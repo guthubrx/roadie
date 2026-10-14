@@ -22,6 +22,13 @@ final class SettingsViewModel: ObservableObject {
     }
     /// Saisie en cours d'un champ, par nom de réglage ; retirée à la validation.
     @Published var drafts: [String: String] = [:]
+    /// Texte gardé pour le confort de saisie, mais déjà enregistré. Ce texte n'est jamais écrit
+    /// une seconde fois à la perte du focus, même si une modification externe arrive entre-temps.
+    private struct AppliedDraft {
+        let raw: String
+        let value: SettingValue
+    }
+    private var appliedDrafts: [String: AppliedDraft] = [:]
     /// Cause du dernier refus, par nom de réglage.
     @Published private(set) var errors: [String: String] = [:]
     @Published private(set) var validity: SettingsValidity
@@ -29,13 +36,14 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var diagnostic: String?
     /// Résultat de « Recharger ».
     @Published private(set) var notice: String?
+    /// Les éditeurs structurés relisent leurs données sans recréer leurs contrôles ni leurs brouillons.
+    @Published private(set) var collectionRevision = 0
+    @Published private(set) var collectionResetRevisions: [String: Int] = [:]
     /// Valeurs lues, limitées aux réglages affichés : lire une valeur reparcourt tout le fichier
     /// (`ConfigFileEditor.readLiteral`, environ 2 ms sur le fichier réel), les 179 coûtent 0,36 s.
     @Published private var values: [String: (value: SettingValue, isDefault: Bool)] = [:]
     /// Texte de la valeur actuelle des entrées en lecture seule, par nom (valeurs d'une liste, « N entrée(s) »).
     @Published private var summaries: [String: String] = [:]
-    /// Couleurs choisies au sélecteur, écrites après une courte pause (le sélecteur envoie une valeur par mouvement).
-    private var pendingColors: [String: Task<Void, Never>] = [:]
 
     init(service: SettingsService = .shared) {
         self.service = service
@@ -104,6 +112,7 @@ final class SettingsViewModel: ObservableObject {
         values = [:]
         summaries = [:]
         loadVisibleValues()
+        collectionRevision += 1
     }
 
     /// Lit les valeurs affichées absentes du cache, avec une seule lecture du fichier.
@@ -125,6 +134,16 @@ final class SettingsViewModel: ObservableObject {
         }
         values = read
         summaries = readSummaries
+        // Notre propre notification conserve le format saisi (« 8.50 »). Une valeur effective
+        // différente vient d'une autre écriture : l'afficher si ce texte avait déjà été enregistré.
+        let changed = appliedDrafts.compactMap { id, saved -> String? in
+            guard drafts[id] == saved.raw, let current = read[id]?.value, current != saved.value else { return nil }
+            return id
+        }
+        for id in changed {
+            appliedDrafts[id] = nil
+            drafts[id] = nil
+        }
     }
 
     func value(_ descriptor: SettingDescriptor) -> SettingValue {
@@ -177,26 +196,56 @@ final class SettingsViewModel: ObservableObject {
         handle(service.set(descriptor.id, to: raw), for: descriptor, isReset: false)
     }
 
-    /// Les tailles valides se voient immédiatement, mais « 8. » reste saisissable comme début de « 8.5 ».
+    /// Chaque valeur complète et valide s'applique pendant la saisie. Le texte brut reste dans le
+    /// champ, même après une relecture du fichier : « 8. » peut ainsi devenir « 8.5 » sans perdre le focus.
     func editText(_ descriptor: SettingDescriptor, raw: String) {
+        appliedDrafts[descriptor.id] = nil
         drafts[descriptor.id] = raw
-        guard descriptor.key == "font_size" || descriptor.key.hasSuffix("_font_size"),
-              case .double(let range?) = descriptor.kind,
-              let number = Double(raw), number.isFinite, range.contains(number) else { return }
-        apply(descriptor, raw: raw)
-        if errors[descriptor.id] == nil { drafts[descriptor.id] = raw }
+        guard !isLocked, descriptor.readOnlyReason == nil else { return }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty, descriptor.defaultValue == .unset {
+            reset(descriptor)
+        } else {
+            // La conversion ne touche pas au disque. Un signe isolé, une couleur partielle ou un
+            // nombre hors plage reste un brouillon et ne remplace jamais la dernière valeur valide.
+            guard case .success = SettingsService.convert(raw, kind: descriptor.kind) else { return }
+            apply(descriptor, raw: raw)
+        }
+        drafts[descriptor.id] = raw
+        if errors[descriptor.id] == nil {
+            appliedDrafts[descriptor.id] = AppliedDraft(raw: raw, value: value(descriptor))
+        }
     }
 
     /// « Rétablir » : retour à la valeur par défaut.
     func reset(_ descriptor: SettingDescriptor) {
         guard !isLocked, descriptor.readOnlyReason == nil else { return }
         drafts[descriptor.id] = nil
+        appliedDrafts[descriptor.id] = nil
         handle(service.reset(descriptor.id), for: descriptor, isReset: true)
+        if descriptor.collection != nil, errors[descriptor.id] == nil {
+            collectionResetRevisions[descriptor.id, default: 0] += 1
+        }
+    }
+
+    /// Une collection suit les mêmes messages et indicateurs que les champs ordinaires.
+    func collectionChanged(_ descriptor: SettingDescriptor, result: SettingChangeResult) {
+        handle(result, for: descriptor, isReset: false)
+        if case .applied = result {
+            // Le résumé scalaire n'est pas le défaut typé de la collection.
+            values[descriptor.id] = service.value(of: descriptor)
+        }
     }
 
     /// Validation d'un champ (Retour ou perte du focus). Un champ vidé d'un réglage sans défaut le rétablit.
     func commitDraft(_ descriptor: SettingDescriptor) {
+        let saved = appliedDrafts.removeValue(forKey: descriptor.id)
         guard let draft = drafts.removeValue(forKey: descriptor.id) else { return }
+        if saved?.raw == draft {
+            // Relecture seulement : ne pas écraser une édition externe faite avant le watcher.
+            values[descriptor.id] = service.value(of: descriptor)
+            return
+        }
         let trimmed = draft.trimmingCharacters(in: .whitespaces)
         guard trimmed != Self.text(value(descriptor)) else { return }
         if trimmed.isEmpty, descriptor.defaultValue == .unset {
@@ -206,16 +255,9 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    /// Couleur choisie au sélecteur : affichée tout de suite, écrite après 300 ms sans autre changement.
+    /// Le sélecteur applique la couleur par le même parcours immédiat que le champ.
     func setColor(_ descriptor: SettingDescriptor, hex: String) {
-        drafts[descriptor.id] = hex
-        pendingColors[descriptor.id]?.cancel()
-        pendingColors[descriptor.id] = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled, let self else { return }
-            self.pendingColors[descriptor.id] = nil
-            self.commitDraft(descriptor)
-        }
+        editText(descriptor, raw: hex)
     }
 
     /// Pas à pas : ajoute `direction` pas à la valeur, bornée à la plage. O(1).
@@ -257,6 +299,7 @@ final class SettingsViewModel: ObservableObject {
         case .applied(_, let new):
             errors[descriptor.id] = nil
             drafts[descriptor.id] = nil
+            appliedDrafts[descriptor.id] = nil
             // Rétablir retire la ligne ; une écriture qui répète le défaut n'a rien à rétablir.
             values[descriptor.id] = (new, isDefault: isReset || new == descriptor.defaultValue)
         case .rejected(let reason):

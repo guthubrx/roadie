@@ -614,6 +614,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var searchLabelFontSize: Double
     public var searchTextFontSize: Double
     public var commandTextFontSize: Double
+    public var searchFontFamily: String
+    public var commandFontFamily: String
 
     public static let defaultSearchHotkey = "command+control+alt+f"
 
@@ -629,7 +631,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         labelFontSize: Double = 13,
         searchLabelFontSize: Double = 13,
         searchTextFontSize: Double = 15,
-        commandTextFontSize: Double = 13
+        commandTextFontSize: Double = 13,
+        searchFontFamily: String = "system",
+        commandFontFamily: String = "system"
     ) {
         self.enabled = enabled
         self.pickerEnabled = pickerEnabled
@@ -643,6 +647,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.searchLabelFontSize = min(48, max(8, searchLabelFontSize))
         self.searchTextFontSize = min(48, max(8, searchTextFontSize))
         self.commandTextFontSize = min(48, max(8, commandTextFontSize))
+        self.searchFontFamily = searchFontFamily
+        self.commandFontFamily = commandFontFamily
     }
 
     /// Modificateurs (`command`, `control`, `alt`, `shift`) et touche d'un raccourci normalisé ;
@@ -669,6 +675,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case searchLabelFontSize = "search_label_font_size"
         case searchTextFontSize = "search_text_font_size"
         case commandTextFontSize = "command_text_font_size"
+        case searchFontFamily = "search_font_family"
+        case commandFontFamily = "command_font_family"
     }
 
     public init(from decoder: Decoder) throws {
@@ -685,7 +693,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? 13,
             searchLabelFontSize: try c.decodeFlexibleDouble(forKey: .searchLabelFontSize) ?? 13,
             searchTextFontSize: try c.decodeFlexibleDouble(forKey: .searchTextFontSize) ?? 15,
-            commandTextFontSize: try c.decodeFlexibleDouble(forKey: .commandTextFontSize) ?? 13
+            commandTextFontSize: try c.decodeFlexibleDouble(forKey: .commandTextFontSize) ?? 13,
+            searchFontFamily: try c.decodeIfPresent(String.self, forKey: .searchFontFamily) ?? "system",
+            commandFontFamily: try c.decodeIfPresent(String.self, forKey: .commandFontFamily) ?? "system"
         )
     }
 }
@@ -1338,7 +1348,7 @@ private enum ConfigValidationRules {
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations"],
-            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size"],
+            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],

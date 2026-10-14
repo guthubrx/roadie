@@ -584,8 +584,11 @@ interceptés pendant la saisie de commande.
 | Contrôler ou recharger | `/doctor`, `/heal`, `/reload` |
 
 La fenêtre de réglages propose des catégories, une recherche et des changements
-appliqués immédiatement. Les listes et les tableaux de tables restent en lecture
-seule. L'interface est en français. Les commentaires du fichier TOML sont conservés.
+appliqués dès la saisie d'une valeur valide. Les marges déclenchent une nouvelle
+disposition, même pour un changement d'un point. Les listes, les stages, les règles
+et les surcharges par écran ont leurs éditeurs intégrés. Un brouillon incomplet
+reste dans le champ sans remplacer la dernière valeur valide.
+L'interface est en français. Les commentaires du fichier TOML sont conservés.
 Une sauvegarde précède la première modification de la session. Une écriture invalide
 est refusée. Les tailles de police sont indépendantes. Les curseurs, le pas à pas
 et la saisie d'une taille valide les appliquent immédiatement. Les sessions ouvertes
@@ -604,6 +607,16 @@ Ses textes, aides et titres ont des défauts de 16, 14 et 22 points. Les étique
 lettres, de la grille et de la recherche ont un défaut de 13 points. Les cartes du rail
 adaptent leur taille à la police. Les infobulles et messages de dialogue natifs de macOS
 gardent la police du système.
+
+Dans Recherche, les familles de police de la saisie et des suggestions sont
+indépendantes : `target_mode.search_font_family` et `target_mode.command_font_family`.
+Le changement apparaît dans la barre ouverte. `system` choisit la police macOS ;
+une famille absente utilise aussi cette police.
+Les rares fragments complexes ont un éditeur avancé intégré avec validation et
+enregistrement explicite. Les `signals.hooks` peuvent être enregistrés, mais Roadie
+ne les exécute pas actuellement. Un fichier invalide peut être réparé dans la fenêtre.
+Les actions de règle `layout` et `gap_override` sont enregistrées, mais ne modifient
+pas encore le tuilage. Les éditeurs signalent cette limite.
 
 La barre et les réglages exigent un daemon démarré et `overlay_enabled = true`.
 Dans la table existante du fichier de configuration, active au minimum :

@@ -208,6 +208,32 @@ public struct StageStore: Sendable {
         )
     }
 
+    /// Une édition explicite d'une définition renomme ses stages existants. Les définitions
+    /// inchangées ne remplacent pas les noms personnalisés ; retirer/réidentifier une définition
+    /// ne supprime aucun stage ni membre. Le démarrage conserve le comportement seed-only.
+    @discardableResult
+    public func applyConfiguredStageNameChanges(from old: [StageDefinition], to new: [StageDefinition]) throws -> Bool {
+        let previousNames = Dictionary(old.map { ($0.id, $0.displayName) }, uniquingKeysWith: { _, latest in latest })
+        let changedNames = new.reduce(into: [String: String]()) { names, definition in
+            if previousNames[definition.id] != definition.displayName {
+                names[definition.id] = definition.displayName
+            }
+        }
+        guard !changedNames.isEmpty else { return false }
+        return try mutateChecked { state in
+            var renamed = false
+            for scopeIndex in state.scopes.indices {
+                for stageIndex in state.scopes[scopeIndex].stages.indices {
+                    let stage = state.scopes[scopeIndex].stages[stageIndex]
+                    guard let name = changedNames[stage.id.rawValue], stage.name != name else { continue }
+                    state.scopes[scopeIndex].stages[stageIndex].name = name
+                    renamed = true
+                }
+            }
+            return renamed
+        }
+    }
+
     /// Migration SPEC-017 (A8) : passe les stages `mutableBsp` en `spatialBsp`, en une transaction.
     /// Avant la première écriture migrée, les octets d'origine sont copiés dans `<fichier>.pre-017`
     /// (une seule fois, jamais écrasée). L'arbre est construit par `infer` s'il est absent ou ne couvre

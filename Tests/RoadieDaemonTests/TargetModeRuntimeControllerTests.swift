@@ -174,6 +174,8 @@ struct TargetModeRuntimeControllerTests {
         config.experimental.targetMode.searchLabelFontSize = 24
         config.experimental.targetMode.searchTextFontSize = 32
         config.experimental.targetMode.commandTextFontSize = 40
+        config.experimental.targetMode.searchFontFamily = "Helvetica"
+        config.experimental.targetMode.commandFontFamily = "Menlo"
         config.experimental.targetGrid.labelFontSize = 28
         for (command, expected) in [("targets.interactive", CGFloat(18)), ("targets.search", CGFloat(24)), ("grid.interactive", CGFloat(28))] {
             controller.handle(TargetModeRuntimeCommand(name: command))
@@ -183,6 +185,8 @@ struct TargetModeRuntimeControllerTests {
             if command == "targets.search" {
                 #expect(style.searchTextFontSize == 32)
                 #expect(style.commandTextFontSize == 40)
+                #expect(style.searchFontFamily == "Helvetica")
+                #expect(style.commandFontFamily == "Menlo")
             }
         }
         controller.stop()

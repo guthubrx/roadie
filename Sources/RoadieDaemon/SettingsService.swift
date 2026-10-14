@@ -1,9 +1,10 @@
 import Foundation
 import RoadieCore
+import TOMLKit
 
 extension Notification.Name {
     /// Écriture validée : les composants visibles peuvent se redessiner sans attendre le watcher.
-    static let roadieSettingsDidChange = Notification.Name("roadie.settings.didChange")
+    public static let roadieSettingsDidChange = Notification.Name("roadie.settings.didChange")
 }
 
 public enum SettingChangeResult: Equatable, Sendable {
@@ -25,7 +26,7 @@ public struct SettingsFileError: Error, Equatable, Sendable {
 }
 
 /// Lit et modifie les réglages du catalogue dans `roadies.toml` (research R5, R10).
-/// Les valeurs sont lues avec `ConfigFileEditor.readLiteral` (pas de TOMLKit ici).
+/// Les scalaires conservent leur texte source ; TOMLKit lit les collections.
 /// Une écriture passe par un fichier candidat validé dans le même dossier, puis un `rename` atomique.
 /// `@unchecked Sendable` : les écritures sont sérialisées par un verrou interne.
 public final class SettingsService: @unchecked Sendable {
@@ -78,6 +79,12 @@ public final class SettingsService: @unchecked Sendable {
     /// Même règle sur un texte déjà lu. `isDefault` : la valeur effective égale le défaut (ligne absente
     /// ou valeur identique au défaut). Un alias de choix est rendu sous sa forme du catalogue. O(L).
     public func value(of descriptor: SettingDescriptor, in text: String) -> (value: SettingValue, isDefault: Bool) {
+        if descriptor.collection != nil {
+            guard let current = try? collection(of: descriptor, in: text).get(), let spec = descriptor.collection else {
+                return (descriptor.defaultValue, true)
+            }
+            return (.string(SettingsCollectionCodec.summary(current)), current == spec.defaultValue)
+        }
         guard descriptor.readOnlyReason == nil,
               let literal = ConfigFileEditor.readLiteral(text, table: descriptor.tablePath, key: descriptor.key),
               var value = Self.parse(literal, kind: descriptor.kind)
@@ -138,6 +145,7 @@ public final class SettingsService: @unchecked Sendable {
         guard let descriptor = SettingsCatalog.find(id: id) else {
             return reject("unknown", "réglage inconnu : \(id)")
         }
+        if descriptor.collection != nil { return reject(id, "Utilise l’éditeur intégré de cette collection.") }
         if let reason = descriptor.readOnlyReason { return reject(id, reason) }
         switch Self.convert(SettingsCatalog.canonicalChoice(raw, for: id), kind: descriptor.kind) {
         case .failure(let error): return reject(id, error.message)
@@ -152,6 +160,7 @@ public final class SettingsService: @unchecked Sendable {
         guard let descriptor = SettingsCatalog.find(id: id) else {
             return reject("unknown", "réglage inconnu : \(id)")
         }
+        if descriptor.collection != nil { return resetCollectionLocked(descriptor) }
         if let reason = descriptor.readOnlyReason { return reject(id, reason) }
         return write(descriptor, literal: nil, newValue: descriptor.defaultValue)
     }
@@ -160,33 +169,47 @@ public final class SettingsService: @unchecked Sendable {
     /// relecture (une reprise), `rename`, rechargement, journal. Un lien symbolique est suivi : la cible
     /// est remplacée, le lien reste. Complexité : O(L) par tentative (au plus deux), plus deux validations.
     private func write(_ descriptor: SettingDescriptor, literal: String?, newValue: SettingValue) -> SettingChangeResult {
+        transaction(id: descriptor.id) { original in
+            switch ConfigFileEditor.edit(original, table: descriptor.tablePath, key: descriptor.key, value: literal) {
+            case .failure(let error): return .failure(SettingsFileError(message: Self.message(error)))
+            case .success(let text): return .success((text, self.value(of: descriptor, in: original).value, newValue))
+            }
+        }
+    }
+
+    /// Unique point de remplacement pour scalaires, collections et réparation complète du fichier.
+    private func transaction(id: String, allowInvalidOriginal: Bool = false, strictConflict: Bool = false,
+                             transform: (String) -> Result<(String, SettingValue, SettingValue), SettingsFileError>) -> SettingChangeResult {
         let fileManager = FileManager.default
         let link = URL(fileURLWithPath: configPath)
         // Le candidat doit naître dans le dossier de la cible réelle : `rename` ne traverse pas les volumes
         // et, fait sur le lien, il remplacerait le lien par un fichier.
         let target = link.resolvingSymlinksInPath()
         let directory = target.deletingLastPathComponent()
-        // Même radical que le fichier : `generatedRulesPath` du candidat désigne les règles générées
-        // voisines de la cible (celles du lien si la cible est dans le même dossier).
+        // Le radical identifie le candidat ; la validation des règles générées utilise explicitement configPath.
         let stem = target.deletingPathExtension().lastPathComponent
 
         for attempt in 1...2 {
             guard case .success(let original) = readConfig() else {
-                return reject(descriptor.id, "\(Self.unreadableMessage) : aucune modification")
+                return reject(id, "\(Self.unreadableMessage) : aucune modification")
             }
-            let old = value(of: descriptor, in: original).value
             let candidateText: String
-            switch ConfigFileEditor.edit(original, table: descriptor.tablePath, key: descriptor.key, value: literal) {
-            case .failure(let error): return reject(descriptor.id, Self.message(error))
-            case .success(let text): candidateText = text
+            let old: SettingValue
+            let newValue: SettingValue
+            switch transform(original) {
+            case .failure(let error): return reject(id, error.message)
+            case .success(let change): (candidateText, old, newValue) = change
             }
             // Rien à écrire (rétablir une clé déjà absente).
             if candidateText == original {
-                return applied(descriptor.id, old: old, new: newValue)
+                if allowInvalidOriginal, let reason = candidateErrors(configPath) {
+                    return reject(id, reason)
+                }
+                return applied(id, old: old, new: newValue)
             }
             let start = RoadieConfigLoader.validate(path: configPath).items.filter { $0.level == .error }
-            guard start.isEmpty else {
-                return reject(descriptor.id, "le fichier de configuration est invalide : corrige-le d'abord (\(start.count) erreur(s))")
+            guard allowInvalidOriginal || start.isEmpty else {
+                return reject(id, "le fichier de configuration est invalide : corrige-le d'abord (\(start.count) erreur(s))")
             }
 
             let candidate = directory.appendingPathComponent("\(stem).candidate-\(UUID().uuidString)")
@@ -196,10 +219,10 @@ public final class SettingsService: @unchecked Sendable {
                 try candidateText.write(to: candidate, atomically: false, encoding: .utf8)
                 try Self.copyAttributes(from: target, to: candidate)
             } catch {
-                return reject(descriptor.id, "écriture impossible : \(error.localizedDescription)")
+                return reject(id, "écriture impossible : \(error.localizedDescription)")
             }
-            if let reason = Self.candidateErrors(candidate.path) {
-                return reject(descriptor.id, reason)
+            if let reason = candidateErrors(candidate.path) {
+                return reject(id, reason)
             }
 
             // Sauvegarde à côté du chemin configuré (purgée par `FileAdministration.configBackupActions`),
@@ -209,7 +232,7 @@ public final class SettingsService: @unchecked Sendable {
                 let url = link.deletingLastPathComponent()
                     .appendingPathComponent("\(link.lastPathComponent).bak-\(Self.timestamp())")
                 do { try fileManager.copyItem(at: target, to: url) } catch {
-                    return reject(descriptor.id, "écriture impossible : \(error.localizedDescription)")
+                    return reject(id, "écriture impossible : \(error.localizedDescription)")
                 }
                 backup = url
             }
@@ -220,20 +243,25 @@ public final class SettingsService: @unchecked Sendable {
             beforeReplace?()
             guard case .success(let latest) = readConfig(), latest == original else {
                 if let backup { try? fileManager.removeItem(at: backup) }
-                if attempt == 2 { return reject(descriptor.id, "le fichier a changé pendant l'écriture") }
+                if strictConflict || attempt == 2 { return reject(id, "le fichier a changé pendant l'écriture") }
                 continue
             }
             guard rename(candidate.path, target.path) == 0 else {
                 let error = POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
                 if let backup { try? fileManager.removeItem(at: backup) }
-                return reject(descriptor.id, "écriture impossible : \(error.localizedDescription)")
+                return reject(id, "écriture impossible : \(error.localizedDescription)")
             }
             if backup != nil { hasBackup = true }
             afterWrite()
-            NotificationCenter.default.post(name: .roadieSettingsDidChange, object: nil, userInfo: ["configPath": configPath])
-            return applied(descriptor.id, old: old, new: newValue)
+            NotificationCenter.default.post(name: .roadieSettingsDidChange, object: nil, userInfo: ["configPath": configPath, "settingID": id])
+            // Les composants modulaires vivent dans des processus distincts du propriétaire des paramètres.
+            DistributedNotificationCenter.default().postNotificationName(
+                .roadieSettingsDidChange, object: nil,
+                userInfo: ["configPath": configPath, "settingID": id], deliverImmediately: true
+            )
+            return applied(id, old: old, new: newValue)
         }
-        return reject(descriptor.id, "le fichier a changé pendant l'écriture")
+        return reject(id, "le fichier a changé pendant l'écriture")
     }
 
     /// Mode POSIX du fichier d'origine (0644 pour un fichier créé) et, si le processus en a le droit,
@@ -251,9 +279,24 @@ public final class SettingsService: @unchecked Sendable {
         try? fileManager.setAttributes(owner, ofItemAtPath: candidate.path)
     }
 
-    /// Erreurs de validation du candidat (le fichier de départ n'en a aucune) ; nil s'il est valide.
-    private static func candidateErrors(_ candidate: String) -> String? {
-        let errors = RoadieConfigLoader.validate(path: candidate).items.filter { $0.level == .error }
+    /// Décode le candidat puis valide ses règles avec les règles générées du chemin configuré.
+    private func candidateErrors(_ candidate: String) -> String? {
+        var errors = RoadieConfigLoader.validate(path: candidate).items.filter { $0.level == .error }
+        // Le nom temporaire du candidat n'a pas le même voisin .generated.toml.
+        // Utiliser le chemin configuré, comme ConfigReloadService, même si c'est un lien symbolique.
+        if errors.isEmpty {
+            do {
+                let raw = FileManager.default.fileExists(atPath: candidate)
+                    ? try String(contentsOfFile: candidate, encoding: .utf8) : ""
+                let config = try TOMLDecoder().decode(RoadieConfig.self, from: raw)
+                let generatedPath = RoadieConfigLoader.generatedRulesPath(for: configPath)
+                let generated = try RoadieConfigLoader.loadRulesFile(from: generatedPath)
+                errors += WindowRuleValidator.validate(config.rules + generated)
+            } catch {
+                // Le détail du parseur pourrait contenir une valeur ; le journal conserve seulement l'identifiant.
+                return "le fichier deviendrait invalide : les règles ne peuvent pas être lues"
+            }
+        }
         guard !errors.isEmpty else { return nil }
         let lines = errors.map { $0.path == candidate ? $0.message : "\($0.path) : \($0.message)" }
         return "le fichier deviendrait invalide : " + lines.joined(separator: " ; ")
@@ -423,7 +466,7 @@ extension SettingsService {
         }
     }
 
-    private static func message(_ error: ConfigEditError) -> String {
+    static func message(_ error: ConfigEditError) -> String {
         let prefix = "modification automatique impossible : "
         switch error {
         case .multilineValue(let line): return prefix + "valeur sur plusieurs lignes ou liste (ligne \(line))"
@@ -433,6 +476,86 @@ extension SettingsService {
         case .duplicateTable: return prefix + "table présente deux fois"
         case .unterminatedString(let line): return prefix + "guillemet non fermé (ligne \(line))"
         case .ambiguousInsertion: return prefix + "fin de fichier dans une valeur ouverte"
+        }
+    }
+}
+
+// MARK: - Collections et correction intégrée du document
+
+extension SettingsService {
+    public func collection(of descriptor: SettingDescriptor) -> Result<CollectionValue, SettingsFileError> {
+        readConfig().flatMap { collection(of: descriptor, in: $0) }
+    }
+
+    public func collection(of descriptor: SettingDescriptor, in text: String) -> Result<CollectionValue, SettingsFileError> {
+        do { return .success(try SettingsCollectionCodec.read(descriptor, text: text)) }
+        catch let error as SettingsFileError { return .failure(error) }
+        catch { return .failure(SettingsFileError(message: "Le fichier TOML ne peut pas être lu.")) }
+    }
+
+    public func validateCollection(_ descriptor: SettingDescriptor, value: CollectionValue) -> [String: String] {
+        guard let spec = descriptor.collection else { return ["collection": "Collection inconnue."] }
+        var errors = SettingsCollectionCodec.validate(spec, value: value)
+        if errors.isEmpty, descriptor.id == "rules", case .rows(let rows) = value {
+            do {
+                // La prévalidation pure ignore les indices source et ne lit aucun fichier utilisateur.
+                let fresh = rows.map { CollectionRow(fields: $0.fields) }
+                let text = try SettingsCollectionWriter.edit("", descriptor: descriptor, value: .rows(fresh))
+                let config = try TOMLDecoder().decode(RoadieConfig.self, from: text)
+                for item in WindowRuleValidator.validate(config.rules) {
+                    let key = item.path.replacingOccurrences(of: "rules[", with: "").replacingOccurrences(of: "].", with: ".")
+                    errors[key] = item.message
+                }
+            } catch { errors["collection"] = "Les règles ne peuvent pas être lues." }
+        }
+        return errors
+    }
+
+    public func setCollection(_ id: String, _ value: CollectionValue, expected: CollectionValue? = nil) -> SettingChangeResult {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let descriptor = SettingsCatalog.find(id: id), descriptor.collection != nil else {
+            return reject(id, "Collection inconnue : \(id).")
+        }
+        let errors = validateCollection(descriptor, value: value)
+        guard errors.isEmpty else { return reject(id, errors.keys.sorted().compactMap { errors[$0] }.joined(separator: " ; ")) }
+        return transaction(id: id, strictConflict: expected != nil) { original in
+            do {
+                let old = try self.collection(of: descriptor, in: original).get()
+                if let expected, expected != old { return .failure(SettingsFileError(message: "La collection a changé. Recharge-la avant de modifier.")) }
+                if old == value { return .success((original, .string(SettingsCollectionCodec.summary(old)), .string(SettingsCollectionCodec.summary(value)))) }
+                let text = try SettingsCollectionWriter.edit(original, descriptor: descriptor, value: value)
+                return .success((text, .string(SettingsCollectionCodec.summary(old)), .string(SettingsCollectionCodec.summary(value))))
+            } catch let error as SettingsFileError { return .failure(error) }
+            catch { return .failure(SettingsFileError(message: "La collection ne peut pas être modifiée.")) }
+        }
+    }
+
+    public func resetCollection(_ id: String) -> SettingChangeResult {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let descriptor = SettingsCatalog.find(id: id), descriptor.collection != nil else { return reject(id, "Collection inconnue : \(id).") }
+        return resetCollectionLocked(descriptor)
+    }
+
+    private func resetCollectionLocked(_ descriptor: SettingDescriptor) -> SettingChangeResult {
+        transaction(id: descriptor.id) { original in
+            do {
+                let old = try self.collection(of: descriptor, in: original).get()
+                let text = try SettingsCollectionWriter.edit(original, descriptor: descriptor, value: nil)
+                return .success((text, .string(SettingsCollectionCodec.summary(old)), descriptor.defaultValue))
+            } catch let error as SettingsFileError { return .failure(error) }
+            catch { return .failure(SettingsFileError(message: "La collection ne peut pas être rétablie.")) }
+        }
+    }
+
+    /// Le texte original exact protège aussi la réparation d'un document actuellement invalide.
+    public func replaceConfigText(_ text: String, expectedOriginal: String) -> SettingChangeResult {
+        lock.lock()
+        defer { lock.unlock() }
+        return transaction(id: "*", allowInvalidOriginal: true, strictConflict: true) { original in
+            guard original == expectedOriginal else { return .failure(SettingsFileError(message: "Le fichier a changé. Recharge-le avant de modifier.")) }
+            return .success((text, .string("Configuration"), .string("Configuration")))
         }
     }
 }

@@ -1,3 +1,5 @@
+import Foundation
+
 /// Raisons de refus d'une édition de `roadies.toml`. `line` est numérotée à partir de 1.
 public enum ConfigEditError: Error, Equatable {
     case multilineValue(line: Int)
@@ -369,5 +371,163 @@ public enum ConfigFileEditor {
         }
         parts.append(String(current))
         return parts
+    }
+}
+
+// MARK: - Collections, sans ré-encodage du document entier
+
+extension ConfigFileEditor {
+    static func collectionComments(_ text: String) -> String {
+        commentLines(splitLines(text)).map { $0 + "\n" }.joined()
+    }
+    /// Remplace une valeur structurée en conservant tous ses commentaires, même sur plusieurs lignes.
+    static func editStructuredValue(_ text: String, table: String, key: String, value: String?) -> Result<String, ConfigEditError> {
+        let (found, failure) = locate(text, table: table, key: key)
+        if let failure {
+            switch failure {
+            case .multilineValue, .inlineTable: break
+            default: return .failure(failure)
+            }
+        }
+        guard let index = found.keyIndex else { return edit(text, table: table, key: key, value: value) }
+        guard let end = found.keyEnd else { return .failure(.ambiguousInsertion) }
+        var lines = found.lines
+        let eol = lines.first(where: { !$0.end.isEmpty })?.end ?? "\n"
+        let originalEnd = lines[end].end
+        let comments = commentLines(Array(lines[index...end]))
+        let prefix = String(String.UnicodeScalarView(Array(lines[index].text.unicodeScalars).prefix(found.valueRange.lowerBound)))
+        var replacement = comments.map { Line(text: $0, end: eol) }
+        if let value { replacement.append(Line(text: prefix + value, end: eol)) }
+        if !replacement.isEmpty { replacement[replacement.count - 1].end = originalEnd }
+        else if originalEnd.isEmpty, index > 0 { lines[index - 1].end = "" }
+        lines.replaceSubrange(index...end, with: replacement)
+        return .success(join(lines))
+    }
+
+    private static func commentLines(_ lines: [Line]) -> [String] {
+        var state = ScanState()
+        var comments: [String] = []
+        for line in lines {
+            let scalars = Array(line.text.unicodeScalars)
+            let result = scan(scalars, from: 0, state)
+            state = result.state
+            if let index = result.comment { comments.append(String(String.UnicodeScalarView(scalars[index...]))) }
+        }
+        return comments
+    }
+
+    /// Sections appartenant à la collection. Les sous-tables restent dans la ligne source correspondante.
+    private static func collectionSections(_ text: String, table: String) -> (lines: [Line], sections: [Range<Int>]) {
+        let lines = splitLines(text)
+        let target = segments(Array(table.unicodeScalars)[...])
+        var state = ScanState()
+        var start: Int?
+        var sections: [Range<Int>] = []
+        for (index, line) in lines.enumerated() {
+            let scalars = Array(line.text.unicodeScalars)
+            if state.isTopLevel, let first = scalars.firstIndex(where: { !isSpace($0) }),
+               let h = header(scalars, at: first) {
+                let belongs = h.path.starts(with: target)
+                let newRow = h.path == target
+                if let existing = start, !belongs || newRow {
+                    var boundary = index
+                    // Un commentaire situé juste avant l'en-tête suit cet en-tête au déplacement.
+                    while boundary > existing + 1 {
+                        let previous = lines[boundary - 1].text.trimmingCharacters(in: .whitespaces)
+                        guard previous.isEmpty || previous.hasPrefix("#") else { break }
+                        boundary -= 1
+                    }
+                    sections.append(existing..<boundary)
+                    start = belongs ? boundary : nil
+                }
+                if belongs, start == nil { start = index }
+            }
+            state = scan(scalars, from: 0, state).state
+        }
+        if let start { sections.append(start..<lines.count) }
+        return (lines, sections)
+    }
+
+    static func collectionFragment(_ text: String, table: String) -> String {
+        let (lines, sections) = collectionSections(text, table: table)
+        if !sections.isEmpty { return sections.map { join(Array(lines[$0])) }.joined() }
+        let path = table.components(separatedBy: ".")
+        let parent = path.dropLast().joined(separator: ".")
+        if let raw = readRawValue(text, table: parent, key: path.last!) { return "[\(parent)]\n\(path.last!) = \(raw)\n" }
+        return ""
+    }
+
+    /// Conserve les sections extérieures et leurs positions ; les blocs source déplacés gardent leurs sous-tables.
+    static func replaceCollectionSections(_ text: String, table: String, fragments: [String]) -> Result<String, ConfigEditError> {
+        let (source, ranges) = collectionSections(text, table: table)
+        var lines = source
+        let eol = source.first(where: { !$0.end.isEmpty })?.end ?? "\n"
+        let hadFinalNewline = text.hasSuffix("\n")
+        var replacement: [Line] = []
+        for fragment in fragments {
+            var part = splitLines(fragment)
+            for index in part.indices { part[index].end = eol }
+            replacement += part
+        }
+        if let first = ranges.first {
+            for range in ranges.reversed() { lines.removeSubrange(range) }
+            lines.insert(contentsOf: replacement, at: first.lowerBound)
+        } else {
+            // La collection peut être définie sous forme de liste/table en ligne.
+            let path = table.components(separatedBy: ".")
+            let parent = path.dropLast().joined(separator: ".")
+            if readRawValue(text, table: parent, key: path.last!) != nil {
+                switch editStructuredValue(text, table: parent, key: path.last!, value: nil) {
+                case .failure(let error): return .failure(error)
+                case .success(let cleaned): lines = splitLines(cleaned)
+                }
+            }
+            if !replacement.isEmpty {
+                if !lines.isEmpty {
+                    lines[lines.count - 1].end = eol
+                    lines.append(Line(text: "", end: eol))
+                }
+                lines += replacement
+            }
+        }
+        // Les commentaires de lignes supprimées restent près de la collection.
+        var commentCounts = Dictionary(commentLines(replacement).map { ($0, 1) }, uniquingKeysWith: +)
+        let removedComments = ranges.flatMap { commentLines(Array(source[$0])) }.filter {
+            if let count = commentCounts[$0], count > 0 { commentCounts[$0] = count - 1; return false }
+            return true
+        }
+        if !removedComments.isEmpty {
+            let index = min(ranges.first?.lowerBound ?? lines.count, lines.count)
+            lines.insert(contentsOf: removedComments.map { Line(text: $0, end: eol) }, at: index)
+        }
+        if !hadFinalNewline, !lines.isEmpty { lines[lines.count - 1].end = "" }
+        return .success(join(lines))
+    }
+
+    static func collectionRowFragments(_ text: String, table: String) -> [String] {
+        let (lines, ranges) = collectionSections(text, table: table)
+        return ranges.map { join(Array(lines[$0])) }
+    }
+
+    /// Remplace seulement les en-têtes afin de rendre une ligne éditable par le moteur scalaire.
+    static func mapCollectionHeaders(_ text: String, from source: String, to destination: String, rootIsArray: Bool) -> String {
+        let from = source.components(separatedBy: ".")
+        let to = destination.components(separatedBy: ".")
+        var lines = splitLines(text)
+        var state = ScanState()
+        for index in lines.indices {
+            let scalars = Array(lines[index].text.unicodeScalars)
+            if state.isTopLevel, let first = scalars.firstIndex(where: { !isSpace($0) }),
+               let h = header(scalars, at: first), h.path.starts(with: from) {
+                let array = h.path == from ? rootIsArray : h.isArray
+                let end = scalars[(first + (h.isArray ? 2 : 1))...].firstIndex(of: "]") ?? scalars.count
+                let suffixStart = min(scalars.count, end + (h.isArray ? 2 : 1))
+                let suffix = String(String.UnicodeScalarView(scalars[suffixStart...]))
+                let name = (to + h.path.dropFirst(from.count)).joined(separator: ".")
+                lines[index].text = (array ? "[[" : "[") + name + (array ? "]]" : "]") + suffix
+            }
+            state = scan(scalars, from: 0, state).state
+        }
+        return join(lines)
     }
 }

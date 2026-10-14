@@ -91,7 +91,7 @@ extension SettingsCatalog {
                   "Espace à droite de l'aperçu.", .double(0...80), .double(16)),
             entry(.rail, t, "vertical_padding", "Marge verticale des aperçus (points)",
                   "Espace au-dessus et au-dessous de l'aperçu.", .double(0...80), .double(20)),
-            readOnlyEntry(.avance, t, "stage_overrides", "Couleur d'accent par stage",
+            readOnlyEntry(.rail, t, "stage_overrides", "Couleur d'accent par stage",
                           "Tableau de couleurs d'accent propres à certains stages."),
         ]
     }()

@@ -18,6 +18,15 @@ Chaque entrée décrit la version correspondante. Les README présentent les sou
   bordure fine, loupe retirée et compteur dans une pastille à droite.
 - Tab complète le titre du résultat de recherche choisi sans cliquer. En mode
   commande, Tab accepte la suggestion sélectionnée avant de parcourir les alternatives.
+- Les réglages valides s'appliquent dès la saisie. Les marges et les autres
+  réglages de disposition déclenchent le tuilage, y compris pour un point de différence.
+- Éditeurs intégrés pour les listes, les stages nommés, les règles et les surcharges
+  par écran ou par stage. Les fragments complexes et la réparation d'un fichier
+  invalide disposent d'un éditeur avancé dans la fenêtre.
+- Le nom d'un stage modifié dans les paramètres apparaît dans le rail. Les autres
+  noms personnalisés et les fenêtres des stages sont conservés.
+- Familles de police indépendantes pour la saisie Caps+F et ses suggestions,
+  appliquées dans la barre ouverte. Les tailles restent indépendantes.
 
 ## 0.4.0 — 2026-10-14
 

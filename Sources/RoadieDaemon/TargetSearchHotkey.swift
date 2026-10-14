@@ -4,8 +4,8 @@ import RoadieCore
 
 /// Raccourci global du mode recherche (SPEC-021), enregistré par Carbon (`RegisterEventHotKey`) :
 /// aucune permission, la combinaison est consommée. Défaut : Cmd+Option+Ctrl+F (hyper key + F).
-/// Relu toutes les 2 s : un changement de `search_hotkey`, de `enabled`/`overlay_enabled` ou de
-/// disposition clavier réenregistre la touche, sans redémarrage.
+/// Les réglages de recherche sont appliqués immédiatement ; la relecture toutes les 2 s
+/// couvre les modifications externes et la disposition clavier, sans redémarrage.
 @MainActor
 public final class TargetSearchHotkey {
     public struct Resolved: Equatable, Sendable {
@@ -13,24 +13,31 @@ public final class TargetSearchHotkey {
         public var modifiers: UInt32
     }
 
-    static let refreshInterval: TimeInterval = 2
-
     private let onPress: @MainActor () -> Void
     private let events: EventLog
     private let configLoader: () -> TargetModeConfig
+    private let configPathLoader: () -> String
+    private let pollingInterval: TimeInterval
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private var registered: Resolved?
     private var lastState: String?
     private var timer: Timer?
+    private var settingsObserver: NSObjectProtocol?
 
     public init(
         events: EventLog = EventLog(),
         configLoader: @escaping () -> TargetModeConfig = { ConfigReloadService.shared.currentConfig().experimental.targetMode },
+        configPathLoader: @escaping () -> String = {
+            ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+        },
+        pollingInterval: TimeInterval = 2,
         onPress: @escaping @MainActor () -> Void
     ) {
         self.events = events
         self.configLoader = configLoader
+        self.configPathLoader = configPathLoader
+        self.pollingInterval = pollingInterval
         self.onPress = onPress
     }
 
@@ -38,9 +45,33 @@ public final class TargetSearchHotkey {
         guard timer == nil else { return }
         installHandler()
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .roadieSettingsDidChange, object: nil, queue: .main
+        ) { [weak self] notification in
+            let path = notification.userInfo?["configPath"] as? String
+            let settingID = notification.userInfo?["settingID"] as? String
+            Task { @MainActor in
+                guard let self, self.timer != nil, let path, let settingID,
+                      ["target_mode.search_hotkey", "target_mode.enabled", "target_mode.overlay_enabled", "*"].contains(settingID),
+                      URL(fileURLWithPath: path).resolvingSymlinksInPath()
+                        == URL(fileURLWithPath: self.configPathLoader()).resolvingSymlinksInPath() else { return }
+                self.refresh()
+            }
+        }
+        timer = Timer.scheduledTimer(withTimeInterval: pollingInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+    }
+
+    /// Libère le raccourci et les observateurs ; aucune session de recherche n'est modifiée.
+    public func stop() {
+        timer?.invalidate()
+        timer = nil
+        if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
+        settingsObserver = nil
+        unregister()
+        if let handlerRef { RemoveEventHandler(handlerRef) }
+        handlerRef = nil
     }
 
     // MARK: - Résolution (pure)

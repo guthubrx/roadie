@@ -61,6 +61,8 @@ struct SettingsServiceTests {
     [[rules]]
     id = "test-float"
     # règle de test
+    [rules.match]
+    app = "Application de test"
     """
 
     /// Dossier temporaire propre à un test.
@@ -303,7 +305,7 @@ struct SettingsServiceTests {
         #expect(service.set("target_mode.label_font_size", to: "20") == .applied(old: .double(13), new: .double(20)))
         #expect(service.describe("target_mode.label_font_size") == "target_mode.label_font_size = 20 (défaut 13, de 8 à 48)")
         #expect(service.describe("exclusions.floating_bundles")
-                == "exclusions.floating_bundles : lecture seule : modifier le fichier de configuration")
+                == "exclusions.floating_bundles =  (défaut )")
     }
 
     @Test
@@ -359,14 +361,12 @@ struct SettingsServiceTests {
     }
 
     @Test
-    func unknownAndReadOnlyAreRejected() throws {
+    func unknownAndScalarCollectionWritesAreRejected() throws {
         let (service, config, _) = try makeService(fixture)
         let before = try Data(contentsOf: config)
         guard case .rejected = service.set("inconnu.reglage", to: "1") else { Issue.record("refus attendu"); return }
         #expect(service.set("exclusions.floating_bundles", to: "x")
-                == .rejected(reason: "lecture seule : modifier le fichier de configuration"))
-        #expect(service.reset("exclusions.floating_bundles")
-                == .rejected(reason: "lecture seule : modifier le fichier de configuration"))
+                == .rejected(reason: "Utilise l’éditeur intégré de cette collection."))
         #expect(try Data(contentsOf: config) == before)
     }
 

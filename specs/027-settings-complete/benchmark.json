@@ -1,0 +1,48 @@
+{
+  "excluded": "Daemon retile, native view redraw, notifications processed asynchronously, and initial load/backup",
+  "measured": "Synchronous caller: conversion, candidate validation, atomic write, reload, and ViewModel cache when selected",
+  "results": [
+    {
+      "changes": 50,
+      "fileBytes": 29293,
+      "maxMs": 69.028666,
+      "medianMs": 60.663229,
+      "mode": "service",
+      "p95Ms": 62.179917,
+      "reloadStatus": "success",
+      "settingID": "tiling.gaps_outer"
+    },
+    {
+      "changes": 50,
+      "fileBytes": 29293,
+      "maxMs": 65.348,
+      "medianMs": 60.900125,
+      "mode": "service",
+      "p95Ms": 61.585125,
+      "reloadStatus": "success",
+      "settingID": "borders.active_color"
+    },
+    {
+      "changes": 50,
+      "fileBytes": 29293,
+      "maxMs": 61.897916,
+      "medianMs": 60.772291499999994,
+      "mode": "viewModel",
+      "p95Ms": 61.562916,
+      "reloadStatus": "success",
+      "settingID": "tiling.gaps_outer"
+    },
+    {
+      "changes": 50,
+      "fileBytes": 29293,
+      "maxMs": 68.958125,
+      "medianMs": 60.431604500000006,
+      "mode": "viewModel",
+      "p95Ms": 65.951584,
+      "reloadStatus": "success",
+      "settingID": "borders.active_color"
+    }
+  ],
+  "sourceBytes": 29293,
+  "sourcePath": "/Users/moi/.config/roadies/roadies.toml"
+}

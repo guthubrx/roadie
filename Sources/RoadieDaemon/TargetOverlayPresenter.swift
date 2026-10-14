@@ -15,6 +15,8 @@ public struct TargetOverlayStyle: Sendable, Equatable {
     public var labelFontSize: CGFloat
     public var searchTextFontSize: CGFloat
     public var commandTextFontSize: CGFloat
+    public var searchFontFamily: String
+    public var commandFontFamily: String
 
     public init(
         drawTargetFrames: Bool = false,
@@ -27,7 +29,9 @@ public struct TargetOverlayStyle: Sendable, Equatable {
         labelPlacement: TargetGridLabelPlacement = .callout,
         labelFontSize: CGFloat = 13,
         searchTextFontSize: CGFloat = 15,
-        commandTextFontSize: CGFloat = 13
+        commandTextFontSize: CGFloat = 13,
+        searchFontFamily: String = "system",
+        commandFontFamily: String = "system"
     ) {
         self.drawTargetFrames = drawTargetFrames
         self.fillColor = fillColor
@@ -40,6 +44,8 @@ public struct TargetOverlayStyle: Sendable, Equatable {
         self.labelFontSize = min(48, max(8, labelFontSize))
         self.searchTextFontSize = min(48, max(8, searchTextFontSize))
         self.commandTextFontSize = min(48, max(8, commandTextFontSize))
+        self.searchFontFamily = searchFontFamily
+        self.commandFontFamily = commandFontFamily
     }
 
     /// Facteur appliqué aux dimensions des étiquettes : 1 à 13 pt, taille d'origine.
@@ -56,7 +62,9 @@ public struct TargetOverlayStyle: Sendable, Equatable {
         TargetOverlayStyle(
             labelFontSize: CGFloat(config.searchLabelFontSize),
             searchTextFontSize: CGFloat(config.searchTextFontSize),
-            commandTextFontSize: CGFloat(config.commandTextFontSize)
+            commandTextFontSize: CGFloat(config.commandTextFontSize),
+            searchFontFamily: config.searchFontFamily,
+            commandFontFamily: config.commandFontFamily
         )
     }
 

@@ -445,18 +445,24 @@ request brings the same window to the front.
 - **Search**: filters the settings of every category by name and description,
   ignoring case and accents.
 - **No Save button**: a change is written to the configuration file and applies
-  at once, without a restart. A refused value leaves the field at the old value
-  and shows the cause under the setting.
+  as soon as typed input is valid, without Return or leaving the field.
+  Incomplete or rejected input remains a draft; the last valid value stays active.
+  Margins trigger a new layout even for a one-point change. During a mouse drag,
+  tiling waits for release.
 - **File tracking**: a change made elsewhere (by hand, by `/set`) appears in the
   window without reopening it.
 - **Closing**: Esc, Cmd+W or the close button. The app that was in front gets the
   focus back.
-- **Général** has no setting: it shows the path and state of the configuration
-  file, with the actions Open, Reload and Diagnostics.
-- **Règles** and the lists or arrays of tables of the file (rules, named stages,
-  hooks, per-display overrides) are **read-only**, with an "Ouvrir le fichier de
-  configuration" (Open the configuration file) button. If the file is invalid, a
-  banner says so and the controls are disabled.
+- **Général** shows settings text, help and title sizes, along with the file path
+  and status. Advanced tools offer Reload, Diagnostics and optional file opening.
+- **Lists and tables**: built-in controls edit gap sides, window roles, apps,
+  width presets, per-display overrides, named stages, stage colors and rules.
+  Each complete valid row applies immediately. Changed stage names appear in the
+  rail. Removing a definition does not delete its stored stage or its windows.
+- **Built-in advanced editor**: rare complex fragments, including `signals.hooks`,
+  use validation and explicit saving inside the window. Roadie stores hooks but
+  does not currently execute them. If the file is invalid, ordinary controls are
+  disabled; the full editor can repair it without an external application.
 
 #### Inline setting (`/set`)
 
@@ -480,8 +486,8 @@ Value conversions:
 - **Choice**: a value from the list, otherwise refused with the list.
 - **Color**: `#RRGGBB` or `#RRGGBBAA`.
 - **Text**: the rest of the input, without edge spaces.
-- **List or array of tables**: refused ("lecture seule : modifier le fichier de
-  configuration", read-only: edit the configuration file).
+- **List or array of tables**: use the built-in editor in `/settings`.
+  `/set name défaut` can reset a collection.
 
 A refusal leaves the file intact and the bar gives the reason. Roadie logs every
 changed setting (`settings.changed`, setting name and result), never its value.
@@ -497,16 +503,24 @@ copy is created in the same folder.
 
 #### Label size
 
-Two settings enlarge the labels: `target_mode.label_font_size`
-(`[experimental.target_mode]`, letter and search modes) and
-`target_grid.label_font_size` (`[experimental.target_grid]`, grid). Value in
-points, default 13, range 8 to 48. The text, the frame and the space around grow
-in proportion; with no value set, the look is the same as before.
+Sizes are independent: `target_mode.label_font_size` for letters,
+`target_mode.search_label_font_size` for search and `target_grid.label_font_size`
+for the grid. Values are in points, default 13, range 8 to 48. Search input uses
+`target_mode.search_text_font_size`; suggestions use `target_mode.command_text_font_size`.
+Frames follow the text size.
+
+Search also offers `target_mode.search_font_family` and `target_mode.command_font_family`.
+The menu lists installed families. `system`, an
+empty value or a missing family falls back to the macOS font. Family and size
+changes appear in the open bar without losing input. The TOML keys belong to
+`[experimental.target_mode]`.
 
 #### Limits
 
-- Lists and arrays of tables of the file still have to be edited by hand; the
-  window shows them read-only.
+- Advanced fragments require validation and explicit saving. `signals.hooks`
+  are not executed.
+- Rule actions `layout` and `gap_override` are stored but do not yet change tiling.
+  The settings window displays this limitation.
 - `/float` and `/close` do not exist: Roadie has no such actions. `/layout float`
   sets the stage layout.
 - Command mode and the settings window are drawn by the daemon: they require

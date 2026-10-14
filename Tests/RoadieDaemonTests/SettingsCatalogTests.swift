@@ -5,7 +5,7 @@ import RoadieDaemon
 
 @Suite
 struct SettingsCatalogTests {
-    private var simple: [SettingDescriptor] { SettingsCatalog.all.filter { $0.readOnlyReason == nil } }
+    private var simple: [SettingDescriptor] { SettingsCatalog.all.filter { $0.readOnlyReason == nil && $0.collection == nil } }
     private var railSimple: [SettingDescriptor] { simple.filter { $0.tablePath.hasPrefix("fx.rail") } }
 
     // MARK: - Structure
@@ -17,10 +17,10 @@ struct SettingsCatalogTests {
     }
 
     @Test
-    func catalogHas173SimpleSettings() {
-        #expect(simple.count == 173)
+    func catalogHas175SimpleSettings() {
+        #expect(simple.count == 175)
         #expect(railSimple.count == 75)
-        #expect(simple.count - railSimple.count == 98)
+        #expect(simple.count - railSimple.count == 100)
     }
 
     @Test
@@ -56,16 +56,17 @@ struct SettingsCatalogTests {
     }
 
     @Test
-    func readOnlyEntriesAreTheListsAndTableArrays() {
-        let readOnly = Set(SettingsCatalog.all.filter { $0.readOnlyReason != nil }.map(\.id))
+    func collectionsAreEditableListsAndTableArrays() {
+        let readOnly = Set(SettingsCatalog.all.filter { $0.collection != nil }.map(\.id))
         #expect(readOnly == [
             "tiling.smart_gaps_solo_sides", "tiling.allowed_subroles", "exclusions.floating_bundles",
             "width_adjustment.presets", "app_targets.include_roles", "app_targets.additional_boost_bundle_ids",
             "tiling.display_overrides", "stage_manager.workspaces", "borders.stage_overrides",
             "rail.preview.stage_overrides", "rules", "signals.hooks",
         ])
-        for descriptor in SettingsCatalog.all where descriptor.readOnlyReason != nil {
-            #expect(descriptor.defaultValue == .unset)
+        for descriptor in SettingsCatalog.all where descriptor.collection != nil {
+            #expect(descriptor.readOnlyReason == nil)
+            #expect(descriptor.defaultValue != .unset)
         }
     }
 
@@ -79,6 +80,9 @@ struct SettingsCatalogTests {
         #expect(SettingCategory.stages.label == "Stages et bureaux")
         #expect(SettingsCatalog.find(id: "target_mode.search_hotkey")?.category == .recherche)
         #expect(SettingsCatalog.find(id: "stage_manager.default_stage")?.category == .stages)
+        #expect(SettingsCatalog.find(id: "stage_manager.workspaces")?.category == .stages)
+        #expect(SettingsCatalog.find(id: "borders.stage_overrides")?.category == .bordures)
+        #expect(SettingsCatalog.find(id: "rail.preview.stage_overrides")?.category == .rail)
         #expect(SettingsCatalog.find(id: "target_record.enabled")?.category == .avance)
     }
 
@@ -142,7 +146,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 173)
+        #expect(expected.count == 175)
     }
 
     // MARK: - Défauts

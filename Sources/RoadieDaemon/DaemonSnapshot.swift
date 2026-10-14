@@ -68,6 +68,9 @@ public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
 }
 
 public struct SnapshotService {
+    /// Une application explicite de géométrie ne laisse pas la tolérance anti-jitter
+    /// absorber un pas de réglage d'un point. Ce contexte est local à la passe du maintainer.
+    var exactLayoutScopes: Set<StageScope> = []
     // AX/macOS peut faire disparaitre des fenetres pendant un plein ecran, un changement
     // de desktop, un redemarrage du daemon ou une reconfiguration display. Une absence
     // courte n'est donc pas une preuve de fermeture : si on prune trop vite, la fenetre
@@ -80,6 +83,7 @@ public struct SnapshotService {
     private let frameRegistry: WrittenFrameRegistry
     /// Config figée injectée (tests, commandes) ; nil = config du processus rechargée à chaud.
     private let fixedConfig: RoadieConfig?
+    private let configService: ConfigReloadService
     private let railSettings: RailSettings?
     private let railRuntimeStateStore: RailRuntimeStateStore
     private let intentStore: LayoutIntentStore
@@ -131,13 +135,15 @@ public struct SnapshotService {
         userInput: UserInputActivity = .shared,
         clock: @escaping @Sendable () -> Date = { Date() },
         frameRegistry: WrittenFrameRegistry = .shared,
-        treeScopeApplications: TreeScopeApplicationCenter = .shared
+        treeScopeApplications: TreeScopeApplicationCenter = .shared,
+        configService: ConfigReloadService = .shared
     ) {
         self.treeScopeApplications = treeScopeApplications
         self.provider = provider
         self.frameWriter = frameWriter
         self.frameRegistry = frameRegistry
         self.fixedConfig = config
+        self.configService = configService
         self.railSettings = railSettings
         self.railRuntimeStateStore = railRuntimeStateStore
         self.intentStore = intentStore
@@ -152,7 +158,7 @@ public struct SnapshotService {
     /// Config courante : relue à chaud via `ConfigReloadService.shared` (un stat par accès).
     /// Les fonctions qui la lisent plusieurs fois en prennent une copie locale.
     private var config: RoadieConfig {
-        fixedConfig ?? ConfigReloadService.shared.currentConfig()
+        fixedConfig ?? configService.currentConfig()
     }
 
     public var effectiveConfig: RoadieConfig {
@@ -1306,11 +1312,15 @@ public extension SnapshotService {
     // O(n log n) - n = cibles.
     private func treeCommands(targets: [WindowID: CGRect], in snapshot: DaemonSnapshot, generation: UInt64) -> ApplyPlan {
         let windowsByID = Dictionary(snapshot.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { first, _ in first })
+        let exactWindowIDs = Set(snapshot.windows.compactMap { entry in
+            entry.scope.map(exactLayoutScopes.contains) == true ? entry.window.id : nil
+        })
         return ApplyPlan(commands: targets.keys.sorted().compactMap { id -> ApplyCommand? in
             guard let window = windowsByID[id], let target = targets[id] else { return nil }
             let observed = window.frame.cgRect
-            if observed.matchesFrame(target) { return nil }
-            if let entry = frameRegistry.entry(for: id.rawValue), entry.generation == generation,
+            let exact = exactWindowIDs.contains(id)
+            if observed.matchesFrame(target, tolerance: exact ? 0 : LayoutTolerance.frameMatch) { return nil }
+            if !exact, let entry = frameRegistry.entry(for: id.rawValue), entry.generation == generation,
                let accepted = entry.accepted, entry.requested.matchesFrame(target), accepted.matchesFrame(observed) {
                 return nil
             }
@@ -1629,8 +1639,11 @@ public extension SnapshotService {
         })
         let currentPlan = LayoutPlan(placements: currentFrames)
 
-        let commands = LayoutDiff.commands(previous: currentPlan, next: plan).compactMap { command -> ApplyCommand? in
+        let exact = exactLayoutScopes.contains(scope)
+        let diff = LayoutDiff.commands(previous: exact ? nil : currentPlan, next: plan)
+        let commands = diff.compactMap { command -> ApplyCommand? in
             guard let window = windowsByID[command.windowID] else { return nil }
+            if exact, window.frame.cgRect.matchesFrame(command.frame, tolerance: 0) { return nil }
             return ApplyCommand(window: window, frame: Rect(command.frame))
         }
         return ApplyPlan(commands: commands)
@@ -1909,16 +1922,17 @@ public extension SnapshotService {
     private func applyPlan(from snapshot: DaemonSnapshot, intent: LayoutIntent) -> ApplyPlan {
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         let focusedWindowID = focusedWindowID()
+        let exact = exactLayoutScopes.contains(intent.scope)
         let commands = intent.windowIDs.compactMap { id -> ApplyCommand? in
             guard let window = windowsByID[id], let target = intent.placements[id] else {
                 return nil
             }
-            if id == focusedWindowID,
+            if !exact, id == focusedWindowID,
                isLikelyFocusWindowChromeDelta(window.frame, baseline: target) {
                 return nil
             }
             // Tolérance unique (T201, R9) : à refaire seulement au-delà de `frameMatch`.
-            guard !window.frame.cgRect.matchesFrame(target.cgRect) else { return nil }
+            guard !window.frame.cgRect.matchesFrame(target.cgRect, tolerance: exact ? 0 : LayoutTolerance.frameMatch) else { return nil }
             return ApplyCommand(window: window, frame: target)
         }
         return ApplyPlan(commands: commands)
@@ -2194,7 +2208,7 @@ private extension SnapshotService {
     }
 
     internal func currentRailSettings() -> RailSettings {
-        railSettings ?? RailSettings.load()
+        railSettings ?? RailSettings.load(path: configService.state.activePath ?? RoadieConfigLoader.defaultConfigPath())
     }
 }
 
@@ -2213,8 +2227,7 @@ private extension CGRect {
     }
 
     /// Tolérance unique de comparaison de frames (R9, FR-010) : `frameMatch` sur chaque composante.
-    func matchesFrame(_ other: CGRect) -> Bool {
-        let tolerance = LayoutTolerance.frameMatch
+    func matchesFrame(_ other: CGRect, tolerance: CGFloat = LayoutTolerance.frameMatch) -> Bool {
         return abs(minX - other.minX) <= tolerance
             && abs(minY - other.minY) <= tolerance
             && abs(width - other.width) <= tolerance

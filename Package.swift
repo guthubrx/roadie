@@ -32,7 +32,7 @@ let package = Package(
         ),
         .target(
             name: "RoadieDaemon",
-            dependencies: ["RoadieAX", "RoadieStages", "RoadieTiler"]
+            dependencies: ["RoadieAX", "RoadieStages", "RoadieTiler", .product(name: "TOMLKit", package: "TOMLKit")]
         ),
         .target(
             name: "RoadieStages",

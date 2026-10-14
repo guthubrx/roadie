@@ -452,18 +452,27 @@ Une seconde demande ramène la même fenêtre au premier plan.
 - **Recherche** : filtre les réglages de toutes les catégories par nom et par
   description, casse et accents ignorés.
 - **Sans bouton Enregistrer** : un changement est écrit dans le fichier de
-  configuration et s'applique tout de suite, sans redémarrage. Une valeur refusée
-  laisse le champ à l'ancienne valeur et affiche la cause sous le réglage.
+  configuration dès la saisie d'une valeur valide, sans Retour ni perte du focus.
+  Une valeur incomplète ou refusée reste en brouillon ; la dernière valeur valide
+  reste active. Les marges déclenchent une nouvelle disposition, même pour un point.
+  Pendant un déplacement à la souris, le tuilage attend le relâchement.
 - **Suivi du fichier** : une modification faite ailleurs (à la main, par `/set`)
   apparaît dans la fenêtre sans la rouvrir.
 - **Fermeture** : Échap, Cmd+W ou le bouton de fermeture. L'application qui était
   au premier plan reprend le focus.
-- **Général** ne contient aucun réglage : il montre le chemin et l'état du
-  fichier de configuration, avec les actions Ouvrir, Recharger et Diagnostic.
-- **Règles** et les listes ou tableaux de tables du fichier (règles, stages
-  nommés, hooks, surcharges par écran) sont en **lecture seule**, avec un bouton
-  « Ouvrir le fichier de configuration ». Si le fichier est invalide, un bandeau
-  l'indique et les contrôles sont désactivés.
+- **Général** montre les tailles des textes, aides et titres de la fenêtre, ainsi
+  que le chemin et l'état du fichier. Les outils avancés proposent Recharger,
+  Diagnostic et l'ouverture facultative du fichier.
+- **Listes et tableaux** : contrôles intégrés pour les côtés des marges, les rôles
+  de fenêtres, les applications, les largeurs prédéfinies, les surcharges par écran,
+  les stages nommés, les couleurs par stage et les règles. Chaque ligne complète et
+  valide s'applique immédiatement. Un nom de stage modifié apparaît dans le rail.
+  Retirer sa définition ne supprime ni le stage persistant ni ses fenêtres.
+- **Éditeur avancé intégré** : les rares fragments complexes, dont `signals.hooks`,
+  se modifient dans la fenêtre avec validation et enregistrement explicite.
+  Roadie enregistre les hooks, mais ne les exécute pas actuellement.
+  Si le fichier est invalide, les contrôles ordinaires sont désactivés ; l'éditeur
+  complet permet de le réparer sans ouvrir une application externe.
 
 #### Réglage en ligne (`/set`)
 
@@ -487,8 +496,8 @@ Conversions de la valeur :
 - **Choix** : une valeur de la liste, sinon refus avec la liste.
 - **Couleur** : `#RRGGBB` ou `#RRGGBBAA`.
 - **Texte** : la fin de la saisie, sans les espaces de bord.
-- **Liste ou tableau de tables** : refus (« lecture seule : modifier le fichier de
-  configuration »).
+- **Liste ou tableau de tables** : utiliser l'éditeur intégré dans `/settings`.
+  `/set nom défaut` peut rétablir une collection.
 
 Un refus laisse le fichier intact et la barre donne la raison. Roadie journalise
 chaque réglage modifié (`settings.changed`, nom du réglage et résultat), jamais sa
@@ -505,16 +514,24 @@ copie `roadies.toml.bak-<horodatage>` est créée dans le même dossier.
 
 #### Taille des étiquettes
 
-Deux réglages agrandissent les étiquettes : `target_mode.label_font_size`
-(`[experimental.target_mode]`, mode lettres et recherche) et
-`target_grid.label_font_size` (`[experimental.target_grid]`, grille). Valeur en
-points, défaut 13, plage 8 à 48. Le texte, le cadre et l'espace autour grandissent
-en proportion ; sans valeur posée, l'aspect est celui d'avant.
+Les tailles sont indépendantes : `target_mode.label_font_size` pour les lettres,
+`target_mode.search_label_font_size` pour la recherche et `target_grid.label_font_size`
+pour la grille. Valeur en points, défaut 13, plage 8 à 48. La saisie de recherche
+utilise `target_mode.search_text_font_size` et les suggestions
+`target_mode.command_text_font_size`. Les cadres suivent la taille du texte.
+
+La catégorie Recherche propose aussi les familles `target_mode.search_font_family`
+et `target_mode.command_font_family`. Le menu liste les familles installées.
+`system`, une valeur vide ou une famille absente utilise
+la police macOS. Famille et taille changent dans la barre déjà ouverte sans perdre
+la saisie. Les clés TOML se trouvent dans `[experimental.target_mode]`.
 
 #### Limites
 
-- Les listes et les tableaux de tables du fichier restent à éditer à la main ; la
-  fenêtre les montre en lecture seule.
+- Les fragments avancés exigent une validation et un enregistrement explicite.
+  Les `signals.hooks` ne sont pas exécutés.
+- Les actions de règle `layout` et `gap_override` sont enregistrées, mais ne
+  modifient pas encore le tuilage. La fenêtre indique cette limite.
 - `/float` et `/close` n'existent pas : Roadie n'a pas ces actions. `/layout float`
   règle la disposition du stage.
 - Le mode commande et la fenêtre de réglages sont dessinés par le daemon : ils

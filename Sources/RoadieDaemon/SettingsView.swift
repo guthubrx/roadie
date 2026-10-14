@@ -7,6 +7,7 @@ import RoadieCore
 struct SettingsView: View {
     @ObservedObject var model: SettingsViewModel
     private var fonts: InterfaceConfig { model.interfaceFonts }
+    @State private var advancedOpen = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -17,6 +18,7 @@ struct SettingsView: View {
         .frame(minWidth: 760, minHeight: 520)
         .font(.system(size: fonts.settingsTextFontSize))
         .buttonStyle(SettingsButtonStyle(fontSize: fonts.settingsTextFontSize))
+        .sheet(isPresented: $advancedOpen) { SettingsAdvancedEditor(model: model, descriptor: nil) }
     }
 
     // MARK: - Colonne gauche
@@ -84,7 +86,7 @@ struct SettingsView: View {
             ForEach(Array(model.validity.messages.prefix(10).enumerated()), id: \.offset) { _, message in
                 Text(message).font(.system(size: fonts.settingsHelpFontSize)).textSelection(.enabled)
             }
-            Button("Ouvrir le fichier") { openConfigFile() }
+            Button("Corriger dans l'éditeur intégré") { advancedOpen = true }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -96,7 +98,7 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             ForEach(Array(descriptors.enumerated()), id: \.element.id) { index, descriptor in
                 if index > 0 { Divider().padding(.leading, 14) }
-                SettingRow(model: model, descriptor: descriptor, openConfigFile: openConfigFile)
+                SettingRow(model: model, descriptor: descriptor)
             }
         }
         .background(cardBackground)
@@ -122,9 +124,14 @@ struct SettingsView: View {
                     Text(model.validityText).foregroundStyle(model.isLocked ? .red : .primary)
                 }
                 VStack(alignment: .leading, spacing: 10) {
-                    Button("Ouvrir le fichier de configuration") { openConfigFile() }
                     Button("Recharger") { model.reloadConfig() }
                     Button("Diagnostic") { model.runDiagnostic() }
+                    DisclosureGroup("Outils avancés") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Button("Éditeur intégré") { advancedOpen = true }
+                            Button("Ouvrir dans un éditeur externe") { openConfigFile() }
+                        }.padding(.top, 8)
+                    }
                 }
                 if let notice = model.notice {
                     Text(notice).font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
@@ -173,7 +180,7 @@ private struct SettingsButtonStyle: ButtonStyle {
 private struct SettingRow: View {
     @ObservedObject var model: SettingsViewModel
     let descriptor: SettingDescriptor
-    let openConfigFile: () -> Void
+    @State private var advancedOpen = false
     @FocusState private var fieldFocused: Bool
     private var fonts: InterfaceConfig { model.interfaceFonts }
     private var isFontSize: Bool { descriptor.key == "font_size" || descriptor.key.hasSuffix("_font_size") }
@@ -205,7 +212,7 @@ private struct SettingRow: View {
             }
             HStack {
                 if descriptor.readOnlyReason != nil {
-                    Button("Ouvrir le fichier de configuration", action: openConfigFile)
+                    Button("Éditeur intégré") { advancedOpen = true }
                 } else {
                     control.disabled(model.isLocked).accessibilityLabel(descriptor.label)
                 }
@@ -232,10 +239,20 @@ private struct SettingRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 14)
+        .sheet(isPresented: $advancedOpen) {
+            SettingsAdvancedEditor(model: model, descriptor: descriptor.collection == nil ? nil : descriptor)
+        }
     }
 
     @ViewBuilder
     private var control: some View {
+        if let collection = descriptor.collection {
+            if case .advanced = collection.shape {
+                Button("Modifier dans l'éditeur intégré") { advancedOpen = true }
+            } else {
+                SettingsCollectionEditor(model: model, descriptor: descriptor)
+            }
+        } else {
         switch descriptor.kind {
         case .bool:
             Toggle("", isOn: Binding(
@@ -273,7 +290,15 @@ private struct SettingRow: View {
             ))
             .frame(maxWidth: .infinity)
         case .text:
-            field.frame(maxWidth: 360)
+            if descriptor.key == "font_family" || descriptor.key.hasSuffix("_font_family") {
+                SettingsFontFamilyPicker(fontSize: fonts.settingsTextFontSize, selection: Binding(
+                    get: { model.text(for: descriptor) },
+                    set: { model.apply(descriptor, raw: $0) }
+                ))
+                .frame(maxWidth: .infinity)
+            } else {
+                field.frame(maxWidth: 360)
+            }
         case .color:
             HStack(spacing: 6) {
                 ColorPicker("", selection: Binding(
@@ -284,9 +309,10 @@ private struct SettingRow: View {
                 field.frame(width: max(100, fonts.settingsTextFontSize * 8))
             }
         }
+        }
     }
 
-    /// Champ validé par Retour ou par la perte du focus.
+    /// Saisie immédiate ; Retour ou perte du focus termine seulement le brouillon.
     private var field: some View {
         TextField(descriptor.defaultValue == .unset ? "non défini" : "", text: Binding(
             get: { model.text(for: descriptor) },

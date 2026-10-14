@@ -35,6 +35,7 @@ var daemonStatusPublisher: DaemonStatusPublisher?
 // Retenu globalement : la sous-commande `tiler` (runComponent) retourne avant
 // NSApplication.run(), donc une reference locale serait desallouee.
 var tilerLiveObserver: AXWindowEventObserver?
+var settingsLiveApplyController: SettingsLiveApplyController?
 // Notifications NSWorkspace du tiler, retenues pour la vie du process.
 var workspaceObservers: [NSObjectProtocol] = []
 // Canal des commandes CLI (`run` et `tiler`), retenu pour toute la vie du process.
@@ -207,6 +208,7 @@ func startTargetModeComponent() {
     // SPEC-021 : raccourci global du mode recherche, même cycle de vie que le mode lettres.
     targetSearchHotkey = TargetSearchHotkey { targetModeRuntimeController?.requestSearch() }
     targetSearchHotkey?.start()
+    ShutdownRegistry.register { targetSearchHotkey?.stop() }
 }
 
 /// Canal socket des commandes CLI, servi par le process qui détient le verrou d'instance.
@@ -359,6 +361,18 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
             return NSEvent.pressedMouseButtons != 0 || now < displaySettlingUntil || now < tickSuspendedUntil
         }
     )
+
+    let settingsController = SettingsLiveApplyController(
+        stageStore: service.effectiveStageStore,
+        onLayoutChange: { invalidateIntents in
+            maintainer.configurationChanged(invalidateLayoutIntents: invalidateIntents)
+            scheduler.request(cause: "command:settings")
+        },
+        onBorderChange: { borderController?.start() }
+    )
+    settingsController.start()
+    settingsLiveApplyController = settingsController
+    ShutdownRegistry.register { settingsController.stop() }
 
     installDisplayChangeObserver(displaySettleSeconds: displaySettleSeconds) {
         scheduler.request(cause: "ax:displayReconfigured")

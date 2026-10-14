@@ -1,11 +1,23 @@
 # Tâches — session 027
 
 - [x] T001 Clôturer la session 026 validée, préparer la branche et le diagnostic.
-- [ ] T002 Fixer le contrat des collections et les garanties d'édition.
-- [ ] T003 Implémenter la lecture, l'écriture et le catalogue des douze entrées.
-- [ ] T004 Appliquer les champs valides pendant la saisie et fournir les éditeurs.
-- [ ] T005 Appliquer les changements effectifs au daemon et au tuilage.
-- [ ] T006 Ajouter les familles de police Caps+F et leur changement immédiat.
-- [ ] T007 Intégrer, tester, inspecter les rendus et traiter la revue.
-- [ ] T008 Installer, redémarrer et vérifier la santé.
+- [x] T002 Fixer le contrat des collections et les garanties d'édition.
+- [x] T003 Implémenter la lecture, l'écriture et le catalogue des douze entrées.
+- [x] T004 Appliquer les champs valides pendant la saisie et fournir les éditeurs.
+- [x] T005 Appliquer les changements effectifs au daemon et au tuilage.
+- [x] T006 Ajouter les familles de police Caps+F et leur changement immédiat.
+- [x] T007 Intégrer, tester, inspecter les rendus et traiter la revue.
+- [x] T008 Installer, redémarrer et vérifier la santé.
 - [ ] T009 Recueillir le test manuel, documenter, committer et fusionner.
+
+## Point de validation
+
+T007 : 1 440 tests dans 154 suites passent en 6,943 s, dont le transport IPC réel,
+les gardes de redimensionnement, les transitions entre stages et la validation
+sémantique des règles. Vingt rendus hors écran sont inspectés. Les constats des
+trois premières revues sont traités. Le scénario du tour 4 est reproduit, corrigé
+et testé dans les deux moteurs, avec reprise au retour et borne conservée.
+
+T008 : version finale installée et redémarrée, PID 47508, quatre contrôles de
+santé OK. Certificat et permissions macOS conservés.
+T009 : test utilisateur confirmé (« Oui, tout fonctionne »). Livraison Git en cours.

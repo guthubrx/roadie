@@ -84,6 +84,7 @@ public struct SettingDescriptor: Equatable, Sendable {
     public let defaultValue: SettingValue
     /// Présent pour les listes et les tableaux de tables : affichés, jamais modifiés.
     public let readOnlyReason: String?
+    public let collection: CollectionSpec?
 
     /// Libellé de présentation seulement : le menu conserve la valeur brute comme tag. O(1).
     public func choiceLabel(_ value: String) -> String {
@@ -115,7 +116,8 @@ public struct SettingDescriptor: Equatable, Sendable {
         help: String,
         kind: SettingKind,
         defaultValue: SettingValue,
-        readOnlyReason: String? = nil
+        readOnlyReason: String? = nil,
+        collection: CollectionSpec? = nil
     ) {
         self.id = SettingsCatalog.id(tablePath: tablePath, key: key)
         self.category = category
@@ -126,6 +128,7 @@ public struct SettingDescriptor: Equatable, Sendable {
         self.kind = kind
         self.defaultValue = defaultValue
         self.readOnlyReason = readOnlyReason
+        self.collection = collection
     }
 }
 
@@ -134,7 +137,7 @@ public enum SettingsCatalog {
     public static let all: [SettingDescriptor] =
         interfaceDescriptors + tilingDescriptors + stageDescriptors + focusDescriptors + borderDescriptors
         + targetModeDescriptors + appTargetDescriptors + targetGridDescriptors
-        + advancedDescriptors + ruleDescriptors + railDescriptors
+        + advancedDescriptors + ruleDescriptors + railDescriptors + fontFamilyDescriptors
 
     /// Texte de recherche normalisé de chaque réglage, calculé une fois (même ordre que `all`).
     private static let searchTexts: [String] = all.map {
@@ -223,7 +226,7 @@ extension SettingsCatalog {
         )
     }
 
-    /// Liste ou tableau de tables : affiché en lecture seule.
+    /// Liste ou tableau de tables : éditeur structuré intégré.
     static func readOnlyEntry(
         _ category: SettingCategory,
         _ tablePath: String,
@@ -231,9 +234,10 @@ extension SettingsCatalog {
         _ label: String,
         _ help: String
     ) -> SettingDescriptor {
-        SettingDescriptor(
+        let spec = collectionSpec(id: id(tablePath: tablePath, key: key))
+        return SettingDescriptor(
             category: category, tablePath: tablePath, key: key, label: label, help: help,
-            kind: .text, defaultValue: .unset, readOnlyReason: readOnlyMessage
+            kind: .text, defaultValue: .string(SettingsCollectionCodec.summary(spec.defaultValue)), collection: spec
         )
     }
 
@@ -300,8 +304,8 @@ extension SettingsCatalog {
     static let stageDescriptors: [SettingDescriptor] = [
         entry(.stages, "stage_manager", "default_stage", "Stage par défaut",
               "Identifiant du stage actif sur un écran neuf.", .text, .string("1")),
-        readOnlyEntry(.avance, "stage_manager", "workspaces", "Noms des stages",
-                      "Tableau des stages nommés dans le fichier de configuration."),
+        readOnlyEntry(.stages, "stage_manager", "workspaces", "Noms des stages",
+                      "Noms des stages. Retirer une définition ne supprime ni le stage ni les fenêtres déjà conservés."),
     ]
 
     static let focusDescriptors: [SettingDescriptor] = [
@@ -335,7 +339,7 @@ extension SettingsCatalog {
               "Couleur de la bordure des autres fenêtres.", .color, .string("#414868")),
         entry(.bordures, "fx.borders", "pulse_on_focus", "Pulsation de la bordure au focus",
               "Fait pulser la bordure quand une fenêtre reçoit le focus.", .bool, .bool(false)),
-        readOnlyEntry(.avance, "fx.borders", "stage_overrides", "Couleur de contour par stage",
+        readOnlyEntry(.bordures, "fx.borders", "stage_overrides", "Couleur de contour par stage",
                       "Tableau de couleurs propres à certains stages."),
     ]
 }
@@ -521,6 +525,6 @@ extension SettingsCatalog {
         readOnlyEntry(.regles, "", "rules", "Règles de fenêtres",
                       "Tableau de règles qui placent ou excluent des fenêtres selon l'application ou le titre."),
         readOnlyEntry(.regles, "signals", "hooks", "Commandes déclenchées par événement",
-                      "Tableau de commandes lancées quand un événement se produit."),
+                      "Structure avancée connue. Roadie ne l'exécute pas actuellement ; cet éditeur permet de la conserver et de la préparer."),
     ]
 }

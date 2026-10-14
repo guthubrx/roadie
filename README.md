@@ -588,9 +588,12 @@ bar. System shortcuts remain intercepted while entering a command.
 | Restore its default | `/set target_mode.label_font_size default` |
 | Diagnose or reload | `/doctor`, `/heal`, `/reload` |
 
-The settings window provides categories, search, and immediate changes. Lists and
-arrays of tables remain read-only. The interface is in French. TOML comments are
-preserved. A backup precedes the first change of the session. Invalid writes are
+The settings window provides categories, search, and changes as soon as a typed
+value is valid. Margins trigger a new layout, including one-point changes. Lists,
+stages, rules and per-display overrides have built-in editors. Incomplete input
+stays in the field without replacing the last valid value.
+The interface is in French. TOML comments are preserved.
+A backup precedes the first change of the session. Invalid writes are
 rejected. Font sizes are independent and apply immediately through sliders,
 steppers, or valid typed values. Open sessions retain their input when fonts change.
 
@@ -606,6 +609,15 @@ For example, `/set interface.settings_text_font_size 20` updates the settings wi
 The settings text, help and title defaults are 16, 14 and 22 points. Letters,
 grid and search labels default to 13 points. Rail cards adapt their size to the font.
 Native macOS tooltips and system dialog messages keep their system font.
+
+Search input and command suggestions have independent font families:
+`target_mode.search_font_family` and `target_mode.command_font_family`. Changes
+appear in the open bar. `system` selects the macOS font; missing families fall
+back to it. Rare complex fragments use a built-in advanced editor with validation
+and explicit saving. `signals.hooks` can be stored but are not currently executed
+by Roadie. An invalid file can be repaired inside the settings window.
+Rule actions `layout` and `gap_override` are stored but do not yet change tiling.
+Their editors display this limitation.
 
 The bar and settings require a running daemon and `overlay_enabled = true`.
 In the existing configuration table, enable at least:

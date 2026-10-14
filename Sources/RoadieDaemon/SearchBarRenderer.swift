@@ -95,14 +95,18 @@ struct SearchBarContentLayout: Equatable {
 @MainActor
 enum SearchBarRenderer {
     static func draw(_ state: TargetSearchBar, in bounds: CGRect, style: TargetOverlayStyle) {
-        let messages = messageLines(state.message, fontSize: style.commandTextFontSize)
+        // Résoudre les deux familles une fois par dessin, hors des boucles de suggestions.
+        let inputFont = font(family: style.searchFontFamily, size: style.searchTextFontSize)
+        let commandFont = font(family: style.commandFontFamily, size: style.commandTextFontSize)
+        let messages = messageLines(state.message, font: commandFont)
         let layout = SearchBarLayout.make(bounds: bounds, suggestions: state.suggestions.count,
                                           messageLines: messages.count, searchTextFontSize: style.searchTextFontSize,
                                           commandTextFontSize: style.commandTextFontSize)
         guard layout.bar.width > 0, layout.bar.height > 0 else { return }
         drawSurface(layout.bar)
         let counter = state.counterText.map {
-            line($0, fontSize: max(8, style.searchTextFontSize - 2), color: NSColor(calibratedWhite: 0.72, alpha: 1))
+            line($0, font: NSFontManager.shared.convert(inputFont, toSize: max(8, style.searchTextFontSize - 2)),
+                 color: NSColor(calibratedWhite: 0.72, alpha: 1))
         }
         let counterSize = counter.map { text -> CGSize in
             let size = text.size()
@@ -110,7 +114,7 @@ enum SearchBarRenderer {
         }
         let content = SearchBarContentLayout.make(bar: layout.bar, counterSize: counterSize)
         let placeholder = state.commandInput == nil && state.properties == nil && state.query.isEmpty
-        let text = line(state.inputText, fontSize: style.searchTextFontSize,
+        let text = line(state.inputText, font: inputFont,
                         color: NSColor(calibratedWhite: placeholder ? 0.52 : 0.94, alpha: 1), truncation: .byTruncatingHead)
         draw(text, in: content.input)
         if let counter, let rect = content.counter {
@@ -138,7 +142,7 @@ enum SearchBarRenderer {
                 NSColor.white.withAlphaComponent(0.08).setFill()
                 NSBezierPath(roundedRect: row.insetBy(dx: -6, dy: 1), xRadius: 6, yRadius: 6).fill()
             }
-            draw(suggestionLine(state.suggestions[index], fontSize: style.commandTextFontSize), in: row)
+            draw(suggestionLine(state.suggestions[index], font: commandFont), in: row)
         }
         for (row, message) in zip(layout.messageRows, messages) { draw(message, in: row) }
     }
@@ -152,31 +156,40 @@ enum SearchBarRenderer {
         path.stroke()
     }
 
-    private static func line(_ text: String, fontSize: CGFloat, color: NSColor,
+    /// O(1) : AppKit résout la famille ; une famille absente garde la taille et utilise le système.
+    static func font(family: String, size: CGFloat) -> NSFont {
+        guard family != "system",
+              let font = NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: size) else {
+            return NSFont.systemFont(ofSize: size, weight: .regular)
+        }
+        return font
+    }
+
+    private static func line(_ text: String, font: NSFont, color: NSColor,
                              truncation: NSLineBreakMode = .byTruncatingTail) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = truncation
         return NSAttributedString(string: text.components(separatedBy: .newlines).joined(separator: " "), attributes: [
-            .font: NSFont.systemFont(ofSize: fontSize, weight: .regular),
+            .font: font,
             .foregroundColor: color, .paragraphStyle: paragraph,
         ])
     }
 
-    private static func suggestionLine(_ suggestion: SlashSuggestion, fontSize: CGFloat) -> NSAttributedString {
+    private static func suggestionLine(_ suggestion: SlashSuggestion, font: NSFont) -> NSAttributedString {
         let name = (suggestion.kind == .command ? "/" : "") + suggestion.text.trimmingCharacters(in: .whitespaces)
-        let result = NSMutableAttributedString(attributedString: line(name, fontSize: fontSize, color: NSColor(calibratedWhite: 0.94, alpha: 1)))
+        let result = NSMutableAttributedString(attributedString: line(name, font: font, color: NSColor(calibratedWhite: 0.94, alpha: 1)))
         if !suggestion.detail.isEmpty {
-            result.append(line("   " + suggestion.detail, fontSize: fontSize, color: NSColor(calibratedWhite: 0.55, alpha: 1)))
+            result.append(line("   " + suggestion.detail, font: font, color: NSColor(calibratedWhite: 0.55, alpha: 1)))
         }
         return result
     }
 
-    private static func messageLines(_ message: SlashMessage?, fontSize: CGFloat) -> [NSAttributedString] {
+    private static func messageLines(_ message: SlashMessage?, font: NSFont) -> [NSAttributedString] {
         switch message {
         case .info(let lines):
-            return lines.prefix(SearchBarLayout.maxMessageLines).map { line($0, fontSize: fontSize, color: .white) }
+            return lines.prefix(SearchBarLayout.maxMessageLines).map { line($0, font: font, color: .white) }
         case .error(let text, let usage):
-            return ([text] + (usage.map { ["Usage : \($0)"] } ?? [])).map { line($0, fontSize: fontSize, color: .systemRed) }
+            return ([text] + (usage.map { ["Usage : \($0)"] } ?? [])).map { line($0, font: font, color: .systemRed) }
         case nil:
             return []
         }

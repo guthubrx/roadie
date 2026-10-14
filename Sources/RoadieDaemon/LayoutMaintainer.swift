@@ -31,7 +31,7 @@ public struct MaintenanceTick: Equatable, Codable, Sendable {
 }
 
 public final class LayoutMaintainer {
-    private let service: SnapshotService
+    private var service: SnapshotService
     private let events: EventLog
     /// Cycle du filet de sécurité, seulement pour la durée de vie du snapshot publié (FR-023).
     /// Aucune attente n'en dépend : les durées de `LayoutTolerance` sont absolues (SPEC-017 R5).
@@ -115,6 +115,13 @@ public final class LayoutMaintainer {
     private var pendingStability: PendingStability?
     private var lastPassEpisodeID: String?
     private var passIndex = 0
+    private var settingsGeometryPending = false
+    private var exactSettingsScopes: Set<StageScope> = []
+    /// Une première relecture différente/inconnue autorise une seule reprise explicite.
+    private var settingsRetryAt: [StageScope: Date] = [:]
+    private var settingsRetryRunnableScopes: Set<StageScope> = []
+    private enum SettingsFrameState { case needsRetry, completed }
+    private var settingsFrameStates: [WindowID: SettingsFrameState] = [:]
 
     /// `service` nil : service de production sur un relevé AX rejouable (T210). Un service injecté
     /// le rejoue si `scanReplay` est son fournisseur.
@@ -167,6 +174,27 @@ public final class LayoutMaintainer {
         tick(cause: "safety")
     }
 
+    /// Une nouvelle géométrie de configuration remplace les placements mémorisés, même si
+    /// leur écart reste dans la tolérance des intents. Les zooms et les arbres sont conservés.
+    /// Appelé avant la demande à TickScheduler : aucune écriture AX ni contournement des gestes.
+    public func configurationChanged(invalidateLayoutIntents: Bool) {
+        service.invalidateSharedSnapshot()
+        guard invalidateLayoutIntents else { return }
+        service.effectiveIntentStore.mutate { intents in
+            intents = intents.filter { $0.value.zoomedWindowID != nil }
+        }
+        lastCommandIntentAt = nil
+        // Nouvelle intention explicite : une variation d'un point dispose de son budget.
+        settingsGeometryPending = true
+        settingsRetryAt.removeAll()
+        settingsRetryRunnableScopes.removeAll()
+        settingsFrameStates.removeAll()
+        _ = generations.next()
+        clampedFrames.removeAll()
+        failedFrames.removeAll()
+        revertedAppliedFrames.removeAll()
+    }
+
     /// Une passe (A1, A15) : état logique sur une copie de travail (règles, déplacements adoptés,
     /// zoom quitté), calcul des placements (masquage, épinglages, zoom, disposition), arbitrage
     /// par fenêtre, une seule application, puis focus. Seules les suspensions globales (topologie
@@ -175,6 +203,8 @@ public final class LayoutMaintainer {
     /// (`ax:<notification>`, `command:<nom>`, `drag`, `deadline`, `safety`) ; une échéance est nommée ici.
     // O(n · s) - n fenêtres, s scopes actifs.
     public func tick(cause: String) -> MaintenanceTick {
+        // La précision des paramètres n'est jamais conservée dans les autres appels du service.
+        defer { service.exactLayoutScopes = [] }
         let startedAt = Date()
         var scans = 1
         var snapshot = service.producerSnapshot(cycle: intervalSeconds)
@@ -233,6 +263,19 @@ public final class LayoutMaintainer {
             // Référence d'observation et priorité conservées : le geste est traité au relâchement.
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
+
+        if settingsGeometryPending {
+            exactSettingsScopes.formUnion(activeScopes(in: snapshot).filter {
+                snapshot.state.stage(scope: $0)?.mode.isTiled == true
+            })
+            settingsGeometryPending = false
+        }
+        service.exactLayoutScopes = exactSettingsScopes
+
+        let waitingSettingsScopes = Set(settingsRetryAt.compactMap { scope, due in
+            tickNow < due ? scope : nil
+        })
+        tickExcludedScopes.formUnion(waitingSettingsScopes)
 
         tickExcludedScopes.formUnion(settlingScopes)
         var observedFrames = scopedFrames(in: snapshot)
@@ -301,6 +344,32 @@ public final class LayoutMaintainer {
         let systemFocusedWindowID = hasActiveFullscreen ? service.focusedWindowID() : nil
         let focusRestore = focusedHiddenRestore(in: snapshot, cause: cause, systemFocusedWindowID: systemFocusedWindowID)
 
+        // Une reprise ne récupère pas l'intent automatique construit sur le cadre ignoré.
+        // Les échecs mémorisés ne doivent pas absorber cette unique nouvelle demande.
+        let retryManualHold = manualResizeApplyAfter.map { tickNow < $0 } == true
+            ? activeScopes(in: snapshot).filter { snapshot.state.stage(scope: $0)?.mode.usesTreeEngine != true }
+            : []
+        // Un zoom ordinaire/natif suspend la disposition. Le zoom réservant le rail
+        // garde sa cible géométrique et peut appliquer la précision des paramètres.
+        let retryFullscreenHold = Set(tickFullscreen.compactMap { item -> StageScope? in
+            guard let scope = item.entry.scope else { return nil }
+            return item.entry.window.furniture?.isNativeFullscreen == true
+                || service.commandLayoutIntent(scope: scope)?.zoomReservesRail != true ? scope : nil
+        })
+        let authorizedRetryScopes = activeScopes(in: snapshot).subtracting(tickExcludedScopes).subtracting(
+            retryFullscreenHold.union(retryManualHold)
+        )
+        for (scope, due) in settingsRetryAt where due <= tickNow && authorizedRetryScopes.contains(scope) {
+            if service.commandLayoutIntent(scope: scope)?.zoomedWindowID == nil {
+                service.removeLayoutIntent(scope: scope)
+            }
+            for entry in snapshot.windows where entry.scope == scope {
+                clampedFrames[entry.window.id.rawValue] = nil
+                failedFrames[entry.window.id.rawValue] = nil
+                revertedAppliedFrames[entry.window.id.rawValue] = nil
+            }
+        }
+
         // 2. Calcul des placements depuis la copie de travail.
         var plan = PassPlan()
         suppressKnownUnmovableFrames(in: ApplyPlan(commands: closedZoomRestoration), snapshot: snapshot)
@@ -367,7 +436,7 @@ public final class LayoutMaintainer {
         let writable = plan.entries.compactMap { command, priority -> ApplyCommand? in
             guard !defersFailedDrift(command.window, now: tickNow) else { return nil }
             guard let scope = scopesByID[command.window.id] else { return command }
-            if settlingScopes.contains(scope) || suspension.covers(scope) { return nil }
+            if settlingScopes.contains(scope) || suspension.covers(scope) || waitingSettingsScopes.contains(scope) { return nil }
             if priority != .layout, treeDisplays.contains(scope.displayID),
                writesUsed(command.window.id.rawValue, generation: generation) >= LayoutTolerance.writeBudgetPerGeneration {
                 return nil
@@ -385,6 +454,28 @@ public final class LayoutMaintainer {
             source: focusRestore == nil ? nil : "stage_focus_restore"
         )
         let writeEnd = now()
+        // Un scope suspendu garde sa demande. Une frame exactement relue consomme la
+        // précision ; un écart/inconnu autorise une seule reprise, puis la précision cesse.
+        let awaitingManualResize = manualResizeApplyAfter.map { tickNow < $0 } == true
+            ? activeScopes(in: snapshot).filter { snapshot.state.stage(scope: $0)?.mode.usesTreeEngine != true }
+            : []
+        // Sans fenêtre candidate, conserver la demande mais désarmer son réveil.
+        // Ne pas utiliser seulement les cibles de la passe : avant l'échéance,
+        // waitingSettingsScopes les exclut volontairement de la disposition.
+        let populatedRetryScopes = Set(snapshot.windows.compactMap { entry in
+            entry.window.isTileCandidate ? entry.scope : nil
+        })
+        settingsRetryRunnableScopes = activeScopes(in: snapshot).intersection(populatedRetryScopes).subtracting(
+            settlingScopes.union(suspension.scopes).union(retryFullscreenHold).union(awaitingManualResize)
+        )
+        finishExactSettingsPass(
+            result: application.result, scopesByID: scopesByID,
+            targets: treePlan.targets.merging(Dictionary(plan.entries.map {
+                ($0.command.window.id, $0.command.frame.cgRect)
+            }, uniquingKeysWith: { _, last in last }), uniquingKeysWith: { _, last in last }),
+            observedFrames: observedFrames,
+            processedScopes: settingsRetryRunnableScopes.subtracting(waitingSettingsScopes), now: writeEnd
+        )
         for placement in rulePlacements where placement.follow {
             _ = service.focus(placement.window)
         }
@@ -472,6 +563,9 @@ public final class LayoutMaintainer {
         ].compactMap { name, at in at.map { (name, $0, false) } }
         due += membershipActivity.values.compactMap(\.burstEnd).map { ("burst", $0, true) }
         due += failedDriftWindows.values.map { ("drift_retry", $0.retryAt, false) }
+        due += settingsRetryAt.compactMap { scope, at in
+            settingsRetryRunnableScopes.contains(scope) ? ("settings_retry", at, true) : nil
+        }
         for guardState in spaceGuards.values {
             due.append(("guard_cap", guardState.openedAt.addingTimeInterval(LayoutTolerance.spaceGuardCap), true))
             due.append(("guard_poll", (guardState.lastPollAt ?? guardState.openedAt).addingTimeInterval(LayoutTolerance.spaceGuardPoll), true))
@@ -489,6 +583,63 @@ public final class LayoutMaintainer {
         }
         if let pendingStability, !pendingStability.checked { due.append(("stability", pendingStability.checkAt, true)) }
         return due
+    }
+
+    /// O(k + s) : seules les frames réellement relues après l'écriture servent de preuve.
+    /// Un retour AX absent/différent garde une unique échéance courte. La seconde passe
+    /// consomme la demande même si l'application arrondit ou refuse encore.
+    private func finishExactSettingsPass(
+        result: ApplyResult,
+        scopesByID: [WindowID: StageScope],
+        targets: [WindowID: CGRect],
+        observedFrames: [UInt32: Rect],
+        processedScopes: Set<StageScope>,
+        now: Date
+    ) {
+        let resultByID = Dictionary(result.items.map { ($0.windowID, $0) }, uniquingKeysWith: { _, last in last })
+        for item in result.items {
+            guard let scope = scopesByID[item.windowID], exactSettingsScopes.contains(scope), processedScopes.contains(scope) else { continue }
+            settingsFrameStates[item.windowID] = settingsFrameStates[item.windowID] == nil ? .needsRetry : .completed
+            if let actual = item.actual {
+                if framesAreClose(actual.cgRect, item.requested.cgRect, tolerance: 0)
+                    || !framesAreClose(actual.cgRect, item.requested.cgRect, tolerance: LayoutTolerance.frameMatch) {
+                    // Cible confirmée, ou vrai clamp pris en charge par le circuit de refus.
+                    settingsFrameStates[item.windowID] = .completed
+                }
+            }
+        }
+        var unresolvedScopes: Set<StageScope> = []
+        var retryScopes: Set<StageScope> = []
+        var blockedScopes: Set<StageScope> = []
+        let targetedScopes = Set(targets.keys.compactMap { scopesByID[$0] })
+        for (id, target) in targets {
+            guard let scope = scopesByID[id], exactSettingsScopes.contains(scope), processedScopes.contains(scope),
+                  settingsFrameStates[id] != .completed else { continue }
+            let item = resultByID[id]
+            let actual = item?.actual?.cgRect ?? observedFrames[id.rawValue]?.cgRect
+            let confirmed = item?.status != .failed && actual.map { framesAreClose($0, target, tolerance: 0) } == true
+            if confirmed { settingsFrameStates[id] = .completed; continue }
+            unresolvedScopes.insert(scope)
+            if item == nil {
+                // La cible est en écart, mais la commande a été retenue avant l'écriture
+                // (backoff, budget). Garder la demande et l'échéance de sa garde, sans boucle.
+                blockedScopes.insert(scope)
+            } else {
+                retryScopes.insert(scope)
+            }
+        }
+        for scope in exactSettingsScopes.intersection(processedScopes) {
+            guard targetedScopes.contains(scope) else { continue }
+            if unresolvedScopes.contains(scope) {
+                if retryScopes.contains(scope), settingsRetryAt[scope] == nil {
+                    settingsRetryAt[scope] = now.addingTimeInterval(LayoutTolerance.refusalConfirmDelay)
+                }
+            } else {
+                exactSettingsScopes.remove(scope)
+                settingsRetryAt[scope] = nil
+            }
+        }
+        settingsRetryRunnableScopes.subtract(blockedScopes)
     }
 
     /// Signal NSWorkspace activeSpaceDidChange transmis par l'ordonnanceur (A5, A19). Il compte
@@ -853,11 +1004,19 @@ public final class LayoutMaintainer {
         excluding excluded: Set<StageScope>
     ) -> [ApplyCommand] {
         let planningSnapshot = snapshotExcludingGrowthClampedWindows(snapshot)
+        let exactWindowIDs = Set(snapshot.windows.compactMap { entry in
+            entry.scope.map(exactSettingsScopes.contains) == true ? entry.window.id : nil
+        })
         // La génération ne sert qu'aux frames acceptées des scopes à arbre, exclus de ce plan.
         return suppressKnownUnmovableFrames(
             in: plannedCommands(from: planningSnapshot, priorityWindowIDs: priority, excluding: excluded, generation: generations.current),
             snapshot: planningSnapshot
-        ).commands
+        ).commands.filter { command in
+            guard settingsFrameStates[command.window.id] == .completed,
+                  exactWindowIDs.contains(command.window.id)
+            else { return true }
+            return !framesAreClose(command.window.frame.cgRect, command.frame.cgRect, tolerance: LayoutTolerance.frameMatch)
+        }
     }
 
     // MARK: - Disposition des modes à arbre (A2, A4, A13, A14, A16, R9)
@@ -903,7 +1062,10 @@ public final class LayoutMaintainer {
         let otherScopes = Set(snapshot.displays.compactMap { snapshot.state.activeScope(on: $0.id) }).subtracting(scopes)
         let planned = plannedCommands(from: snapshot, excluding: otherScopes, generation: generation).commands
         let commands = planned.compactMap { command in
-            treeWrite(command, snapBack: command.window.id == snappedWindowID, generation: generation, now: now)
+            let exact = settingsFrameStates[command.window.id] != .completed
+                && entriesByID[command.window.id]?.scope.map(exactSettingsScopes.contains) == true
+            let retry = exact && entriesByID[command.window.id]?.scope.flatMap { settingsRetryAt[$0] }.map { $0 <= now } == true
+            return treeWrite(command, snapBack: command.window.id == snappedWindowID, exact: exact, retry: retry, generation: generation, now: now)
         }
         var targets: [WindowID: CGRect] = [:]
         for entry in snapshot.windows where entry.window.isTileCandidate && entry.scope.map(scopes.contains) == true {
@@ -915,17 +1077,17 @@ public final class LayoutMaintainer {
 
     /// Décide l'écriture d'une fenêtre d'arbre vers sa cible (R9, A2, A4, A13). nil = rien à écrire.
     // O(1)
-    private func treeWrite(_ command: ApplyCommand, snapBack: Bool, generation: UInt64, now: Date) -> ApplyCommand? {
+    private func treeWrite(_ command: ApplyCommand, snapBack: Bool, exact: Bool, retry: Bool, generation: UInt64, now: Date) -> ApplyCommand? {
         let id = command.window.id.rawValue
         let observed = command.window.frame.cgRect
         let target = command.frame.cgRect
         // Tolérance unique (R9) : à refaire seulement au-delà de `frameMatch`.
-        if Self.matches(observed, target) { return nil }
+        if framesAreClose(observed, target, tolerance: exact ? 0 : LayoutTolerance.frameMatch) { return nil }
         if snapBack { return command }
         let entry = writtenFrames.entry(for: id)
-        let sameTarget = entry.map { Self.matches($0.requested, target) } ?? false
+        let sameTarget = entry.map { framesAreClose($0.requested, target, tolerance: exact ? 0 : LayoutTolerance.frameMatch) } ?? false
         // R9 : la frame acceptée de la génération courante n'est pas à refaire.
-        if sameTarget, let entry, entry.generation == generation,
+        if !retry, sameTarget, let entry, entry.generation == generation,
            let accepted = entry.accepted, Self.matches(accepted, observed) {
             return nil
         }
@@ -933,6 +1095,9 @@ public final class LayoutMaintainer {
             acceptObserved(command, generation: generation, reason: "write_budget_exhausted")
             return nil
         }
+        // Écho à 2 points : il ne prouve pas la première application explicite. Une seule
+        // reprise conserve le budget normal et ne réarme pas une troisième tentative.
+        if exact && retry { return command }
         guard sameTarget, let entry else { return command }
         if let readBack = entry.readBack, entry.hasRefusal, Self.matches(readBack, observed) {
             // Écho de la relecture d'un refus : il attend sa seconde observation (A14).
@@ -1670,7 +1835,7 @@ public final class LayoutMaintainer {
         let window = restore.entry.window
         if restore.isFullscreen {
             if service.commandLayoutIntent(scope: restore.scope)?.zoomReservesRail == true {
-                return reservedZoomCommand(for: window, on: restore.display)
+                return reservedZoomCommand(for: window, on: restore.display, scope: restore.scope)
             }
             guard let target = fullscreenSizedRestoreTarget(for: window.frame.cgRect, on: restore.display) else { return nil }
             return ApplyCommand(window: window, frame: Rect(target))
@@ -1770,7 +1935,7 @@ public final class LayoutMaintainer {
                   !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
             else { return nil }
             if service.commandLayoutIntent(scope: scope)?.zoomReservesRail == true {
-                return reservedZoomCommand(for: entry.window, on: item.display)
+                return reservedZoomCommand(for: entry.window, on: item.display, scope: scope)
             }
             guard let target = fullscreenSizedReanchorTarget(for: entry.window.frame.cgRect, on: item.display) else { return nil }
             return ApplyCommand(window: entry.window, frame: Rect(target))
@@ -1778,10 +1943,11 @@ public final class LayoutMaintainer {
     }
 
     /// Recalage réservé : cible actualisée, avec les mêmes mémoires de refus que la disposition.
-    private func reservedZoomCommand(for window: WindowSnapshot, on display: DisplaySnapshot) -> ApplyCommand? {
+    private func reservedZoomCommand(for window: WindowSnapshot, on display: DisplaySnapshot, scope: StageScope) -> ApplyCommand? {
         guard let target = service.maximizedFrame(on: display) else { return nil }
         let observed = window.frame.cgRect
-        if framesAreClose(observed, target, tolerance: LayoutTolerance.frameMatch), observed.minX >= target.minX,
+        let exact = exactSettingsScopes.contains(scope) && settingsFrameStates[window.id] != .completed
+        if framesAreClose(observed, target, tolerance: exact ? 0 : LayoutTolerance.frameMatch), observed.minX >= target.minX,
            display.visibleFrame.cgRect.contains(observed) { return nil }
         let command = ApplyCommand(window: window, frame: Rect(target))
         let id = window.id.rawValue

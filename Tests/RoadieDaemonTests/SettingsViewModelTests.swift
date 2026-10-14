@@ -169,15 +169,11 @@ struct SettingsViewModelTests {
     }
 
     @Test
-    func searchListsReadOnlyEntriesAfterEditableOnes() throws {
+    func searchIncludesEditableCollectionsAndKeepsTheirCategories() throws {
         let (model, _) = try makeModel()
         model.query = "stage"
-        // Sans section ni entrée en lecture seule, la boucle ci-dessous ne vérifierait rien.
-        #expect(model.sections.contains { $0.descriptors.contains { $0.readOnlyReason != nil } })
-        for section in model.sections {
-            let flags = section.descriptors.map { $0.readOnlyReason != nil }
-            #expect(flags == flags.sorted { !$0 && $1 })
-        }
+        #expect(model.sections.contains { $0.descriptors.contains { $0.collection != nil } })
+        #expect(model.sections.flatMap(\.descriptors).allSatisfy { $0.readOnlyReason == nil })
         // Choisir une catégorie quitte la recherche.
         model.select(.regles)
         #expect(model.query.isEmpty)
@@ -223,7 +219,7 @@ struct SettingsViewModelTests {
     }
 
     @Test
-    func readOnlyEntriesShowTheirCurrentValueAsText() throws {
+    func collectionEditorsShowTheirExistingListsAndRules() throws {
         let (model, _) = try makeModel(fixture + """
 
 
@@ -244,10 +240,11 @@ struct SettingsViewModelTests {
         let entries = model.sections.flatMap(\.descriptors)
         let rules = try #require(entries.first { $0.key == "rules" })
         let bundles = try #require(entries.first { $0.key == "floating_bundles" })
-        #expect(try #require(model.readOnlySummary(rules)).contains("2 entrée"))
-        let bundlesSummary = try #require(model.readOnlySummary(bundles))
-        #expect(bundlesSummary.contains("com.example.alpha"))
-        #expect(bundlesSummary.contains("com.example.beta"))
+        let rulesEditor = SettingsCollectionEditorModel(descriptor: rules, service: model.service)
+        #expect(rulesEditor.rows.count == 2)
+        #expect(rulesEditor.rows.map { $0.raw["id"] } == ["a", "b"])
+        let bundlesEditor = SettingsCollectionEditorModel(descriptor: bundles, service: model.service)
+        #expect(bundlesEditor.items.map(\.raw) == ["com.example.alpha", "com.example.beta"])
 
         // Un réglage modifiable n'a pas de résumé.
         model.select(.grille)
@@ -326,20 +323,19 @@ struct SettingsViewModelTests {
     }
 
     @Test
-    func readOnlyEntriesCannotBeEdited() throws {
+    func collectionsCannotBeOverwrittenWithAScalar() throws {
         let (model, config) = try makeModel()
         model.select(.regles)
         let entries = try #require(model.sections.first?.descriptors)
         #expect(!entries.isEmpty)
-        #expect(entries.allSatisfy { $0.readOnlyReason != nil })
+        #expect(entries.allSatisfy { $0.collection != nil })
 
         let before = try String(contentsOf: config, encoding: .utf8)
         for entry in entries {
             model.apply(entry, raw: "x")
-            model.reset(entry)
         }
         #expect(try String(contentsOf: config, encoding: .utf8) == before)
-        #expect(model.errors.isEmpty)
+        #expect(!model.errors.isEmpty)
     }
 
     @Test
