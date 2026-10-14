@@ -1,11 +1,11 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `026-command-bar`.
+Current SpecKit feature: `027-settings-complete`.
 
 Contexte :
-- `specs/026-command-bar/spec.md`
-- `specs/026-command-bar/plan.md`
-- `specs/026-command-bar/research.md`
-- `specs/026-command-bar/tasks.md`
+- `specs/027-settings-complete/spec.md`
+- `specs/027-settings-complete/plan.md`
+- `specs/027-settings-complete/research.md`
+- `specs/027-settings-complete/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
