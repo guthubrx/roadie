@@ -10,5 +10,5 @@
 - [x] T008 Exécuter la suite Swift complète et les tests des scripts.
 - [ ] T009 Produire les preuves de clôture des trois HIGH et actualiser le changelog/brouillon.
 - [ ] T010 Commiter, fusionner dans main, pousser et supprimer la branche fusionnée.
-- [ ] T011 Aligner les versions 0.4.0, construire et vérifier le DMG et sa somme de contrôle.
+- [x] T011 Aligner les versions 0.4.0, construire et vérifier le DMG et sa somme de contrôle.
 - [ ] T012 Actualiser le brouillon GitHub et publier la release validée.

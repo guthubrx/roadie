@@ -49,5 +49,19 @@
     "Index géométrique fini : pire O(M×W) + O(Σg log²g) construction ; repli non fini : pire O(M×W log W).",
     "Les douze autres constats restent ouverts ; l’ancien audit est conservé sans réécriture.",
     "Le snapshot complet contient d’autres parcours ; seul le constructeur des appartenances est mesuré pour PERF-010."
-  ]
+  ],
+  "release": {
+    "version": "0.4.0",
+    "build": "release succeeded",
+    "binary_versions": [
+      "roadie 0.4.0",
+      "roadied 0.4.0"
+    ],
+    "dmg_bytes": 8038154,
+    "dmg_sha256": "3203832da406a7a39ce95c7dc59e76e51b21edc19653f507301ff77e328dcc3b",
+    "signature": "ad-hoc verified deep/strict",
+    "disk_image": "hdiutil verify passed; mounted read-only; bundled binaries and Applications link verified",
+    "checksum_file": "shasum -a 256 -c passed",
+    "versioned_swift_full_tests": 1354
+  }
 }
