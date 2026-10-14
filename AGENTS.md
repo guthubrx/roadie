@@ -1,12 +1,12 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `023-command-box-settings`.
+Current SpecKit feature: `024-release-performance`.
 
 Contexte :
-- `specs/023-command-box-settings/spec.md`
-- `specs/023-command-box-settings/plan.md`
-- `specs/023-command-box-settings/research.md`
-- `specs/023-command-box-settings/data-model.md`
-- `specs/023-command-box-settings/contracts/`
+- `specs/024-release-performance/spec.md`
+- `specs/024-release-performance/plan.md`
+- `specs/024-release-performance/research.md`
+- `specs/024-release-performance/data-model.md`
+- `specs/024-release-performance/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

@@ -1,0 +1,53 @@
+{
+  "scope": "Audit ciblé des trois HIGH PERF-010/011/012 ; aucun nouvel audit complet revendiqué",
+  "date": "2026-10-14",
+  "baseline": "d2e7daf0",
+  "findings": [
+    {
+      "id": "PERF-010",
+      "status": "resolved",
+      "severity_before": "HIGH"
+    },
+    {
+      "id": "PERF-011",
+      "status": "resolved",
+      "severity_before": "HIGH"
+    },
+    {
+      "id": "PERF-012",
+      "status": "resolved",
+      "severity_before": "HIGH"
+    }
+  ],
+  "remaining_previous_audit": {
+    "HIGH": 0,
+    "MEDIUM": 6,
+    "LOW": 6
+  },
+  "review": {
+    "verdict": "favorable",
+    "blocking_findings": 0,
+    "conditions": "tests et microbenchmarks vérifiés ; limites documentées"
+  },
+  "tests": {
+    "targeted": 136,
+    "swift_full": 1354,
+    "swift_suites": 143,
+    "scripts": 26,
+    "benchmark_before_exit": 0,
+    "benchmark_after_exit": 0
+  },
+  "source_sha256": {
+    "Sources/RoadieStages/RoadieState.swift": "638686d222e84ca4af3f5b2c583a2e2606d7c70da0560544e400af8fa2a8d253",
+    "Sources/RoadieDaemon/DaemonSnapshot.swift": "2e7cdb062a582eb02ab9ad4e4af64e96a40e28b8bfa9dda6d905934c60bcd225",
+    "Sources/RoadieDaemon/LayoutMaintainer.swift": "9046b37fdf4750d4399b22fa9c0e0a9dd7535319e57cfb01077cf9a399cdf582",
+    "Sources/RoadieDaemon/StageStore.swift": "fc5f720255849fc18a435cd9a14b9ae1697b8ec1cbdf6a02b0c8f61ce56e3c1d"
+  },
+  "measurements": "specs/024-release-performance/measurements/comparison.json",
+  "limitations": [
+    "Compilation debug ; pas de mesure de latence UI, tick global ni mémoire.",
+    "Index géométrique fini : pire O(M×W) + O(Σg log²g) construction ; repli non fini : pire O(M×W log W).",
+    "Les douze autres constats restent ouverts ; l’ancien audit est conservé sans réécriture.",
+    "Le snapshot complet contient d’autres parcours ; seul le constructeur des appartenances est mesuré pour PERF-010."
+  ]
+}

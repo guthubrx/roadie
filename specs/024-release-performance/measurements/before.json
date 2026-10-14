@@ -1,0 +1,142 @@
+[
+  {
+    "variant": "before",
+    "scenario": "PERF-010-membership",
+    "n": 50,
+    "reference_ms": 0.7583333999999999,
+    "production_ms": 0.0704082
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-011-validation",
+    "n": 50,
+    "reference_ms": 33.251042,
+    "production_ms": 0.809917
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-ambiguous",
+    "n": 50,
+    "reference_ms": 2.6324166666666664,
+    "production_ms": 2.410875
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-adopted",
+    "n": 50,
+    "reference_ms": 1.1064166666666666,
+    "production_ms": 1.1135833333333334
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-no-orphans",
+    "n": 50,
+    "reference_ms": 0.2959446666666667,
+    "production_ms": 0.284236
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-010-membership",
+    "n": 100,
+    "reference_ms": 1.6106334,
+    "production_ms": 0.1174916
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-011-validation",
+    "n": 100,
+    "reference_ms": 165.283125,
+    "production_ms": 1.746959
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-ambiguous",
+    "n": 100,
+    "reference_ms": 9.0655,
+    "production_ms": 8.202125
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-adopted",
+    "n": 100,
+    "reference_ms": 3.1720693333333334,
+    "production_ms": 2.873014
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-no-orphans",
+    "n": 100,
+    "reference_ms": 0.5754026666666666,
+    "production_ms": 0.5055416666666667
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-010-membership",
+    "n": 200,
+    "reference_ms": 5.2226082,
+    "production_ms": 0.2508
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-011-validation",
+    "n": 200,
+    "reference_ms": 1041.08225,
+    "production_ms": 5.229792
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-ambiguous",
+    "n": 200,
+    "reference_ms": 30.868875,
+    "production_ms": 30.283749999999998
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-adopted",
+    "n": 200,
+    "reference_ms": 10.153416666666667,
+    "production_ms": 9.723805666666667
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-no-orphans",
+    "n": 200,
+    "reference_ms": 1.130653,
+    "production_ms": 1.0050416666666666
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-010-membership",
+    "n": 400,
+    "reference_ms": 16.268641600000002,
+    "production_ms": 0.48761679999999996
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-011-validation",
+    "n": 400,
+    "reference_ms": 6684.921083,
+    "production_ms": 18.091791
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-ambiguous",
+    "n": 400,
+    "reference_ms": 119.64944433333334,
+    "production_ms": 117.741625
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-adopted",
+    "n": 400,
+    "reference_ms": 35.30504166666667,
+    "production_ms": 32.861902666666666
+  },
+  {
+    "variant": "before",
+    "scenario": "PERF-012-no-orphans",
+    "n": 400,
+    "reference_ms": 2.373111,
+    "production_ms": 1.9763193333333333
+  }
+]
