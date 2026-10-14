@@ -13,4 +13,4 @@
 - [x] T011 Exécuter les tests ciblés, la suite Swift et la mesure avant/après des deux architectures.
 - [x] T012 Converger par deux revues, puis lancer l'audit de code final.
 - [x] T013 Construire, installer et vérifier le comportement du runtime Roadie.
-- [ ] T014 Intégrer, pousser, documenter la livraison et nettoyer le périmètre 029.
+- [x] T014 Intégrer, pousser, documenter la livraison et nettoyer le périmètre 029.

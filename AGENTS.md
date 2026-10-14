@@ -5,8 +5,10 @@ Tests ciblés : 117 succès. Suite complète : 1466 succès. Revue finale approu
 Audit v14 : A, aucun finding, validateur conforme. Build Release installé et signé.
 Runtime Roadie actif sur le PID 93111. Une fermeture réelle a produit le marqueur
 `confirmedClosedAt` et un rafraîchissement du rail 90 ms après la détection.
-Worktree avant intégration : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/029-navrail-fermeture.
-Artefacts : specs/029-navrail-fermeture/. Livraison Git encore à finaliser.
+Source 94e15e7cc6d5b682329a5efb9fe697f1ed938db9 intégrée par
+4b1f4171564997355c99f09bf659b405cf12c09e et poussée sur origin/main.
+Artefacts : specs/029-navrail-fermeture/. Reçu :
+specs/029-navrail-fermeture/validation/livraison029.md.
 Current SpecKit feature: `029-navrail-fermeture`.
 
 Contexte :
