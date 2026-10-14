@@ -741,7 +741,9 @@ public final class LayoutMaintainer {
             if changedFramesMatchSavedIntent(in: snapshot, frames: observedFrames, changedWindowIDs: changedWindowIDs) {
                 return NonTreeLayout()
             }
-            let modeledScopes = authoritativeModelScopes(for: changedWindowIDs, in: snapshot)
+            let modeledScopes = Self.authoritativeModelScopes(for: changedWindowIDs, in: snapshot) {
+                service.hasValidLayoutIntent(scope: $0, in: snapshot)
+            }
             if !modeledScopes.isEmpty {
                 priorityWindowIDs = []
                 manualResizeApplyAfter = nil
@@ -3341,20 +3343,23 @@ public final class LayoutMaintainer {
         return windowIDs(result, outside: treeScopes, in: snapshot)
     }
 
-    private func authoritativeModelScopes(
+    /// O(w + s × V) : w fenêtres, s scopes uniques, V coût de validation de l'intent.
+    /// La validation géométrique n'est exécutée qu'une fois par scope admissible (PERF-011).
+    static func authoritativeModelScopes(
         for windowIDs: Set<WindowID>,
-        in snapshot: DaemonSnapshot
+        in snapshot: DaemonSnapshot,
+        hasValidIntent: (StageScope) -> Bool
     ) -> Set<StageScope> {
-        Set(snapshot.windows.compactMap { entry -> StageScope? in
+        let candidates = Set(snapshot.windows.compactMap { entry -> StageScope? in
             guard windowIDs.contains(entry.window.id),
                   let scope = entry.scope,
                   let stage = snapshot.state.stage(scope: scope),
                   stage.mode == .bsp,
-                  snapshot.state.activeScope(on: scope.displayID) == scope,
-                  service.hasValidLayoutIntent(scope: scope, in: snapshot)
+                  snapshot.state.activeScope(on: scope.displayID) == scope
             else { return nil }
             return scope
         })
+        return Set(candidates.filter(hasValidIntent))
     }
 
     private func strictAuthoritativeScopes(
