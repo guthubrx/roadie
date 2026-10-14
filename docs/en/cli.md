@@ -264,7 +264,7 @@ roadie targets hide
 actions return structured errors instead of silently falling back.
 
 `targets search` opens search mode (input bar, every visible window), like the
-`search_hotkey` shortcut (Hyper+F by default). See `docs/en/features.md`,
+configurable `search_hotkey` shortcut. See `docs/en/features.md`,
 Search mode section.
 
 In this bar, a `/` as the first character opens command mode. Its commands

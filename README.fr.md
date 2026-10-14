@@ -9,103 +9,100 @@
 
 </div>
 
-Roadie est écrit en Swift. Il regroupe les fenêtres dans des stages et organise le stage actif sur chaque écran. Un panneau latéral natif, le **nav rail**, permet de changer de stage et de déplacer les fenêtres avec des vignettes.
+Roadie organise tes fenêtres autour de tes activités. Regroupe les applications
+d'un projet, retrouve-les dans le rail latéral et passe d'un espace de travail à
+l'autre sur chaque écran.
 
-**État du projet :** développement actif. Les commandes et la configuration peuvent encore changer. Ce README décrit les sources actuelles : tuilage réactif, recherche dans les fenêtres visibles, boîte de commandes, fenêtre de réglages et correctifs de fiabilité. Compile les sources de `main` pour utiliser ce code.
-
-La version [0.5.0](https://github.com/guthubrx/roadie/releases/tag/v0.5.0) apporte les réglages immédiats, les éditeurs intégrés et une barre Caps+F avec complétion par Tab et polices personnalisables. Consulte le [changelog](CHANGELOG.md) et les [notes de release](docs/releases/v0.5.0.md).
+**[Télécharger Roadie 0.5.0](https://github.com/guthubrx/roadie/releases/tag/v0.5.0)** ·
+[Découvrir les nouveautés](docs/releases/v0.5.0.md) · [Guide d'installation](#installation-manuelle)
 
 <p align="center">
-  <img src="docs/assets/screenshot-multi-display.png" alt="Bureau Roadie avec tiling, nav rail et commandes CLI" width="100%">
+  <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">
 </p>
 
-## Pourquoi Roadie Existe
+## Un espace pour chaque activité
 
-Roadie réunit trois idées dans un même usage :
+Un éditeur, un terminal et un navigateur pour développer. Des documents pour
+écrire. Une fenêtre de réunion à garder sous la main. Roadie permet de réunir
+ces fenêtres dans des **stages**, des groupes nommés que tu retrouves dans le rail.
 
-- Une disposition automatique des fenêtres (tiling), inspirée de [yabai](https://github.com/koekeishiya/yabai).
-- Des bureaux virtuels, inspirés de [AeroSpace](https://github.com/nikitabobko/AeroSpace).
-- Des groupes de fenêtres nommés, inspirés de Stage Manager.
+Le projet réunit le tuilage inspiré de [yabai](https://github.com/koekeishiya/yabai),
+les bureaux virtuels inspirés d'[AeroSpace](https://github.com/nikitabobko/AeroSpace)
+et les groupes de fenêtres de Stage Manager.
 
-Les bureaux et les stages appartiennent à Roadie. Ils ne créent pas et ne pilotent pas les Spaces natifs de macOS. SIP reste actif. Les déplacements utilisent Accessibilité. Une sonde système privée en lecture seule aide à reconnaître les transitions de plein écran natif. Roadie n’utilise pas d’API privée pour modifier les Spaces ou changer de Space.
+## Ce que tu peux faire avec Roadie
 
-`roadie toggle maximize` agrandit la fenêtre active en gardant la bande du navrail visible libre. Relance la commande pour restaurer la disposition. Les voisines de la même stage sont cachées pendant la maximisation. Activer une autre fenêtre de cette stage restaure directement la disposition. Changer de stage conserve le zoom sauvegardé. Avec le masquage automatique, le rail masqué laisse toute la zone utile, comme le plein écran Roadie. Quand il revient au survol ou avec `roadie rail pin`, la fenêtre se redimensionne pour lui laisser la place, sans quitter la maximisation. Le menu de titre propose aussi « Fenêtre → Maximiser / restaurer (garder le navrail) » lorsqu'il est activé.
-
-`roadie toggle fullscreen` utilise toute la zone utile, avec le rail au-dessus. `roadie toggle native-fullscreen` utilise le plein écran macOS. Les deux modes Roadie peuvent se remplacer directement ; répéter le mode actif restaure la disposition précédente.
-
-## Ce Que Fait Roadie Aujourd’hui
-
-| Domaine | Comportement actuel |
+| Besoin | Fonction |
 |---|---|
-| Tiling | Arbre persistant `spatialBsp`, modes automatiques `bsp`, `masterStack` et `float` |
-| Stages | Groupes nommés, masquage, restauration, réorganisation et déplacement vers un autre écran |
-| Bureaux | Bureaux virtuels Roadie, avec bureau courant et stage actif indépendants sur chaque écran |
-| Multi-écran | Dispositions indépendantes, parking au débranchement et récupération au retour |
-| Nav rail | Cartes de stages, vignettes ou icônes, glisser-déposer et état de présentation des fenêtres |
-| Outils de fenêtre | Bordure de focus, focus à la souris, menu de barre de titre, épinglages, signets et groupes |
-| Automatisation | CLI, requêtes JSON, événements JSONL, règles TOML et rechargement de configuration |
-| Sûreté | Sauvegardes, écriture atomique, récupération des fenêtres masquées, verrous et contrôles de santé |
-| Modes facultatifs | Cibles clavier, découverte des zones applicatives, grilles écran/fenêtre et macros courtes |
-| Exécution | Un daemon pour l’usage quotidien, ou des composants séparés |
+| Organiser les fenêtres | Tuilage automatique, plusieurs dispositions et ajustement des proportions |
+| Passer d'un projet à l'autre | Stages nommés, aperçus et changement d'espace depuis le rail |
+| Travailler sur plusieurs écrans | Bureaux et dispositions indépendants, transfert des fenêtres et des stages |
+| Garder une fenêtre accessible | Épinglages, signets et groupes de fenêtres |
+| Agir au clavier | Étiquettes, grilles et barre de recherche et de commandes |
+| Adapter l'interface | Réglages immédiats, tailles indépendantes et choix de polices |
+| Automatiser les habitudes | Règles de placement, macros courtes, commandes et API JSON |
 
-### Recherche, Boîte De Commandes Et Réglages
+### Une disposition qui suit ton travail
 
-Le raccourci `Cmd+Ctrl+Option+F` ouvre la recherche quand elle est activée. Elle lit les éléments des fenêtres visibles et affiche les résultats au fil de leur découverte. Un `/` en premier caractère ouvre la boîte de commandes. `/settings` affiche les réglages avec recherche et catégories. `/set` permet de lire, modifier ou rétablir un réglage. Les étiquettes ont une taille configurable de 8 à 48 points.
+Roadie répartit les fenêtres et ajuste leur place quand tu en ouvres ou en fermes
+une. Choisis une disposition équilibrée, une fenêtre principale avec ses voisines,
+ou un placement libre.
 
-Voir [le guide détaillé](docs/fr/features.md) et les exemples ci-dessous.
+Réorganise les fenêtres par glisser-déposer : un dépôt au centre échange les
+positions, un dépôt sur un bord insère la fenêtre de ce côté. Tu peux aussi
+modifier les proportions au clavier. La maximisation laisse le rail accessible
+et permet de revenir à la disposition précédente.
 
-### Tiling Réactif Et Glisser-Déposer
+[Explorer les dispositions et les gestes](docs/fr/features.md)
 
-`spatialBsp` conserve la disposition dans un arbre binaire persistant. Cet arbre garde les séparations et leurs proportions. Une nouvelle fenêtre partage la case de la fenêtre active selon son côté le plus long. Une fenêtre fermée rend sa place à sa voisine dans l’arbre. Les fenêtres temporairement absentes gardent leur place dans l’arbre enregistré, sans recevoir de placement.
+### Tes projets, à portée de vue
 
-Les événements d’Accessibilité et des applications déclenchent les mises à jour. Roadie regroupe les rafales et ignore les notifications causées par ses propres placements. Un contrôle périodique de secours reste actif. Roadie suspend les écritures de disposition pendant le déplacement à la souris, puis applique le dépôt.
+Le rail affiche les stages de chaque écran avec leurs vignettes ou leurs icônes.
+Passe à un autre stage, ramène une fenêtre dans l'espace actif ou déplace un
+stage entier vers un autre écran.
 
-- Sur le même écran et dans le même stage, un dépôt au centre échange les deux positions. Un dépôt sur un bord insère la fenêtre de ce côté.
-- Entre écrans, l’aperçu suit le pointeur. Un dépôt au centre insère à droite de la cible. Un dépôt sur un bord suit ce bord. Un stage tilé vide peut aussi recevoir la fenêtre.
-- Une fenêtre échangée prend la case de destination. Si une application refuse une petite taille, Roadie ajuste les séparations concernées pour respecter sa taille minimale. Un minimum large peut donner un résultat proche de l’équilibre.
-- Au retour d’un écran, Roadie conserve les dernières positions visibles utiles. Une ancienne référence enregistrée ne suffit pas à créer une carte de fenêtre visible dans le rail.
+Les épinglages gardent une fenêtre visible pendant les changements de stage.
+Les signets permettent de retrouver une fenêtre choisie. Tes stages et tes
+réglages sont conservés entre les sessions.
 
-`mutableBsp` et `yabai` restent des alias de `spatialBsp`. Les anciens stages `mutableBsp` migrent une seule fois. Roadie sauvegarde l’état précédent sous le nom `stages.json.pre-017` dans son dossier d’état local.
+### Une barre pour chercher et agir
 
-Pour modifier l’arbre, utilise `move`, `warp`, `resize`, `window swap`, `layout split` et `layout toggle-split`. Dans ce mode, `layout insert` et `layout join-with` sont refusés : utilise `warp`. `layout width` est aussi refusé : utilise `resize`. `layout flatten` équilibre l’arbre existant. Il ne le reconstruit pas depuis les positions des fenêtres.
+Ouvre la **barre de recherche et de commandes** avec le raccourci de ton choix.
+Tape quelques lettres pour trouver une fenêtre, un stage ou un élément visible. Tab complète la sélection ;
+un `/` initial donne accès aux commandes de Roadie.
 
-### Stages, Bureaux Et Nav Rail
+Par exemple, `/stage dev` change d'activité et `/settings` ouvre les paramètres.
+Les suggestions et l'historique accompagnent la saisie. Le raccourci se règle
+dans la catégorie Recherche ; `roadie targets search` ouvre aussi la barre.
 
-Chaque écran affiche uniquement le stage actif de son bureau Roadie courant. Les autres stages restent masqués et accessibles dans le nav rail. Tu peux déplacer une vignette entre stages, la ramener dans l’espace actif ou envoyer un stage entier vers un autre écran.
+### Une interface à ta mesure
 
-Le rail distingue les fenêtres normales, agrandies et en plein écran natif. Il se masque par défaut devant le plein écran natif. Le masquage devant une fenêtre agrandie est configurable. Enregistrement d’écran permet les vignettes en direct. Sans cette permission, les icônes restent disponibles.
+Ajuste les espacements, les noms de stages, les règles et les exceptions depuis
+la fenêtre de paramètres. Les valeurs valides s'appliquent pendant la saisie.
+Choisis séparément les tailles du rail, des étiquettes et des paramètres, ainsi
+que les polices du champ de recherche et de ses suggestions.
 
-Quand un écran disparaît, Roadie place ses stages non vides sur un écran restant. Il garde leur origine pour les remettre en place quand l’écran est reconnu sans ambiguïté. Les épinglages gardent certaines fenêtres visibles pendant les changements de stage. Les signets permettent de revenir à une fenêtre choisie. Les groupes persistants permettent un usage limité de type pile.
+Les étiquettes clavier permettent de sélectionner un élément en tapant ses lettres.
+Les grilles écran et fenêtre permettent de viser une zone précise. Les macros
+courtes enregistrent des actions de souris à répéter. Active les outils qui
+conviennent à ta façon de travailler.
 
-### Stabilisation Et Récupération
-
-Le daemon partage un cache des fenêtres et protège les modifications d’état avec un verrou de fichier unique. Les écritures sont atomiques. Les fichiers invalides restent conservés pour le diagnostic. Si une nouvelle configuration est invalide, Roadie garde la dernière configuration valide.
-
-Les commandes passent normalement par un socket Unix local. Le daemon utilise ses propres permissions macOS. Les requêtes de santé, les événements, les audits d’état et les résumés de performance aident au diagnostic.
-
-`make restart` arrête maintenant une instance ouverte directement comme application, ainsi que le service installé. L’installation conserve le certificat de signature exact quand il est disponible. Cela aide à garder la permission Accessibilité. L’arrêt et le processus de surveillance des crashs restaurent les fenêtres masquées.
-
-### Fonctions Facultatives Et Expérimentales
-
-Le Mode Cibles propose des labels clavier, une recherche, une inspection, une activation et une sortie JSON. La découverte des zones applicatives, les grilles récursives écran/fenêtre et les macros souris courtes sont expérimentales. Chaque fonction a son propre réglage d’activation.
-
-Le mode modulaire sépare `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu` et `target-mode` en processus distincts. Le lanceur standard démarre l’ensemble. Un usage limité aux stages ou aux effets visuels avec un autre gestionnaire demande encore des profils de démarrage dédiés.
-
-La gestion des Spaces natifs, un moteur général de raccourcis intégré et un installateur public validé par Apple restent hors du périmètre actuel. Le seul raccourci global intégré à Roadie est `search_hotkey`, qui ouvre le mode recherche. Certaines commandes listées, comme `window close` et `toggle floating`, signalent explicitement qu’elles ne sont pas implémentées. La refonte abandonnée des popovers d’épinglage ne fait pas partie des fonctions livrées.
+[Voir les fonctionnalités](docs/fr/features.md) ·
+[Exemples d'utilisation](docs/fr/use-cases.md)
 
 ## Documentation
 
-La documentation complete existe en francais et en anglais :
+La documentation complète existe en français et en anglais :
 
-- [Documentation francaise](docs/fr/README.md)
+- [Documentation française](docs/fr/README.md)
 - [English documentation](docs/en/README.md)
 
 Guides principaux :
 
-- [Vue d'ensemble des fonctionnalites](docs/fr/features.md)
+- [Vue d'ensemble des fonctionnalités](docs/fr/features.md)
 - [Commandes CLI](docs/fr/cli.md)
 - [Configuration et rules](docs/fr/configuration-rules.md)
-- [Evenements et Query API](docs/fr/events-query.md)
+- [Événements et API de requêtes](docs/fr/events-query.md)
 - [Cas d'usage](docs/fr/use-cases.md)
 
 ## Prérequis
@@ -242,16 +239,9 @@ roadie query components
 roadie query health
 ```
 
-Le script modulaire standard lance aujourd'hui tout le set de composants, y
-compris le tiler. L'interet architectural est plus large : permettre a Roadie de
-devenir non seulement un window manager complet, mais aussi un ensemble de
-composants utilisables comme couche compagnon avec yabai, AeroSpace ou un autre
-gestionnaire de fenetres.
-
-Cet usage "companion mode" reste volontairement note comme experimental : les
-frontieres runtime, les locks de composants, la sante par composant et les logs
-separes sont en place, mais les profils explicites "stage-only" ou
-"overlay-only" restent a formaliser.
+Le lanceur modulaire standard démarre tous les composants, y compris le tuilage.
+Chaque composant dispose de ses journaux et de son état de santé. Ce mode permet
+d'observer les services séparément.
 
 ## Build DMG Et Installation Non Signée Apple
 
@@ -630,7 +620,7 @@ search_hotkey = "command+control+alt+f"
 Pour découvrir et cliquer les éléments des applications, active aussi
 `[experimental.app_targets].enabled = true` et
 `[experimental.target_mode].app_mouse_actions_enabled = true`. Les commandes
-et les réglages fonctionnent sans activer ces clics expérimentaux.
+et les réglages fonctionnent sans activer les clics dans les applications.
 
 Voir [le catalogue et les limites du mode commande](docs/fr/features.md#mode-commande--et-fenêtre-de-réglages).
 
@@ -654,7 +644,7 @@ roadie grid interactive --scope focused_window
 roadie record start demo --duration 10
 ```
 
-Les surfaces risquées sont expérimentales et activables séparément dans
+Ces outils peuvent être activés séparément dans
 `[experimental.target_mode]`, `[experimental.app_targets]`,
 `[experimental.target_grid]` et `[experimental.target_record]`.
 
@@ -732,4 +722,4 @@ examples               Config d’exemple, raccourcis skhd et Karabiner
 
 ## Statut
 
-Roadie est d’abord construit pour un usage quotidien personnel. Les commandes, les clés de configuration et le comportement du rail peuvent encore changer pendant la stabilisation.
+Le développement se poursuit sur `main`. Les [notes de release](https://github.com/guthubrx/roadie/releases) présentent les nouveautés et les consignes de mise à jour.

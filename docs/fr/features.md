@@ -178,7 +178,7 @@ une seule destination `Prochaine stage vide`.
 
 ## Menu contextuel de barre de titre
 
-Roadie peut afficher un menu experimental lors d'un clic droit dans la zone haute d'une fenetre geree. Le clic droit dans le contenu de l'application reste laisse a l'application.
+Roadie peut afficher un menu contextuel lors d'un clic droit dans la zone haute d'une fenêtre gérée. Le clic droit dans le contenu de l'application reste laissé à l'application.
 
 Activation TOML :
 
@@ -274,9 +274,9 @@ Chaque cible a un label court (`A`, `S`, `D`, puis `AA`, etc.), un ID stable et
 une liste d'actions possibles. Les labels sont faits pour l'humain; les IDs sont
 faits pour les scripts.
 
-Les zones applicatives sensibles peuvent etre listees en mode experimental via
-Accessibility. Ce mode est desactive par defaut pour eviter de scanner les apps
-pendant les chemins chauds du window manager.
+Les contrôles d'une application peuvent être listés via Accessibility.
+Active cette découverte lorsque tu souhaites les utiliser ; elle est désactivée
+par défaut pour garder la lecture des applications facultative.
 
 Les applications Electron (T3 Code, Slack, Discord...) ne publient leur contenu
 Accessibility qu'a la demande. Quand le boost AX est actif (`ax_boost_enabled` ou
@@ -311,14 +311,14 @@ Les applications CEF (Grayjay, Bluejay) ne repondent a aucune demande externe :
 leur arbre n'existe que si l'application lance CEF avec
 `--force-renderer-accessibility` (option integree a Bluejay sur macOS).
 
-### Mode recherche (Hyper+F)
+### Mode recherche
 
 Le mode recherche reprend l'idee de Homerow : on tape un texte au lieu de lire
 des etiquettes. Un raccourci global ouvre une barre de saisie en bas de l'ecran
 du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
 
 - **Raccourci** : `search_hotkey` dans `[experimental.target_mode]`, par defaut
-  `command+control+alt+f` (Hyper+F quand Caps Lock est une hyper key Karabiner).
+  `command+control+alt+f`. Ce raccourci est personnalisable.
   Alias acceptes : `hyper` (= `command+control+alt`) et `ctrl`. Une chaine vide
   desactive le raccourci. Un changement prend effet sans redemarrage, y compris
   apres un changement de disposition clavier. `roadie targets search` ouvre la
@@ -588,7 +588,7 @@ Cas d'usage :
 
 - sauter vers une fenetre bookmarkee ou une stage sans memoriser son ID;
 - chercher une cible par texte avec `targets pick` et refuser proprement les ambiguities;
-- taper quelques lettres (Hyper+F) pour cliquer un element de n'importe quelle fenetre visible;
+- ouvrir la barre avec le raccourci choisi, puis taper quelques lettres pour activer un élément visible;
 - envoyer la fenetre active vers une cible affichee par label;
 - fournir a un agent une API JSON plus robuste qu'une capture d'ecran;
 - inspecter pourquoi une cible est stale, pinnee, flottante ou hors tiling.
@@ -597,8 +597,8 @@ Meme si `experimental.app_targets.enabled = true`, les actions `click`,
 `double-click`, `right-click` et `command-click` sur les zones applicatives sont refusees tant que
 `experimental.target_mode.app_mouse_actions_enabled = false`.
 
-Ce qui reste volontairement borne : le controle applicatif profond. Les app
-targets restent experimentales, limitees par timeout et desactivees par defaut.
+La découverte des contrôles dépend des informations exposées par chaque
+application. Le temps de lecture est limité et la fonction s'active séparément.
 
 ## Commandes power-user
 

@@ -27,7 +27,7 @@ Roadie combines automatic tiling, named stages, and Roadie virtual desktops. Eac
 - **Reliable runtime:** local command socket, atomic state writes, shared snapshots, validated configuration reload, hidden-window recovery, and daemon health queries.
 - **Automation:** CLI, TOML rules, JSON queries, JSONL events, and read-only performance diagnostics.
 - **Command box and settings:** a leading `/` in search, Tab completion and history. `/settings` offers live input, list, stage and rule editors, and independent typography. `/set` also reads, changes or resets a value.
-- **Optional modes:** Keyboard Targets, search across every visible window, experimental app-zone discovery, display/window grids, and short macros.
+- **Keyboard navigation and visual tools:** target labels, search across visible windows, controls exposed by applications, display/window grids, and short macros.
 - **Modular execution:** separate tiler, rail, border, focus, title-bar, and target processes. Dedicated companion-only startup profiles remain future work.
 
 ## Update And Check

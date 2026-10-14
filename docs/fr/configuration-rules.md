@@ -163,7 +163,7 @@ search_font_family = "system"
 command_font_family = "system"
 ```
 
-Dans Recherche, choisir séparément la famille et la taille de la saisie Caps+F
+Dans Recherche, choisir séparément la famille et la taille du champ de saisie
 et des suggestions. Le menu liste les familles installées. `system`, une valeur
 vide ou une famille absente utilise la police macOS.
 Voir la [référence des tailles d'interface](features.md).

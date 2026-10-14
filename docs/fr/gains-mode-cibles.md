@@ -38,7 +38,7 @@ Ici, `gray` doit retrouver les fenêtres **BlueJay / Grayjay**, `work` doit
 retrouver ta stage **Work**, et `horizon` doit retrouver la fenêtre Firefox
 **Horizon Studio**.
 
-Roadie peut maintenant exposer les **zones sensibles d'une application** via Accessibility : boutons, liens, champs, lignes, menus, etc. C'est **expérimental**, **configurable**, et activable/désactivable. Les clics applicatifs réels sont aussi séparés par option, parce que certaines personnes voudront seulement lister ou inspecter les cibles sans que Roadie clique dans les apps.
+Roadie expose les **contrôles d'une application** via Accessibility : boutons, liens, champs, lignes et menus. La découverte est configurable et peut être activée séparément. Les clics disposent de leur propre option : tu peux ainsi lister ou inspecter les cibles avant de choisir leur activation. Les contrôles disponibles dépendent de ce que chaque application expose à macOS.
 
 ```bash
 roadie targets list --source app --max 20
@@ -52,10 +52,9 @@ Au moment du relevé, l'app frontmost exposait des cibles applicatives iTerm2 :
 dans ton TOML, `roadie targets activate D --action click` peut vraiment cliquer
 dans l'app active.
 
-On a aussi préparé un **overlay visuel de labels**. Il peut afficher
-temporairement des labels au-dessus des cibles, et il est derrière un paramètre
-expérimental. Le but est d'aller vers une navigation clavier plus directe, sans
-imposer cette interface à tous les utilisateurs.
+Un **affichage d'étiquettes** permet de sélectionner les cibles au clavier.
+Il affiche temporairement des labels au-dessus des éléments et dispose de son
+propre réglage d'activation.
 
 ```bash
 roadie targets show --json --labels-only

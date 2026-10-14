@@ -68,3 +68,18 @@ au paquet vérifié. La version 0.5.0 est déclarée comme dernière release.
 Le corps de la release v0.4.0 est actualisé et correspond au texte français
 réécrit. Son tag reste `5ab0ab9544de68edbd6642f58ac6140ef8a07f1e` et ses pièces
 jointes gardent leurs identifiants, leur taille et leur empreinte d'origine.
+
+## Correction de présentation
+
+À la demande de l'utilisateur, le raccourci personnel ne sert plus de nom public.
+Le terme retenu est « barre de recherche et de commandes » ; la documentation
+précise que le raccourci est personnalisable.
+
+Les introductions des README français et anglais présentent les usages :
+organisation par activité, plusieurs écrans, recherche, commandes et réglages.
+Les fonctions disponibles sont décrites comme des outils à activer, avec leurs
+conditions de compatibilité dans les guides. Les noms des clés TOML sont conservés.
+
+Relecture éditoriale favorable. Les liens et ancres des textes corrigés sont
+vérifiés. Cette correction concerne uniquement la documentation et les notes
+publiées ; le tag et les fichiers de téléchargement restent ceux de la 0.5.0.

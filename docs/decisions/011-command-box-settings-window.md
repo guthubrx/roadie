@@ -6,7 +6,7 @@ Accepté. Mis en oeuvre par la SPEC-023 (`specs/023-command-box-settings/researc
 
 ## Contexte
 
-La boîte de Caps Lock + F (SPEC-021) cherche seulement du texte parmi les cibles à l'écran. Elle ne lance aucune action. Roadie sait déjà faire ce que la ligne de commande `roadie` fait, mais l'utilisateur doit se souvenir de raccourcis ou ouvrir un terminal.
+La barre de recherche (SPEC-021) cherche seulement du texte parmi les cibles à l'écran. Elle ne lance aucune action. Roadie sait déjà faire ce que la ligne de commande `roadie` fait, mais l'utilisateur doit se souvenir de raccourcis ou ouvrir un terminal.
 
 Les réglages vivent dans un seul fichier, `roadies.toml` (774 lignes, environ 50 tables). Rien ne les montre à l'écran. Aucun code n'écrit ce fichier : TOMLKit sert uniquement à le lire. La taille des étiquettes (13 pt) est fixée dans le code.
 

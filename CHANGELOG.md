@@ -13,16 +13,16 @@ jour et les limites connues ; les README décrivent la version courante.
   stage se modifient dans la fenêtre. Un éditeur avancé traite les structures
   complexes et permet de réparer une configuration invalide.
 - **Typographie personnalisable** : tailles indépendantes pour les paramètres,
-  le rail, les lettres, la grille et la recherche. Caps+F propose aussi des familles
+  le rail, les lettres, la grille et la recherche. La barre propose aussi des familles
   distinctes pour la saisie et les suggestions, mises à jour dans la barre ouverte.
-- **Complétion par Tab** dans Caps+F : insertion du résultat ou de la suggestion
+- **Complétion par Tab** dans la barre de recherche et de commandes : insertion du résultat ou de la suggestion
   sélectionnée, puis parcours des alternatives en mode commande.
 
 ### Améliorations et corrections
 
 - Paramètres plus lisibles, modes de tuilage nommés en français et valeur héritée
   `balanced` correctement affichée.
-- Barre Caps+F fixe, bordure fine et compteur compact ; la loupe est retirée.
+- Barre de recherche et de commandes fixe, bordure fine et compteur compact ; la loupe est retirée.
 - Mise à jour des noms de stages dans le rail, sans modifier les noms personnels
   des autres stages ni leurs fenêtres.
 - Protection contre l'écrasement d'un changement externe à la sortie d'un champ,

@@ -9,96 +9,86 @@ English | [Français](README.fr.md)
 
 </div>
 
-Roadie is written in Swift. It groups windows into stages and tiles the active stage on each display. A native side panel, the **nav rail**, lets you switch stages and move windows with thumbnails.
+Roadie organizes your windows around your activities. Bring a project's apps
+together, find them in the side rail and switch workspaces on each display.
 
-**Status:** active development. Commands and configuration can still change. This README describes the current sources: reactive tiling, search across visible windows, the command box, the settings window, and reliability fixes. Build from `main` to use this code.
-
-Version [0.5.0](https://github.com/guthubrx/roadie/releases/tag/v0.5.0) brings live settings, built-in editors and a Caps+F bar with Tab completion and customizable fonts. See the [changelog](CHANGELOG.md) and [release notes](docs/releases/v0.5.0.en.md).
+**[Download Roadie 0.5.0](https://github.com/guthubrx/roadie/releases/tag/v0.5.0)** ·
+[What's new](docs/releases/v0.5.0.en.md) · [Installation guide](#manual-installation)
 
 <p align="center">
-  <img src="docs/assets/screenshot-multi-display.png" alt="Roadie desktop with tiling, nav rail, and CLI" width="100%">
+  <img src="docs/assets/screenshot-multi-display.png" alt="Roadie workspaces across multiple displays" width="100%">
 </p>
 
-## Why Roadie Exists
+## A workspace for every activity
 
-Roadie brings three ideas into one workflow:
+An editor, a terminal and a browser for development. Documents for writing.
+A meeting window to keep close at hand. Roadie brings these windows into
+**stages**: named groups you can reach from the rail.
 
-- Automatic tiling inspired by [yabai](https://github.com/koekeishiya/yabai).
-- Virtual desktops inspired by [AeroSpace](https://github.com/nikitabobko/AeroSpace).
-- Named window groups inspired by Stage Manager.
+The project combines tiling inspired by [yabai](https://github.com/koekeishiya/yabai),
+virtual desktops inspired by [AeroSpace](https://github.com/nikitabobko/AeroSpace)
+and Stage Manager's window groups.
 
-Roadie desktops and stages belong to Roadie. They do not create or control native macOS Spaces. SIP stays enabled. Window movement uses Accessibility. A private read-only system probe helps identify native fullscreen transitions; Roadie does not use private APIs to write or switch Spaces.
+## What you can do with Roadie
 
-`roadie toggle maximize` enlarges the active window while keeping the visible nav rail strip clear. Run it again to restore the layout. Siblings in the same stage are hidden while maximized. Activating another window in that stage restores the layout directly. Switching stages preserves the saved zoom. With auto-hide enabled, a hidden rail frees the entire visible area, just like Roadie fullscreen. When the rail returns on hover or with `roadie rail pin`, the window resizes to make room without leaving maximized mode. The enabled title-bar menu also offers “Fenêtre → Maximiser / restaurer (garder le navrail)”.
-
-`roadie toggle fullscreen` uses the entire visible area, with the rail above it. `roadie toggle native-fullscreen` uses macOS fullscreen. Switching between the two Roadie zoom modes preserves the original layout; repeating the active mode restores it.
-
-## What Roadie Does Today
-
-| Area | Current behavior |
+| Your goal | Feature |
 |---|---|
-| Tiling | Persistent `spatialBsp` tree, automatic `bsp`, `masterStack`, and `float` modes |
-| Stages | Named window groups, hide/restore, reorder, summon, and move to another display |
-| Desktops | Roadie virtual desktops with independent current desktop and active stage per display |
-| Multiple displays | Independent layouts, parking on disconnect, and recovery on reconnect |
-| Nav rail | Stage cards, live thumbnails or app icons, drag and drop, and window presentation state |
-| Window tools | Focus border, focus follows mouse, title-bar context menu, window pins, bookmarks, and groups |
-| Automation | CLI, JSON queries, JSONL events, TOML rules, and configuration reload |
-| Safety | State backups, atomic persistence, hidden-window recovery, instance locks, and health checks |
-| Optional modes | Keyboard Targets, application-zone discovery, display/window grids, and short macros |
-| Runtime | One daemon for daily use, or separate modular components |
+| Arrange windows | Automatic tiling, multiple layouts and adjustable proportions |
+| Switch projects | Named stages, previews and workspace switching from the rail |
+| Use multiple displays | Independent desktops and layouts, window and stage transfers |
+| Keep a window within reach | Pins, bookmarks and window groups |
+| Work from the keyboard | Labels, grids and the search and command bar |
+| Personalize the interface | Live settings, independent sizes and font choices |
+| Automate routine actions | Placement rules, short macros, commands and a JSON API |
 
-### Search, Command Box, And Settings
+### A layout that follows your work
 
-`Cmd+Ctrl+Option+F` opens search when enabled. It reads elements across visible windows and adds results as they are discovered. A leading `/` opens the command box. `/settings` opens searchable settings by category. `/set` reads, changes, or resets a setting. Labels have a configurable font size from 8 to 48 points.
+Roadie arranges windows and adjusts their space as you open or close them.
+Choose a balanced layout, a main window beside its neighbors, or free placement.
 
-See [the full guide](docs/en/features.md) and the examples below.
+Rearrange windows by dragging: drop in the center to swap positions, or on an
+edge to insert on that side. You can also adjust proportions from the keyboard.
+Maximization keeps the rail within reach and lets you return to the previous layout.
 
-### Reactive Tiling And Drag And Drop
+[Explore layouts and gestures](docs/en/features.md)
 
-`spatialBsp` stores the layout as a persistent binary tree. The tree keeps the splits and their ratios. A new window splits the focused window along its longest side. Closing a window gives its space to its sibling. Temporarily absent windows keep their place in the stored tree without receiving placements.
+### Keep your projects in view
 
-Accessibility and application events trigger layout updates. Roadie groups bursts of events and ignores echoes of its own placements. It also keeps a periodic safety check. It holds layout writes while you drag a window, then applies the drop.
+The rail shows each display's stages with thumbnails or app icons. Switch
+stages, bring a window into the active workspace or move an entire stage to
+another display.
 
-- On the same display, within the same stage, a drop on a window center swaps the two positions. A drop on an edge inserts on that side.
-- Between displays, the preview follows the pointer. A center drop inserts to the right of the target; an edge drop inserts on that edge. An empty tiled stage can also receive the window.
-- A swapped window takes the destination cell. If an application refuses a small size, Roadie adjusts the affected splits to respect its minimum size. A wide minimum can make the result look balanced instead of giving the other window the full original width.
-- Reconnecting a display preserves the last useful visible positions. Old saved members alone do not create visible window cards in the rail.
+Pins keep a window visible as you change stages. Bookmarks let you return to a
+chosen window. Your stages and settings are saved between sessions.
 
-`mutableBsp` and `yabai` remain aliases of `spatialBsp`. Existing `mutableBsp` stages migrate once. Roadie saves the previous state as `stages.json.pre-017` in its local state directory.
+### One bar to search and act
 
-Use `move`, `warp`, `resize`, `window swap`, `layout split`, and `layout toggle-split` to edit the tree. In this mode, `layout insert` and `layout join-with` are rejected: use `warp`. `layout width` is also rejected: use `resize`. `layout flatten` balances the existing tree; it does not rebuild it from window positions.
+Open the **search and command bar** with your chosen shortcut. Type a few letters
+to find a visible window, stage or element. Tab completes the selection; a leading `/` opens
+Roadie's commands.
 
-### Stages, Desktops, And The Nav Rail
+For example, `/stage dev` switches activities and `/settings` opens settings.
+Suggestions and history help you enter commands. Set the shortcut in the
+**Recherche** (Search) settings category; `roadie targets search` also opens the bar.
 
-Only the active stage of the current Roadie desktop is shown on each display. Other stages stay hidden and remain accessible through the nav rail. You can drag a thumbnail between stages, summon it into the active workspace, or move a whole stage to another display.
+### Make it your own
 
-The rail distinguishes normal, maximized, and native fullscreen windows. It hides over native fullscreen by default. Hiding over maximized windows is configurable. Screen Recording enables live thumbnails; without it, app icons remain available.
+Adjust spacing, stage names, rules and overrides in the settings window.
+Valid values apply as you type. Choose separate sizes for the rail, labels
+and settings, and font families for the search field and its suggestions.
 
-When a display disconnects, Roadie parks its non-empty stages on a remaining display. It keeps their origin so they can return when the display is recognized safely. Pins keep selected windows visible across stage changes. Bookmarks let you return to a selected window. Persistent groups provide a narrower stack-like workflow.
+Keyboard labels let you select an element by typing its letters. Display and window
+grids let you choose a precise area. Short macros record mouse actions to repeat.
+Enable the tools that suit the way you work.
 
-### Stabilization And Recovery
-
-The daemon caches shared window snapshots and keeps state mutations under a single file lock. Changed state is written atomically. Invalid files are preserved for diagnosis. Configuration reload keeps the last valid configuration if the replacement is invalid.
-
-Commands normally reach the daemon through a local Unix socket. The daemon uses its own macOS permissions. Health queries, event logs, state audits, and read-only performance summaries help diagnose problems.
-
-`make restart` now stops an instance opened directly as an app as well as the installed service. Installation preserves the exact existing signing certificate when available, which helps retain Accessibility permission. Shutdown and the crash watcher restore hidden windows.
-
-### Optional And Experimental Features
-
-Keyboard Targets provide labels, search, inspection, activation, and JSON output. Application-zone discovery, recursive Display Grid and Window Grid, and short mouse macro recording are experimental. Each has a separate configuration gate.
-
-The modular runtime splits `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu`, and `target-mode` into separate processes. The standard modular launcher starts the full set. Using Roadie as a stage-only or overlay-only companion to another window manager still needs dedicated startup profiles.
-
-Native Spaces management, a general built-in shortcut engine, and a notarized public installer remain outside the current scope. The only global shortcut built into Roadie is `search_hotkey`, which opens search mode. Some listed CLI commands, such as `window close` and `toggle floating`, explicitly report that they are not implemented. The abandoned pin-popover redesign is not part of the delivered features.
+[See the features](docs/en/features.md) · [Everyday examples](docs/en/use-cases.md)
 
 ## Documentation
 
 Full documentation is available in English and French:
 
 - [English documentation](docs/en/README.md)
-- [Documentation francaise](docs/fr/README.md)
+- [Documentation française](docs/fr/README.md)
 
 Main guides:
 
@@ -242,15 +232,9 @@ roadie query components
 roadie query health
 ```
 
-The standard modular script currently starts the full component set, including
-the tiler. Its architectural purpose is broader: it lets Roadie evolve from a
-single all-or-nothing window manager into a set of components that can also be
-used as a companion layer beside yabai, AeroSpace, or another window manager.
-
-Today, that companion-mode usage is intentionally described as experimental:
-the runtime boundaries, component locks, health checks, and per-component logs
-are in place, but explicit "stage-only" or "overlay-only" startup profiles are
-still future work.
+The standard modular launcher starts all components, including the tiler.
+Each component has its own logs and health status. Use this mode when you want
+to observe the services separately.
 
 ## DMG Build And Unsigned Installation
 
@@ -631,7 +615,7 @@ search_hotkey = "command+control+alt+f"
 To discover and click application elements, also enable
 `[experimental.app_targets].enabled = true` and
 `[experimental.target_mode].app_mouse_actions_enabled = true`. Commands and
-settings work without enabling those experimental clicks.
+settings work without enabling application clicks.
 
 See [the command catalog and limits](docs/en/features.md#command-mode--and-settings-window).
 
@@ -654,7 +638,7 @@ roadie grid interactive --scope focused_window
 roadie record start demo --duration 10
 ```
 
-Risky surfaces are experimental and independently configurable through
+These tools can be enabled independently through
 `[experimental.target_mode]`, `[experimental.app_targets]`,
 `[experimental.target_grid]`, and `[experimental.target_record]`.
 
@@ -732,4 +716,4 @@ examples               Example config, skhd and Karabiner shortcuts
 
 ## Status
 
-Roadie is built for personal daily use first. Expect changes in command shape, configuration keys, and rail behavior while the project stabilizes.
+Development continues on `main`. Follow the [release notes](https://github.com/guthubrx/roadie/releases) for new features and update instructions.

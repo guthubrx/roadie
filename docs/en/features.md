@@ -176,7 +176,7 @@ stage` destination.
 
 ## Title Bar Context Menu
 
-Roadie can show an experimental menu when you right-click the top band of a managed window. Right-clicks inside application content are left to the application.
+Roadie can show a context menu when you right-click the top band of a managed window. Right-clicks inside application content are left to the application.
 
 TOML activation:
 
@@ -270,9 +270,8 @@ Roadie targets cover windows, stages, displays, desktops, and bookmarks. Each
 target has a short label (`A`, `S`, `D`, then `AA`, etc.), a stable ID, and a
 list of supported actions. Labels are for humans; IDs are for scripts.
 
-Application-sensitive zones can be listed experimentally through Accessibility.
-This mode is disabled by default so app scanning does not run on window-manager
-hot paths.
+Application controls can be listed through Accessibility. Enable discovery when
+you want to use them; it is off by default to keep app scanning optional.
 
 Electron apps (T3 Code, Slack, Discord...) only publish their Accessibility
 content on request. When the AX boost is active (`ax_boost_enabled` or
@@ -306,14 +305,14 @@ CEF apps (Grayjay, Bluejay) answer no external request: their tree only exists
 when the app starts CEF with `--force-renderer-accessibility` (built into
 Bluejay on macOS).
 
-### Search mode (Hyper+F)
+### Search mode
 
 Search mode follows the Homerow idea: type text instead of reading labels. A
 global shortcut opens an input bar at the bottom of the pointer's display. Each
 letter filters the targets; Return clicks the green target.
 
 - **Shortcut**: `search_hotkey` in `[experimental.target_mode]`, default
-  `command+control+alt+f` (Hyper+F when Caps Lock is a Karabiner hyper key).
+  `command+control+alt+f`. The shortcut is customizable.
   Accepted aliases: `hyper` (= `command+control+alt`) and `ctrl`. An empty
   string disables the shortcut. Changes apply without a restart, including after
   a keyboard layout change. `roadie targets search` opens the same session.
@@ -576,7 +575,7 @@ Use cases:
 
 - jump to a bookmarked window or stage without remembering its ID;
 - search for a target with `targets pick` and fail cleanly on ambiguity;
-- type a few letters (Hyper+F) to click an element of any visible window;
+- open the bar with your chosen shortcut, then type a few letters to activate a visible element;
 - send the active window to a target selected by label;
 - give an agent a JSON API that is more robust than screenshots;
 - inspect why a target is stale, pinned, floating, or excluded from tiling.
@@ -585,8 +584,8 @@ Even when `experimental.app_targets.enabled = true`, `click`, `double-click`,
 `right-click`, and `command-click` on application targets are refused until
 `experimental.target_mode.app_mouse_actions_enabled = true`.
 
-Still intentionally bounded: deep application control remains experimental,
-timeout-limited, and disabled by default.
+Control discovery depends on the information each application exposes.
+Reading is time-limited and the feature is enabled separately.
 
 ## Power-User Commands
 

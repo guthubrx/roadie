@@ -268,7 +268,7 @@ La section `[experimental.target_mode]` permet aussi de couper tout le Mode
 Cibles (`enabled = false`) ou seulement le picker (`picker_enabled = false`).
 
 `targets search` ouvre le mode recherche (barre de saisie, toutes les fenetres
-visibles), comme le raccourci `search_hotkey` (Hyper+F par defaut). Voir
+visibles), comme le raccourci configurable `search_hotkey`. Voir
 `docs/fr/features.md`, section Mode recherche.
 
 Dans cette barre, un `/` en premier caractère ouvre le mode commande. Ses

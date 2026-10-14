@@ -160,7 +160,7 @@ search_font_family = "system"
 command_font_family = "system"
 ```
 
-Under Recherche, choose separate families and sizes for Caps+F input and
+Under **Recherche** (Search), choose separate families and sizes for the input field and
 suggestions. The menu lists installed families. `system`, an empty value or a
 missing family falls back to the macOS font.
 See the [interface size reference](features.md).
