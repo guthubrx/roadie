@@ -100,16 +100,16 @@ struct CommandBoxSessionTests {
     }
 
     @Test
-    func barWithoutLinesKeepsItsFormerPlace() {
-        let layout = SearchBarLayout.make(bounds: CGRect(x: 0, y: 0, width: 1280, height: 720), contentWidth: 100, suggestions: 0, messageLines: 0)
-        #expect(layout.bar == CGRect(x: 430, y: 48, width: 420, height: 40))
+    func barWithoutLinesUsesTheFixedWidthAtTheBottom() {
+        let layout = SearchBarLayout.make(bounds: CGRect(x: 0, y: 0, width: 1280, height: 720), suggestions: 0, messageLines: 0)
+        #expect(layout.bar == CGRect(x: 320, y: 48, width: 640, height: 40))
         #expect(layout.panel == nil)
     }
 
     @Test
     func linesStackAboveTheBarWithTheMessageNearest() throws {
         let bounds = CGRect(x: 0, y: 0, width: 1280, height: 720)
-        let layout = SearchBarLayout.make(bounds: bounds, contentWidth: 600, suggestions: 3, messageLines: 2)
+        let layout = SearchBarLayout.make(bounds: bounds, suggestions: 3, messageLines: 2)
         let panel = try #require(layout.panel)
         #expect(layout.bar.minY == 48)
         #expect(panel.minY == layout.bar.maxY + SearchBarLayout.gap)
@@ -124,12 +124,12 @@ struct CommandBoxSessionTests {
 
     @Test
     func linesAreBoundedToEightSuggestionsTwelveMessageLinesAndTheScreen() throws {
-        let tall = SearchBarLayout.make(bounds: CGRect(x: 0, y: 0, width: 1280, height: 900), contentWidth: 0, suggestions: 20, messageLines: 30)
+        let tall = SearchBarLayout.make(bounds: CGRect(x: 0, y: 0, width: 1280, height: 900), suggestions: 20, messageLines: 30)
         #expect(tall.suggestionRows.count == 8)
         #expect(tall.messageRows.count == 12)
 
         let short = CGRect(x: 0, y: 0, width: 1280, height: 300)
-        let clipped = SearchBarLayout.make(bounds: short, contentWidth: 0, suggestions: 8, messageLines: 12)
+        let clipped = SearchBarLayout.make(bounds: short, suggestions: 8, messageLines: 12)
         let panel = try #require(clipped.panel)
         #expect(panel.maxY <= short.maxY)
         #expect(clipped.messageRows.count == 8)

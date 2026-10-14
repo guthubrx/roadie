@@ -896,7 +896,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return TargetActionResult(changed: false, message: "target_search: event tap unavailable", error: "event_tap_unavailable")
         }
         NSApplication.shared.setActivationPolicy(.accessory)
-        // Une fenêtre par écran : la barre suit l'écran du pointeur, même sans correspondance.
+        // Une fenêtre par écran : la barre reste sur l'écran du pointeur choisi à l'ouverture.
         windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: style) }
         windows.forEach { $0.orderFrontRegardless() }
         render()
@@ -952,10 +952,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             _ = model.typeLabel(value)
         case .delete:
             model.deleteBackward()
-        case .next:
-            model.next()
-        case .previous:
-            model.previous()
+        case .next, .previous:
+            model.handleNavigation(input)
         case .escape, .confirm, .ignored:
             break
         }
@@ -1063,8 +1061,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func show(badges: [TargetOverlayBadge], bar: TargetSearchBar) {
-        let mouse = NSEvent.mouseLocation
-        let barWindow = windows.first { $0.frame.contains(mouse) } ?? windows.first
+        let barWindow = pointerScreen.flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
         for window in windows {
             window.update(badges: badges, searchBar: window === barWindow ? bar : nil)
         }
@@ -1164,58 +1161,6 @@ extension SlashCommandModel {
             break
         }
         return .update
-    }
-}
-
-/// Mise en page de la barre de saisie et de la boîte de commandes (SPEC-023 R4), pure. La barre reste
-/// collée en bas de l'écran (y = minY + 48) ; la liste et le message s'empilent au-dessus d'elle, dans
-/// un même fond, sans sortir de l'écran. Le message, réponse à Retour, est le plus près de la barre.
-struct SearchBarLayout: Equatable {
-    static let maxSuggestions = 8
-    static let maxMessageLines = 12
-    static let lineHeight: CGFloat = 22
-    static let padding: CGFloat = 8
-    static let gap: CGFloat = 6
-
-    var bar: CGRect
-    /// Fond des lignes ; nil sans ligne.
-    var panel: CGRect?
-    /// De haut en bas.
-    var suggestionRows: [CGRect]
-    var messageRows: [CGRect]
-
-    /// `contentWidth` : largeur du texte le plus long. Faute de place, les suggestions cèdent la
-    /// place au message. Complexité : O(s + m), s ≤ 8 et m ≤ 12.
-    static func make(
-        bounds: CGRect, contentWidth: CGFloat, suggestions: Int, messageLines: Int,
-        searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13
-    ) -> SearchBarLayout {
-        let lineHeight = Self.lineHeight * min(48, max(8, commandTextFontSize)) / 13
-        let barHeight = 40 * min(48, max(8, searchTextFontSize)) / 15
-        let width = min(bounds.width - 40, max(420, contentWidth + 40))
-        let bar = CGRect(x: bounds.midX - width / 2, y: bounds.minY + min(48, max(0, bounds.height - barHeight)), width: width, height: min(bounds.height, barHeight)).integral
-        let room = max(0, Int((bounds.maxY - 8 - bar.maxY - gap - 2 * padding) / lineHeight))
-        let messageCount = min(messageLines, maxMessageLines, room)
-        let suggestionCount = min(suggestions, maxSuggestions, room - messageCount)
-        let total = messageCount + suggestionCount
-        guard total > 0 else { return SearchBarLayout(bar: bar, panel: nil, suggestionRows: [], messageRows: []) }
-        let panel = CGRect(x: bar.minX, y: bar.maxY + gap, width: bar.width, height: CGFloat(total) * lineHeight + 2 * padding)
-        let rows = (0..<total).map { index in
-            CGRect(x: panel.minX + 12, y: panel.maxY - padding - CGFloat(index + 1) * lineHeight, width: panel.width - 24, height: lineHeight)
-        }
-        return SearchBarLayout(
-            bar: bar,
-            panel: panel,
-            suggestionRows: Array(rows.prefix(suggestionCount)),
-            messageRows: Array(rows.suffix(messageCount))
-        )
-    }
-
-    /// Suggestions montrées dans `rows` lignes, sélection comprise. O(1).
-    static func visibleSuggestions(count: Int, selected: Int?, rows: Int) -> Range<Int> {
-        let shown = max(0, min(count, rows))
-        let start = min(max(0, (selected ?? 0) - shown + 1), count - shown)
-        return start..<(start + shown)
     }
 }
 
@@ -1511,19 +1456,6 @@ private final class TargetOverlayWindow: NSPanel {
     }
 }
 
-/// Contenu de la barre de saisie du mode recherche.
-private struct TargetSearchBar {
-    var query: String
-    var matchCount: Int
-    var properties: String?
-    var isLoading: Bool
-    /// Mode commande (SPEC-023) : saisie après le `/` ; nil en mode recherche.
-    var commandInput: String? = nil
-    var suggestions: [SlashSuggestion] = []
-    var selectedSuggestion: Int? = nil
-    var message: SlashMessage? = nil
-}
-
 private final class TargetOverlayView: NSView {
     fileprivate var badges: [TargetOverlayBadge]
     fileprivate var searchBar: TargetSearchBar?
@@ -1577,105 +1509,8 @@ private final class TargetOverlayView: NSView {
             occupied.append(placement.badge.insetBy(dx: -style.badgeAvoidanceMargin, dy: -style.badgeAvoidanceMargin))
         }
         if let searchBar {
-            drawSearchBar(searchBar)
+            SearchBarRenderer.draw(searchBar, in: bounds, style: style)
         }
-    }
-
-    private func drawSearchBar(_ bar: TargetSearchBar) {
-        let text: String
-        if let input = bar.commandInput {
-            text = "/\(input)▏"
-        } else if let properties = bar.properties {
-            text = properties
-        } else {
-            let count = bar.matchCount == 0 ? "aucune correspondance" : "\(bar.matchCount) correspondance\(bar.matchCount > 1 ? "s" : "")"
-            text = "🔍 \(bar.query)▏   \(count)\(bar.isLoading ? " · lecture…" : "")"
-        }
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: style.searchTextFontSize, weight: .medium),
-            .foregroundColor: NSColor.white,
-        ]
-        let size = text.size(withAttributes: attributes)
-        // Mode commande (SPEC-023 R4) : liste et message au-dessus de la barre.
-        let messageLines = messageLines(bar.message)
-        let candidates = SearchBarLayout.visibleSuggestions(
-            count: bar.suggestions.count, selected: bar.selectedSuggestion, rows: SearchBarLayout.maxSuggestions
-        )
-        let widest = (candidates.map { suggestionLine(bar.suggestions[$0]) } + messageLines)
-            .reduce(size.width) { max($0, $1.size().width) }
-        let layout = SearchBarLayout.make(
-            bounds: bounds, contentWidth: widest, suggestions: bar.suggestions.count, messageLines: messageLines.count,
-            searchTextFontSize: style.searchTextFontSize, commandTextFontSize: style.commandTextFontSize
-        )
-        let rect = layout.bar
-        let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
-        NSColor(calibratedWhite: 0.06, alpha: 0.92).setFill()
-        path.fill()
-        NSColor.systemGreen.withAlphaComponent(0.9).setStroke()
-        path.lineWidth = 1.5
-        path.stroke()
-        text.draw(
-            in: CGRect(x: rect.minX + 20, y: rect.midY - size.height / 2, width: rect.width - 40, height: size.height),
-            withAttributes: attributes
-        )
-        guard let panel = layout.panel else { return }
-        let panelPath = NSBezierPath(roundedRect: panel, xRadius: 10, yRadius: 10)
-        NSColor(calibratedWhite: 0.06, alpha: 0.92).setFill()
-        panelPath.fill()
-        NSColor.systemGreen.withAlphaComponent(0.9).setStroke()
-        panelPath.lineWidth = 1.5
-        panelPath.stroke()
-        let shown = SearchBarLayout.visibleSuggestions(
-            count: bar.suggestions.count, selected: bar.selectedSuggestion, rows: layout.suggestionRows.count
-        )
-        for (row, index) in zip(layout.suggestionRows, shown) {
-            if index == bar.selectedSuggestion {
-                NSColor.systemGreen.withAlphaComponent(0.35).setFill()
-                NSBezierPath(roundedRect: row.insetBy(dx: -6, dy: 1), xRadius: 6, yRadius: 6).fill()
-            }
-            Self.draw(suggestionLine(bar.suggestions[index]), in: row)
-        }
-        for (row, line) in zip(layout.messageRows, messageLines) {
-            Self.draw(line, in: row)
-        }
-    }
-
-    /// Ligne de la boîte : police monospace configurée, coupée en fin de ligne si elle est trop longue.
-    private func lineText(_ string: String, color: NSColor) -> NSAttributedString {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingTail
-        return NSAttributedString(string: string, attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: style.commandTextFontSize, weight: .regular),
-            .foregroundColor: color,
-            .paragraphStyle: paragraph,
-        ])
-    }
-
-    /// `/stage   Changer de stage` : nom en blanc, description en gris.
-    private func suggestionLine(_ suggestion: SlashSuggestion) -> NSAttributedString {
-        let name = (suggestion.kind == .command ? "/" : "") + suggestion.text.trimmingCharacters(in: .whitespaces)
-        let line = NSMutableAttributedString(attributedString: lineText(name, color: .white))
-        if !suggestion.detail.isEmpty {
-            line.append(lineText("   " + suggestion.detail, color: NSColor(calibratedWhite: 0.65, alpha: 1)))
-        }
-        return line
-    }
-
-    /// Information en blanc ; erreur en rouge, suivie de la forme attendue.
-    private func messageLines(_ message: SlashMessage?) -> [NSAttributedString] {
-        switch message {
-        case .info(let lines):
-            return lines.prefix(SearchBarLayout.maxMessageLines).map { lineText($0, color: .white) }
-        case .error(let text, let usage):
-            return ([text] + (usage.map { ["Usage : \($0)"] } ?? [])).map { lineText($0, color: .systemRed) }
-        case nil:
-            return []
-        }
-    }
-
-    private static func draw(_ line: NSAttributedString, in row: CGRect) {
-        let height = line.size().height
-        line.draw(in: CGRect(x: row.minX, y: row.midY - height / 2, width: row.width, height: height))
     }
 
     private func placement(for badge: TargetOverlayBadge, avoiding occupied: [CGRect]) -> BadgePlacement? {

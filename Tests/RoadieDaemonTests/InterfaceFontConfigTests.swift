@@ -122,8 +122,8 @@ struct InterfaceFontConfigTests {
     @Test
     func largerCommandFontsIncreaseRowsAndStayInsideTheScreen() throws {
         let bounds = CGRect(x: 0, y: 0, width: 1280, height: 720)
-        let original = SearchBarLayout.make(bounds: bounds, contentWidth: 600, suggestions: 3, messageLines: 2)
-        let large = SearchBarLayout.make(bounds: bounds, contentWidth: 600, suggestions: 3, messageLines: 2,
+        let original = SearchBarLayout.make(bounds: bounds, suggestions: 3, messageLines: 2)
+        let large = SearchBarLayout.make(bounds: bounds, suggestions: 3, messageLines: 2,
                                          searchTextFontSize: 48, commandTextFontSize: 48)
         #expect(large.bar.height == 128)
         #expect(large.bar.height > original.bar.height)
@@ -133,11 +133,11 @@ struct InterfaceFontConfigTests {
         #expect(large.suggestionRows.count == 3)
         #expect(large.messageRows[0].height > original.messageRows[0].height)
         // Une taille de commande ne change pas la saisie ; une taille de saisie ne change pas les lignes.
-        let commandsOnly = SearchBarLayout.make(bounds: bounds, contentWidth: 600, suggestions: 3, messageLines: 2,
+        let commandsOnly = SearchBarLayout.make(bounds: bounds, suggestions: 3, messageLines: 2,
                                                 commandTextFontSize: 48)
         #expect(commandsOnly.bar == original.bar)
         #expect(commandsOnly.messageRows[0].height == large.messageRows[0].height)
-        let inputOnly = SearchBarLayout.make(bounds: bounds, contentWidth: 600, suggestions: 3, messageLines: 2,
+        let inputOnly = SearchBarLayout.make(bounds: bounds, suggestions: 3, messageLines: 2,
                                              searchTextFontSize: 48)
         #expect(inputOnly.bar == large.bar)
         #expect(inputOnly.messageRows[0].height == original.messageRows[0].height)
@@ -146,7 +146,7 @@ struct InterfaceFontConfigTests {
     @Test
     func largeFontsOnShortScreensReserveMessageSpace() throws {
         let bounds = CGRect(x: -1280, y: -500, width: 1280, height: 300)
-        let layout = SearchBarLayout.make(bounds: bounds, contentWidth: 1500, suggestions: 8, messageLines: 12,
+        let layout = SearchBarLayout.make(bounds: bounds, suggestions: 8, messageLines: 12,
                                           searchTextFontSize: 48, commandTextFontSize: 48)
         #expect(bounds.contains(layout.bar))
         let panel = try #require(layout.panel)

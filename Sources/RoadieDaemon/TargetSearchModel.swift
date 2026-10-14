@@ -112,6 +112,35 @@ public struct TargetSearchModel: Equatable, Sendable {
         highlightedIndex = (index - 1 + matches.count) % matches.count
     }
 
+    /// Tab complète le titre sélectionné sans effectuer son action. Un titre de commande ne doit
+    /// pas faire changer de mode. O(n), comme une frappe ; conserve la cible après le filtrage.
+    public mutating func completeHighlighted() {
+        guard let target = highlighted else { return }
+        let title = target.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        let completed = title.hasPrefix("/") ? " " + title : title
+        // Certaines cibles ont un texte de recherche personnalisé : ne pas perdre la sélection.
+        guard !Self.matches([target], query: completed).isEmpty else { return }
+        properties = nil
+        // Comme la saisie manuelle : l'espace initial cherche un titre « /… » sans lancer de commande.
+        query = completed
+        refresh()
+        highlightedIndex = matches.firstIndex { $0.id == target.id }
+    }
+
+    /// Tab complète ; les autres touches de navigation gardent leur rôle. Sans action ni clic.
+    mutating func handleNavigation(_ input: SearchKeyInput) {
+        switch input.kind {
+        case .next:
+            if input.navigationSource == .tab { completeHighlighted() }
+            else { next() }
+        case .previous:
+            previous()
+        default:
+            break
+        }
+    }
+
     /// Maj + label : met en avant la correspondance dont le label vaut les caractères tapés.
     /// Faux si aucun label ne commence ainsi (la saisie du label repart de zéro).
     public mutating func typeLabel(_ character: String) -> Bool {

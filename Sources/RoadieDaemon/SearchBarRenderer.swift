@@ -1,0 +1,196 @@
+import AppKit
+
+/// Mise en page de la barre de saisie et de la boîte de commandes (SPEC-023 R4), pure. La barre reste
+/// collée en bas de l'écran (y = minY + 48) ; la liste et le message s'empilent au-dessus d'elle,
+/// sans sortir de l'écran. Le message, réponse à Retour, est le plus près de la barre.
+struct SearchBarLayout: Equatable {
+    static let maxSuggestions = 8
+    static let maxMessageLines = 12
+    static let lineHeight: CGFloat = 22
+    static let padding: CGFloat = 8
+    static let gap: CGFloat = 6
+
+    var bar: CGRect
+    /// Fond des lignes ; nil sans ligne.
+    var panel: CGRect?
+    /// De haut en bas.
+    var suggestionRows: [CGRect]
+    var messageRows: [CGRect]
+
+    /// La largeur du contenu ne déplace plus la barre. Faute de place, les suggestions cèdent la
+    /// place au message. Complexité : O(s + m), s ≤ 8 et m ≤ 12.
+    static func make(
+        bounds: CGRect, suggestions: Int, messageLines: Int,
+        searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13
+    ) -> SearchBarLayout {
+        let lineHeight = Self.lineHeight * min(48, max(8, commandTextFontSize)) / 13
+        let barHeight = 40 * min(48, max(8, searchTextFontSize)) / 15
+        let margin = min(20, bounds.width * 0.05)
+        let width = max(0, min(640, bounds.width - 2 * margin))
+        let bar = CGRect(x: bounds.midX - width / 2, y: bounds.minY + min(48, max(0, bounds.height - barHeight)), width: width, height: min(bounds.height, barHeight))
+        let room = max(0, Int((bounds.maxY - 8 - bar.maxY - gap - 2 * padding) / lineHeight))
+        let messageCount = min(messageLines, maxMessageLines, room)
+        let suggestionCount = min(suggestions, maxSuggestions, room - messageCount)
+        let total = messageCount + suggestionCount
+        guard total > 0 else { return SearchBarLayout(bar: bar, panel: nil, suggestionRows: [], messageRows: []) }
+        let panel = CGRect(x: bar.minX, y: bar.maxY + gap, width: bar.width, height: CGFloat(total) * lineHeight + 2 * padding)
+        let rows = (0..<total).map { index in
+            CGRect(x: panel.minX + 12, y: panel.maxY - padding - CGFloat(index + 1) * lineHeight, width: panel.width - 24, height: lineHeight)
+        }
+        return SearchBarLayout(
+            bar: bar,
+            panel: panel,
+            suggestionRows: Array(rows.prefix(suggestionCount)),
+            messageRows: Array(rows.suffix(messageCount))
+        )
+    }
+
+    /// Suggestions montrées dans `rows` lignes, sélection comprise. O(1).
+    static func visibleSuggestions(count: Int, selected: Int?, rows: Int) -> Range<Int> {
+        let shown = max(0, min(count, rows))
+        let start = min(max(0, (selected ?? 0) - shown + 1), count - shown)
+        return start..<(start + shown)
+    }
+}
+
+/// Contenu de la barre de saisie du mode recherche.
+struct TargetSearchBar {
+    var query: String
+    var matchCount: Int
+    var properties: String?
+    var isLoading: Bool
+    /// Mode commande (SPEC-023) : saisie après le `/` ; nil en mode recherche.
+    var commandInput: String? = nil
+    var suggestions: [SlashSuggestion] = []
+    var selectedSuggestion: Int? = nil
+    var message: SlashMessage? = nil
+
+    var inputText: String {
+        if let commandInput { return "/\(commandInput)▏" }
+        if let properties { return properties }
+        return query.isEmpty ? "Rechercher ou saisir /commande" : "\(query)▏"
+    }
+
+    var counterText: String? { commandInput == nil ? String(max(0, matchCount)) : nil }
+}
+
+/// Réserve le compteur à droite ; le texte long ne peut ni le recouvrir ni déplacer son cadre.
+struct SearchBarContentLayout: Equatable {
+    var input: CGRect
+    var counter: CGRect?
+
+    static func make(bar: CGRect, counterSize: CGSize?) -> Self {
+        let inner = bar.insetBy(dx: min(16, bar.width / 8), dy: min(6, bar.height / 4))
+        guard let counterSize else { return Self(input: inner, counter: nil) }
+        let width = min(inner.width / 2, counterSize.width + 20)
+        let height = min(inner.height, counterSize.height + 6)
+        let counter = CGRect(x: inner.maxX - width, y: inner.midY - height / 2, width: width, height: height)
+        let gap = min(12, max(0, counter.minX - inner.minX))
+        let input = CGRect(x: inner.minX, y: inner.minY, width: max(0, counter.minX - gap - inner.minX), height: inner.height)
+        return Self(input: input, counter: counter)
+    }
+}
+
+/// Dessin AppKit de la barre Caps+F, réutilisé pour les rendus hors écran. O(s + m), au plus 20 lignes.
+@MainActor
+enum SearchBarRenderer {
+    static func draw(_ state: TargetSearchBar, in bounds: CGRect, style: TargetOverlayStyle) {
+        let messages = messageLines(state.message, fontSize: style.commandTextFontSize)
+        let layout = SearchBarLayout.make(bounds: bounds, suggestions: state.suggestions.count,
+                                          messageLines: messages.count, searchTextFontSize: style.searchTextFontSize,
+                                          commandTextFontSize: style.commandTextFontSize)
+        guard layout.bar.width > 0, layout.bar.height > 0 else { return }
+        drawSurface(layout.bar)
+        let counter = state.counterText.map {
+            line($0, fontSize: max(8, style.searchTextFontSize - 2), color: NSColor(calibratedWhite: 0.72, alpha: 1))
+        }
+        let counterSize = counter.map { text -> CGSize in
+            let size = text.size()
+            return CGSize(width: size.width + (state.isLoading ? 10 : 0), height: size.height)
+        }
+        let content = SearchBarContentLayout.make(bar: layout.bar, counterSize: counterSize)
+        let placeholder = state.commandInput == nil && state.properties == nil && state.query.isEmpty
+        let text = line(state.inputText, fontSize: style.searchTextFontSize,
+                        color: NSColor(calibratedWhite: placeholder ? 0.52 : 0.94, alpha: 1), truncation: .byTruncatingHead)
+        draw(text, in: content.input)
+        if let counter, let rect = content.counter {
+            NSColor.white.withAlphaComponent(0.08).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
+            var textRect = rect.insetBy(dx: min(6, rect.width / 4), dy: 0)
+            if state.isLoading {
+                let diameter = min(4, rect.width / 8, rect.height / 2)
+                let dot = CGRect(x: rect.minX + min(8, rect.width / 4), y: rect.midY - diameter / 2,
+                                 width: diameter, height: diameter)
+                NSColor.white.withAlphaComponent(0.55).setFill()
+                NSBezierPath(ovalIn: dot).fill()
+                let inset = min(10, textRect.width / 2)
+                textRect.origin.x += inset
+                textRect.size.width -= inset
+            }
+            draw(counter, in: textRect, centered: true)
+        }
+        guard let panel = layout.panel else { return }
+        drawSurface(panel)
+        let shown = SearchBarLayout.visibleSuggestions(count: state.suggestions.count,
+                                                       selected: state.selectedSuggestion, rows: layout.suggestionRows.count)
+        for (row, index) in zip(layout.suggestionRows, shown) {
+            if index == state.selectedSuggestion {
+                NSColor.white.withAlphaComponent(0.08).setFill()
+                NSBezierPath(roundedRect: row.insetBy(dx: -6, dy: 1), xRadius: 6, yRadius: 6).fill()
+            }
+            draw(suggestionLine(state.suggestions[index], fontSize: style.commandTextFontSize), in: row)
+        }
+        for (row, message) in zip(layout.messageRows, messages) { draw(message, in: row) }
+    }
+
+    private static func drawSurface(_ rect: CGRect) {
+        let path = NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12)
+        NSColor(calibratedWhite: 0.10, alpha: 0.96).setFill()
+        path.fill()
+        NSColor.white.withAlphaComponent(0.18).setStroke()
+        path.lineWidth = 0.5
+        path.stroke()
+    }
+
+    private static func line(_ text: String, fontSize: CGFloat, color: NSColor,
+                             truncation: NSLineBreakMode = .byTruncatingTail) -> NSAttributedString {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = truncation
+        return NSAttributedString(string: text.components(separatedBy: .newlines).joined(separator: " "), attributes: [
+            .font: NSFont.systemFont(ofSize: fontSize, weight: .regular),
+            .foregroundColor: color, .paragraphStyle: paragraph,
+        ])
+    }
+
+    private static func suggestionLine(_ suggestion: SlashSuggestion, fontSize: CGFloat) -> NSAttributedString {
+        let name = (suggestion.kind == .command ? "/" : "") + suggestion.text.trimmingCharacters(in: .whitespaces)
+        let result = NSMutableAttributedString(attributedString: line(name, fontSize: fontSize, color: NSColor(calibratedWhite: 0.94, alpha: 1)))
+        if !suggestion.detail.isEmpty {
+            result.append(line("   " + suggestion.detail, fontSize: fontSize, color: NSColor(calibratedWhite: 0.55, alpha: 1)))
+        }
+        return result
+    }
+
+    private static func messageLines(_ message: SlashMessage?, fontSize: CGFloat) -> [NSAttributedString] {
+        switch message {
+        case .info(let lines):
+            return lines.prefix(SearchBarLayout.maxMessageLines).map { line($0, fontSize: fontSize, color: .white) }
+        case .error(let text, let usage):
+            return ([text] + (usage.map { ["Usage : \($0)"] } ?? [])).map { line($0, fontSize: fontSize, color: .systemRed) }
+        case nil:
+            return []
+        }
+    }
+
+    private static func draw(_ line: NSAttributedString, in rect: CGRect, centered: Bool = false) {
+        guard rect.width > 0, rect.height > 0 else { return }
+        let size = line.size()
+        let width = min(size.width, rect.width)
+        let x = centered ? rect.midX - width / 2 : rect.minX
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: rect).addClip()
+        line.draw(in: CGRect(x: x, y: rect.midY - size.height / 2, width: width, height: size.height))
+        NSGraphicsContext.restoreGraphicsState()
+    }
+}
+

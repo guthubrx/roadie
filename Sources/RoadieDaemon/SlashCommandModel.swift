@@ -46,6 +46,8 @@ public struct SlashCommandModel: Equatable, Sendable {
     /// Début de saisie (tout sauf le mot courant) figé pendant un cycle de Tab. Sans lui, un mot
     /// complété qui finit par une espace (`stage `) deviendrait un nouveau mot vide au Tab suivant.
     private var completionPrefix: String?
+    /// Une navigation explicite doit être acceptée par Tab, même si elle revient au choix inséré.
+    private var completionCanAdvance = false
     private let suggestionProvider: @Sendable (String) -> [SlashSuggestion]
 
     public init(
@@ -65,6 +67,7 @@ public struct SlashCommandModel: Equatable, Sendable {
             && lhs.history == rhs.history && lhs.historyCursor == rhs.historyCursor
             && lhs.message == rhs.message && lhs.isActive == rhs.isActive
             && lhs.completionPrefix == rhs.completionPrefix
+            && lhs.completionCanAdvance == rhs.completionCanAdvance
     }
 
     /// Complexité : O(c) par frappe, c = nombre de suggestions rendues par le fournisseur.
@@ -84,8 +87,8 @@ public struct SlashCommandModel: Equatable, Sendable {
         inputEdited()
     }
 
-    /// Tab. Une seule suggestion : elle remplace le mot courant. Plusieurs : la sélection avance
-    /// (avec retour au début) et remplace le mot courant. Aucune : rien ne change.
+    /// Tab accepte d'abord la sélection courante, ou la première proposition. Les Tab suivants
+    /// parcourent les alternatives. Une seule suggestion remplace le mot et recharge les suivantes.
     /// Complexité : O(c + l), l = longueur de la saisie.
     public mutating func complete() {
         guard !suggestions.isEmpty else { return }
@@ -96,15 +99,23 @@ public struct SlashCommandModel: Equatable, Sendable {
             return
         }
         completionPrefix = prefix
-        move(by: 1)
+        if completionCanAdvance { move(by: 1) }
+        else if selected == nil { selected = 0 }
         if let selected { input = prefix + suggestions[selected].text }
+        completionCanAdvance = true
     }
 
     /// Ctrl-N : déplace la surbrillance sans toucher à la saisie.
-    public mutating func nextSuggestion() { move(by: 1) }
+    public mutating func nextSuggestion() {
+        completionCanAdvance = false
+        move(by: 1)
+    }
 
     /// Ctrl-P et Maj-Tab.
-    public mutating func previousSuggestion() { move(by: -1) }
+    public mutating func previousSuggestion() {
+        completionCanAdvance = false
+        move(by: -1)
+    }
 
     /// Flèche haut : commande précédente (la plus récente d'abord). Reste sur la plus ancienne.
     public mutating func historyUp() {
@@ -145,6 +156,7 @@ public struct SlashCommandModel: Equatable, Sendable {
         message = nil
         historyCursor = nil
         completionPrefix = nil
+        completionCanAdvance = false
         selected = nil
         suggestions = suggestionProvider(input)
     }
