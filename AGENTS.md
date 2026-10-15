@@ -27,13 +27,18 @@ ne fait plus réduire les voisines. Reprise automatique dès lecture AX valide, 
 1484 tests isolés et 1551 tests combinés réussis. Contrôle réel avec disponibilité retardée
 3 secondes : voisines stables, placement sans échec, cadres restaurés après fermeture.
 UUID 2B510D42-C812-384F-952E-59E17AA95A6C, PID 15020, quatre contrôles santé OK.
-Current SpecKit feature: `034-reprise-placement`.
+Session 036 implémentée et installée : présence CG ID/PID distincte du placement,
+conservation des groupes et du rail pendant le plein écran natif. 1490 tests isolés et
+1557 combinés réussis. Reproduction réelle avant/après à 22 s ; huit affectations conservées.
+Outlook récupéré dans une stage séparée après perte antérieure à l’installation.
+PID 53642, signature stable, quatre contrôles santé OK ; diaporama de preuves vérifié.
+Current SpecKit feature: `036-stages-plein-ecran`.
 
 Contexte :
-- `specs/034-reprise-placement/spec.md`
-- `specs/034-reprise-placement/plan.md`
-- `specs/034-reprise-placement/implementation.md`
-- `specs/034-reprise-placement/tasks.md`
+- `specs/036-stages-plein-ecran/spec.md`
+- `specs/036-stages-plein-ecran/plan.md`
+- `specs/036-stages-plein-ecran/implementation.md`
+- `specs/036-stages-plein-ecran/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

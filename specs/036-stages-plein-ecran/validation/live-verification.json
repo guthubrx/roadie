@@ -1,0 +1,11 @@
+{
+  "nativeFullscreenSeconds": 22,
+  "beforeCorrectionObservedOnlyT3": true,
+  "afterCorrectionCardsRetained": true,
+  "allEightIncidentWindowsStillGrouped": true,
+  "sameMembershipDuringFullscreen": true,
+  "sameMembershipAfterClose": true,
+  "sameNamesAndOrder": true,
+  "windowScopeChanges": {},
+  "actualActions": "Fenêtre native témoin ; commandes AppKit de plein écran et retour ; aucune simulation de clic"
+}

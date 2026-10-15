@@ -1,0 +1,5 @@
+Isolé : scripts/with-xcode swift test --jobs 2 --no-parallel
+􁁛  Test run with 1490 tests in 163 suites passed after 21.429 seconds.
+
+Combiné : même commande sur la base installée vérifiée
+􁁛  Test run with 1557 tests in 170 suites passed after 22.837 seconds.

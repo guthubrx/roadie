@@ -1,0 +1,26 @@
+{
+  "beforePID": 47809,
+  "afterPID": 53642,
+  "sameStageNamesAndOrder": true,
+  "installedDaemonSHA256": "0280659351971acc5a0124fec6b593f800eed35ba1b80439b74294335c4e7d37",
+  "trackedWindowScopesPreservedBeforeRecovery": {
+    "124": true,
+    "140": true,
+    "37486": true,
+    "54856": true,
+    "79862": true,
+    "92934": true,
+    "104249": true
+  },
+  "outlookReferenceAlreadyAbsentBeforeInstall": true,
+  "outlookRecovery": {
+    "windowID": 614,
+    "pid": 69726,
+    "identityConfirmed": true,
+    "restoredStageID": "recovered-outlook-614",
+    "restoredName": "Outlook",
+    "separateStageToPreserveCurrentGroup": true,
+    "activeStageUnchanged": "1",
+    "method": "transaction sous le même flock et remplacement atomique"
+  }
+}

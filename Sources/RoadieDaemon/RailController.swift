@@ -889,7 +889,7 @@ public final class RailController {
             ? TargetRecordingStatusStore().activeStatus()
             : nil
         let recordingIndicatorBottomOffset = CGFloat(recordConfig.navrailBottomOffset)
-        let liveWindowIDs = Set(snapshot.windows.compactMap { $0.window.isTileCandidate ? $0.window.id : nil })
+        let liveWindowIDs = snapshotService.railWindowIDs(in: snapshot, state: state)
         let protectedWindowIDs = Set(protectedBlurredWindows.keys)
         // Deux ecrans peuvent partager un UUID (clones, docks) : on garde le premier au lieu de planter.
         let screensByDisplayID = Dictionary(NSScreen.screens.compactMap { screen in

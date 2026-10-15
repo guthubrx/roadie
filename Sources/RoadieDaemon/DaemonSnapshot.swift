@@ -173,6 +173,34 @@ public struct SnapshotService {
         stageStore
     }
 
+    /// Présence utilisée par le rail, sans ajouter de fenêtre au relevé de placement.
+    public func railWindowIDs(in snapshot: DaemonSnapshot, state: PersistentStageState? = nil) -> Set<WindowID> {
+        Self.existingManagedWindowIDs(
+            in: state ?? stageStore.state(), windows: snapshot.windows.map(\.window),
+            inventory: provider.existingWindowPIDs()
+        )
+    }
+
+    /// Une identité persistante vérifiée n'est pas une nouvelle fenêtre à adopter. O(w + m).
+    private static func existingManagedWindowIDs(
+        in state: PersistentStageState, windows: [WindowSnapshot],
+        inventory: [WindowID: Int32]?, excluding: Set<WindowID> = []
+    ) -> Set<WindowID> {
+        var present = Set(windows.compactMap { $0.isTileCandidate ? $0.id : nil })
+        guard let inventory else { return present }
+        let observed = Set(windows.map(\.id))
+        for scope in state.scopes {
+            for stage in scope.stages {
+                for member in stage.members where !observed.contains(member.windowID) {
+                    guard member.confirmedClosedAt == nil, !excluding.contains(member.windowID),
+                          let pid = member.pid, inventory[member.windowID] == pid else { continue }
+                    present.insert(member.windowID)
+                }
+            }
+        }
+        return present
+    }
+
     /// Snapshot pour les composants lecteurs (bordure, focus-souris, rail) : réutilise le
     /// dernier snapshot publié dans le processus pour ce fichier d'état s'il est encore valide
     /// (150 ms, ou le cycle courant du tiler s'il vient de `producerSnapshot`) et que ni l'état
@@ -279,6 +307,7 @@ public struct SnapshotService {
             hiddenWindowIDs: hiddenWindowIDs,
             lastObservedWindowAt: observation.lastSeenAt,
             stageManagedWindowIDs: stageManagedWindowIDs,
+            existingWindowPIDs: provider.existingWindowPIDs(),
             liveDisplayIDs: liveDisplayIDs,
             providerFocusedID: providerFocusedID,
             mouseLocation: mouseLocation,
@@ -339,6 +368,7 @@ public struct SnapshotService {
         let hiddenWindowIDs: Set<WindowID>
         let lastObservedWindowAt: [WindowID: Date]
         let stageManagedWindowIDs: Set<WindowID>
+        let existingWindowPIDs: [WindowID: Int32]?
         let liveDisplayIDs: Set<DisplayID>
         let providerFocusedID: WindowID?
         let mouseLocation: CGPoint?
@@ -398,7 +428,10 @@ public struct SnapshotService {
             )
         }
         let activeDisplayIDBeforeMissingReconciliation = persistedStages.activeDisplayID
-        let liveWindowIDs = stageManagedWindowIDs
+        let liveWindowIDs = Self.existingManagedWindowIDs(
+            in: persistedStages, windows: windows, inventory: input.existingWindowPIDs,
+            excluding: input.recentDestroyedWindowIDs
+        )
         let mouseLocation = input.mouseLocation
         persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })
         let missingWindows = persistedStages.pruneMissingWindows(

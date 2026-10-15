@@ -9,11 +9,14 @@ public protocol SystemSnapshotProviding: Sendable {
     func permissions(prompt: Bool) -> PermissionSnapshot
     func displays() -> [DisplaySnapshot]
     func windows() -> [WindowSnapshot]
+    /// Identités CG existantes, y compris sur les Spaces inactifs ; nil si indisponible.
+    func existingWindowPIDs() -> [WindowID: Int32]?
     func focusedWindowID() -> WindowID?
     func mouseLocation() -> CGPoint?
 }
 
 public extension SystemSnapshotProviding {
+    func existingWindowPIDs() -> [WindowID: Int32]? { nil }
     func focusedWindowID() -> WindowID? { nil }
     func mouseLocation() -> CGPoint? { nil }
 }
@@ -631,6 +634,20 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 isMain: id == mainID
             )
         }
+    }
+
+    /// Présence CG seule : aucune lecture AX et aucune fenêtre ajoutée au placement. O(n).
+    public func existingWindowPIDs() -> [WindowID: Int32]? {
+        guard let raw = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+        var owners: [WindowID: Int32] = [:]
+        for info in raw {
+            guard let number = info[kCGWindowNumber as String] as? UInt32, number > 0,
+                  let pid = info[kCGWindowOwnerPID as String] as? Int32, pid > 0 else { continue }
+            owners[WindowID(rawValue: number)] = pid
+        }
+        return owners
     }
 
     // O(n + Σm) : n fenetres CG, une enumeration kAXWindows (m elements) par application.

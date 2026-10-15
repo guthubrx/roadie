@@ -1699,7 +1699,7 @@ public struct StageCommandService {
     }
 
     private func liveWindowIDs(in snapshot: DaemonSnapshot) -> Set<WindowID> {
-        Set(snapshot.windows.compactMap { $0.window.isTileCandidate ? $0.window.id : nil })
+        service.railWindowIDs(in: snapshot)
     }
 
     private func nextEmptyStageID(in scope: PersistentStageScope) -> StageID {
