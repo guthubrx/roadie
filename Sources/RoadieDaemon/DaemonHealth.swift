@@ -119,8 +119,8 @@ public struct DaemonHealthService {
     /// si l'état change. Le tick suivant du tiler applique la disposition. Le heal complet
     /// (`heal()`) prend plusieurs snapshots et purge les membres absents, ce qu'il faut éviter
     /// pendant qu'un écran se reconfigure (fenêtres transitoirement invisibles pour AX).
-    public func healDisplayChange() -> DisplayParkingReport {
-        let report = applyParkingTransition(snapshot: service.snapshot())
+    public func healDisplayChange(snapshot: DaemonSnapshot? = nil) -> DisplayParkingReport {
+        let report = applyParkingTransition(snapshot: snapshot ?? service.snapshot())
         appendParkingEvent(report)
         return report
     }

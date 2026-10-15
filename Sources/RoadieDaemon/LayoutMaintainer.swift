@@ -214,21 +214,15 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
         let tickNow = now()
-        failedDriftWindows = failedDriftWindows.filter { tickNow < $0.value.retryAt }
-        let cause = cause == "deadline" ? "deadline:\(dueDeadlineName(now: tickNow))" : cause
-        forgetGoneWindows(liveWindowIDs: Set(snapshot.windows.map(\.window.id.rawValue)), now: tickNow)
-        // Plein écran lu une seule fois, avant tout calcul de plan (R5).
-        tickFullscreen = fullscreenEntries(in: snapshot)
-        tickExcludedScopes = []
-        let generationBefore = generations.current
-        var generation = currentGeneration(cause: cause, snapshot: snapshot)
-
-        // Garde de bureau et rafale : exclusion totale du scope, aucun chemin d'écriture ne la
-        // contourne (A5, A6). L'arbre d'un scope en attente n'intègre pas encore ses changements.
-        let burstingScopes = burstScopes(in: snapshot, now: tickNow)
-        var settlingScopes = spaceGuardScopes(in: snapshot, now: tickNow).union(burstingScopes)
         let currentDisplaySignature = displaySignature(snapshot.displays)
-        if let lastDisplaySignature, lastDisplaySignature != currentDisplaySignature {
+        // Une fenêtre candidate sans scope attend le parking d'un écran absent. Au démarrage,
+        // aucune notification d'écran n'est garantie ; la première passe stable le récupère.
+        let needsDisplayRecovery = !snapshot.displays.isEmpty && snapshot.windows.contains {
+            $0.window.isTileCandidate && $0.scope == nil
+        }
+        if (lastDisplaySignature != nil && lastDisplaySignature != currentDisplaySignature)
+            || (lastDisplaySignature == nil && needsDisplayRecovery) {
+            let previousSignature = lastDisplaySignature ?? "startup"
             self.lastDisplaySignature = currentDisplaySignature
             lastDisplayTopologyChangedAt = tickNow
             displayTopologySettlesUntil = tickNow.addingTimeInterval(LayoutTolerance.displayTopologySettle)
@@ -238,7 +232,7 @@ public final class LayoutMaintainer {
             failedDriftWindows.removeAll()
             revertedAppliedFrames.removeAll()
             events.append(RoadieEvent(type: "display.topology_settling", details: [
-                "from": lastDisplaySignature,
+                "from": previousSignature,
                 "to": currentDisplaySignature
             ]))
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
@@ -249,6 +243,26 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
         displayTopologySettlesUntil = nil
+        if needsDisplayRecovery {
+            let report = DaemonHealthService(service: service, stageStore: store, events: events)
+                .healDisplayChange(snapshot: snapshot)
+            if report.kind == .park || report.kind == .restore || report.restoredStageCount > 0 {
+                // Même relevé AX en production : seule la copie logique doit être reconstruite.
+                scanReplay?.replayLastScan()
+                snapshot = service.snapshot(followFocus: false)
+                if scanReplay == nil { scans += 1 }
+            }
+        }
+        failedDriftWindows = failedDriftWindows.filter { tickNow < $0.value.retryAt }
+        let cause = cause == "deadline" ? "deadline:\(dueDeadlineName(now: tickNow))" : cause
+        forgetGoneWindows(liveWindowIDs: Set(snapshot.windows.map(\.window.id.rawValue)), now: tickNow)
+        tickFullscreen = fullscreenEntries(in: snapshot)
+        tickExcludedScopes = []
+        let generationBefore = generations.current
+        var generation = currentGeneration(cause: cause, snapshot: snapshot)
+        // Les gardes sont calculées après récupération, sur les scopes effectivement présents.
+        let burstingScopes = burstScopes(in: snapshot, now: tickNow)
+        var settlingScopes = spaceGuardScopes(in: snapshot, now: tickNow).union(burstingScopes)
         var treeScopes = activeTreeScopes(in: snapshot)
         // Pas de grâce de fin de glisser pour les modes à arbre : le relâchement fait la passe (A11).
         let releaseGrace = activeScopes(in: snapshot).contains { !treeScopes.contains($0) }
