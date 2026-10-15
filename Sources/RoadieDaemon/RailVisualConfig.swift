@@ -266,9 +266,14 @@ struct RailStageLabelConfig {
     var visibilitySeconds: TimeInterval
     var fadeSeconds: TimeInterval
     var visibleUntil: TimeInterval?
+    var captionFontSize: CGFloat = 0
+    var gap: CGFloat = 4
+    var followsPerspective = false
 
     var font: NSFont { railFont(family: fontFamily, size: fontSize, weight: weight) }
     var lineHeight: CGFloat { railLineHeight(font: font, size: fontSize) }
+    var captionFont: NSFont { railFont(family: fontFamily, size: captionFontSize > 0 ? captionFontSize : fontSize, weight: weight) }
+    var captionLineHeight: CGFloat { railLineHeight(font: captionFont, size: captionFont.pointSize) }
 
     static let `default` = RailStageLabelConfig(
         enabled: true,
@@ -341,6 +346,9 @@ struct RailStageLabelConfig {
             visibilitySeconds: settings.visibilitySeconds,
             fadeSeconds: settings.fadeSeconds
         )
+        captionFontSize = CGFloat(settings.captionFontSize)
+        gap = CGFloat(settings.gap)
+        followsPerspective = settings.followsPerspective
     }
 
     func opacityMultiplier(now: Date = Date()) -> CGFloat {

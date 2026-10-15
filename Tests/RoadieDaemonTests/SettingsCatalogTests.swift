@@ -17,9 +17,9 @@ struct SettingsCatalogTests {
     }
 
     @Test
-    func catalogHas176SimpleSettings() {
-        #expect(simple.count == 176)
-        #expect(railSimple.count == 76)
+    func catalogHas179SimpleSettings() {
+        #expect(simple.count == 179)
+        #expect(railSimple.count == 79)
         #expect(simple.count - railSimple.count == 100)
     }
 
@@ -146,7 +146,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 176)
+        #expect(expected.count == 179)
     }
 
     // MARK: - Défauts
@@ -174,7 +174,7 @@ struct SettingsCatalogTests {
     @Test
     func railDefaultsMatchRailSettings() {
         let status = statusDictionary(RailSettings.load(raw: ""))
-        // Les 76 clés du rail ont un descripteur, et inversement.
+        // Les 79 clés du rail ont un descripteur, et inversement.
         #expect(Set(railSimple.map { String($0.id.dropFirst("rail.".count)) }) == Set(status.keys))
         for descriptor in railSimple {
             let name = String(descriptor.id.dropFirst("rail.".count))
@@ -202,8 +202,8 @@ struct SettingsCatalogTests {
             #expect(high.flatMap(Double.init) == range.upperBound, "borne haute : \(descriptor.id)")
             checked += 1
         }
-        // 76 clés du rail, dont 46 numériques.
-        #expect(checked == 46)
+        // 79 clés du rail, dont 48 numériques.
+        #expect(checked == 48)
     }
 
     @Test

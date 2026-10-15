@@ -164,6 +164,46 @@ struct DropPreviewEngineTests {
         #expect(candidate?.placements[topRight.id] == Rect(x: 505, y: 0, width: 495, height: 500))
     }
 
+    @Test(arguments: [false, true])
+    func sameStageBottomDropCommitsPreviewDespiteOldDestructionSignal(staleDestroy: Bool) throws {
+        let t3 = previewWindow(1, title: "T3", frame: Rect(x: 0, y: 0, width: 495, height: 245))
+        let teams = previewWindow(2, title: "Teams", frame: Rect(x: 505, y: 0, width: 495, height: 500))
+        let outlook = previewWindow(3, title: "Outlook", frame: Rect(x: 0, y: 255, width: 495, height: 245))
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5,
+            first: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(t3.id), second: .leaf(outlook.id)),
+            second: .leaf(teams.id))
+        let setup = fixture(windows: [t3, teams, outlook], tree: tree)
+        if staleDestroy { setup.service.noteWindowDestroyed(outlook.id) }
+        let candidate = try #require(setup.engine.candidate(sourceWindowID: outlook.id, atAXPoint: CGPoint(x: 750, y: 450)))
+        #expect(candidate.operation == .insertDown)
+        #expect(candidate.targetWindowID == teams.id)
+        #expect(candidate.frame == CGRect(x: 505, y: 255, width: 495, height: 245))
+        let result = StageCommandService(service: setup.service, store: setup.store).place(
+            windowID: outlook.id, displayID: candidate.displayID, orderedWindowIDs: candidate.orderedWindowIDs,
+            placements: candidate.placements, treeMutation: candidate.treeMutation)
+        #expect(result.changed)
+        #expect(setup.store.state().bspTree(for: Self.scope)?.windowIDs == [t3.id, teams.id, outlook.id])
+        for (id, frame) in candidate.placements { #expect(setup.writer.frames[id] == frame) }
+        let next = setup.service.snapshot(followFocus: false)
+        let layout = setup.service.layoutPlan(from: next, scope: Self.scope, orderedWindowIDs: candidate.orderedWindowIDs)
+        #expect(layout.placements[outlook.id] == candidate.frame)
+        #expect(layout.placements[teams.id] == candidate.placements[teams.id]?.cgRect)
+        // Une nouvelle fermeture garde son effet après un placement réussi.
+        setup.service.noteWindowDestroyed(outlook.id)
+        setup.provider.snapshots.removeAll { $0.id == outlook.id }
+        _ = setup.service.snapshot(followFocus: false)
+        #expect(setup.store.state().bspTree(for: Self.scope)?.contains(outlook.id) == false)
+    }
+
+    @Test func destructionNewerThanPlacementRequestIsNotRetracted() {
+        let setup = fixture(windows: [left, topRight, bottomRight], tree: threeTree)
+        setup.service.noteWindowDestroyed(bottomRight.id)
+        let observed = setup.service.snapshot(followFocus: false)
+        setup.service.confirmLiveWindowPlacement(bottomRight.id, in: observed, requestedAt: .distantPast)
+        _ = setup.service.snapshot(followFocus: false)
+        #expect(setup.store.state().bspTree(for: Self.scope)?.contains(bottomRight.id) == false)
+    }
+
     @Test
     func treeDropAtCenterSwapsLeaves() {
         let setup = fixture(windows: [left, topRight, bottomRight], tree: threeTree)

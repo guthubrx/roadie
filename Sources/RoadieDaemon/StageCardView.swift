@@ -82,6 +82,7 @@ final class StageCardView: NSControl {
     private let isActive: Bool
     private let accent: NSColor
     private let config: RailVisualConfig
+    private let captionLineHeight: CGFloat
     private let presentationStates: [WindowID: WindowPresentationState]
     private let thumbnails: [WindowID: NSImage]
     private let visualMembers: [PersistentStageMember]
@@ -107,6 +108,7 @@ final class StageCardView: NSControl {
         self.isActive = isActive
         self.accent = accent
         self.config = config
+        self.captionLineHeight = config.stageLabel.captionLineHeight
         self.presentationStates = presentationStates
         self.thumbnails = thumbnails
         self.visualMembers = Self.focusFirstMembers(stage)
@@ -142,7 +144,7 @@ final class StageCardView: NSControl {
             return max(config.slotHeight, 78 + extra * 2 + (rows - 1) * (size + 8))
         }
         if config.slotHeight > 0 { return max(80, config.slotHeight) }
-        return max(150, config.previewHeight + 66) + extra * 2
+        return max(150, config.previewHeight + 66) + max(0, config.stageLabel.captionLineHeight - 16) * 2
     }
 
     private static func iconSize(for config: RailVisualConfig) -> CGFloat {
@@ -191,15 +193,14 @@ final class StageCardView: NSControl {
     }
 
     private func drawCard() {
-        let rect = bounds.insetBy(dx: contentInset, dy: 12)
+        let rect = cardContentRect
         let preview = previewArea(in: rect)
-        let previewBounds = visualPreviewBounds(in: rect, preview: preview)
         if config.stageLabel.enabled, config.stageLabel.zOrder == .below {
-            drawStageLabel(in: rect, previewBounds: previewBounds)
+            drawStageLabel()
         }
         drawStagePreview(in: rect, preview: preview)
         if config.stageLabel.enabled, config.stageLabel.zOrder == .above {
-            drawStageLabel(in: rect, previewBounds: previewBounds)
+            drawStageLabel()
         }
     }
 
@@ -216,50 +217,79 @@ final class StageCardView: NSControl {
         }
     }
 
-    private func drawStageLabel(in rect: CGRect, previewBounds: CGRect) {
+    private var compactCaption: Bool {
+        config.mode != .icons && config.stageLabel.enabled && config.stageLabel.placement == .below
+    }
+
+    private var cardContentRect: CGRect {
+        bounds.insetBy(dx: contentInset, dy: compactCaption && config.slotHeight > 0 ? 6 : 12)
+    }
+
+    private var captionUsesPerspective: Bool {
+        config.mode == .parallax && config.stageLabel.followsPerspective
+    }
+
+    private func captionHeight(previewWidth: CGFloat) -> CGFloat {
+        captionLineHeight + (captionUsesPerspective ? previewWidth * abs(parallaxProjection.b) : 0)
+    }
+
+    /// Réserve verticale bornée : les couches restent visibles sans toucher la légende voisine.
+    private func verticalFanReserve(previewWidth: CGFloat) -> CGFloat {
+        guard compactCaption, config.slotHeight > 0, config.mode == .parallax || config.mode == .stacked else { return 0 }
+        let available = cardContentRect.height - captionHeight(previewWidth: previewWidth) - config.stageLabel.gap
+        return min(8, max(0, available * 0.15))
+    }
+
+    /// Rectangle du texte avant projection et transformation effectivement utilisée pour son dessin.
+    func stageLabelLayout() -> (rect: CGRect, transform: CGAffineTransform) {
+        let label = config.stageLabel
+        let preview = previewArea(in: cardContentRect)
+        let previews = hitPreviewItems().map(\.rect)
+        let rawFront: CGRect
+        if config.mode == .icons || config.mode == .mosaic {
+            rawFront = previews.dropFirst().reduce(previews.first ?? preview) { $0.union($1) }
+        } else {
+            rawFront = previews.first ?? preview
+        }
+        let projectedFront = config.mode == .parallax ? rawFront.applying(parallaxProjection(for: rawFront)) : rawFront
+        let anchor = visualMembers.isEmpty && compactCaption ? emptyMarkerFrame(in: preview) : projectedFront
+        let width = captionUsesPerspective ? rawFront.width : projectedFront.width
+        let lineHeight = captionLineHeight
+        let visualHeight = lineHeight + (captionUsesPerspective ? width * abs(parallaxProjection.b) : 0)
+        let centerY = label.placement == .above
+            ? anchor.maxY + label.gap + visualHeight / 2
+            : anchor.minY - label.gap - visualHeight / 2
+        var rect = CGRect(x: projectedFront.midX - width / 2 + label.offsetX,
+                          y: centerY - lineHeight / 2 + label.offsetY, width: width, height: lineHeight)
+        let projected = captionUsesPerspective ? rect.applying(parallaxProjection(for: rect)) : rect
+        let dy = max(0, -projected.minY) - max(0, projected.maxY - bounds.height)
+        rect.origin.y += dy
+        return (rect, captionUsesPerspective ? parallaxProjection(for: rect) : .identity)
+    }
+
+    private func drawStageLabel() {
         guard !displayLabel.isEmpty else { return }
         let labelConfig = config.stageLabel
         let now = Date()
-        guard labelConfig.opacityMultiplier(now: now) > 0 else { return }
-        let lineHeight = labelConfig.lineHeight
-        let baseY: CGFloat
-        switch labelConfig.placement {
-        case .above:
-            baseY = previewBounds.maxY - lineHeight
-        case .below:
-            baseY = previewBounds.minY - lineHeight * 0.66
-        }
-        let left = previewBounds.minX + labelConfig.offsetX
-        let maxWidth = max(64, rect.maxX - left - 8)
-        let labelRect = CGRect(
-            x: left,
-            y: min(max(0, baseY + labelConfig.offsetY), max(0, bounds.height - lineHeight)),
-            width: maxWidth,
-            height: lineHeight
-        )
+        guard labelConfig.opacityMultiplier(now: now) > 0,
+              let context = NSGraphicsContext.current?.cgContext else { return }
+        let layout = stageLabelLayout()
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         paragraph.alignment = labelConfig.alignment.nsTextAlignment
-        let label = displayLabel as NSString
-        label.draw(in: labelRect, withAttributes: [
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.8)
+        shadow.shadowBlurRadius = 2
+        shadow.shadowOffset = .zero
+        context.saveGState()
+        context.concatenate(layout.transform)
+        (displayLabel as NSString).draw(in: layout.rect, withAttributes: [
             .foregroundColor: labelConfig.resolvedColor(stageAccent: accent, now: now),
-            .font: labelConfig.font,
+            .font: labelConfig.captionFont,
             .paragraphStyle: paragraph,
+            .shadow: shadow,
         ])
-    }
-
-    private func visualPreviewBounds(in rect: CGRect, preview: CGRect) -> CGRect {
-        let frames: [CGRect]
-        switch config.mode {
-        case .stacked, .parallax:
-            frames = previewItems(in: preview, maxCount: 5).map(\.rect)
-        case .mosaic:
-            frames = mosaicPreviewFrames(in: preview)
-        case .icons:
-            frames = iconDisplayFrames()
-        }
-        guard let first = frames.first else { return preview }
-        return frames.dropFirst().reduce(first) { $0.union($1) }
+        context.restoreGState()
     }
 
     private func drawStacked(in rect: CGRect) {
@@ -326,8 +356,16 @@ final class StageCardView: NSControl {
         guard config.stageLabel.enabled else { return }
         let opacity = 0.10 * config.stageLabel.opacityMultiplier()
         guard opacity > 0 else { return }
-        let line = CGRect(x: rect.minX + 18, y: rect.midY - 3, width: rect.width - 36, height: 6)
+        let line = emptyMarkerFrame(in: rect)
         rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(opacity))
+    }
+
+    private func emptyMarkerFrame(in rect: CGRect) -> CGRect {
+        guard compactCaption else {
+            return CGRect(x: rect.minX + 18, y: rect.midY - 3, width: max(1, rect.width - 36), height: 6)
+        }
+        let frame = config.mode == .parallax ? rect.applying(parallaxProjection(for: rect)) : rect
+        return CGRect(x: frame.minX + frame.width * 0.15, y: frame.minY, width: frame.width * 0.7, height: 6)
     }
 
     private func mosaicPreviewFrames(in rect: CGRect) -> [CGRect] {
@@ -358,7 +396,7 @@ final class StageCardView: NSControl {
 
     /// Tous les cadres dessinés, compteur compris ; les cibles de clic ne comprennent que les membres.
     func iconDisplayFrames() -> [CGRect] {
-        let rect = bounds.insetBy(dx: contentInset, dy: 12).insetBy(dx: 8, dy: 18)
+        let rect = cardContentRect.insetBy(dx: 8, dy: 18)
         return (0..<min(7, visualMembers.count)).map { iconFrame(in: rect, index: $0) }
     }
 
@@ -381,8 +419,14 @@ final class StageCardView: NSControl {
         max(1, min(bounds.width - 8, config.railWidth - 20) - config.leadingPadding - config.trailingPadding)
     }
 
-    private var parallaxXScale: CGFloat {
-        Self.parallaxTransform(for: .zero, rotation: config.parallaxRotation).a
+    private var parallaxProjection: CGAffineTransform {
+        Self.parallaxTransform(for: .zero, rotation: config.parallaxRotation)
+    }
+
+    private var parallaxXScale: CGFloat { parallaxProjection.a }
+
+    private func parallaxProjection(for rect: CGRect) -> CGAffineTransform {
+        Self.parallaxTransform(for: rect, rotation: config.parallaxRotation)
     }
 
     private func horizontalStep(width: CGFloat) -> CGFloat {
@@ -396,7 +440,11 @@ final class StageCardView: NSControl {
         let scale = config.mode == .parallax ? parallaxXScale : 1
         let width = min(config.previewWidth, previewAvailableWidth / scale)
         let verticalReserve = config.slotHeight > 0 ? 2 * config.verticalPadding : 60
-        let height = max(1, min(config.previewHeight, rect.height - verticalReserve))
+        let perspectiveHeight = config.mode == .parallax ? width * abs(parallaxProjection.b) : 0
+        let hasCompactLayout = compactCaption && config.slotHeight > 0
+        let height = hasCompactLayout
+            ? max(1, min(config.previewHeight, rect.height - captionHeight(previewWidth: width) - config.stageLabel.gap - perspectiveHeight - verticalFanReserve(previewWidth: width)))
+            : max(1, min(config.previewHeight, rect.height - verticalReserve))
         let leftCompensation: CGFloat
         switch config.mode {
         case .parallax, .stacked:
@@ -408,7 +456,9 @@ final class StageCardView: NSControl {
         }
         return CGRect(
             x: rect.minX + config.leadingPadding + leftCompensation,
-            y: rect.midY - height / 2,
+            y: hasCompactLayout
+                ? rect.minY + captionHeight(previewWidth: width) + config.stageLabel.gap + perspectiveHeight / 2
+                : rect.midY - height / 2,
             width: width,
             height: height
         )
@@ -438,12 +488,19 @@ final class StageCardView: NSControl {
                 let offset = CGFloat(index)
                 let scale = 1 - offset * config.stackedScale
                 let dx = -offset * horizontalStep(width: preview.width)
-                let dy = offset * config.stackedOffsetY * 0.10
+                let step = compactCaption && config.slotHeight > 0
+                    ? min(config.stackedOffsetY * 0.10, preview.height * config.stackedScale / 2 + verticalFanReserve(previewWidth: preview.width) / 4)
+                    : config.stackedOffsetY * 0.10
+                let dy = offset * step
                 return (index, preview.scaled(by: scale).offsetBy(dx: dx, dy: dy))
             case .parallax:
                 let offset = CGFloat(index)
                 let scale = 1 - offset * config.parallaxScale
-                return (index, preview.scaled(by: scale).offsetBy(dx: -offset * horizontalStep(width: preview.width), dy: offset * config.parallaxOffsetY))
+                let projectedHeight = preview.height + preview.width * abs(parallaxProjection.b)
+                let step = compactCaption && config.slotHeight > 0
+                    ? min(config.parallaxOffsetY, projectedHeight * config.parallaxScale / 2 + verticalFanReserve(previewWidth: preview.width) / 4)
+                    : config.parallaxOffsetY
+                return (index, preview.scaled(by: scale).offsetBy(dx: -offset * horizontalStep(width: preview.width), dy: offset * step))
             case .mosaic, .icons:
                 return (index, preview)
             }
@@ -687,11 +744,12 @@ final class StageCardView: NSControl {
     func windowInsertionIndex(at point: CGPoint) -> Int {
         let count = stage.members.count
         guard count > 0 else { return 0 }
-        let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
+        let cardRect = cardContentRect
         let preview = config.mode == .icons
             ? cardRect.insetBy(dx: 8, dy: 18)
             : previewArea(in: cardRect)
-        let bounds = visualPreviewBounds(in: cardRect, preview: preview)
+        let frames = previewDisplayFrames()
+        let bounds = frames.dropFirst().reduce(frames.first ?? preview) { $0.union($1) }
         let clampedY = min(max(point.y, bounds.minY), bounds.maxY)
         let unitFromTop = 1 - ((clampedY - bounds.minY) / max(1, bounds.height))
         return min(max(Int((unitFromTop * CGFloat(count)).rounded()), 0), count)
@@ -719,7 +777,7 @@ final class StageCardView: NSControl {
     /// Aperçus dans l'ordre de test du clic, du dessus vers le dessous : en stacked/parallax, dessinés
     /// de l'arrière vers l'avant, l'index 0 est visuellement au-dessus. Mêmes cadres que le dessin (MIN-001).
     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
-        let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
+        let cardRect = cardContentRect
         let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect)
         switch config.mode {
         case .stacked, .parallax:

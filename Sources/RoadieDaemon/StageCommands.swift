@@ -836,12 +836,14 @@ public struct StageCommandService {
         treeMutation: ((BSPTree) -> BSPTree)?
     ) -> StageCommandResult {
         let generation = PlacementGeneration.shared.next()
+        let requestedAt = service.clock()
         let snapshot = service.snapshot()
         guard let sourceEntry = snapshot.windows.first(where: { $0.window.id == windowID }),
               let display = snapshot.displays.first(where: { $0.id == displayID })
         else {
             return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false, outcome: .failed)
         }
+        service.confirmLiveWindowPlacement(windowID, in: snapshot, requestedAt: requestedAt)
         let window = sourceEntry.window
         let sourceScope = sourceEntry.scope
         var current = store.state()

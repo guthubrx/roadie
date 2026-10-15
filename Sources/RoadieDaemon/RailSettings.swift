@@ -91,6 +91,9 @@ public struct RailSettings: Equatable, Sendable {
         public var zOrder: String
         public var visibilitySeconds: Double
         public var fadeSeconds: Double
+        public var captionFontSize: Double = 0
+        public var gap: Double = 4
+        public var followsPerspective: Bool = false
     }
 
     public struct Stages: Equatable, Sendable {
@@ -233,7 +236,10 @@ public struct RailSettings: Equatable, Sendable {
                 placement: normalizedChoice(stageLabel["placement"], allowed: ["above", "below"], default: "below"),
                 zOrder: normalizedChoice(stageLabel["z_order"], allowed: ["below", "above"], default: "below"),
                 visibilitySeconds: number(stageLabel["visibility_seconds"], default: 0, min: 0, max: 3600),
-                fadeSeconds: number(stageLabel["fade_seconds"], default: 0.35, min: 0, max: 10)
+                fadeSeconds: number(stageLabel["fade_seconds"], default: 0.35, min: 0, max: 10),
+                captionFontSize: number(stageLabel["caption_font_size"], default: 0, min: 0, max: 28),
+                gap: number(stageLabel["gap"], default: 4, min: 0, max: 24),
+                followsPerspective: bool(stageLabel["follows_perspective"], default: false)
             ),
             stages: Stages(
                 position: normalizedChoice(stages["position"], allowed: ["top", "center", "bottom"], default: normalizedChoice(layout["stages_position"], allowed: ["top", "center", "bottom"], default: "center")),
@@ -319,6 +325,9 @@ public struct RailSettings: Equatable, Sendable {
             "stage_labels.z_order=\(stageLabel.zOrder)",
             "stage_labels.visibility_seconds=\(stageLabel.visibilitySeconds)",
             "stage_labels.fade_seconds=\(stageLabel.fadeSeconds)",
+            "stage_labels.caption_font_size=\(stageLabel.captionFontSize)",
+            "stage_labels.gap=\(stageLabel.gap)",
+            "stage_labels.follows_perspective=\(stageLabel.followsPerspective)",
             "stages.position=\(stages.position)",
             "stages.alignment=\(stages.alignment)",
             "stages.gap=\(stages.gap)",

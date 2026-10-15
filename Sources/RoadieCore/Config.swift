@@ -1337,7 +1337,7 @@ private enum ConfigValidationRules {
             "fx.rail.header": ["enabled", "placement", "alignment", "top_padding", "bottom_padding", "height", "width", "title_color", "subtitle_color", "title_font_size", "subtitle_font_size", "font_family", "title_weight", "subtitle_weight", "title_template", "subtitle_template"],
             "fx.rail.header.display": labelKeys,
             "fx.rail.header.desktop": labelKeys,
-            "fx.rail.stage_labels": ["enabled", "color", "font_size", "font_family", "weight", "alignment", "opacity", "offset_x", "offset_y", "placement", "z_order", "visibility_seconds", "fade_seconds"],
+            "fx.rail.stage_labels": ["enabled", "color", "font_size", "font_family", "weight", "alignment", "opacity", "offset_x", "offset_y", "placement", "z_order", "visibility_seconds", "fade_seconds", "caption_font_size", "gap", "follows_perspective"],
             "fx.rail.stages": ["position", "alignment", "gap", "slot_height"],
             "fx.rail.preview": ["width", "height", "leading_padding", "trailing_padding", "vertical_padding"],
             "fx.rail.preview.stage_overrides": ["stage_id", "active_color"],

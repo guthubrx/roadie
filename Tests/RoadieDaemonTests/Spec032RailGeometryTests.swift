@@ -74,7 +74,7 @@ struct Spec032RailGeometryTests {
     }
 
     @Test(arguments: [90.0, 150.0, 320.0], [0.0, 35.0, 75.0])
-    func foregroundStaysAlignedAndEveryWindowRemainsClickable(width: Double, rotation: Double) throws {
+    func foregroundStaysAlignedAndEveryWindowRemainsClickable(width: Double, rotation: Double) async throws {
         var config = config()
         config.railWidth = width
         config.parallaxRotation = rotation
@@ -93,6 +93,7 @@ struct Spec032RailGeometryTests {
             guard count == 5 else { continue }
             var found: Set<WindowID> = []
             for y in stride(from: 0, through: Int(view.bounds.height), by: 2) {
+                if y.isMultiple(of: 10) { await Task.yield() }
                 for x in stride(from: 0, through: Int(width - 12), by: 2) {
                     if let id = view.windowID(at: CGPoint(x: x, y: y)) { found.insert(id) }
                 }
@@ -125,7 +126,9 @@ struct Spec032RailGeometryTests {
         #expect(abs(cards[1].frame.midY - cards[2].frame.midY - 133) < 0.01)
         let source = stages[2].id
         // Déposer T3 juste au-dessus de Firefox doit donner le rang 2 et un trait entre Word et Firefox.
-        let local = CGPoint(x: 50, y: cards[1].frame.midY + 10)
+        let targetPreview = try #require(cards[1].previewDisplayFrames().first)
+        let targetFrame = stack.convert(targetPreview, from: cards[1])
+        let local = CGPoint(x: 50, y: targetFrame.midY + 10)
         let point = panel.convertPoint(toScreen: stack.convert(local, to: nil))
         #expect(panel.stageReorderPosition(at: point, sourceStageID: source) == 2)
         panel.showStageReorderPreview(at: point, sourceStageID: source)

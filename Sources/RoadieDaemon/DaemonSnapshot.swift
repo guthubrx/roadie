@@ -216,6 +216,18 @@ public struct SnapshotService {
         processState.noteDestroyed(windowID, at: clock())
     }
 
+    /// Un placement explicite confirme une fenêtre vivante. Seul un signal antérieur à la
+    /// commande est révoqué ; une fermeture arrivée pendant le relevé reste prioritaire.
+    func confirmLiveWindowPlacement(_ windowID: WindowID, in snapshot: DaemonSnapshot, requestedAt: Date) {
+        guard snapshot.windows.contains(where: { $0.window.id == windowID && $0.window.isTileCandidate }),
+              processState.retractDestruction(windowID, observedBefore: requestedAt)
+        else { return }
+        invalidateSharedSnapshot()
+        events.append(RoadieEvent(type: "window_destruction_retracted", details: [
+            "windowID": String(windowID.rawValue), "reason": "explicit_placement",
+        ]))
+    }
+
     /// Prochaine relecture courte d'une fermeture que CoreGraphics présente encore.
     func destroyedWindowRetryDeadline(now: Date) -> Date? {
         processState.destroyedWindowRetryDeadline(now: now)
@@ -2429,6 +2441,15 @@ final class SnapshotProcessState: @unchecked Sendable {
                 scheduledRetries: 0,
                 retryAt: nil
             )
+        }
+    }
+
+    func retractDestruction(_ id: WindowID, observedBefore date: Date) -> Bool {
+        lock.withLock {
+            guard let evidence = destroyedEvidence[id], evidence.observedAt <= date else { return false }
+            destroyed.remove(id)
+            destroyedEvidence[id] = nil
+            return true
         }
     }
 
