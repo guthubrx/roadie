@@ -322,8 +322,11 @@ final class StageCardView: NSControl {
     }
 
     private func drawEmpty(in rect: CGRect) {
+        guard config.stageLabel.enabled else { return }
+        let opacity = 0.10 * config.stageLabel.opacityMultiplier()
+        guard opacity > 0 else { return }
         let line = CGRect(x: rect.minX + 18, y: rect.midY - 3, width: rect.width - 36, height: 6)
-        rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(0.10))
+        rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(opacity))
     }
 
     private var visiblePreviewCount: Int {

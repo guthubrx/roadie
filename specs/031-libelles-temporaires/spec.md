@@ -4,9 +4,9 @@
 
 Spec: 031-libelles-temporaires
 Titre: Numéro et nom temporaires des stages
-Statut: Implemented
+Statut: In Progress
 Priorité: P1
-Tâches: 4/4 (100%)
+Tâches: 4/5 (80%)
 Tests: 1539/1539 (100%)
 
 Validation utilisateur : 2026-10-15, avec séparation des deux touches Alt.
@@ -26,6 +26,10 @@ noms des stages dans Karabiner.
 - Alt gauche deux fois conserve la grille de placement à l'échelle de l'écran.
 - Alt droite ne déclenche plus la grille. Les raccourcis sans rapport restent intacts.
 - Les groupes, le tiling et la récupération au démarrage restent fonctionnels.
+- Les traits des stages vides suivent la visibilité des noms : cachés au repos,
+  visibles pendant la révélation, puis disparus après le même fondu.
+
+Complément validé le 2026-10-15 : masquer aussi les repères vides persistants.
 
 ## Périmètre
 

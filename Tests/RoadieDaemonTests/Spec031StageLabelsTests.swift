@@ -11,6 +11,36 @@ struct Spec031StageLabelsTests {
         return try #require(image.tiffRepresentation)
     }
 
+    private func hasVisiblePixels(_ card: StageCardView) throws -> Bool {
+        let bitmap = try #require(NSBitmapImageRep(data: image(card)))
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0 {
+                return true
+            }
+        }
+        return false
+    }
+
+    @Test(arguments: [RailRenderMode.stacked, .mosaic, .parallax, .icons])
+    func emptyStageMarkerIsOnlyVisibleWithLabels(mode: RailRenderMode) throws {
+        var config = RailVisualConfig()
+        config.mode = mode
+        config.stageLabel.visibilitySeconds = 5
+        let stage = PersistentStage(id: StageID(rawValue: "1"), name: "Work")
+        func card() -> StageCardView {
+            StageCardView(stage: stage, displayLabel: "", isActive: false, accent: .systemBlue,
+                          config: config, presentationStates: [:], thumbnails: [:])
+        }
+        #expect(try !hasVisiblePixels(card()))
+        config.stageLabel.visibleUntil = Date().addingTimeInterval(5).timeIntervalSince1970
+        #expect(try hasVisiblePixels(card()))
+        config.stageLabel.visibleUntil = Date().addingTimeInterval(-10).timeIntervalSince1970
+        #expect(try !hasVisiblePixels(card()))
+        config.stageLabel.enabled = false
+        config.stageLabel.visibleUntil = Date().addingTimeInterval(5).timeIntervalSince1970
+        #expect(try !hasVisiblePixels(card()))
+    }
+
     @Test(arguments: [RailRenderMode.stacked, .mosaic, .parallax, .icons])
     func positionAndNameAppearAndDisappearTogether(mode: RailRenderMode) throws {
         var config = RailVisualConfig()

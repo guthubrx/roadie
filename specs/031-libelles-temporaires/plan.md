@@ -20,3 +20,8 @@ l'API BTT et le profil Karabiner sélectionné.
 
 Complexité : préfixage O(longueur du nom), aucun scan ou minuteur supplémentaire.
 Minimalisme : réemploi des services et de la configuration existants, aucune dépendance.
+
+Complément : appliquer au dessin du trait vide le multiplicateur d'opacité
+des libellés et leur activation. Garder les cartes et leurs zones de dépôt
+pour préserver l'ordre des raccourcis. Tester les pixels transparents au repos
+et à expiration dans les quatre modes, puis vérifier sur l'écran réel.
