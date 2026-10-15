@@ -1,0 +1,59 @@
+[
+  {
+    "timestamp": "2026-10-15T03:51:28Z",
+    "type": "rail_refresh",
+    "details": {
+      "stages": "3",
+      "snapshotMs": "0.2",
+      "reason": "recording_status",
+      "displays": "1",
+      "thumbnailCaptureBudget": "8",
+      "durationMs": "3.2"
+    },
+    "tsMs": 1792036288087
+  },
+  {
+    "type": "rail_refresh",
+    "details": {
+      "thumbnailCaptureBudget": "8",
+      "durationMs": "62.5",
+      "reason": "start",
+      "snapshotMs": "0.2",
+      "displays": "1",
+      "stages": "3"
+    },
+    "tsMs": 1792036304265,
+    "timestamp": "2026-10-15T03:51:44Z"
+  },
+  {
+    "timestamp": "2026-10-15T03:51:44Z",
+    "type": "layout_apply",
+    "details": {
+      "clamped": "0",
+      "pass": "1",
+      "durationMs": "55.0",
+      "axWrites": "9",
+      "scans": "1",
+      "commands": "3",
+      "priorityWindowIDs": "",
+      "cause": "command:startup",
+      "failed": "0",
+      "windowWrites": "75411:1,75834:1,79467:1",
+      "applied": "3",
+      "layoutVersion": "3"
+    },
+    "tsMs": 1792036304513,
+    "episodeId": "ep_1792036304296"
+  },
+  {
+    "type": "layout_stable",
+    "timestamp": "2026-10-15T03:51:44Z",
+    "details": {
+      "windows": "3",
+      "layoutVersion": "3",
+      "stableAfterMs": "414"
+    },
+    "tsMs": 1792036304916,
+    "episodeId": "ep_1792036304296"
+  }
+]

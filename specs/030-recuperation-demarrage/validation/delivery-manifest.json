@@ -1,0 +1,23 @@
+{
+  "correctionCommit": "a7079c02",
+  "combinedPatchSha256": "45b8f30df9980a592122b63cb59f41fa43f5f291861a798907ed2ac5bb8fe2b7",
+  "sources": {
+    "Sources/RoadieDaemon/LayoutMaintainer.swift": "d5b42e5962e05eaa8e5a3a4c39984e8d95378e952aa6396b531d36c97b16ba25",
+    "Sources/RoadieDaemon/DaemonHealth.swift": "722281499b3ca4386cd39f92399f70befaae4bad42f207e18e4bdff240d5012c",
+    "Sources/RoadieDaemon/DisplayParkingService.swift": "30330d6683db0a625030c770e40862a68fdcb21479effd6adac3dd2948bd9358",
+    "Sources/RoadieDaemon/StageStore.swift": "023ae68d16a7587ea4284d2885e849b1fc9331edb3413e7d7d70398541f6be98",
+    "Sources/RoadieDaemon/StagePresentationOrder.swift": "331d76e5514c6f9a3f4f691cc98f8980af78ab971c94960cf1760dcde19c8151"
+  },
+  "testsIsolated": 1471,
+  "testsCombined": 1527,
+  "installedMachOUUID": "D89DCA82-9439-3864-9344-0284FCFD8C07",
+  "pidBefore": 53846,
+  "pidAfter": 37751,
+  "codeCommit": "a7079c02",
+  "testCommit": "5e03788",
+  "unscopedLiveCandidates": 0,
+  "retainedMemberships": 4,
+  "railStages": 3,
+  "bootLayoutApplied": 3,
+  "bootLayoutFailed": 0
+}

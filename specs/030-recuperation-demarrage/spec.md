@@ -1,6 +1,6 @@
 # Session 030 — Récupération des fenêtres au démarrage
 
-Statut : En cours. Validation utilisateur : 2026-10-15.
+Statut : Implémentée et installée. Validation utilisateur : 2026-10-15.
 
 ## Problème prouvé
 

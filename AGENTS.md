@@ -9,8 +9,8 @@ Source 94e15e7cc6d5b682329a5efb9fe697f1ed938db9 intégrée par
 4b1f4171564997355c99f09bf659b405cf12c09e et poussée sur origin/main.
 Artefacts : specs/029-navrail-fermeture/. Reçu :
 specs/029-navrail-fermeture/validation/livraison029.md.
-Session 030 en cours : récupération des fenêtres sur écran absent au démarrage.
-Correction validée par 1471 tests Swift. Installation en préparation.
+Session 030 implémentée et installée : récupération des fenêtres sur écran absent au démarrage.
+1471 tests isolés et 1527 tests combinés réussis. Redémarrage vérifié, quatre contrôles santé OK.
 Current SpecKit feature: `030-recuperation-demarrage`.
 
 Contexte :

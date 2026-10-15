@@ -1,0 +1,27 @@
+{
+  "data" : {
+    "checks" : [
+      {
+        "level" : "ok",
+        "message" : "pid=37751 running=true",
+        "name" : "process"
+      },
+      {
+        "level" : "ok",
+        "message" : "pid=37751 mode=run alive=true accessibility=true config_valid=true",
+        "name" : "daemon-status"
+      },
+      {
+        "level" : "ok",
+        "message" : "failed=false",
+        "name" : "self-test"
+      },
+      {
+        "level" : "ok",
+        "message" : "failed=false",
+        "name" : "state-audit"
+      }
+    ]
+  },
+  "kind" : "health"
+}

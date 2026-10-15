@@ -34,3 +34,9 @@ L'installation 030 doit conserver ces changements, sans modifier son dossier de 
 Vérification supplémentaire : le fournisseur rejouable utilisé en production effectue
 une seule lecture système pendant la passe de récupération. Les 5 tests de la
 session et la suite complète (1471 tests) passent après cet ajout.
+
+## Livraison
+
+Release signée installée, PID 37751 après arrêt propre et bootstrap. Quatre
+contrôles de santé OK, aucune fenêtre candidate sans scope, groupes conservés.
+Suite combinée finale : 1527 tests. Reçu : validation/livraison030.md.

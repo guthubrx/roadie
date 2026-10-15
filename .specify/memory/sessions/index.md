@@ -13,4 +13,4 @@
 | 027 | Clôturée, installée, validée et publiée en v0.5.0 | `session-027-settings-complete` (fusionnée, supprimée) | `specs/027-settings-complete` | Saisie immédiate, retuilage, douze éditeurs de collections et familles de police Caps+F ; 1 440 tests Swift, 26 tests des scripts, santé OK, test utilisateur confirmé, DMG vérifié |
 | 028 | Clôturée, installée et validée | `session-028-search-dismissal` (fusionnée, supprimée) | `specs/028-search-dismissal` | Libellés natifs recherchables, lectures AX inutiles réduites, fermeture au clic extérieur ; 1 458 tests Swift, 26 tests des scripts, revue et essai utilisateur confirmés |
 
-| 030 | Correction validée, installation en préparation | `session-030-recuperation-demarrage` | `specs/030-recuperation-demarrage` | Récupération sur passe stable sans notification écran ; 1471 tests Swift |
+| 030 | Implémentée, installée et redémarrée | `session-030-recuperation-demarrage` | `specs/030-recuperation-demarrage` | Récupération sur passe stable sans notification écran ; 1471 tests isolés, 1527 combinés, santé OK |
