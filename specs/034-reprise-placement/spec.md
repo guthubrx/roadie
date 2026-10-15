@@ -2,9 +2,10 @@
 
 Spec: 034-reprise-placement
 Titre: Attendre une fenêtre déplaçable avant de réserver sa place sur un autre écran
-Statut: In progress
+Statut: Complete
 Priorité: P1
-Tâches: 3/4 (75%)
+Tâches: 4/4 (100%)
+Tests: 1551/1551 (100%)
 
 Correction demandée le 2026-10-15 après diagnostic de l'ouverture d'iTerm2 à 12 h 19.
 Deux placements ont échoué, puis le budget a bloqué la reprise pendant trois minutes.

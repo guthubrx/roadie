@@ -22,13 +22,18 @@ Session 033 implémentée et installée : légendes compactes sous les aperçus,
 Dépôt Outlook corrigé : deux gestes complets et six cycles de maintien rejoués en test isolé.
 Échec sans correctif, succès avec correctif. 1550 tests combinés réussis en mode séquentiel.
 Sources de production installées inchangées, UUID vérifié. PID 34131, quatre contrôles santé OK.
-Current SpecKit feature: `033-legendes-compactes`.
+Session 034 implémentée et installée : une fenêtre encore illisible sur un autre écran
+ne fait plus réduire les voisines. Reprise automatique dès lecture AX valide, budget conservé.
+1484 tests isolés et 1551 tests combinés réussis. Contrôle réel avec disponibilité retardée
+3 secondes : voisines stables, placement sans échec, cadres restaurés après fermeture.
+UUID 2B510D42-C812-384F-952E-59E17AA95A6C, PID 15020, quatre contrôles santé OK.
+Current SpecKit feature: `034-reprise-placement`.
 
 Contexte :
-- `specs/033-legendes-compactes/spec.md`
-- `specs/033-legendes-compactes/plan.md`
-- `specs/033-legendes-compactes/implementation.md`
-- `specs/033-legendes-compactes/tasks.md`
+- `specs/034-reprise-placement/spec.md`
+- `specs/034-reprise-placement/plan.md`
+- `specs/034-reprise-placement/implementation.md`
+- `specs/034-reprise-placement/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

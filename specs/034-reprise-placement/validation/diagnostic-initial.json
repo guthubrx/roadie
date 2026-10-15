@@ -1,0 +1,45 @@
+{
+  "reportedIssue": "Terminal créé sur écran interne, place réservée sur écran externe",
+  "localDate": "2026-10-15",
+  "timezone": "Europe/Paris",
+  "windowID": 99751,
+  "app": "iTerm2",
+  "newAppsTarget": "mouse",
+  "targetScope": {
+    "displayID": "0B31204C-54F4-4978-B0EC-50F74DCFB4AF",
+    "desktopID": 4,
+    "stageID": "4"
+  },
+  "initialActualFrame": {
+    "x": 150,
+    "y": 290,
+    "width": 570,
+    "height": 436
+  },
+  "requestedFrame": {
+    "x": -2052,
+    "y": -930,
+    "width": 989,
+    "height": 1754
+  },
+  "failedWriteTimes": [
+    "12:19:24",
+    "12:19:25"
+  ],
+  "suppression": {
+    "first": "12:19:26",
+    "last": "12:22:40",
+    "events": 98,
+    "reason": "write_budget_exhausted"
+  },
+  "automaticSuccessfulPlacement": {
+    "time": "12:22:42",
+    "cause": "ax:didActivateApplication",
+    "layoutVersion": 133
+  },
+  "confirmedTerminalDragLogged": false,
+  "confirmedDefect": "Deux échecs consomment le budget ; la fenêtre reste sur un autre écran tandis que le plan garde sa réservation externe, sans reprise dans la même génération.",
+  "initialAXFailureReason": "Les codes AX détaillés ne figurent pas dans ces événements ; une indisponibilité au lancement reste une hypothèse.",
+  "productionCodeChanged": false,
+  "runtimeLayoutChangedByInvestigation": false
+}

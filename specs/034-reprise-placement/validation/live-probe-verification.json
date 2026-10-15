@@ -1,0 +1,71 @@
+{
+  "waitingEvents": [
+    {
+      "type": "layout_window_waiting_for_ax",
+      "timestamp": "2026-10-15T10:53:45Z",
+      "details": {
+        "windowID": "103268"
+      },
+      "tsMs": 1792061625315,
+      "episodeId": "ep_1792061625222",
+      "scope": {
+        "stageID": "4",
+        "desktopID": 4,
+        "displayID": "0B31204C-54F4-4978-B0EC-50F74DCFB4AF"
+      }
+    }
+  ],
+  "readyEvents": [
+    {
+      "episodeId": "ep_1792061628342",
+      "tsMs": 1792061628404,
+      "type": "layout_window_ax_ready",
+      "timestamp": "2026-10-15T10:53:48Z",
+      "scope": {
+        "displayID": "0B31204C-54F4-4978-B0EC-50F74DCFB4AF",
+        "desktopID": 4,
+        "stageID": "4"
+      },
+      "details": {
+        "windowID": "103268"
+      }
+    }
+  ],
+  "failedEvents": [],
+  "changedExistingScopes": {},
+  "changedExistingFramesAfterClose": {},
+  "commonWindows": 9,
+  "probeGone": true,
+  "probeWindowID": 103268,
+  "waitingPeerFrameChecks": [
+    {
+      "afterSeconds": 0.42,
+      "changedPeerFrames": {}
+    },
+    {
+      "afterSeconds": 1.24,
+      "changedPeerFrames": {}
+    },
+    {
+      "afterSeconds": 2.43,
+      "changedPeerFrames": {}
+    }
+  ],
+  "waitingPeerWindowIDs": [
+    140,
+    75411
+  ],
+  "readyAfterMs": 3089,
+  "physicalInitialFrame": {
+    "height": 468,
+    "width": 570,
+    "x": 200,
+    "y": 364
+  },
+  "placedFrame": {
+    "height": 1754,
+    "width": 989,
+    "x": -2052,
+    "y": -930
+  }
+}
