@@ -1,11 +1,11 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `028-search-dismissal`.
+Current SpecKit feature: `029-resize-rail`.
 
 Contexte :
-- `specs/028-search-dismissal/spec.md`
-- `specs/028-search-dismissal/plan.md`
-- `specs/028-search-dismissal/research.md`
-- `specs/028-search-dismissal/tasks.md`
+- `specs/029-resize-rail/spec.md`
+- `specs/029-resize-rail/plan.md`
+- `specs/029-resize-rail/research.md`
+- `specs/029-resize-rail/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
