@@ -1,0 +1,7 @@
+Branche isolée
+􁁛  Test run with 1482 tests in 160 suites passed after 52.846 seconds.
+SHA256 : 9a2461f91ee1f2cb7357afd286ba921c45342c6bcf91ced8d00123cd5ec25970
+
+Version combinée
+􁁛  Test run with 1549 tests in 167 suites passed after 36.882 seconds.
+SHA256 : f24a9815616791d32b9557e589d88b2b04d6d8d65e7b0acf7405779109e4f5a9

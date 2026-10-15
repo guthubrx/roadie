@@ -17,13 +17,17 @@ Les repères des stages vides suivent aussi la visibilité temporaire des noms.
 Session 032 implémentée et installée : avant des vignettes aligné, hauteur des emplacements réglable,
 repère de dépôt et géométrie stable pendant le glisser. Hauteur installée 120 points, gap 13 conservé.
 1477 tests isolés et 1544 tests combinés réussis. Deux rails vérifiés, dix scopes conservés.
-Current SpecKit feature: `032-rail-geometrie`.
+Session 033 implémentée et installée : légendes compactes sous les aperçus, perspective optionnelle.
+14 points, écart 4, emplacement 112 points ; visibilité temporaire et raccourcis conservés.
+Dépôt Outlook corrigé et reproduit par test ; glisser physique non rejoué après changement de groupe.
+1482 tests isolés et 1549 tests combinés réussis en mode séquentiel. PID 34131, santé OK.
+Current SpecKit feature: `033-legendes-compactes`.
 
 Contexte :
-- `specs/032-rail-geometrie/spec.md`
-- `specs/032-rail-geometrie/plan.md`
-- `specs/031-libelles-temporaires/implementation.md`
-- `specs/032-rail-geometrie/tasks.md`
+- `specs/033-legendes-compactes/spec.md`
+- `specs/033-legendes-compactes/plan.md`
+- `specs/033-legendes-compactes/implementation.md`
+- `specs/033-legendes-compactes/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

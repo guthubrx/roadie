@@ -4,9 +4,9 @@
 
 Spec: 033-legendes-compactes
 Titre: Légendes lisibles sous les aperçus et dépôt dans Teams
-Statut: In Progress
+Statut: Complete
 Priorité: P1
-Tâches: 4/5 (80%)
+Tâches: 5/5 (100%)
 Tests: 1549/1549 (100%)
 
 Validation utilisateur le 2026-10-15 : légende sous les vignettes, numéro et nom,

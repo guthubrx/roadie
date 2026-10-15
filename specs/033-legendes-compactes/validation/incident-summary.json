@@ -1,0 +1,69 @@
+{
+  "localDate": "2026-10-15",
+  "localTimes": [
+    "10:28:09 Europe/Paris",
+    "10:28:12 Europe/Paris"
+  ],
+  "sourceWindowID": 614,
+  "stageMembersAtDiagnosis": [
+    75411,
+    140,
+    614,
+    55021
+  ],
+  "stageTreeLeavesAtDiagnosis": [
+    75411,
+    140
+  ],
+  "historicalTargetNotLogged": true,
+  "reproductionWithStaleDestruction": {
+    "assertionFailuresBefore": 6,
+    "passedAfter": true
+  },
+  "events": [
+    {
+      "timestamp": "2026-10-15T08:28:09Z",
+      "type": "stage_place_window",
+      "details": {
+        "failed": "0",
+        "windowID": "614",
+        "clamped": "0",
+        "strategy": "tree",
+        "treeMutation": "true",
+        "commands": "1",
+        "applied": "1"
+      }
+    },
+    {
+      "timestamp": "2026-10-15T08:28:09Z",
+      "type": "window_drag_apply",
+      "details": {
+        "changed": "true",
+        "operation": "insertDown",
+        "windowID": "614"
+      }
+    },
+    {
+      "timestamp": "2026-10-15T08:28:12Z",
+      "type": "stage_place_window",
+      "details": {
+        "failed": "0",
+        "windowID": "614",
+        "clamped": "0",
+        "strategy": "tree",
+        "treeMutation": "true",
+        "commands": "1",
+        "applied": "1"
+      }
+    },
+    {
+      "timestamp": "2026-10-15T08:28:12Z",
+      "type": "window_drag_apply",
+      "details": {
+        "changed": "true",
+        "windowID": "614",
+        "operation": "insertDown"
+      }
+    }
+  ]
+}
