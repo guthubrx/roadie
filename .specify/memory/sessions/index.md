@@ -15,4 +15,4 @@
 
 | 030 | Implémentée, installée et redémarrée | `session-030-recuperation-demarrage` | `specs/030-recuperation-demarrage` | Récupération sur passe stable sans notification écran ; 1471 tests isolés, 1527 combinés, santé OK |
 
-| 031 | Implémentée, installée et redémarrée | `session-031-libelles-temporaires` | `specs/031-libelles-temporaires` | Numéro et nom temporaires ; double Alt gauche grille, droite libellés ; 1 539 tests, captures et santé OK |
+| 031 | Implémentée, installée et redémarrée | `session-031-libelles-temporaires` | `specs/031-libelles-temporaires` | Numéro et nom temporaires ; double Alt gauche grille, droite libellés ; 1 540 tests, repères vides temporaires, captures et santé OK |

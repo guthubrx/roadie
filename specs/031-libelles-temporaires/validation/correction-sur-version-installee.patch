@@ -6,7 +6,7 @@
      private let visualMembers: [PersistentStageMember]
 -    private let position: Int?
      private let contentInset: CGFloat = 4
- 
+
      override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
 @@ -104,16 +103,15 @@
      ) {
@@ -30,7 +30,7 @@
 @@ -134,17 +132,16 @@
          config.mode == .icons ? max(1, config.railWidth - 12) : 224
      }
- 
+
 -    static func height(for config: RailVisualConfig, memberCount: Int = 6, hasPosition: Bool = false) -> CGFloat {
 +    static func height(for config: RailVisualConfig, memberCount: Int = 6) -> CGFloat {
          // Les deux marges augmentent avec le texte ; le dessin et les zones de clic restent communs.
@@ -47,11 +47,11 @@
 +        }
 +        return max(150, config.previewHeight + 66) + extra * 2
      }
- 
+
      private static func iconSize(for config: RailVisualConfig) -> CGFloat {
 @@ -193,11 +190,9 @@
      }
- 
+
      private func drawCard() {
 -        let rect = previewContentRect
 +        let rect = bounds.insetBy(dx: contentInset, dy: 12)
@@ -96,18 +96,31 @@
 -        text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
 -                  withAttributes: [.font: font, .foregroundColor: NSColor.white])
      }
- 
+
      private func drawStagePreview(in rect: CGRect, preview: CGRect) {
-@@ -392,7 +358,7 @@
- 
+@@ -356,8 +322,11 @@
+     }
+
+     private func drawEmpty(in rect: CGRect) {
++        guard config.stageLabel.enabled else { return }
++        let opacity = 0.10 * config.stageLabel.opacityMultiplier()
++        guard opacity > 0 else { return }
+         let line = CGRect(x: rect.minX + 18, y: rect.midY - 3, width: rect.width - 36, height: 6)
+-        rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(0.10))
++        rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(opacity))
+     }
+
+     private var visiblePreviewCount: Int {
+@@ -392,7 +361,7 @@
+
      /// Tous les cadres dessinés, compteur compris ; les cibles de clic ne comprennent que les membres.
      func iconDisplayFrames() -> [CGRect] {
 -        let rect = previewContentRect.insetBy(dx: 8, dy: 18)
 +        let rect = bounds.insetBy(dx: contentInset, dy: 12).insetBy(dx: 8, dy: 18)
          return (0..<min(7, visualMembers.count)).map { iconFrame(in: rect, index: $0) }
      }
- 
-@@ -696,7 +662,7 @@
+
+@@ -696,7 +665,7 @@
      func windowInsertionIndex(at point: CGPoint) -> Int {
          let count = stage.members.count
          guard count > 0 else { return 0 }
@@ -116,7 +129,7 @@
          let preview = config.mode == .icons
              ? cardRect.insetBy(dx: 8, dy: 18)
              : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
-@@ -709,7 +675,6 @@
+@@ -709,7 +678,6 @@
      /// `localPoint` est le point dans le repère de l'aperçu avant transformation : en parallax, le clic est
      /// ramené par l'inverse de la transformée du dessin, pour viser la forme réellement visible (REL-040).
      private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect, localPoint: CGPoint)? {
@@ -124,7 +137,7 @@
          for item in hitPreviewItems() {
              let localPoint = config.mode == .parallax
                  ? point.applying(Self.parallaxTransform(for: item.rect, rotation: config.parallaxRotation).inverted())
-@@ -729,7 +694,7 @@
+@@ -729,7 +697,7 @@
      /// Aperçus dans l'ordre de test du clic, du dessus vers le dessous : en stacked/parallax, dessinés
      /// de l'arrière vers l'avant, l'index 0 est visuellement au-dessus. Mêmes cadres que le dessin (MIN-001).
      private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
@@ -149,7 +162,7 @@
 @@ -203,28 +203,4 @@
          #expect(faded.contains { $0.kind == .desktopStage && $0.id == "1:2" && $0.label == "3 · Perso" })
      }
- 
+
 -    @Test(arguments: [8.0, 16.0, 48.0], [RailRenderMode.stacked, .mosaic, .parallax, .icons])
 -    func permanentNumberHasItsOwnUnclippedArea(size: Double, mode: RailRenderMode) throws {
 -        var config = RailVisualConfig()

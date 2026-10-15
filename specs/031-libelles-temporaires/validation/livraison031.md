@@ -45,3 +45,29 @@ Logs : /private/tmp/roadie031-old-badge-repro.log,
 /private/tmp/roadie031-combined-targeted.log,
 /private/tmp/roadie031-combined-full.log,
 /private/tmp/roadie031-install.log.
+
+## Complément livré — repères des stages vides
+
+Correction 78d620e, validée puis installée le 2026-10-15. Les traits suivent
+désormais les noms et leur fondu. Tests : 21 ciblés et 1 540 dans la suite
+combinée, aucun échec. Le test avant correction reproduit 12 écarts de visibilité.
+
+UUID installé et compilé : EA62DB8E-2503-37CF-AD26-7FEADD5135E5.
+Signature stricte valide. Redémarrage PID 2722 vers 21035. Quatre contrôles
+santé OK ; les huit fenêtres avec un scope conservent ce scope.
+
+Captures du rail externe inspectées : aucun trait au repos ; les traits et
+les noms réapparaissent ensemble ; aucun trait après expiration. Les fenêtres
+du rail restent visibles. Les actions et raccourcis BTT/Karabiner sont inchangés.
+
+Captures ciblées : /private/tmp/roadie031-empty-rest-rail.png,
+/private/tmp/roadie031-empty-reveal-rail.png,
+/private/tmp/roadie031-empty-expired-rail.png.
+
+Sauvegarde précédente et patch combiné actualisé :
+/private/tmp/roadie031-empty-before-install
+
+Logs : /private/tmp/roadie031-empty-repro.log,
+/private/tmp/roadie031-empty-targeted.log,
+/private/tmp/roadie031-empty-full.log,
+/private/tmp/roadie031-empty-install.log.

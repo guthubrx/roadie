@@ -1,8 +1,8 @@
 {
-  "codeCommit": "893c5fc6a7690ccc5737aee37e25f9600226621e",
-  "combinedTests": 1539,
+  "codeCommit": "78d620e",
+  "combinedTests": 1540,
   "suites": 165,
-  "targetedTests": 20,
+  "targetedTests": 21,
   "oldBadgeReproductionIssues": 20,
   "otherSession": {
     "base": "6a901de1dd0256dd50abd3e65607a7bce34a7860",
@@ -67,17 +67,16 @@
     "Sources/RoadieDaemon/StageCommands.swift": "dae368c139c9dcb4e99d2d5970b17ab2781a1333b47245e9c48d9666aa7203db",
     "Sources/RoadieDaemon/FocusFollowsMouseController.swift": "083ea704c1eaf6f853807825b39159d9c0f43951c3866738ef3c9d633ecd7a04",
     "Sources/RoadieDaemon/RailController.swift": "54b22f8d492fe32a61af6ff5f2aeef9b9dc0344e86c97246d8c40058466842b5",
-    "Sources/RoadieDaemon/StageCardView.swift": "83cb1a0231e079b7c5272b8dd54d6fde90b0f8b74e5939a918a06d76fec04b67"
+    "Sources/RoadieDaemon/StageCardView.swift": "7fe5edbb45745635cc37dfad3915f641c1825f75a09d8ce218f2b45a51269973"
   },
-  "installedMachOUUID": "9D135F82-6211-33BD-9F12-A2D9767C47F5",
+  "installedMachOUUID": "EA62DB8E-2503-37CF-AD26-7FEADD5135E5",
   "signature": "78a75e8032f190a20072eb91cc2919aac344ef78",
-  "pidBefore": 60128,
-  "pidAfter": 2722,
-  "retainedScopedWindows": 5,
-  "railStages": 3,
-  "combinedPatchSha256": "ac29d6368c3c49f2c23de43f67c55202f128e72fb9331bde03f3286f650fdd05",
+  "pidBefore": 2722,
+  "pidAfter": 21035,
+  "retainedScopedWindows": 8,
+  "combinedPatchSha256": "73d08b8882fd71dc819157b012eb075ea8341063fb50ad27f1d1791470dda157",
   "deliveryWorktree": "/private/tmp/roadie031-livraison",
-  "backup": "/private/tmp/roadie031-before-install",
+  "backup": "/private/tmp/roadie031-empty-before-install",
   "visualChecks": {
     "rest": "no numbers",
     "reveal": [
@@ -96,5 +95,28 @@
     "/private/tmp/roadie031-screen-before.png",
     "/private/tmp/roadie031-screen-grid.png"
   ],
-  "physicalKeyDoubleTapTested": false
+  "physicalKeyDoubleTapTested": false,
+  "previousInstalledMachOUUID": "9D135F82-6211-33BD-9F12-A2D9767C47F5",
+  "deliveryBaseCommit": "893c5fc6",
+  "emptyMarkerReproductionIssues": 12,
+  "emptyMarkersVisualChecks": {
+    "rest": "no lines or labels",
+    "reveal": "empty markers and numbered labels visible",
+    "expired": "no lines or labels"
+  },
+  "emptyMarkerScreenshots": [
+    "/private/tmp/roadie031-empty-rest-rail.png",
+    "/private/tmp/roadie031-empty-reveal-rail.png",
+    "/private/tmp/roadie031-empty-expired-rail.png"
+  ],
+  "initialRailStages": 3,
+  "railAfterRestart": {
+    "latencyMs": "115.4",
+    "reason": "stage_store",
+    "displays": "2",
+    "durationMs": "7.1",
+    "snapshotMs": "0.1",
+    "thumbnailCaptureBudget": "0",
+    "stages": "13"
+  }
 }

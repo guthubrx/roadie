@@ -1,129 +1,141 @@
 [
   {
-    "timestamp": "2026-10-15T05:40:44Z",
-    "tsMs": 1792042844976,
-    "details": {
-      "thumbnailCaptureBudget": "8",
-      "displays": "1",
-      "stages": "3",
-      "reason": "start",
-      "durationMs": "49.0",
-      "snapshotMs": "0.1"
-    },
-    "type": "rail_refresh"
-  },
-  {
-    "timestamp": "2026-10-15T05:40:44Z",
-    "tsMs": 1792042844983,
-    "details": {},
-    "type": "target_mode.runtime_started"
-  },
-  {
-    "timestamp": "2026-10-15T05:40:44Z",
-    "tsMs": 1792042844996,
-    "details": {
-      "hotkey": "command+control+alt+f",
-      "state": "registered"
-    },
-    "type": "target_mode.search_hotkey"
-  },
-  {
+    "timestamp": "2026-10-15T06:42:10Z",
+    "tsMs": 1792046530175,
+    "episodeId": "ep_1792046529935",
     "type": "layout_apply",
-    "timestamp": "2026-10-15T05:40:45Z",
-    "episodeId": "ep_1792042844997",
     "details": {
-      "layoutVersion": "2",
+      "cause": "ax:didActivateApplication",
+      "windowWrites": "75411:1,75834:1",
+      "durationMs": "166.0",
+      "failed": "0",
       "axWrites": "6",
-      "priorityWindowIDs": "",
-      "durationMs": "44.0",
-      "windowWrites": "75834:1,79862:1",
-      "pass": "1",
-      "clamped": "0",
-      "cause": "command:startup",
       "scans": "1",
-      "applied": "2",
+      "applied": "1",
+      "pass": "1",
+      "priorityWindowIDs": "75411",
       "commands": "2",
-      "failed": "0"
-    },
-    "tsMs": 1792042845186
-  },
-  {
-    "type": "layout_stable",
-    "timestamp": "2026-10-15T05:40:45Z",
-    "tsMs": 1792042845337,
-    "details": {
-      "layoutVersion": "2",
-      "stableAfterMs": "162",
-      "windows": "2"
-    },
-    "episodeId": "ep_1792042844997"
-  },
-  {
-    "details": {
-      "thumbnailCaptureBudget": "8",
-      "reason": "recording_status",
-      "durationMs": "5.1",
-      "stages": "3",
-      "displays": "1",
-      "snapshotMs": "0.3"
-    },
-    "tsMs": 1792042855496,
-    "type": "rail_refresh",
-    "timestamp": "2026-10-15T05:40:55Z"
-  },
-  {
-    "details": {
-      "display": "current",
-      "scope": "display",
-      "path": "",
-      "rootDisplay": "1",
-      "resolvedScope": "display",
-      "duration": "15.00"
-    },
-    "timestamp": "2026-10-15T05:41:11Z",
-    "tsMs": 1792042871577,
-    "type": "target_mode.grid_started"
-  },
-  {
-    "timestamp": "2026-10-15T05:41:11Z",
-    "tsMs": 1792042871607,
-    "details": {
-      "app": "T3 Code (Alpha)",
-      "windowID": "75411"
-    },
-    "type": "target_mode.grid_focus_followed"
-  },
-  {
-    "type": "target_mode.finished",
-    "timestamp": "2026-10-15T05:41:12Z",
-    "tsMs": 1792042872565,
-    "details": {
-      "error": "cancelled",
-      "changed": "false",
-      "message": "grid_interactive_cancelled",
-      "command": "grid.interactive"
+      "layoutVersion": "10",
+      "clamped": "1"
     }
   },
   {
-    "type": "target_mode.grid_started",
+    "timestamp": "2026-10-15T06:42:10Z",
+    "tsMs": 1792046530343,
     "details": {
-      "path": "",
-      "display": "current",
-      "scope": "display",
-      "rootDisplay": "1",
-      "resolvedScope": "display",
-      "duration": "15.00"
+      "latencyMs": "115.4",
+      "reason": "stage_store",
+      "displays": "2",
+      "durationMs": "7.1",
+      "snapshotMs": "0.1",
+      "thumbnailCaptureBudget": "0",
+      "stages": "13"
     },
-    "tsMs": 1792042897411,
-    "timestamp": "2026-10-15T05:41:37Z"
+    "type": "rail_refresh",
+    "episodeId": "ep_1792046529935"
   },
   {
-    "type": "target_mode.grid_focus_followed",
     "details": {
-      "windowID": "75411",
-      "app": "T3 Code (Alpha)"
+      "reason": "recording_status",
+      "displays": "2",
+      "thumbnailCaptureBudget": "8",
+      "stages": "13",
+      "snapshotMs": "0.1",
+      "durationMs": "7.8"
     },
-    "timestamp": "2026-10-15T05:41:37Z",
-    "tsMs": 1792042897423
+    "timestamp": "2026-10-15T06:42:18Z",
+    "tsMs": 1792046538460,
+    "type": "rail_refresh"
+  },
+  {
+    "details": {
+      "snapshotMs": "100.0",
+      "durationMs": "110.5",
+      "displays": "2",
+      "reason": "timer",
+      "thumbnailCaptureBudget": "1",
+      "stages": "13"
+    },
+    "tsMs": 1792046555569,
+    "timestamp": "2026-10-15T06:42:35Z",
+    "type": "rail_refresh"
+  },
+  {
+    "type": "rail_refresh",
+    "details": {
+      "durationMs": "181.6",
+      "thumbnailCaptureBudget": "1",
+      "snapshotMs": "171.6",
+      "displays": "2",
+      "reason": "timer",
+      "stages": "13"
+    },
+    "tsMs": 1792046557640,
+    "timestamp": "2026-10-15T06:42:37Z"
+  },
+  {
+    "details": {
+      "stages": "13",
+      "durationMs": "91.0",
+      "reason": "timer",
+      "displays": "2",
+      "snapshotMs": "0.1",
+      "thumbnailCaptureBudget": "1"
+    },
+    "tsMs": 1792046589552,
+    "type": "rail_refresh",
+    "timestamp": "2026-10-15T06:43:09Z"
+  },
+  {
+    "timestamp": "2026-10-15T06:43:21Z",
+    "type": "rail_refresh",
+    "details": {
+      "displays": "2",
+      "snapshotMs": "105.6",
+      "durationMs": "113.2",
+      "reason": "timer",
+      "stages": "13",
+      "thumbnailCaptureBudget": "1"
+    },
+    "tsMs": 1792046601535
+  },
+  {
+    "type": "rail_refresh",
+    "tsMs": 1792046629569,
+    "details": {
+      "stages": "13",
+      "reason": "timer",
+      "displays": "2",
+      "snapshotMs": "113.9",
+      "durationMs": "121.6",
+      "thumbnailCaptureBudget": "1"
+    },
+    "timestamp": "2026-10-15T06:43:49Z"
+  },
+  {
+    "tsMs": 1792046652501,
+    "details": {
+      "displays": "2",
+      "snapshotMs": "0.2",
+      "thumbnailCaptureBudget": "1",
+      "stages": "13",
+      "reason": "timer",
+      "durationMs": "98.2"
+    },
+    "type": "rail_refresh",
+    "timestamp": "2026-10-15T06:44:12Z"
+  },
+  {
+    "type": "rail_refresh",
+    "details": {
+      "displays": "2",
+      "durationMs": "120.1",
+      "reason": "timer",
+      "stages": "13",
+      "snapshotMs": "112.8",
+      "thumbnailCaptureBudget": "1"
+    },
+    "tsMs": 1792046663578,
+    "timestamp": "2026-10-15T06:44:23Z"
   }
 ]

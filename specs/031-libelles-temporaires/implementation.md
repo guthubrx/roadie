@@ -49,3 +49,17 @@ Minimalisme et responsabilité future : pas de dépendance, de nouvel état,
 de boucle ou d'abstraction. Le code se comprend par la règle utilisateur :
 numéro et nom apparaissent et disparaissent ensemble. Aucun calcul supplémentaire
 de l'ordre des stages. Préfixage linéaire dans la longueur du texte.
+
+## Complément — repères des stages vides
+
+Le trait dessiné par drawEmpty ignorait la visibilité des noms. Le test des
+pixels révèle 12 écarts avant correction dans les quatre modes : trait encore
+visible au repos, après expiration et avec les noms désactivés.
+
+Le dessin vérifie désormais l'activation des libellés et multiplie son opacité
+par leur multiplicateur temporel. Le même minuteur contrôle aussi les traits.
+Les cartes, les groupes et les zones de dépôt gardent leur géométrie.
+Complexité constante, aucun état ajouté. Revue locale : trois gardes/calculs
+simples dans le dessin existant, sans nouvelle abstraction ni dépendance.
+
+Validation combinée : 21 tests ciblés, puis 1 540 tests dans 165 suites réussis.

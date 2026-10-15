@@ -12,7 +12,8 @@ specs/029-navrail-fermeture/validation/livraison029.md.
 Session 030 implémentée et installée : récupération des fenêtres sur écran absent au démarrage.
 1471 tests isolés et 1527 tests combinés réussis. Redémarrage vérifié, quatre contrôles santé OK.
 Session 031 implémentée et installée : numéro et nom temporaires ; Alt gauche grille, Alt droite libellés.
-1 539 tests combinés réussis, captures avant/après et expiration vérifiées, santé OK.
+1 540 tests combinés réussis, captures avant/après et expiration vérifiées, santé OK.
+Les repères des stages vides suivent aussi la visibilité temporaire des noms.
 Current SpecKit feature: `031-libelles-temporaires`.
 
 Contexte :
