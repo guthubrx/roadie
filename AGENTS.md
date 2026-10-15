@@ -9,13 +9,15 @@ Source 94e15e7cc6d5b682329a5efb9fe697f1ed938db9 intégrée par
 4b1f4171564997355c99f09bf659b405cf12c09e et poussée sur origin/main.
 Artefacts : specs/029-navrail-fermeture/. Reçu :
 specs/029-navrail-fermeture/validation/livraison029.md.
-Current SpecKit feature: `029-navrail-fermeture`.
+Session 030 en cours : récupération des fenêtres sur écran absent au démarrage.
+Correction validée par 1471 tests Swift. Installation en préparation.
+Current SpecKit feature: `030-recuperation-demarrage`.
 
 Contexte :
-- `specs/029-navrail-fermeture/spec.md`
-- `specs/029-navrail-fermeture/plan.md`
-- `specs/029-navrail-fermeture/research.md`
-- `specs/029-navrail-fermeture/tasks.md`
+- `specs/030-recuperation-demarrage/spec.md`
+- `specs/030-recuperation-demarrage/plan.md`
+- `specs/030-recuperation-demarrage/implementation.md`
+- `specs/030-recuperation-demarrage/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

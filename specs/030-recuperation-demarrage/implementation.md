@@ -21,3 +21,16 @@ normale, sans boucle ni nouveau contrôleur.
 La version actuellement installée a le même UUID Mach-O que la Release de la
 session 029-resize-rail, dont les changements ne sont pas encore intégrés à main.
 L'installation 030 doit conserver ces changements, sans modifier son dossier de travail.
+
+## Validation de la version combinée
+
+- Copie de livraison distincte : /private/tmp/roadie030-livraison.
+- Correctif 030 plus instantané des changements déjà installés de 029-resize-rail.
+- Fusion des délais de fermeture et de geste en attente : les deux sont conservés.
+- Suite combinée : 1526 tests, 163 suites, aucun échec.
+- Le cache de compilation copié a été nettoyé après un rejet de chemin PCH.
+- Aucun fichier de la session 029-resize-rail n’a été modifié.
+
+Vérification supplémentaire : le fournisseur rejouable utilisé en production effectue
+une seule lecture système pendant la passe de récupération. Les 5 tests de la
+session et la suite complète (1471 tests) passent après cet ajout.

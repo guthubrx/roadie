@@ -9,9 +9,13 @@ private final class StartupRecoveryProvider: SystemSnapshotProviding, @unchecked
     var trusted = true
     var liveWindows: [WindowSnapshot] = []
     var liveDisplays = [powerDisplay("host")]
+    var windowReadCount = 0
     func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: trusted) }
     func displays() -> [DisplaySnapshot] { liveDisplays }
-    func windows() -> [WindowSnapshot] { liveWindows }
+    func windows() -> [WindowSnapshot] {
+        windowReadCount += 1
+        return liveWindows
+    }
 }
 
 private final class StartupRecoveryWriter: WindowFrameWriting, @unchecked Sendable {
@@ -20,7 +24,7 @@ private final class StartupRecoveryWriter: WindowFrameWriting, @unchecked Sendab
 
 @Suite
 struct Spec030StartupRecoveryTests {
-    private func fixture(_ provider: StartupRecoveryProvider) -> (StageStore, SnapshotService, URL) {
+    private func fixture(_ provider: any SystemSnapshotProviding) -> (StageStore, SnapshotService, URL) {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-030-\(UUID())")
         let store = StageStore(path: directory.appendingPathComponent("stages.json").path)
         let externalWindow = powerWindow(30030, x: 100)
@@ -41,6 +45,23 @@ struct Spec030StartupRecoveryTests {
             stageStore: store, events: EventLog(path: directory.appendingPathComponent("events.jsonl").path)
         )
         return (store, service, directory)
+    }
+
+    @Test
+    func recoveryUsesOnlyOneSystemScanPerPass() {
+        let provider = StartupRecoveryProvider()
+        provider.liveWindows = [powerWindow(30030, x: 100)]
+        let replay = ReplayableSnapshotProvider(base: provider)
+        let (store, service, directory) = fixture(replay)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var time = Date()
+        let maintainer = LayoutMaintainer(service: service, scanReplay: replay, now: { time })
+        _ = maintainer.tick(cause: "command:startup")
+        let previousReads = provider.windowReadCount
+        time.addTimeInterval(LayoutTolerance.displayTopologySettle + 0.1)
+        _ = maintainer.tick(cause: "deadline")
+        #expect(provider.windowReadCount == previousReads + 1)
+        #expect(store.state().stageScope(for: WindowID(rawValue: 30030))?.displayID.rawValue == "host")
     }
 
     @Test
