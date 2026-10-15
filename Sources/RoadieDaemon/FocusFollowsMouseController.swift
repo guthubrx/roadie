@@ -63,12 +63,15 @@ public struct GestureSession: Equatable, Sendable {
     public var startFrame: CGRect?
     public var startedAt: Date
     public var endedAt: Date?
+    /// Preuve de mouvement avec le bouton gauche enfoncé ; un clic seul ne demande aucune attente AX.
+    public var didDrag: Bool
 
-    public init(windowID: UInt32?, startFrame: CGRect?, startedAt: Date, endedAt: Date? = nil) {
+    public init(windowID: UInt32?, startFrame: CGRect?, startedAt: Date, endedAt: Date? = nil, didDrag: Bool = false) {
         self.windowID = windowID
         self.startFrame = startFrame
         self.startedAt = startedAt
         self.endedAt = endedAt
+        self.didDrag = didDrag
     }
 }
 
@@ -95,6 +98,7 @@ public final class UserInputActivity: @unchecked Sendable {
     private var monitors: [Any] = []
     private var gesture: GestureSession?
     private var finishedGesture: GestureSession?
+    private var physicalReleaseObservedAt: Date?
     private var gestureTarget: GestureTarget?
     private var releaseHandler: ReleaseHandler?
 
@@ -112,7 +116,7 @@ public final class UserInputActivity: @unchecked Sendable {
     public func startMonitoring() {
         guard lock.withLock({ monitors.isEmpty }) else { return }
         let mask: NSEvent.EventTypeMask = [
-            .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+            .leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseUp,
             .otherMouseDown, .otherMouseUp, .keyDown, .flagsChanged,
         ]
         let global = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
@@ -147,6 +151,9 @@ public final class UserInputActivity: @unchecked Sendable {
         case .leftMouseUp:
             mouseUp(leftButton: true)
             return
+        case .leftMouseDragged:
+            mouseDragged()
+            return
         case .rightMouseUp, .otherMouseUp:
             mouseUp(leftButton: false)
             return
@@ -163,8 +170,14 @@ public final class UserInputActivity: @unchecked Sendable {
     func mouseDown(at point: CGPoint, now: Date = Date()) {
         let target = lock.withLock { gestureTarget }?(point)
         lock.withLock {
+            physicalReleaseObservedAt = nil
             gesture = GestureSession(windowID: target?.windowID, startFrame: target?.frame, startedAt: now)
         }
+    }
+
+    @MainActor
+    func mouseDragged() {
+        lock.withLock { gesture?.didDrag = true }
     }
 
     /// Relâchement d'un bouton. Celui du bouton gauche ferme la session ; une session sans cible
@@ -174,22 +187,53 @@ public final class UserInputActivity: @unchecked Sendable {
     @MainActor
     func mouseUp(leftButton: Bool, now: Date = Date()) {
         let (ended, handler) = lock.withLock { () -> (Bool, ReleaseHandler?) in
-            guard leftButton, var session = gesture else { return (false, releaseHandler) }
-            gesture = nil
-            guard session.windowID != nil else { return (false, releaseHandler) }
-            if let previous = finishedGesture, previous.windowID == session.windowID {
-                session.startFrame = previous.startFrame
-                session.startedAt = previous.startedAt
-            }
-            session.endedAt = now
-            finishedGesture = session
-            return (true, releaseHandler)
+            physicalReleaseObservedAt = nil
+            return (leftButton ? finishGestureLocked(at: now) : false, releaseHandler)
         }
         handler?(ended)
     }
 
     /// Session en cours (bouton gauche enfoncé). nil hors geste.
     public var currentGesture: GestureSession? { lock.withLock { gesture } }
+
+    /// L'état physique peut précéder mouseUp : attendre son callback 300 ms au plus après
+    /// relâchement observé, puis conserver le geste récupéré pour la passe qui consulte la garde.
+    /// Un bouton encore appuyé reste bloquant, sans durée maximale de glissement. O(1).
+    public func blocksLayout(mouseButtonsPressed: Bool, now: Date = Date()) -> Bool {
+        lock.withLock {
+            if mouseButtonsPressed {
+                physicalReleaseObservedAt = nil
+                return true
+            }
+            guard gesture != nil else { physicalReleaseObservedAt = nil; return false }
+            guard let releasedAt = physicalReleaseObservedAt else {
+                physicalReleaseObservedAt = now
+                return true
+            }
+            guard releasedAt.addingTimeInterval(0.3) <= now else { return true }
+            // Callback perdu : la passe qui consulte la garde peut consommer la session terminée.
+            // Aucun handler n'est rappelé ici ; mouseUp tardif ne trouve plus de session à rejouer.
+            _ = finishGestureLocked(at: releasedAt)
+            return false
+        }
+    }
+
+    /// Uniquement sous lock : fermeture/coalescence partagée par mouseUp et sa récupération.
+    /// Ne déclenche aucun callback. La date reste celle du premier relâchement physique observé.
+    private func finishGestureLocked(at endedAt: Date) -> Bool {
+        guard var session = gesture else { return false }
+        gesture = nil
+        physicalReleaseObservedAt = nil
+        guard session.windowID != nil else { return false }
+        if let previous = finishedGesture, previous.windowID == session.windowID {
+            session.startFrame = previous.startFrame
+            session.startedAt = previous.startedAt
+            session.didDrag = previous.didDrag || session.didDrag
+        }
+        session.endedAt = endedAt
+        finishedGesture = session
+        return true
+    }
 
     /// Dernière session terminée sur une fenêtre gérée, consommée une seule fois (A17).
     public func takeGesture() -> GestureSession? {
@@ -225,8 +269,11 @@ public enum FocusFollowsMousePicker {
     /// inactive) masque celles de derrière : aucune cible.
     /// O(n), uniquement pour les gestes : le focus au mouvement garde son test strict.
     public static func gestureTargetWindow(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        if let front = frontWindow(at: point, in: snapshot) {
-            return isEligible(front, in: snapshot) ? front : nil
+        let frontIndex = snapshot.windows.firstIndex {
+            $0.window.isOnScreen && $0.window.frame.cgRect.contains(point)
+        }
+        if let frontIndex, isEligible(snapshot.windows[frontIndex], in: snapshot) {
+            return snapshot.windows[frontIndex]
         }
         func distance(_ entry: ScopedWindowSnapshot) -> CGFloat {
             let frame = entry.window.frame.cgRect
@@ -234,7 +281,9 @@ public enum FocusFollowsMousePicker {
             let dy = max(frame.minY - point.y, point.y - frame.maxY, 0)
             return dx * dx + dy * dy
         }
-        return snapshot.windows.filter { entry in
+        // Un intérieur inéligible bloque seulement les poignées situées derrière lui en Z.
+        // Le cadre décoratif d'une fenêtre située devant ne masque pas sa propre poignée.
+        return snapshot.windows.prefix(frontIndex ?? snapshot.windows.count).filter { entry in
             isEligible(entry, in: snapshot)
                 && entry.window.frame.cgRect.insetBy(dx: -8, dy: -8).contains(point)
         }.min { lhs, rhs in

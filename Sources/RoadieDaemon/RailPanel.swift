@@ -308,6 +308,7 @@ final class RailPanel: NSPanel {
                 thumbnails: thumbnails.images(for: stage.members),
                 position: index + 1
             )
+            card.toolTip = StagePresentationOrder.menuLabel(stage, position: index + 1)
             stack.addArrangedSubview(card)
         }
         if config.headerVisible, config.headerPosition == .bottom {
@@ -528,21 +529,20 @@ final class RailPanel: NSPanel {
     }
 
     private func nextGeneratedStageID() -> StageID {
-        let used = Set((visibleStageIDs + emptyStageIDs).map(\.rawValue))
+        Self.nextGeneratedStageID(in: orderedStageIDs)
+    }
+
+    /// Un membre hors du relevé garde son ID réservé jusqu'à sa suppression réelle du scope.
+    static func nextGeneratedStageID(in orderedStageIDs: [StageID]) -> StageID {
+        let used = Set(orderedStageIDs.map(\.rawValue))
         for index in 1...99 where !used.contains(String(index)) {
             return StageID(rawValue: String(index))
         }
         return StageID(rawValue: UUID().uuidString)
     }
 
-    private static func isCustomStageName(_ name: String, id: StageID) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && trimmed != "Stage \(id.rawValue)"
-    }
-
     private static func stageDisplayLabel(_ stage: PersistentStage, position: Int) -> String {
-        let trimmed = stage.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return isCustomStageName(trimmed, id: stage.id) ? trimmed : "Stage \(position)"
+        StagePresentationOrder.name(stage, position: position)
     }
 }
 

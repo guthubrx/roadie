@@ -51,6 +51,19 @@ public final class LayoutMaintainer {
     private let generations: PlacementGeneration
     /// Session de geste terminée, consommée une seule fois (A17). Injectable pour les tests.
     private let takeGesture: () -> GestureSession?
+    /// Une session au plus : plafond absolu 2 s, dont 300 ms d'observation hors garde.
+    /// Les pas de 50 ms utilisent l'ordonnanceur existant ; aucune boucle ni état persisté.
+    private struct PendingGesture {
+        let session: GestureSession
+        let windowID: WindowID
+        let pid: pid_t
+        let scope: StageScope
+        let expiresAt: Date
+        var observationRemaining: TimeInterval = 0.3
+        var lastObservationAt: Date?
+        var pollAt: Date
+    }
+    private var pendingGesture: PendingGesture?
     /// Type du bureau courant d'un écran : vrai = bureau utilisateur, nil = sonde indisponible (A19).
     private let spaceProbe: (String) -> Bool?
     /// Lecture AX fraîche d'un cadre (seconde observation d'un refus, repli de la garde, stabilité ;
@@ -64,6 +77,9 @@ public final class LayoutMaintainer {
     private var cachedRules: [WindowRule]?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
+    /// Échecs des placements directs : attendre une nouvelle géométrie ou intention explicite.
+    private var failedRestorations: [WindowID: FailedRestoration] = [:]
+    private var lastRestorationActivationWindowID: WindowID?
     /// Transfert échoué : attend avant de refaire la même réparation (même PID et même cadre).
     private var failedDriftWindows: [WindowID: (window: WindowSnapshot, retryAt: Date)] = [:]
     /// Écritures réussies que l'application a annulées (modes sans arbre seulement, A3).
@@ -112,6 +128,9 @@ public final class LayoutMaintainer {
     private var commandGeneration: UInt64?
     private var lastTreeWindowIDs: Set<UInt32> = []
     private var unreadyPlacementWindows: Set<WindowID> = []
+    /// Une lecture réussie distingue la disponibilité initiale des refus ultérieurs,
+    /// même si la fenêtre était déjà à sa cible et n'a jamais nécessité d'écriture.
+    private var placementResolvedPIDs: [WindowID: Int32] = [:]
     // Mesure (A12, A20).
     private var pendingStability: PendingStability?
     private var lastPassEpisodeID: String?
@@ -159,7 +178,9 @@ public final class LayoutMaintainer {
         // Sous les tests, la souris, les gestes et les bureaux réels de la machine ne comptent pas.
         let testing = TestEnvironment.isRunningTests
         self.mouseButtonsPressed = mouseButtonsPressed
-            ?? (testing ? { false } : { NSEvent.pressedMouseButtons != 0 })
+            ?? (testing ? { false } : {
+                UserInputActivity.shared.blocksLayout(mouseButtonsPressed: NSEvent.pressedMouseButtons != 0)
+            })
         // Sous les tests, registre et génération propres à l'instance : les suites tournent en
         // parallèle avec les mêmes identifiants de fenêtre.
         self.writtenFrames = writtenFrames ?? (testing ? WrittenFrameRegistry() : .shared)
@@ -181,11 +202,13 @@ public final class LayoutMaintainer {
     public func configurationChanged(invalidateLayoutIntents: Bool) {
         service.invalidateSharedSnapshot()
         guard invalidateLayoutIntents else { return }
+        pendingGesture = nil
         service.effectiveIntentStore.mutate { intents in
             intents = intents.filter { $0.value.zoomedWindowID != nil }
         }
         lastCommandIntentAt = nil
         // Nouvelle intention explicite : une variation d'un point dispose de son budget.
+        failedRestorations.removeAll()
         settingsGeometryPending = true
         settingsRetryAt.removeAll()
         settingsRetryRunnableScopes.removeAll()
@@ -215,6 +238,7 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
         let tickNow = now()
+
         let currentDisplaySignature = displaySignature(snapshot.displays)
         // Une fenêtre candidate sans scope attend le parking d'un écran absent. Au démarrage,
         // aucune notification d'écran n'est garantie ; la première passe stable le récupère.
@@ -230,6 +254,7 @@ public final class LayoutMaintainer {
             lastObservedFrames = scopedFrames(in: snapshot)
             clampedFrames.removeAll()
             failedFrames.removeAll()
+            failedRestorations.removeAll()
             failedDriftWindows.removeAll()
             revertedAppliedFrames.removeAll()
             events.append(RoadieEvent(type: "display.topology_settling", details: [
@@ -254,9 +279,21 @@ public final class LayoutMaintainer {
                 if scanReplay == nil { scans += 1 }
             }
         }
+        if cause.hasPrefix("command:") {
+            // Une intention explicite libère aussi le refus nonTree de la restauration focalisée.
+            for id in failedRestorations.keys { failedFrames[id.rawValue] = nil }
+            failedRestorations.removeAll()
+        }
         failedDriftWindows = failedDriftWindows.filter { tickNow < $0.value.retryAt }
         let cause = cause == "deadline" ? "deadline:\(dueDeadlineName(now: tickNow))" : cause
         forgetGoneWindows(liveWindowIDs: Set(snapshot.windows.map(\.window.id.rawValue)), now: tickNow)
+        let currentWindowsByID = Dictionary(snapshot.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { first, _ in first })
+        for (id, failed) in failedRestorations {
+            guard let window = currentWindowsByID[id],
+                  window.pid != failed.pid || window.bundleID != failed.bundleID else { continue }
+            failedRestorations[id] = nil
+            failedFrames[id.rawValue] = nil
+        }
         tickFullscreen = fullscreenEntries(in: snapshot)
         tickExcludedScopes = []
         let generationBefore = generations.current
@@ -306,17 +343,14 @@ public final class LayoutMaintainer {
         // dans ce processus, le dépôt consomme la session avant cette passe (un glisser encore en
         // cours arrête la passe plus haut sans la consommer) ; d'un autre processus, il laisse sa
         // preuve dans le fichier partagé du glisser, postérieure au début de la session.
-        var gesture = takeGesture()
-        if let session = gesture, let drop = dragActivity.lastDrop(),
-           drop.windowID.rawValue == session.windowID, drop.at >= session.startedAt {
-            gesture = nil
-        }
+        var gesture = layoutGesture(in: &snapshot, excluding: settlingScopes.union(waitingSettingsScopes), now: tickNow)
+        observedFrames = scopedFrames(in: snapshot)
         if let raw = gesture?.windowID,
            let scope = snapshot.windows.first(where: { $0.window.id.rawValue == raw })?.scope,
            treeScopes.contains(scope) {
             generation = generations.next()
         }
-        let resizedEntry = resizedGestureEntry(gesture, in: snapshot)
+        var resizedEntry = resizedGestureEntry(gesture, in: snapshot)
         if let resizedEntry, let scope = resizedEntry.scope {
             failedDriftWindows[resizedEntry.window.id] = nil
             // Une commande antérieure ne doit pas consommer le geste manuel qui la suit.
@@ -356,7 +390,16 @@ public final class LayoutMaintainer {
         let hasActiveFullscreen = tickFullscreen.contains { item in
             item.entry.scope.map { snapshot.state.activeScope(on: $0.displayID) == $0 } == true
         }
-        let systemFocusedWindowID = hasActiveFullscreen ? service.focusedWindowID() : nil
+        let activatesApplication = cause.contains("didActivateApplication") || cause.contains("AXFocusedWindowChanged")
+        let observedFocusedWindowID = hasActiveFullscreen || activatesApplication ? service.focusedWindowID() : nil
+        if activatesApplication {
+            if let id = observedFocusedWindowID, id != lastRestorationActivationWindowID,
+               failedRestorations.removeValue(forKey: id) != nil {
+                failedFrames[id.rawValue] = nil
+            }
+            lastRestorationActivationWindowID = observedFocusedWindowID
+        }
+        let systemFocusedWindowID = hasActiveFullscreen ? observedFocusedWindowID : nil
         let focusRestore = focusedHiddenRestore(in: snapshot, cause: cause, systemFocusedWindowID: systemFocusedWindowID)
 
         // Une reprise ne récupère pas l'intent automatique construit sur le cadre ignoré.
@@ -409,7 +452,27 @@ public final class LayoutMaintainer {
             handleFullscreenScopeChanges(in: snapshot, changedWindowIDs: changedForChurn, fullscreenScopes: fullscreenScopes)
         }
 
-        let waitingPlacementScopes = unreadyCrossDisplayScopes(
+        if let pending = pendingGesture {
+            if !validPendingGesture(pending, in: snapshot) || fullscreenScopes.contains(pending.scope) {
+                pendingGesture = nil
+                gesture = nil
+                resizedEntry = nil
+            } else if gesture == nil {
+                // Ne pas réécrire l'ancienne tuile avant que l'application publie la taille finale.
+                tickExcludedScopes.insert(pending.scope)
+            }
+        }
+
+        if let gesture, let raw = gesture.windowID, let start = gesture.startFrame,
+           let entry = snapshot.windows.first(where: { $0.window.id.rawValue == raw }),
+           let scope = entry.scope, !tickExcludedScopes.contains(scope),
+           !Self.matches(entry.window.frame.cgRect, start) {
+            // Un geste confirmé autorise une nouvelle intention, même vers une cible refusée.
+            failedRestorations[entry.window.id] = nil
+            failedFrames[raw] = nil
+        }
+
+        let waitingPlacementScopes = unreadyPlacementScopes(
             in: snapshot, scopes: treeScopes.subtracting(tickExcludedScopes)
         )
         tickExcludedScopes.formUnion(waitingPlacementScopes)
@@ -440,6 +503,17 @@ public final class LayoutMaintainer {
             generation: generation,
             now: tickNow
         )
+        if gesture != nil, var pending = pendingGesture {
+            if !tickExcludedScopes.contains(pending.scope) {
+                pendingGesture = nil
+            } else {
+                // Déplacement sans taille changée, encore retenu par une commande sans arbre.
+                // Garder l'intention sans réarmer une date déjà échue ni consommer le temps actif.
+                pending.lastObservationAt = nil
+                pending.pollAt = min(tickNow.addingTimeInterval(0.05), pending.expiresAt)
+                pendingGesture = pending
+            }
+        }
         treePlan.commands.forEach { plan.add($0, .layout) }
         retargetStabilityCheck(treePlan.targets)
         nonTree.commands.forEach { plan.add($0, .layout) }
@@ -452,12 +526,22 @@ public final class LayoutMaintainer {
         //    Sur un écran à arbre, masquage, épinglage et zoom comptent aussi au budget (A13).
         let scopesByID = Dictionary(snapshot.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } }, uniquingKeysWith: { first, _ in first })
         let treeDisplays = Set(treeScopes.map(\.displayID))
+        var restorativeIDs = Set(closedZoomRestoration.map(\.window.id))
+        restorativeIDs.formUnion(focusRestore?.restoration?.commands.map(\.window.id) ?? [])
+        restorativeIDs.formUnion(focusRestore?.activeHiddenWindowIDs ?? [])
+        restorativeIDs.formUnion(hiddenInactive.map(\.window.id))
+        restorativeIDs.formUnion(hiddenSiblings.map(\.window.id))
+        restorativeIDs.formUnion(restoredPins.map(\.window.id))
+        restorativeIDs.formUnion(reanchoredZoomed.map(\.window.id))
         let writable = plan.entries.compactMap { command, priority -> ApplyCommand? in
             guard !defersFailedDrift(command.window, now: tickNow) else { return nil }
+            if restorativeIDs.contains(command.window.id), let failed = failedRestorations[command.window.id],
+               failed.matches(command, scope: scopesByID[command.window.id])
+                || !failed.permits(command, scope: scopesByID[command.window.id]) { return nil }
             guard let scope = scopesByID[command.window.id] else { return command }
             if settlingScopes.contains(scope) || suspension.covers(scope) || waitingSettingsScopes.contains(scope)
                 || waitingPlacementScopes.contains(scope) { return nil }
-            if priority != .layout, treeDisplays.contains(scope.displayID),
+            if priority != .layout || restorativeIDs.contains(command.window.id), treeDisplays.contains(scope.displayID),
                writesUsed(command.window.id.rawValue, generation: generation) >= LayoutTolerance.writeBudgetPerGeneration {
                 return nil
             }
@@ -473,6 +557,24 @@ public final class LayoutMaintainer {
             generation: generation,
             source: focusRestore == nil ? nil : "stage_focus_restore"
         )
+        let writableByID = Dictionary(writable.map { ($0.window.id, $0) }, uniquingKeysWith: { _, last in last })
+        for item in application.result.items where restorativeIDs.contains(item.windowID) {
+            guard let command = writableByID[item.windowID] else { continue }
+            if item.status == .failed {
+                let scope = scopesByID[item.windowID]
+                let previous = failedRestorations[item.windowID]
+                let previousAttempts = previous.flatMap { $0.continues(command, scope: scope) ? $0.attempts : nil } ?? 0
+                let attempts = previousAttempts + 1
+                let observed = item.actual ?? readFrame(command.window).map { Rect($0) }
+                failedRestorations[item.windowID] = FailedRestoration(command, scope: scope, observed: observed, attempts: attempts)
+                // Le refus nonTree ne doit pas prendre notre déplacement partiel pour un geste.
+                if let observed, failedFrames[item.windowID.rawValue] != nil {
+                    failedFrames[item.windowID.rawValue]?.observedAtFailure = observed
+                }
+            } else if item.status == .applied {
+                failedRestorations[item.windowID] = nil
+            }
+        }
         let writeEnd = now()
         // Un scope suspendu garde sa demande. Une frame exactement relue consomme la
         // précision ; un écart/inconnu autorise une seule reprise, puis la précision cesse.
@@ -531,11 +633,11 @@ public final class LayoutMaintainer {
                 generation: generation,
                 startedAt: startedAt
             )
-            armStabilityCheck(
-                targets: Dictionary(application.result.items.map { ($0.windowID, $0.requested.cgRect) }, uniquingKeysWith: { _, last in last }),
-                startedAt: tickNow,
-                writeEnd: writeEnd
-            )
+            let successfulTargets = Dictionary(application.result.items.filter { $0.status != .failed }
+                .map { ($0.windowID, $0.requested.cgRect) }, uniquingKeysWith: { _, last in last })
+            if !successfulTargets.isEmpty {
+                armStabilityCheck(targets: successfulTargets, startedAt: tickNow, writeEnd: writeEnd)
+            }
         }
         checkStability(in: snapshot, now: tickNow, generation: generation)
         if deadlines(now: tickNow).contains(where: \.episode) {
@@ -589,6 +691,8 @@ public final class LayoutMaintainer {
         if let retryAt = service.destroyedWindowRetryDeadline(now: now) {
             due.append(("destroyed_window", retryAt, true))
         }
+        if let pendingGesture { due.append(("gesture_pending", pendingGesture.pollAt, true)) }
+
         for guardState in spaceGuards.values {
             due.append(("guard_cap", guardState.openedAt.addingTimeInterval(LayoutTolerance.spaceGuardCap), true))
             due.append(("guard_poll", (guardState.lastPollAt ?? guardState.openedAt).addingTimeInterval(LayoutTolerance.spaceGuardPoll), true))
@@ -1044,6 +1148,71 @@ public final class LayoutMaintainer {
 
     // MARK: - Disposition des modes à arbre (A2, A4, A13, A14, A16, R9)
 
+    /// Capture une fois, puis observe sans prolonger le plafond du relâchement. O(w), mémoire O(1).
+    /// Seul un mouvement réel autorise l'attente d'une frame tardive ; les fixtures immédiates
+    /// et les déplacements déjà visibles suivent le chemin existant, sans nouvelle inférence AX.
+    private func layoutGesture(in snapshot: inout DaemonSnapshot, excluding blocked: Set<StageScope>, now: Date) -> GestureSession? {
+        if let session = takeGesture() {
+            pendingGesture = nil
+            if let raw = session.windowID, session.startFrame != nil,
+               let entry = snapshot.windows.first(where: { $0.window.id.rawValue == raw }), let scope = entry.scope {
+                let expires = (session.endedAt ?? now).addingTimeInterval(2)
+                pendingGesture = PendingGesture(session: session, windowID: entry.window.id, pid: entry.window.pid,
+                    scope: scope, expiresAt: expires, pollAt: now)
+            }
+        }
+        guard var pending = pendingGesture else { return nil }
+        let dropped = dragActivity.lastDrop(now: now).map {
+            $0.windowID == pending.windowID && $0.at >= pending.session.startedAt
+        } ?? false
+        guard !dropped, now < pending.expiresAt, validPendingGesture(pending, in: snapshot),
+              !tickFullscreen.contains(where: { $0.entry.scope == pending.scope }),
+              let index = snapshot.windows.firstIndex(where: { $0.window.id == pending.windowID }),
+              let start = pending.session.startFrame
+        else { pendingGesture = nil; return nil }
+
+        let current = snapshot.windows[index].window.frame.cgRect
+        let changed = !Self.matches(current, start)
+        // Un simple clic ne doit créer ni délai ni échéance d'observation.
+        if !pending.session.didDrag && !changed { pendingGesture = nil; return nil }
+        if blocked.contains(pending.scope) {
+            pending.lastObservationAt = nil
+            pending.pollAt = min(now.addingTimeInterval(0.05), pending.expiresAt)
+            pendingGesture = pending
+            return nil
+        }
+        if let previous = pending.lastObservationAt {
+            pending.observationRemaining -= max(0, now.timeIntervalSince(previous))
+        }
+        guard pending.observationRemaining > 0.001 else { pendingGesture = nil; return nil }
+        pending.lastObservationAt = now
+
+        if !changed, pending.session.didDrag,
+           let fresh = readFrame(snapshot.windows[index].window),
+           fresh.width > 0, fresh.height > 0,
+           !HiddenWindowPlacement.isHidden(fresh, in: snapshot.displays) {
+            snapshot.windows[index].window.frame = Rect(fresh)
+        }
+        if !Self.matches(snapshot.windows[index].window.frame.cgRect, start) {
+            pendingGesture = pending
+            return pending.session
+        }
+        pending.pollAt = min(now.addingTimeInterval(min(0.05, pending.observationRemaining)), pending.expiresAt)
+        pendingGesture = pending
+        return nil
+    }
+
+    /// L'identité et le scope du premier relevé ne sont jamais réinterprétés sur une autre fenêtre.
+    private func validPendingGesture(_ pending: PendingGesture, in snapshot: DaemonSnapshot) -> Bool {
+        guard let entry = snapshot.windows.first(where: { $0.window.id == pending.windowID }),
+              entry.window.pid == pending.pid, entry.scope == pending.scope,
+              entry.window.isTileCandidate, entry.window.isOnScreen,
+              snapshot.state.activeScope(on: pending.scope.displayID) == pending.scope,
+              snapshot.state.stage(scope: pending.scope)?.mode.isTiled == true
+        else { return false }
+        return !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
+    }
+
     /// Un clic seul ne remplace jamais un intent : il faut une taille réellement changée. O(n).
     private func resizedGestureEntry(_ gesture: GestureSession?, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
         guard let gesture, let id = gesture.windowID, let start = gesture.startFrame,
@@ -1058,22 +1227,24 @@ public final class LayoutMaintainer {
             || abs(current.height - start.height) > LayoutTolerance.frameMatch ? entry : nil
     }
 
-    /// Une fenêtre CG peut précéder sa fenêtre AX. Ne pas réduire ses voisines sur l'écran
-    /// cible tant qu'elle n'est pas lisible. La passe de sécurité existante reprend l'attente.
-    /// O(n · d), d = écrans présents, plus une lecture AX par candidate sans écriture connue.
-    private func unreadyCrossDisplayScopes(in snapshot: DaemonSnapshot, scopes: Set<StageScope>) -> Set<StageScope> {
+    /// Une fenêtre CG peut précéder sa fenêtre AX, même sur son écran cible. Ne pas réduire
+    /// ses voisines tant qu'elle n'est pas lisible. La passe de sécurité reprend l'attente.
+    /// O(m + n · d), m membres, d écrans, plus une lecture AX par identité non résolue.
+    private func unreadyPlacementScopes(in snapshot: DaemonSnapshot, scopes: Set<StageScope>) -> Set<StageScope> {
         let displays = Dictionary(snapshot.displays.map { ($0.id, $0.frame.cgRect) }, uniquingKeysWith: { first, _ in first })
+        let members = Set(store.state().scopes.flatMap { $0.stages.flatMap { $0.members.map(\.windowID) } })
+        placementResolvedPIDs = placementResolvedPIDs.filter { members.contains($0.key) }
         var waiting: Set<StageScope> = []
         var unavailable: Set<WindowID> = []
         for entry in snapshot.windows {
             let id = entry.window.id
             guard entry.window.isTileCandidate, entry.pin == nil,
                   entry.window.furniture?.isNativeFullscreen != true,
-                  let scope = entry.scope, scopes.contains(scope), let display = displays[scope.displayID],
-                  !display.contains(entry.window.frame.center),
+                  let scope = entry.scope, scopes.contains(scope), displays[scope.displayID] != nil,
                   !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
                   displays.values.contains(where: { $0.contains(entry.window.frame.center) }),
-                  writtenFrames.entry(for: id.rawValue) == nil
+                  writtenFrames.entry(for: id.rawValue) == nil,
+                  placementResolvedPIDs[id] != entry.window.pid
             else { continue }
             if readFrame(entry.window) == nil {
                 waiting.insert(scope)
@@ -1083,7 +1254,9 @@ public final class LayoutMaintainer {
                         "windowID": String(id.rawValue)
                     ]))
                 }
-            } else if unreadyPlacementWindows.contains(id) {
+            } else {
+                placementResolvedPIDs[id] = entry.window.pid
+                guard unreadyPlacementWindows.contains(id) else { continue }
                 // Aucun appel de placement AX enregistré : un ancien échec de résolution
                 // ne doit pas épuiser le budget avant la première écriture réelle.
                 writeCounts[id.rawValue] = nil
@@ -1204,6 +1377,11 @@ public final class LayoutMaintainer {
             let id = item.windowID.rawValue
             let used = writeCounts[id].flatMap { $0.generation == generation ? $0.count : nil } ?? 0
             writeCounts[id] = (generation, used + 1)
+            if item.actual == nil, writtenFrames.entry(for: id) == nil {
+                // La résolution peut disparaître entre lecture et écriture ; ne pas mémoriser
+                // cette fenêtre comme prête tant qu'aucun appel AX n'a atteint le registre.
+                placementResolvedPIDs[WindowID(rawValue: id)] = nil
+            }
             guard let actual = item.actual else { continue }
             let after = writtenFrames.entry(for: id)
             if after == (before[id] ?? nil) || after?.generation != generation {
@@ -1791,6 +1969,7 @@ public final class LayoutMaintainer {
         let oldest = now.addingTimeInterval(-LayoutTolerance.refusalMemorySeconds)
         clampedFrames = clampedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
         failedFrames = failedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
+        failedRestorations = failedRestorations.filter { liveWindowIDs.contains($0.key.rawValue) }
         revertedAppliedFrames = revertedAppliedFrames.filter { liveWindowIDs.contains($0.key) }
         writeCounts = writeCounts.filter { liveWindowIDs.contains($0.key) }
         externalReverts = externalReverts.filter { liveWindowIDs.contains($0.key) }
@@ -3797,6 +3976,63 @@ private struct ClampedFrame {
     }
 }
 
+/// Refus d'une restauration directe. Les mêmes échos AX ne créent pas de nouvelle demande.
+private struct FailedRestoration {
+    var pid: Int32
+    var bundleID: String
+    var scope: StageScope?
+    var requested: Rect
+    var observed: Rect
+    var observedReliably: Bool
+    var attempts: Int
+
+    init(_ command: ApplyCommand, scope: StageScope?, observed: Rect?, attempts: Int) {
+        pid = command.window.pid
+        bundleID = command.window.bundleID
+        self.scope = scope
+        requested = command.frame
+        self.observed = observed ?? command.window.frame
+        observedReliably = observed != nil
+        self.attempts = attempts
+    }
+
+    /// Une réponse partielle peut arriver après la relecture : sa progression vers la cible
+    /// conserve le budget. Un geste confirmé libère cette mémoire avant l'arbitrage.
+    func continues(_ command: ApplyCommand, scope: StageScope?) -> Bool {
+        pid == command.window.pid && bundleID == command.window.bundleID && self.scope == scope
+            && (!observedReliably
+                || observed.isClose(to: command.window.frame, tolerance: LayoutTolerance.unchangedSinceRefusal)
+                || isDelayedPartialResponse(command.window.frame))
+    }
+
+    /// Chaque composante doit rester entre la dernière observation et la cible refusée.
+    /// Un axe qui s'en éloigne ou dépasse la cible constitue une nouvelle géométrie.
+    private func isDelayedPartialResponse(_ current: Rect) -> Bool {
+        let tolerance = LayoutTolerance.unchangedSinceRefusal
+        let components = [
+            (observed.x, requested.x, current.x), (observed.y, requested.y, current.y),
+            (observed.width, requested.width, current.width), (observed.height, requested.height, current.height)
+        ]
+        var progressed = false
+        for (before, target, actual) in components {
+            guard actual >= min(before, target) - tolerance,
+                  actual <= max(before, target) + tolerance else { return false }
+            if abs(actual - before) > tolerance { progressed = true }
+        }
+        return progressed
+    }
+
+    func permits(_ command: ApplyCommand, scope: StageScope?) -> Bool {
+        !continues(command, scope: scope) || attempts < LayoutTolerance.writeBudgetPerGeneration
+    }
+
+    func matches(_ command: ApplyCommand, scope: StageScope?) -> Bool {
+        continues(command, scope: scope)
+            && requested.isClose(to: command.frame, tolerance: LayoutTolerance.sameRequest)
+            && observed.isClose(to: command.window.frame, tolerance: LayoutTolerance.unchangedSinceRefusal)
+    }
+}
+
 /// Échec d'application mémorisé. Expire après `LayoutTolerance.refusalMemorySeconds` (FR-004).
 private struct FailedFrame {
     var requested: Rect
@@ -3874,6 +4110,7 @@ public final class ReplayableSnapshotProvider: SystemSnapshotProviding, @uncheck
         var permissions: PermissionSnapshot?
         var displays: [DisplaySnapshot]?
         var windows: [WindowSnapshot]?
+        var existingWindowPIDs: [WindowID: Int32]??
         var focusedWindowID: WindowID??
         var mouseLocation: CGPoint??
     }
@@ -3902,6 +4139,10 @@ public final class ReplayableSnapshotProvider: SystemSnapshotProviding, @uncheck
 
     public func windows() -> [WindowSnapshot] {
         served(\.windows) ?? recorded(\.windows, base.windows())
+    }
+
+    public func existingWindowPIDs() -> [WindowID: Int32]? {
+        served(\.existingWindowPIDs) ?? recorded(\.existingWindowPIDs, base.existingWindowPIDs())
     }
 
     public func focusedWindowID() -> WindowID? {

@@ -62,6 +62,12 @@ public struct DisplayParkingReport: Equatable, Codable, Sendable {
 }
 
 public struct DisplayParkingService: Sendable {
+    private struct RestoreCandidate {
+        var displayID: DisplayID
+        var desktopID: DesktopID
+        var stage: PersistentStage
+    }
+
     public init() {}
 
     public func transition(
@@ -127,9 +133,6 @@ public struct DisplayParkingService: Sendable {
             var staleScope = state.scopes[scopeIndex]
             let logicalDisplayID = staleScope.logicalDisplayID ?? LogicalDisplayID(displayID: staleScope.displayID)
             staleScope.logicalDisplayID = logicalDisplayID
-            firstOriginDisplayID = firstOriginDisplayID ?? staleScope.displayID
-            firstLogicalDisplayID = firstLogicalDisplayID ?? logicalDisplayID
-
             for stageIndex in staleScope.stages.indices {
                 let sourceStage = staleScope.stages[stageIndex]
                 guard !sourceStage.members.isEmpty else {
@@ -147,6 +150,9 @@ public struct DisplayParkingService: Sendable {
                     }
                 }
 
+                firstOriginDisplayID = firstOriginDisplayID ?? staleScope.displayID
+                firstLogicalDisplayID = firstLogicalDisplayID ?? logicalDisplayID
+
                 let parkedID = uniqueParkedStageID(
                     originDisplayID: staleScope.displayID,
                     originStageID: sourceStage.id,
@@ -159,7 +165,8 @@ public struct DisplayParkingService: Sendable {
                     stageID: sourceStage.id,
                     position: stageIndex + 1,
                     nameAtParking: sourceStage.name,
-                    parkedAt: now
+                    parkedAt: now,
+                    modeAtParking: sourceStage.mode
                 )
 
                 var parkedStage = sourceStage
@@ -224,17 +231,15 @@ public struct DisplayParkingService: Sendable {
         liveDisplays: [DisplaySnapshot],
         now: Date
     ) -> DisplayParkingReport? {
-        let parkedStages = state.scopes
-            .flatMap { scope in scope.stages }
-            .filter { $0.parkingState == .parked && $0.origin != nil && !$0.members.isEmpty }
+        let parkedStages = restoreCandidates(in: state)
         guard !parkedStages.isEmpty else { return nil }
 
-        let grouped = Dictionary(grouping: parkedStages) { stage in
-            stage.origin!.logicalDisplayID
+        let grouped = Dictionary(grouping: parkedStages) { candidate in
+            candidate.stage.origin!.logicalDisplayID
         }
 
         for (logicalDisplayID, stages) in grouped {
-            guard let origin = stages.compactMap(\.origin).first else { continue }
+            guard let origin = stages.compactMap({ $0.stage.origin }).first else { continue }
             let fingerprint = fingerprintForRestore(
                 state: state,
                 origin: origin,
@@ -257,14 +262,23 @@ public struct DisplayParkingService: Sendable {
 
             // Un écran, plusieurs bureaux : chaque bureau d'origine est restauré dans son propre
             // scope (REL-017). Les stages d'un autre bureau ne migrent pas vers celui du premier.
-            let stagesByDesktop = Dictionary(grouping: stages) { $0.origin!.desktopID }
+            let stagesByDesktop = Dictionary(grouping: stages) { $0.stage.origin!.desktopID }
             var restoredCount = 0
             for desktopID in stagesByDesktop.keys.sorted() {
                 let sortedStages = stagesByDesktop[desktopID, default: []].sorted {
-                    ($0.origin?.position ?? Int.max, $0.id.rawValue) < ($1.origin?.position ?? Int.max, $1.id.rawValue)
+                    ($0.stage.origin?.position ?? Int.max, $0.stage.id.rawValue)
+                        < ($1.stage.origin?.position ?? Int.max, $1.stage.id.rawValue)
                 }
-                let parkedIDs = Set(sortedStages.map(\.id))
-                removeParkedStages(parkedIDs, from: &state)
+                removeRestoreCandidates(sortedStages, from: &state)
+
+                // L'identité physique peut changer à la reconnexion. Garder le scope
+                // d'origine et son ordre quand aucun scope n'existe encore sous le nouvel ID.
+                if !state.scopes.contains(where: { $0.displayID == restoredDisplayID && $0.desktopID == desktopID }),
+                   let originalScopeIndex = state.scopes.firstIndex(where: {
+                       $0.displayID == origin.displayID && $0.desktopID == desktopID
+                   }) {
+                    state.scopes[originalScopeIndex].displayID = restoredDisplayID
+                }
 
                 var targetScope = state.scope(displayID: restoredDisplayID, desktopID: desktopID)
                 targetScope.logicalDisplayID = logicalDisplayID
@@ -272,19 +286,34 @@ public struct DisplayParkingService: Sendable {
                     targetScope.lastKnownDisplayFingerprint = DisplayFingerprint(display: display)
                 }
 
-                for parkedStage in sortedStages {
+                for candidate in sortedStages {
+                    let parkedStage = candidate.stage
                     var restoredStage = parkedStage
                     let originalStageID = parkedStage.origin?.stageID ?? parkedStage.id
-                    targetScope.stages.removeAll { stage in
-                        stage.id == originalStageID
-                            && stage.members.isEmpty
-                            && stage.parkingState == .parked
-                    }
-                    restoredStage.id = uniqueRestoredStageID(originalStageID, in: targetScope)
                     restoredStage.parkingState = .restored
                     restoredStage.hostDisplayID = nil
                     restoredStage.restoredAt = now
-                    targetScope.stages.append(restoredStage)
+                    if let placeholderIndex = targetScope.stages.firstIndex(where: {
+                        $0.id == originalStageID && $0.origin == parkedStage.origin
+                            && isIntactPlaceholder($0)
+                    }) {
+                        restoredStage.id = originalStageID
+                        targetScope.stages[placeholderIndex] = restoredStage
+                    } else {
+                        // Une modification du placeholder lui donne sa propre existence.
+                        // La copie retrouve sa position sans écraser ce choix utilisateur.
+                        if let editedIndex = targetScope.stages.firstIndex(where: {
+                            $0.id == originalStageID && $0.origin == parkedStage.origin && $0.parkingState == .parked
+                        }) {
+                            targetScope.stages[editedIndex].parkingState = .native
+                            targetScope.stages[editedIndex].origin = nil
+                            targetScope.stages[editedIndex].hostDisplayID = nil
+                        }
+                        restoredStage.id = uniqueRestoredStageID(originalStageID, in: targetScope)
+                        let position = parkedStage.origin?.position ?? Int.max
+                        let index = position <= 1 ? 0 : min(position - 1, targetScope.stages.count)
+                        targetScope.stages.insert(restoredStage, at: index)
+                    }
                 }
                 state.update(targetScope)
                 restoredCount += sortedStages.count
@@ -357,10 +386,47 @@ public struct DisplayParkingService: Sendable {
         return candidate
     }
 
-    private func removeParkedStages(_ parkedIDs: Set<StageID>, from state: inout PersistentStageState) {
+    private func restoreCandidates(in state: PersistentStageState) -> [RestoreCandidate] {
+        state.scopes.flatMap { scope in
+            scope.stages.compactMap { stage -> RestoreCandidate? in
+                guard let origin = stage.origin, !stage.members.isEmpty else { return nil }
+                let isElsewhere = scope.displayID != origin.displayID
+                    && scope.logicalDisplayID != origin.logicalDisplayID
+                let hasPendingReturn = stage.parkingState == .parked
+                    || (stage.parkingState == .restored && hasPendingPlaceholder(for: origin, in: state))
+                guard isElsewhere, hasPendingReturn else { return nil }
+                return RestoreCandidate(displayID: scope.displayID, desktopID: scope.desktopID, stage: stage)
+            }
+        }
+    }
+
+    private func hasPendingPlaceholder(for origin: StageOrigin, in state: PersistentStageState) -> Bool {
+        // Un ancien état « restored » sans placeholder ne prouve pas qu'un retour
+        // reste attendu : la stage a pu être déplacée volontairement entre-temps.
+        state.scopes.contains { scope in
+            scope.desktopID == origin.desktopID
+                && (scope.displayID == origin.displayID || scope.logicalDisplayID == origin.logicalDisplayID)
+                && scope.stages.contains { stage in
+                    stage.id == origin.stageID && stage.parkingState == .parked && stage.origin == origin
+                }
+        }
+    }
+
+    private func isIntactPlaceholder(_ stage: PersistentStage) -> Bool {
+        guard stage.parkingState == .parked, stage.members.isEmpty, let origin = stage.origin else { return false }
+        // Les anciens fichiers ne mémorisent pas le mode. Préserver un mode personnalisé
+        // plutôt que de risquer de supprimer une modification non identifiable.
+        return stage.name == origin.nameAtParking && stage.mode == (origin.modeAtParking ?? .bsp)
+    }
+
+    private func removeRestoreCandidates(_ candidates: [RestoreCandidate], from state: inout PersistentStageState) {
         for scopeIndex in state.scopes.indices {
+            let scope = state.scopes[scopeIndex]
+            let localCandidates = candidates.filter { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }
+            guard !localCandidates.isEmpty else { continue }
             state.scopes[scopeIndex].stages.removeAll { stage in
-                parkedIDs.contains(stage.id) && stage.parkingState == .parked && !stage.members.isEmpty
+                localCandidates.contains { $0.stage.id == stage.id && $0.stage.origin == stage.origin }
+                    && !stage.members.isEmpty
             }
             if !state.scopes[scopeIndex].stages.contains(where: { $0.id == state.scopes[scopeIndex].activeStageID }),
                let firstStage = firstSelectableStage(in: state.scopes[scopeIndex]) {
@@ -372,12 +438,18 @@ public struct DisplayParkingService: Sendable {
     @discardableResult
     private func pruneEmptyParkedResidues(state: inout PersistentStageState) -> Int {
         var prunedCount = 0
+        let originsWithCopies = restoreCandidates(in: state).compactMap { $0.stage.origin }
         for scopeIndex in state.scopes.indices {
             let beforeCount = state.scopes[scopeIndex].stages.count
-            state.scopes[scopeIndex].stages.removeAll { stage in
-                stage.parkingState == .parked
-                    && stage.origin != nil
-                    && stage.members.isEmpty
+            state.scopes[scopeIndex].stages = state.scopes[scopeIndex].stages.compactMap { stage in
+                guard stage.parkingState == .parked, let origin = stage.origin, stage.members.isEmpty else { return stage }
+                if originsWithCopies.contains(origin) { return stage }
+                if isIntactPlaceholder(stage) { return nil }
+                var editedStage = stage
+                editedStage.parkingState = .native
+                editedStage.origin = nil
+                editedStage.hostDisplayID = nil
+                return editedStage
             }
             let removedCount = beforeCount - state.scopes[scopeIndex].stages.count
             guard removedCount > 0 else { continue }
@@ -432,21 +504,17 @@ public struct DisplayParkingService: Sendable {
                 let originalID = stage.id
                 var recoveredStage = stage
                 let preferredID = materializedStageID(for: recoveredStage, in: scope, excluding: stageIndex)
+                recoveredStage.id = preferredID
+                recoveredStage.parkingState = .restored
+                recoveredStage.hostDisplayID = nil
+                recoveredStage.restoredAt = now
                 if preferredID != originalID,
                    let emptyConflictIndex = scope.stages.firstIndex(where: {
-                       $0.id == preferredID && $0.members.isEmpty && $0.parkingState != .parked
+                       $0.id == preferredID && canReuseMaterializationSlot($0, for: stage)
                    }) {
-                    scope.stages.remove(at: emptyConflictIndex)
-                    let adjustedIndex = emptyConflictIndex < stageIndex ? stageIndex - 1 : stageIndex
-                    scope.stages[adjustedIndex].id = preferredID
-                    scope.stages[adjustedIndex].parkingState = .restored
-                    scope.stages[adjustedIndex].hostDisplayID = nil
-                    scope.stages[adjustedIndex].restoredAt = now
+                    scope.stages[emptyConflictIndex] = recoveredStage
+                    scope.stages.remove(at: stageIndex)
                 } else {
-                    recoveredStage.id = preferredID
-                    recoveredStage.parkingState = .restored
-                    recoveredStage.hostDisplayID = nil
-                    recoveredStage.restoredAt = now
                     scope.stages[stageIndex] = recoveredStage
                 }
 
@@ -478,8 +546,7 @@ public struct DisplayParkingService: Sendable {
         if let sameNameEmpty = scope.stages.enumerated().first(where: { item in
             item.offset != excludedIndex
                 && item.element.parkingState != .parked
-                && item.element.members.isEmpty
-                && item.element.name == stage.name
+                && canReuseMaterializationSlot(item.element, for: stage)
         })?.element.id {
             return sameNameEmpty
         }
@@ -489,7 +556,7 @@ public struct DisplayParkingService: Sendable {
         if !existing.contains(where: { $0.element.id == preferred }) {
             return preferred
         }
-        if existing.contains(where: { $0.element.id == preferred && $0.element.members.isEmpty && $0.element.parkingState != .parked }) {
+        if existing.contains(where: { $0.element.id == preferred && canReuseMaterializationSlot($0.element, for: stage) }) {
             return preferred
         }
 
@@ -500,6 +567,12 @@ public struct DisplayParkingService: Sendable {
             candidate = StageID(rawValue: "\(preferred.rawValue)-recovered-\(suffix)")
         }
         return candidate
+    }
+
+    private func canReuseMaterializationSlot(_ slot: PersistentStage, for stage: PersistentStage) -> Bool {
+        slot.parkingState != .parked && slot.members.isEmpty
+            && slot.name == stage.name && slot.mode == stage.mode
+            && slot.groups.isEmpty && slot.bspTree == nil
     }
 
     private func firstSelectableStage(in scope: PersistentStageScope) -> PersistentStage? {

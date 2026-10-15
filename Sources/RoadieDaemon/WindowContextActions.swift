@@ -22,7 +22,6 @@ public struct WindowContextActions {
     private let snapshotService: SnapshotService
     private let stageStore: StageStore
     private let eventLog: EventLog
-    private let stageLabelsVisible: () -> Bool
     private let affinityService: WindowRuleAffinityService
 
     public init(
@@ -30,21 +29,13 @@ public struct WindowContextActions {
         stageStore: StageStore = StageStore(),
         eventLog: EventLog = EventLog(),
         affinityService: WindowRuleAffinityService = WindowRuleAffinityService(),
-        stageLabelsVisible: @escaping () -> Bool = {
-            let settings = RailSettings.load().stageLabel
-            guard settings.enabled else { return false }
-            guard settings.visibilitySeconds > 0 else { return true }
-            let runtime = RailRuntimeStateStore().load()
-            guard let visibleUntil = runtime.stageLabelsVisibleUntil else { return false }
-            let fadeEndsAt = visibleUntil + settings.fadeSeconds
-            return Date().timeIntervalSince1970 <= fadeEndsAt
-        }
+        // Conservé pour la compatibilité des appelants ; le fondu ne filtre plus les destinations.
+        stageLabelsVisible: @escaping () -> Bool = { true }
     ) {
         self.snapshotService = snapshotService
         self.stageStore = stageStore
         self.eventLog = eventLog
         self.affinityService = affinityService
-        self.stageLabelsVisible = stageLabelsVisible
     }
 
     public func destinations(
@@ -234,44 +225,18 @@ public struct WindowContextActions {
 
     private func stageDestinations(in snapshot: DaemonSnapshot, scope: StageScope) -> [WindowDestination] {
         let persistent = stageStore.state()
-        let showLabels = stageLabelsVisible()
-        if let persistentScope = persistent.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }) {
-            var destinations = persistentScope.stages
-                .filter { isVisibleDestination($0, includeNamedEmpty: showLabels) }
-                .enumerated()
-                .map { index, stage in
-                    WindowDestination(
-                        kind: .stage,
-                        id: stage.id.rawValue,
-                        label: stageLabel(stage, position: index + 1),
-                        isCurrent: stage.id == scope.stageID
-                    )
-                }
-            if let nextEmpty = nextEmptyStageID(in: persistentScope.stages) {
-                destinations.append(WindowDestination(
-                    kind: .stage,
-                    id: nextEmpty.rawValue,
-                    label: "Prochaine stage vide",
-                    isCurrent: false
-                ))
-            }
-            return destinations
-        }
-
-        guard let desktop = snapshot.state.desktop(displayID: scope.displayID, desktopID: scope.desktopID) else { return [] }
-        var destinations = desktop.stages.values
-            .sorted { $0.id < $1.id }
-            .filter { !$0.windowIDs.isEmpty || (showLabels && isCustomStageName($0.name, id: $0.id)) }
-            .enumerated()
-            .map { index, stage in
+        let stageList = stages(in: persistent, snapshot: snapshot, displayID: scope.displayID, desktopID: scope.desktopID)
+        let persistentScope = PersistentStageScope(displayID: scope.displayID, desktopID: scope.desktopID, stages: stageList)
+        let order = StagePresentationOrder(scope: persistentScope, liveWindowIDs: liveWindowIDs(in: snapshot))
+        var destinations = order.visibleStages.enumerated().map { index, stage in
                 WindowDestination(
                     kind: .stage,
                     id: stage.id.rawValue,
-                    label: stageLabel(PersistentStage(id: stage.id, name: stage.name), position: index + 1),
+                    label: stageLabel(stage, position: index + 1),
                     isCurrent: stage.id == scope.stageID
                 )
             }
-        if let nextEmpty = nextEmptyStageID(in: desktop.stages.values.map { PersistentStage(id: $0.id, name: $0.name) }) {
+        if let nextEmpty = nextEmptyStageID(in: stageList) {
             destinations.append(WindowDestination(
                 kind: .stage,
                 id: nextEmpty.rawValue,
@@ -300,13 +265,21 @@ public struct WindowContextActions {
 
     private func desktopStageDestinations(in snapshot: DaemonSnapshot, scope: StageScope) -> [WindowDestination] {
         let state = stageStore.state()
-        let showLabels = stageLabelsVisible()
         return desktopIDs(in: state, displayID: scope.displayID).flatMap { desktopID -> [WindowDestination] in
             let desktopLabel = state.label(displayID: scope.displayID, desktopID: desktopID)
                 ?? "Desktop \(desktopID.rawValue)"
             let stageList = stages(in: state, snapshot: snapshot, displayID: scope.displayID, desktopID: desktopID)
-            var destinations = stageList
-                .filter { isVisibleDestination($0, includeNamedEmpty: showLabels) }
+            let represented: [PersistentStage]
+            if desktopID == state.currentDesktopID(for: scope.displayID) {
+                let targetScope = PersistentStageScope(displayID: scope.displayID, desktopID: desktopID, stages: stageList)
+                represented = StagePresentationOrder(scope: targetScope, liveWindowIDs: liveWindowIDs(in: snapshot)).visibleStages
+            } else {
+                // Les fenêtres des autres Spaces ne sont pas toutes dans le relevé vivant.
+                represented = stageList.filter {
+                    !$0.members.isEmpty || ($0.parkingState != .parked && StagePresentationOrder.isNamed($0))
+                }
+            }
+            var destinations = represented
                 .enumerated()
                 .map { index, stage in
                     WindowDestination(
@@ -447,22 +420,15 @@ public struct WindowContextActions {
     }
 
     private func stageLabel(_ stage: PersistentStage, position: Int) -> String {
-        let trimmed = stage.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let generatedName = "Stage \(stage.id.rawValue)"
-        return trimmed.isEmpty || trimmed == generatedName ? "Stage \(position)" : trimmed
+        StagePresentationOrder.menuLabel(stage, position: position)
     }
 
-    private func isVisibleDestination(_ stage: PersistentStage, includeNamedEmpty: Bool) -> Bool {
-        !stage.members.isEmpty || (includeNamedEmpty && isCustomStageName(stage.name, id: stage.id))
-    }
-
-    private func isCustomStageName(_ name: String, id: StageID) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && trimmed != "Stage \(id.rawValue)"
+    private func liveWindowIDs(in snapshot: DaemonSnapshot) -> Set<WindowID> {
+        snapshotService.railWindowIDs(in: snapshot)
     }
 
     private func nextEmptyStageID(in stages: [PersistentStage]) -> StageID? {
-        if let empty = stages.first(where: { $0.members.isEmpty && !isCustomStageName($0.name, id: $0.id) }) {
+        if let empty = stages.first(where: { $0.parkingState != .parked && $0.members.isEmpty && !StagePresentationOrder.isNamed($0) }) {
             return empty.id
         }
         let used = Set(stages.map(\.id.rawValue))

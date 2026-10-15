@@ -219,7 +219,7 @@ struct TitlebarContextMenuTests {
         let destinations = WindowContextActions(snapshotService: service, stageStore: store, stageLabelsVisible: { true })
             .destinations(for: window.id, in: snapshot, settings: TitlebarContextMenuSettings(enabled: true))
 
-        #expect(destinations.contains(WindowDestination(kind: .stage, id: "9", label: "Work", isCurrent: true)))
+        #expect(destinations.contains(WindowDestination(kind: .stage, id: "9", label: "1 · Work", isCurrent: true)))
         #expect(destinations.contains(WindowDestination(kind: .stage, id: "4", label: "Stage 2", isCurrent: false)))
         #expect(destinations.contains(WindowDestination(kind: .stage, id: "7", label: "Stage 3", isCurrent: false)))
         #expect(destinations.contains {
@@ -252,7 +252,7 @@ struct TitlebarContextMenuTests {
         #expect(destinations.contains { $0.kind == .stage && $0.id == "1" && $0.isCurrent })
         #expect(destinations.contains { $0.kind == .stage && $0.id == "3" && !$0.isCurrent })
         #expect(destinations.contains(WindowDestination(kind: .stage, id: "4", label: "Prochaine stage vide", isCurrent: false)))
-        #expect(!destinations.contains { $0.kind == .stage && $0.id == "2" })
+        #expect(destinations.contains { $0.kind == .stage && $0.id == "2" && $0.label == "2 · Work" })
         #expect(!destinations.contains { $0.kind == .stage && $0.id == "4" && $0.label != "Prochaine stage vide" })
     }
 

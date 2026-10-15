@@ -260,6 +260,8 @@ private final class DynamicDisplaySequenceProvider: SystemSnapshotProviding, @un
 private final class RecordingWriter: WindowFrameWriting, @unchecked Sendable {
     private(set) var requestedFrames: [WindowID: Rect] = [:]
 
+    func readFrame(of window: WindowSnapshot) -> CGRect? { window.frame.cgRect }
+
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         requestedFrames[window.id] = Rect(frame)
         return frame
@@ -270,6 +272,9 @@ private final class FailingWriter: WindowFrameWriting, @unchecked Sendable {
     private(set) var attempts = 0
     /// Exécuté à chaque tentative : simule une écriture concurrente pendant l'appel AX.
     var onAttempt: (() -> Void)?
+
+    // Ce double refuse l'écriture ; la fenêtre reste lisible avant la tentative.
+    func readFrame(of window: WindowSnapshot) -> CGRect? { window.frame.cgRect }
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         attempts += 1

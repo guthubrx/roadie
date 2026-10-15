@@ -113,7 +113,9 @@ public final class ConfigReloadService: @unchecked Sendable {
     /// la comparaison de signature et la publication, pour ne pas bloquer les autres composants.
     // O(1) (un stat par fichier) si inchangé ; O(taille du fichier) au rechargement.
     public func currentConfig() -> RoadieConfig {
-        let path = lock.withLock { storedState.activePath } ?? RoadieConfigLoader.defaultConfigPath()
+        let (path, previousStamp) = lock.withLock {
+            (storedState.activePath ?? RoadieConfigLoader.defaultConfigPath(), loadedStamp)
+        }
         let stamp = Self.stamp(for: path)
         if let unchanged = lock.withLock({ stamp == loadedStamp ? storedConfig : nil }) {
             return unchanged
@@ -125,8 +127,10 @@ public final class ConfigReloadService: @unchecked Sendable {
 
         var pendingEvents: [RoadieEvent] = []
         let config: RoadieConfig = lock.withLock {
-            // Un autre appel a déjà publié cette version : ni double application ni double journal.
-            guard stamp != loadedStamp else { return storedConfig }
+            // L'I/O se fait hors verrou : un reload ou un autre lecteur peut avoir publié
+            // entre-temps. Son résultat prime sur cette ancienne tentative.
+            guard storedState.activePath == path, loadedStamp == previousStamp,
+                  stamp != loadedStamp else { return storedConfig }
             let isFirstLoad = loadedStamp == nil
             loadedStamp = stamp
             storedState.lastAttemptAt = attemptAt

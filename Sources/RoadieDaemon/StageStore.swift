@@ -12,6 +12,15 @@ public struct LogicalDisplayID: RawRepresentable, Hashable, Codable, Sendable, C
         self.rawValue = rawValue
     }
 
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        let raw = try c.decode(String.self)
+        guard !raw.isEmpty else {
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "LogicalDisplayID must not be empty")
+        }
+        self.init(rawValue: raw)
+    }
+
     public init(displayID: DisplayID) {
         self.init(rawValue: "display:\(displayID.rawValue)")
     }
@@ -83,6 +92,7 @@ public struct StageOrigin: Equatable, Codable, Sendable {
     public var position: Int
     public var nameAtParking: String
     public var parkedAt: Date
+    public var modeAtParking: WindowManagementMode?
 
     public init(
         logicalDisplayID: LogicalDisplayID,
@@ -91,7 +101,8 @@ public struct StageOrigin: Equatable, Codable, Sendable {
         stageID: StageID,
         position: Int,
         nameAtParking: String,
-        parkedAt: Date
+        parkedAt: Date,
+        modeAtParking: WindowManagementMode? = nil
     ) {
         self.logicalDisplayID = logicalDisplayID
         self.displayID = displayID
@@ -100,6 +111,7 @@ public struct StageOrigin: Equatable, Codable, Sendable {
         self.position = position
         self.nameAtParking = nameAtParking
         self.parkedAt = parkedAt
+        self.modeAtParking = modeAtParking
     }
 }
 
@@ -372,6 +384,50 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public mutating func update(_ scope: PersistentStageScope) {
         scopes.removeAll { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }
         scopes.append(scope)
+    }
+
+    /// Observations d'un relevé, appliquées une fois par membre, pin et signet.
+    /// Les fenêtres masquées ou hors écran sont filtrées par l'appelant. O(m + p + b).
+    public mutating func updateWindowObservations(
+        _ windows: [WindowID: WindowSnapshot],
+        scopes windowScopes: [WindowID: StageScope],
+        presentationStates: [WindowID: WindowPresentationState] = [:],
+        now: Date = Date()
+    ) {
+        guard !windows.isEmpty else { return }
+        for scopeIndex in scopes.indices {
+            for stageIndex in scopes[scopeIndex].stages.indices {
+                let scope = StageScope(displayID: scopes[scopeIndex].displayID,
+                    desktopID: scopes[scopeIndex].desktopID, stageID: scopes[scopeIndex].stages[stageIndex].id)
+                for memberIndex in scopes[scopeIndex].stages[stageIndex].members.indices {
+                    let id = scopes[scopeIndex].stages[stageIndex].members[memberIndex].windowID
+                    guard windowScopes[id] == scope, let window = windows[id] else { continue }
+                    scopes[scopeIndex].stages[stageIndex].members[memberIndex].observe(
+                        window, presentationState: presentationStates[id], now: now)
+                }
+            }
+        }
+        for index in windowPins.indices {
+            guard let window = windows[windowPins[index].windowID] else { continue }
+            let pin = windowPins[index]
+            guard pin.bundleID != window.bundleID || pin.title != window.title || pin.lastFrame != window.frame else { continue }
+            windowPins[index].bundleID = window.bundleID
+            windowPins[index].title = window.title
+            windowPins[index].lastFrame = window.frame
+            windowPins[index].updatedAt = now
+        }
+        for index in windowBookmarks.indices {
+            let bookmark = windowBookmarks[index]
+            guard let window = windows[bookmark.windowID], let scope = windowScopes[bookmark.windowID],
+                  bookmark.scope != scope || bookmark.bundleID != window.bundleID || bookmark.title != window.title
+                    || bookmark.frame != window.frame || bookmark.missingSince != nil else { continue }
+            windowBookmarks[index].scope = scope
+            windowBookmarks[index].bundleID = window.bundleID
+            windowBookmarks[index].title = window.title
+            windowBookmarks[index].frame = window.frame
+            windowBookmarks[index].lastSeenAt = now
+            windowBookmarks[index].missingSince = nil
+        }
     }
 
     /// Arbre BSP persistant d'un stage (mode `.spatialBsp`). nil si absent.
@@ -1337,20 +1393,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             guard let memberIndex = stages[stageIndex].members.firstIndex(where: { $0.windowID == window.id }) else {
                 continue
             }
-            var member = stages[stageIndex].members[memberIndex]
-            member.frame = window.frame
-            member.bundleID = window.bundleID
-            member.title = window.title
-            member.pid = window.pid
-            member.confirmedClosedAt = nil
-            if let presentationState {
-                member.presentationState = presentationState
-            }
-            if member.missingSince != nil {
-                member.missingSince = nil
-                member.lastSeenAt = Date()
-            }
-            stages[stageIndex].members[memberIndex] = member
+            stages[stageIndex].members[memberIndex].observe(window, presentationState: presentationState, now: Date())
             return
         }
     }
@@ -1529,6 +1572,17 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
     public var confirmedClosedAt: Date?
     /// pid observé du processus propriétaire (SPEC-016 FR-006). Optionnel : absent des anciens fichiers.
     public var pid: Int32?
+
+    /// O(1). Une observation inchangée ne rafraîchit pas les dates (FR-014).
+    fileprivate mutating func observe(_ window: WindowSnapshot, presentationState: WindowPresentationState?, now: Date) {
+        frame = window.frame
+        bundleID = window.bundleID
+        title = window.title
+        pid = window.pid
+        confirmedClosedAt = nil
+        if let presentationState { self.presentationState = presentationState }
+        if missingSince != nil { missingSince = nil; lastSeenAt = now }
+    }
 
     public init(
         windowID: WindowID,

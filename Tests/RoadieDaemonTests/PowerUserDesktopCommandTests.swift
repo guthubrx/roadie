@@ -1023,7 +1023,9 @@ struct PowerUserDesktopCommandTests {
                 ]),
             ]),
         ]))
-        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        // Cette fixture teste les stages non vides ; les noms configurés sont couverts par SPEC-029.
+        let config = RoadieConfig(stageManager: StageManagerConfig(workspaces: []))
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: config, stageStore: store)
 
         let result = StageCommandService(service: service, store: store).assignPosition(2)
         var state = store.state()

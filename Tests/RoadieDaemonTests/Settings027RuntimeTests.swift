@@ -624,6 +624,10 @@ private final class SettingsPrecisionWriter: WindowFrameWriting, @unchecked Send
     let behavior: Settings027WriteBehavior
     private(set) var requested: [Rect] = []
 
+    func readFrame(of window: WindowSnapshot) -> CGRect? {
+        provider.snapshots.first { $0.id == window.id }?.frame.cgRect
+    }
+
     init(provider: PowerUserProvider, behavior: Settings027WriteBehavior) {
         self.provider = provider
         self.behavior = behavior

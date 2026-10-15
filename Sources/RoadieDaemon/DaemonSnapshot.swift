@@ -408,7 +408,8 @@ public struct SnapshotService {
 
     /// Réconcilie l'état persisté avec les fenêtres vivantes et construit l'état runtime.
     /// Fonction de (état, entrées) : appelée sous le verrou de `StageStore.mutate` en mode writer.
-    // O(w + m) — w fenêtres vivantes, m membres persistés (index inverse pré-calculé).
+    // Observations connues : O(w·d + m + p + b), d écrans, m membres, p pins, b signets.
+    // Adoption et remappage d'identités : coûts documentés dans PersistentStageState.
     private func reconcile(_ persistedStages: inout PersistentStageState, input: ReconciliationInput) -> Reconciliation {
         let config = input.config
         let displays = input.displays
@@ -481,13 +482,24 @@ public struct SnapshotService {
         let fallbackDisplayID = displays.first?.id
         // Pre-compute inverse index O(total_members) pour eviter O(w * scopes * stages * members) sur le hot path.
         var stageIndex = persistedStages.stageScopeIndex()
+        let pinsByWindow = Dictionary(persistedStages.windowPins.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
+        var metadata: [StageScope: (mode: WindowManagementMode, groups: [WindowGroup])] = [:]
+        for persisted in persistedStages.scopes {
+            for stage in persisted.stages {
+                metadata[StageScope(displayID: persisted.displayID, desktopID: persisted.desktopID, stageID: stage.id)] = (stage.mode, stage.groups)
+            }
+        }
+        var initializedScopes: Set<StageScope> = []
+        var observedWindows: [WindowID: WindowSnapshot] = [:]
+        var observedScopes: [WindowID: StageScope] = [:]
+        var observedPresentations: [WindowID: WindowPresentationState] = [:]
         var initialMemberships: [(WindowID, StageScope)] = []
         for window in windows {
             guard stageManagedWindowIDs.contains(window.id) else {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
                 continue
             }
-            let pin = persistedStages.pin(for: window.id)
+            let pin = pinsByWindow[window.id]
             let indexedScope = stageIndex[window.id]
             let liveIndexedScope = indexedScope.flatMap { liveDisplayIDs.contains($0.displayID) ? $0 : nil }
             let livePinnedScope = (pin?.homeScope).flatMap { liveDisplayIDs.contains($0.displayID) ? $0 : nil }
@@ -537,21 +549,6 @@ public struct SnapshotService {
                     desktopID: persistentScope.desktopID,
                     stageID: persistentScope.activeStageID
                 )
-            } else if !input.hiddenWindowIDs.contains(window.id),
-                      // FR-037 : un cadre hors de tout écran présent (écran débranché) n'écrase pas la
-                      // dernière position visible du membre. O(d), d = nombre d'écrans.
-                      displays.contains(where: { $0.frame.cgRect.intersects(window.frame.cgRect) }) {
-                var persistentScope = persistedStages.scope(
-                    displayID: displayID,
-                    desktopID: knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID),
-                    defaultMode: config.tiling.defaultStrategy
-                )
-                persistentScope.updateFrame(
-                    window: window,
-                    presentationState: presentationState(for: window, displayID: displayID, displays: displays)
-                )
-                persistedStages.update(persistentScope)
-                persistedStages.updatePinFrame(window: window, now: now)
             }
             let desktopID = knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID)
             let stageID = knownScope?.stageID
@@ -567,25 +564,25 @@ public struct SnapshotService {
             )
             if !input.hiddenWindowIDs.contains(window.id),
                displays.contains(where: { $0.frame.cgRect.intersects(window.frame.cgRect) }) {
-                persistedStages.updateBookmarkObservation(window: window, scope: scope, now: now)
+                // FR-037 : garder la dernière position visible quand l'écran a disparu.
+                observedWindows[window.id] = window
+                observedScopes[window.id] = scope
+                observedPresentations[window.id] = presentationState(for: window, displayID: displayID, displays: displays)
             }
             let isNewlyScoped = knownScope == nil
-            let persistedScope = persistedStages.scopes.first {
-                $0.displayID == scope.displayID && $0.desktopID == scope.desktopID
+            if initializedScopes.insert(scope).inserted {
+                let stage = metadata[scope]
+                try? state.createStage(
+                    id: scope.stageID, name: "Stage \(scope.stageID.rawValue)",
+                    mode: stage?.mode ?? config.tiling.defaultStrategy,
+                    in: scope.displayID, desktopID: scope.desktopID
+                )
+                try? state.setMode(stage?.mode ?? config.tiling.defaultStrategy, for: scope)
+                try? state.setGroups(stage?.groups ?? [], for: scope)
             }
-            let persistedStage = persistedScope?.stages.first { $0.id == scope.stageID }
-            try? state.createStage(
-                id: scope.stageID,
-                name: "Stage \(scope.stageID.rawValue)",
-                mode: persistedStage?.mode ?? config.tiling.defaultStrategy,
-                in: scope.displayID,
-                desktopID: scope.desktopID
-            )
-            try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
             if window.isTileCandidate, pin == nil {
                 initialMemberships.append((window.id, scope))
             }
-            try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             scopedWindows.append(ScopedWindowSnapshot(
                 window: window,
                 scope: scope,
@@ -596,9 +593,11 @@ public struct SnapshotService {
         // PERF-010 : l'état est neuf ; éviter removeWindow/insert pour chaque fenêtre.
         try? state.initializeWindowMemberships(initialMemberships)
         correctSoloMaximizedStates(
-            in: &persistedStages, scopedWindows: scopedWindows, hiddenWindowIDs: input.hiddenWindowIDs,
-            displays: displays, config: config
+            in: &observedPresentations, scopedWindows: scopedWindows, hiddenWindowIDs: input.hiddenWindowIDs,
+            displays: displays
         )
+        persistedStages.updateWindowObservations(observedWindows, scopes: observedScopes,
+            presentationStates: observedPresentations, now: now)
         var focusedID: WindowID?
         if input.followFocus,
            let providerFocusedID,
@@ -765,11 +764,10 @@ public struct SnapshotService {
     /// pas « agrandie ». Le nombre de fenêtres par scope n'est connu qu'après la boucle d'affectation,
     /// d'où cette correction a posteriori des états persistés. O(w).
     private func correctSoloMaximizedStates(
-        in persistedStages: inout PersistentStageState,
+        in presentations: inout [WindowID: WindowPresentationState],
         scopedWindows: [ScopedWindowSnapshot],
         hiddenWindowIDs: Set<WindowID>,
-        displays: [DisplaySnapshot],
-        config: RoadieConfig
+        displays: [DisplaySnapshot]
     ) {
         let tiledCounts = WindowPresentationStateResolver.tiledWindowCounts(in: scopedWindows)
         for entry in scopedWindows where entry.window.isTileCandidate {
@@ -779,20 +777,11 @@ public struct SnapshotService {
                   presentationState(for: entry.window, displayID: scope.displayID, displays: displays) == .maximized,
                   let display = displays.first(where: { $0.id == scope.displayID })
             else { continue }
-            var persistentScope = persistedStages.scope(
-                displayID: scope.displayID,
-                desktopID: scope.desktopID,
-                defaultMode: config.tiling.defaultStrategy
-            )
-            persistentScope.updateFrame(
-                window: entry.window,
-                presentationState: WindowPresentationStateResolver.state(
+            presentations[entry.window.id] = WindowPresentationStateResolver.state(
                     for: entry.window,
                     on: display,
                     isOnlyTiledWindowInScope: true
-                )
             )
-            persistedStages.update(persistentScope)
         }
     }
 
@@ -894,6 +883,10 @@ public struct SnapshotService {
         context: TilingPolicyContext
     ) -> WindowSnapshot {
         var tile = window.isTileCandidate
+
+        if tile && config.tiling.popupFilter && window.role == "AXSheet" {
+            tile = false
+        }
 
         if tile && context.floatingBundles.contains(window.bundleID) {
             tile = false

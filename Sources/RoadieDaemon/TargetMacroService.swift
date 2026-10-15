@@ -192,7 +192,19 @@ public struct TargetMacroService {
 
     public func inspect(_ name: String) throws -> TargetMacroRecording {
         let data = try Data(contentsOf: recordingURL(name))
-        return try JSONDecoder.roadie.decode(TargetMacroRecording.self, from: data)
+        let recording = try JSONDecoder.roadie.decode(TargetMacroRecording.self, from: data)
+        // O(n), n <= 20 000 événements à la capture. Un fichier modifié ne doit ni
+        // faire déborder CGKeyCode(UInt16), ni imposer une attente hors des limites de capture.
+        guard recording.schemaVersion == 1,
+              recording.events.count <= 20_000,
+              recording.durationSeconds.isFinite, (0...3_600).contains(recording.durationSeconds),
+              recording.events.allSatisfy({ event in
+                  event.t.isFinite && (0...3_600).contains(event.t)
+                      && event.keyCode.map { CGKeyCode(exactly: $0) != nil } != false
+              }) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Invalid macro values or capture limits exceeded"))
+        }
+        return recording
     }
 
     public func delete(_ name: String) throws -> TargetActionResult {

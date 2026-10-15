@@ -339,7 +339,7 @@ public struct StageManagerConfig: Equatable, Codable, Sendable {
         self.init(
             enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
             hideStrategy: try c.decodeIfPresent(String.self, forKey: .hideStrategy) ?? "corner",
-            defaultStage: try c.decodeIfPresent(String.self, forKey: .defaultStage) ?? "1",
+            defaultStage: try c.decodeIfPresent(StageID.self, forKey: .defaultStage)?.rawValue ?? "1",
             workspaces: try c.decodeIfPresent([StageDefinition].self, forKey: .workspaces) ?? []
         )
     }
@@ -357,6 +357,14 @@ public struct StageDefinition: Equatable, Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id
         case displayName = "display_name"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(StageID.self, forKey: .id).rawValue,
+            displayName: try c.decode(String.self, forKey: .displayName)
+        )
     }
 }
 
@@ -1721,13 +1729,17 @@ private extension KeyedDecodingContainer {
     /// Autre type (booléen, texte, tableau) : l'erreur de décodage est propagée, jamais remplacée
     /// par le défaut (REL-011).
     func decodeFlexibleDouble(forKey key: Key) throws -> Double? {
+        let value: Double?
         do {
-            return try decodeIfPresent(Double.self, forKey: key)
+            value = try decodeIfPresent(Double.self, forKey: key)
         } catch {
-            if let value = try? decodeIfPresent(Int.self, forKey: key) {
-                return Double(value)
-            }
-            throw error
+            guard let integer = try? decodeIfPresent(Int.self, forKey: key) else { throw error }
+            value = Double(integer)
         }
+        // TOML autorise nan/inf, mais les cadres AX et les exports JSON exigent un nombre fini.
+        guard value?.isFinite != false else {
+            throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "Expected a finite number")
+        }
+        return value
     }
 }

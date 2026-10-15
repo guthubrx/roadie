@@ -368,7 +368,7 @@ struct WindowDragReleaseTests {
 
         producer.finish(now: now.addingTimeInterval(0.1), droppedWindowID: WindowID(rawValue: 7))
 
-        let drop = consumer.lastDrop()
+        let drop = consumer.lastDrop(now: now.addingTimeInterval(0.2))
         #expect(drop?.windowID == WindowID(rawValue: 7))
         #expect(drop.map { abs($0.at.timeIntervalSince(now.addingTimeInterval(0.1))) < 0.001 } == true)
         #expect(consumer.isActive(now: now.addingTimeInterval(0.2)))

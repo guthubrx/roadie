@@ -27,6 +27,7 @@ struct ResizeHandlePickerTests {
 
     @Test(arguments: [
         CGPoint(x: 3678, y: -300), CGPoint(x: 3680, y: -300),
+        CGPoint(x: 3680, y: -350),
         CGPoint(x: 1660, y: -300), CGPoint(x: 2000, y: -928),
         CGPoint(x: 2000, y: 1190), CGPoint(x: 3680, y: 1190),
     ])
@@ -40,6 +41,7 @@ struct ResizeHandlePickerTests {
     func nearestEdgeWinsInGapAndInteriorWinsOverExpandedNeighbor() {
         let snapshot = snapshot()
         #expect(FocusFollowsMousePicker.gestureTargetWindow(at: CGPoint(x: 3681, y: -300), in: snapshot)?.window.id.rawValue == 1)
+        #expect(FocusFollowsMousePicker.gestureTargetWindow(at: CGPoint(x: 3681, y: -350), in: snapshot)?.window.id.rawValue == 1)
         #expect(FocusFollowsMousePicker.gestureTargetWindow(at: CGPoint(x: 3685, y: -300), in: snapshot)?.window.id.rawValue == 2)
         #expect(FocusFollowsMousePicker.gestureTargetWindow(at: CGPoint(x: 3689, y: -300), in: snapshot)?.window.id.rawValue == 2)
         #expect(FocusFollowsMousePicker.gestureTargetWindow(at: CGPoint(x: 1650, y: -300), in: snapshot) == nil)

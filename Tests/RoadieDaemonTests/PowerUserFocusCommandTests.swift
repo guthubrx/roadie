@@ -37,6 +37,10 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
         self.provider = provider
     }
 
+    func readFrame(of window: WindowSnapshot) -> CGRect? {
+        provider.snapshots.first { $0.id == window.id }?.frame.cgRect
+    }
+
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         let rect = Rect(frame)
         frames[window.id] = rect

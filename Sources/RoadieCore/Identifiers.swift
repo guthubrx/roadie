@@ -8,6 +8,15 @@ public struct DisplayID: RawRepresentable, Hashable, Codable, Sendable, CustomSt
         self.rawValue = rawValue
     }
 
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        let raw = try c.decode(String.self)
+        guard !raw.isEmpty else {
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "DisplayID must not be empty")
+        }
+        self.init(rawValue: raw)
+    }
+
     public var description: String { rawValue }
 }
 
@@ -17,6 +26,15 @@ public struct DesktopID: RawRepresentable, Hashable, Codable, Sendable, Comparab
     public init(rawValue: Int) {
         precondition(rawValue > 0, "DesktopID must be positive")
         self.rawValue = rawValue
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        let raw = try c.decode(Int.self)
+        guard raw > 0 else {
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "DesktopID must be positive")
+        }
+        self.init(rawValue: raw)
     }
 
     public static func < (lhs: DesktopID, rhs: DesktopID) -> Bool {
@@ -34,6 +52,15 @@ public struct StageID: RawRepresentable, Hashable, Codable, Sendable, Comparable
         self.rawValue = rawValue
     }
 
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        let raw = try c.decode(String.self)
+        guard !raw.isEmpty else {
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "StageID must not be empty")
+        }
+        self.init(rawValue: raw)
+    }
+
     public static func < (lhs: StageID, rhs: StageID) -> Bool {
         lhs.rawValue.localizedStandardCompare(rhs.rawValue) == .orderedAscending
     }
@@ -47,6 +74,15 @@ public struct WindowID: RawRepresentable, Hashable, Codable, Sendable, Comparabl
     public init(rawValue: UInt32) {
         precondition(rawValue > 0, "WindowID must be positive")
         self.rawValue = rawValue
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        let raw = try c.decode(UInt32.self)
+        guard raw > 0 else {
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "WindowID must be positive")
+        }
+        self.init(rawValue: raw)
     }
 
     public static func < (lhs: WindowID, rhs: WindowID) -> Bool {

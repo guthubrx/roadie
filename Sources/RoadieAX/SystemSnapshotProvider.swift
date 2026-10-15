@@ -519,7 +519,60 @@ struct AXApplicationWindows {
             if registry.noteResult(idError, pid: pid) { return nil }
             entries.append((idError == .success && id > 0 ? id : nil, element))
         }
-        self.init(pid: pid, entries: entries)
+        func value(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+            guard !registry.isQuarantined(pid) else { return nil }
+            var raw: CFTypeRef?
+            let error = AXUIElementCopyAttributeValue(element, attribute as CFString, &raw)
+            registry.noteResult(error, pid: pid)
+            return error == .success ? raw : nil
+        }
+        let attached = Self.attachedWindowEntries(roots: entries,
+            children: { value($0, kAXChildrenAttribute) as? [AXUIElement] ?? [] },
+            identifier: { element in
+                guard !registry.isQuarantined(pid) else { return nil }
+                var id = CGWindowID()
+                let error = AXUIElementGetWindowID(element, &id)
+                registry.noteResult(error, pid: pid)
+                return error == .success && id > 0 ? id : nil
+            }, isSheet: { value($0, kAXRoleAttribute) as? String == kAXSheetRole })
+        guard !registry.isQuarantined(pid) else { return nil }
+        self.init(pid: pid, entries: entries + attached)
+    }
+
+    /// Une feuille peut héberger son contenu dans un autre CGWindow (service XPC AppKit).
+    /// Ces identités appartiennent à la feuille ; les contrôles de la fenêtre principale
+    /// ne deviennent pas des fenêtres. O(r + c), c borné à 256 éléments, profondeur 4.
+    static func attachedWindowEntries(
+        roots: [(id: CGWindowID?, element: AXUIElement)],
+        children: (AXUIElement) -> [AXUIElement],
+        identifier: (AXUIElement) -> CGWindowID?,
+        isSheet: (AXUIElement) -> Bool
+    ) -> [(id: CGWindowID?, element: AXUIElement)] {
+        var result: [(id: CGWindowID?, element: AXUIElement)] = []
+        var seen = Set(roots.compactMap(\.id))
+        var remaining = 256
+        for root in roots {
+            guard remaining > 0 else { return result }
+            for child in children(root.element).prefix(remaining) {
+                guard remaining > 0 else { return result }
+                remaining -= 1
+                let childID = identifier(child)
+                guard childID == nil || childID != root.id, isSheet(child) else { continue }
+                if let childID, seen.insert(childID).inserted { result.append((childID, child)) }
+                var pending: [(AXUIElement, Int)] = [(child, 0)]
+                while remaining > 0, let (node, depth) = pending.popLast() {
+                    remaining -= 1
+                    if let id = identifier(node), id != childID, id != root.id {
+                        if seen.insert(id).inserted { result.append((id, child)) }
+                        continue
+                    }
+                    if depth < 4 {
+                        pending.append(contentsOf: children(node).prefix(remaining).map { ($0, depth + 1) })
+                    }
+                }
+            }
+        }
+        return result
     }
 
     init(pid: pid_t, entries: [(id: CGWindowID?, element: AXUIElement)]) {

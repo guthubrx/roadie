@@ -19,9 +19,11 @@ public final class WindowDragActivity: @unchecked Sendable {
         guard enabled else { return }
         lock.lock()
         defer { lock.unlock() }
-        activeWindowID = windowID
-        activeUntil = max(activeUntil, now.addingTimeInterval(holdSeconds), readLocked()?.expiry ?? .distantPast)
-        writeActiveUntilLocked(activeUntil, windowID: windowID)
+        withFileLock {
+            activeWindowID = windowID
+            activeUntil = max(activeUntil, now.addingTimeInterval(holdSeconds), readLocked()?.expiry ?? .distantPast)
+            writeActiveUntilLocked(activeUntil, windowID: windowID)
+        }
     }
 
     /// Fin d'un glisser avec la grâce de relâchement. `droppedWindowID` : fenêtre d'un dépôt reconnu
@@ -30,9 +32,11 @@ public final class WindowDragActivity: @unchecked Sendable {
         guard enabled else { return }
         lock.lock()
         defer { lock.unlock() }
-        activeWindowID = nil
-        activeUntil = max(activeUntil, now.addingTimeInterval(graceSeconds), readLocked()?.expiry ?? .distantPast)
-        writeActiveUntilLocked(activeUntil, windowID: nil, drop: droppedWindowID.map { ($0, now) })
+        withFileLock {
+            activeWindowID = nil
+            activeUntil = max(activeUntil, now.addingTimeInterval(graceSeconds), readLocked()?.expiry ?? .distantPast)
+            writeActiveUntilLocked(activeUntil, windowID: nil, drop: droppedWindowID.map { ($0, now) })
+        }
     }
 
     /// Relâchement sans dépôt reconnu (T216) : le glisser cesse tout de suite, sans grâce. Le geste
@@ -41,19 +45,22 @@ public final class WindowDragActivity: @unchecked Sendable {
         guard enabled else { return }
         lock.lock()
         defer { lock.unlock() }
-        activeWindowID = nil
-        activeUntil = now
-        writeActiveUntilLocked(now, windowID: nil)
+        withFileLock {
+            activeWindowID = nil
+            activeUntil = now
+            writeActiveUntilLocked(now, windowID: nil)
+        }
     }
 
     /// Dernier dépôt reconnu, encore présent dans le fichier partagé (jusqu'à la fin de la grâce).
     /// Preuve, pour le maintien d'un autre processus, qu'une session de geste sur cette fenêtre,
     /// ouverte avant `at`, a été consommée par un dépôt (A17, T216). O(1).
-    public func lastDrop() -> (windowID: WindowID, at: Date)? {
+    public func lastDrop(now: Date = Date()) -> (windowID: WindowID, at: Date)? {
         guard enabled else { return nil }
         lock.lock()
         defer { lock.unlock() }
-        return readLocked()?.drop
+        guard let stored = readLocked(), now <= stored.expiry else { return nil }
+        return stored.drop
     }
 
     /// Premier instant où ni le glisser ni sa grâce ne sont actifs (`isActive` inclut sa borne),
@@ -68,11 +75,14 @@ public final class WindowDragActivity: @unchecked Sendable {
     }
 
     public func reset() {
+        guard enabled else { return }
         lock.lock()
         defer { lock.unlock() }
-        activeWindowID = nil
-        activeUntil = .distantPast
-        try? FileManager.default.removeItem(at: url)
+        withFileLock {
+            activeWindowID = nil
+            activeUntil = .distantPast
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     /// Glisser en cours, ou grâce de fin de glisser encore due. `includingReleaseGrace: false`
@@ -92,8 +102,18 @@ public final class WindowDragActivity: @unchecked Sendable {
         }
         activeWindowID = nil
         activeUntil = .distantPast
-        try? FileManager.default.removeItem(at: url)
+        // Lecture seule : une publication peut avoir remplacé le fichier depuis readLocked.
+        // Le supprimer ici effacerait le glisser d'un autre processus.
         return false
+    }
+
+    /// Les lectures-modifications-écritures partagées sont sérialisées entre instances.
+    private func withFileLock(_ body: () -> Void) {
+        do {
+            try FileLock.withLock(path: FileLock.lockPath(for: url), block: body)
+        } catch {
+            fputs("roadie: window drag activity not updated: \(error)\n", stderr)
+        }
     }
 
     /// Fichier partagé : échéance, fenêtre glissée (vide hors glisser), puis le dépôt reconnu

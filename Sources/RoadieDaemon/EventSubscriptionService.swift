@@ -127,8 +127,10 @@ public struct EventSubscriptionService: Sendable {
             }
             let complete = data[data.startIndex..<lastNewline]
             let newOffset = offset + UInt64(complete.count + 1)
-            if let raw = String(data: complete, encoding: .utf8) {
-                events += raw.split(separator: "\n").compactMap { decodeEnvelope(String($0)) }
+            // O(n), décodage ligne par ligne : un octet abîmé ne doit pas faire perdre
+            // les événements valides du lot alors que le curseur avance au-delà.
+            events += complete.split(separator: 10).compactMap { bytes in
+                String(data: bytes, encoding: .utf8).flatMap(decodeEnvelope)
             }
             return (gap + filtered(events, options), EventSubscriptionCursor(offset: newOffset, inode: currentInode))
         } catch {
@@ -231,10 +233,10 @@ public struct EventSubscriptionService: Sendable {
     private static func completeLines(of handle: FileHandle, from offset: UInt64) -> [String] {
         guard (try? handle.seek(toOffset: offset)) != nil,
               let data = try? handle.readToEnd(),
-              let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")),
-              let raw = String(data: data[data.startIndex..<lastNewline], encoding: .utf8)
+              let lastNewline = data.lastIndex(of: UInt8(ascii: "\n"))
         else { return [] }
-        return raw.split(separator: "\n").map(String.init)
+        return data[data.startIndex..<lastNewline].split(separator: 10)
+            .compactMap { String(data: $0, encoding: .utf8) }
     }
 
     /// Decoder partage : evite ~30us d'allocation par event (5Hz polling, peut traiter

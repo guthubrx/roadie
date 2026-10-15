@@ -85,7 +85,8 @@ public struct StageCommandService {
 
         var state = store.state()
         let scope = activeScope(displayID: displayID, in: &state)
-        guard let stageID = stageID(atAssignablePosition: position, in: scope) else {
+        guard let stageID = StagePresentationOrder(scope: scope, liveWindowIDs: liveWindowIDs(in: snapshot))
+            .stageID(at: position, allowingEmptySlots: true) else {
             return StageCommandResult(message: "stage assign-position \(position): not found", changed: false, outcome: .failed)
         }
         return assign(stageID.rawValue)
@@ -604,14 +605,25 @@ public struct StageCommandService {
                 var targetScope = activeScope(displayID: targetDisplay.id, in: &state)
                 guard let movingStageIndex = sourceScope.stages.firstIndex(where: { $0.id == stageID }) else { return nil }
                 var movingStage = sourceScope.stages.remove(at: movingStageIndex)
+                let automaticallyNamed = !StagePresentationOrder.isNamed(movingStage)
+                // Un déplacement explicite remplace l'ancienne destination de retour.
+                movingStage.parkingState = .native
+                movingStage.origin = nil
+                movingStage.hostDisplayID = nil
+                movingStage.restoredAt = nil
                 let requestedStageID = movingStage.id
                 let sourceWasActive = sourceScope.activeStageID == requestedStageID
                 let targetConflict = targetScope.stages.first { $0.id == movingStage.id }
                 if let targetConflict,
-                   !targetConflict.members.isEmpty || !targetConflict.groups.isEmpty {
+                   !targetConflict.members.isEmpty || !targetConflict.groups.isEmpty
+                    || StagePresentationOrder.isNamed(targetConflict)
+                    || targetConflict.mode != movingStage.mode || targetConflict.bspTree != nil {
                     movingStage.id = nextAvailableStageID(preferred: movingStage.id, in: targetScope)
                 } else if targetConflict != nil {
                     targetScope.stages.removeAll { $0.id == movingStage.id }
+                }
+                if automaticallyNamed {
+                    movingStage.name = "Stage \(movingStage.id.rawValue)"
                 }
                 targetScope.stages.append(movingStage)
                 if effectiveFollow {
@@ -1662,30 +1674,15 @@ public struct StageCommandService {
     }
 
     private func stageID(atVisiblePosition position: Int, in scope: PersistentStageScope, liveWindowIDs: Set<WindowID>) -> StageID? {
-        let visible = visibleStageIDs(in: scope, liveWindowIDs: liveWindowIDs)
-        let ordered = visible.isEmpty ? selectableStageIDs(in: scope) : visible
-        let index = position - 1
-        guard ordered.indices.contains(index) else { return nil }
-        return ordered[index]
-    }
-
-    // O(s) - s = stages du scope (avant : O(s²), `visible.contains` par candidate, PERF-005).
-    private func stageID(atAssignablePosition position: Int, in scope: PersistentStageScope) -> StageID? {
-        let candidates = scope.stages.filter(isSelectableStage)
-        let visible = candidates.filter { !$0.members.isEmpty }.map(\.id)
-        let remaining = candidates.filter { $0.members.isEmpty }.map(\.id)
-        let ordered = visible + remaining
-        let index = position - 1
-        guard ordered.indices.contains(index) else { return nil }
-        return ordered[index]
+        let order = StagePresentationOrder(scope: scope, liveWindowIDs: liveWindowIDs)
+        return order.stageID(at: position, allowingEmptySlots: order.visibleStages.isEmpty)
     }
 
     private func visibleStageIDs(in scope: PersistentStageScope, liveWindowIDs: Set<WindowID>) -> [StageID] {
-        scope.stages
-            .filter { stage in
-                isSelectableStage(stage)
-                    && stage.members.contains { liveWindowIDs.contains($0.windowID) }
-            }
+        // switch-visible parcourt les stages non vides, même si une carte nommée vide garde son
+        // repère. Les membres sous grâce sont déjà filtrés par la projection commune.
+        StagePresentationOrder(scope: scope, liveWindowIDs: liveWindowIDs).visibleStages
+            .filter { !$0.members.isEmpty }
             .map(\.id)
     }
 
@@ -1703,7 +1700,7 @@ public struct StageCommandService {
     }
 
     private func nextEmptyStageID(in scope: PersistentStageScope) -> StageID {
-        if let empty = scope.stages.first(where: { isSelectableStage($0) && $0.members.isEmpty && !isCustomStageName($0.name, id: $0.id) }) {
+        if let empty = scope.stages.first(where: { isSelectableStage($0) && $0.members.isEmpty && !StagePresentationOrder.isNamed($0) }) {
             return empty.id
         }
         return nextGeneratedStageID(in: scope)
@@ -1722,12 +1719,6 @@ public struct StageCommandService {
             candidate = "stage-\(UUID().uuidString)"
         }
         return StageID(rawValue: candidate)
-    }
-
-    private func isCustomStageName(_ name: String, id: StageID) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        return trimmed != "Stage \(id.rawValue)"
     }
 
     private func activeDisplay(in snapshot: DaemonSnapshot) -> DisplaySnapshot? {

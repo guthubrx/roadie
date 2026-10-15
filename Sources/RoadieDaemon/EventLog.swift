@@ -201,6 +201,8 @@ public struct EventLog: Sendable {
         guard written == line.count else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
     }
 
+    /// O(n) en temps et mémoire, n = octets lus : chaque bloc est compté une fois,
+    /// puis assemblé une fois dans l'ordre du fichier.
     public func tail(limit: Int = 20) -> [String] {
         let limit = max(1, limit)
         guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
@@ -209,7 +211,9 @@ public struct EventLog: Sendable {
         guard fileSize > 0 else { return [] }
 
         var offset = fileSize
-        var data = Data()
+        var chunks: [Data] = []
+        var byteCount = 0
+        var lineCount = 0
         let chunkSize: UInt64 = 64 * 1024
         while offset > 0 {
             let readSize = min(chunkSize, offset)
@@ -217,13 +221,17 @@ public struct EventLog: Sendable {
             do {
                 try handle.seek(toOffset: offset)
                 let chunk = try handle.read(upToCount: Int(readSize)) ?? Data()
-                data.insert(contentsOf: chunk, at: 0)
+                chunks.append(chunk)
+                byteCount += chunk.count
+                lineCount += chunk.reduce(0) { $0 + ($1 == 10 ? 1 : 0) }
             } catch {
                 break
             }
-            let lineCount = data.reduce(0) { $0 + ($1 == 10 ? 1 : 0) }
             if lineCount > limit { break }
         }
+        var data = Data()
+        data.reserveCapacity(byteCount)
+        for chunk in chunks.reversed() { data.append(chunk) }
 
         // OBS-002 : on sélectionne les dernières lignes sur les octets AVANT de décoder. La frontière
         // d'un bloc peut couper un caractère UTF-8 dans la première ligne (partielle, jamais retenue :

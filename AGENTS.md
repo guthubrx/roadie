@@ -32,13 +32,20 @@ conservation des groupes et du rail pendant le plein écran natif. 1490 tests is
 1557 combinés réussis. Reproduction réelle avant/après à 22 s ; huit affectations conservées.
 Outlook récupéré dans une stage séparée après perte antérieure à l’installation.
 PID 53642, signature stable, quatre contrôles santé OK ; diaporama de preuves vérifié.
-Current SpecKit feature: `036-stages-plein-ecran`.
+Session 037 implémentée et installée : inventaire transmis au tiler, attente AX sur
+le même écran, observations par lot, feuilles XPC exclues et glisser partagé verrouillé.
+Sept mécanismes corrigés de 035 intégrés. 1587 tests dans 183 suites réussis ;
+278 empreintes Sources/Tests inchangées. UUID 795C9759-EE86-3D9C-B720-0BCB7430213F.
+PID 62842, signature stable, quatre contrôles santé OK. Dépôts natifs et plein écran
+35 s vérifiés sur l'écran interne. Stage 4 restaurée, tests temporaires retirés.
+Limites et preuves : specs/037-fiabilite-placement/validation/livraison037.md.
+Current SpecKit feature: `037-fiabilite-placement`.
 
 Contexte :
-- `specs/036-stages-plein-ecran/spec.md`
-- `specs/036-stages-plein-ecran/plan.md`
-- `specs/036-stages-plein-ecran/implementation.md`
-- `specs/036-stages-plein-ecran/tasks.md`
+- `specs/037-fiabilite-placement/spec.md`
+- `specs/037-fiabilite-placement/plan.md`
+- `specs/037-fiabilite-placement/implementation.md`
+- `specs/037-fiabilite-placement/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

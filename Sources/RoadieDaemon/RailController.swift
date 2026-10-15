@@ -521,7 +521,7 @@ public final class RailController {
         menu.addItem(header)
 
         let stageMenu = NSMenu(title: "Envoyer la fenetre vers stage")
-        for target in windowStageTargets(displayID: displayID, excluding: stageID) {
+        for target in windowStageTargets(displayID: displayID, excluding: stageID, snapshot: snapshot) {
             let item = NSMenuItem(title: target.title, action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
             let action = RailMenuActionTarget { [weak self] in
                 guard let self else { return }
@@ -576,17 +576,17 @@ public final class RailController {
         menu.addItem(displayItem)
     }
 
-    private func windowStageTargets(displayID: DisplayID, excluding sourceStageID: StageID) -> [(title: String, stageID: StageID)] {
+    private func windowStageTargets(displayID: DisplayID, excluding sourceStageID: StageID, snapshot: DaemonSnapshot) -> [(title: String, stageID: StageID)] {
         var state = store.state()
         let desktopID = state.currentDesktopID(for: displayID)
         let scope = state.scope(displayID: displayID, desktopID: desktopID)
+        let liveIDs = snapshotService.railWindowIDs(in: snapshot)
+        let order = StagePresentationOrder(scope: scope, liveWindowIDs: liveIDs)
         var targets: [(String, StageID)] = []
-        for (index, stage) in scope.stages.enumerated() where stage.id != sourceStageID {
-            guard !stage.members.isEmpty || isCustomStageName(stage.name, id: stage.id) else { continue }
-            targets.append((stageDisplayName(stage, position: index + 1), stage.id))
+        for (index, stage) in order.visibleStages.enumerated() where stage.id != sourceStageID {
+            targets.append((StagePresentationOrder.menuLabel(stage, position: index + 1), stage.id))
         }
-        let emptyID = scope.stages.first { $0.members.isEmpty && !isCustomStageName($0.name, id: $0.id) }?.id
-            ?? nextGeneratedStageID(in: scope)
+        let emptyID = order.emptyStageIDs.first ?? nextGeneratedStageID(in: scope)
         if emptyID != sourceStageID {
             targets.append(("Prochaine stage vide", emptyID))
         }
@@ -634,16 +634,6 @@ public final class RailController {
         let desktopID = state.currentDesktopID(for: displayID)
         let scope = state.scope(displayID: displayID, desktopID: desktopID)
         return scope.stages.first { $0.id == stageID }?.name ?? "Stage \(stageID.rawValue)"
-    }
-
-    private func stageDisplayName(_ stage: PersistentStage, position: Int) -> String {
-        let trimmed = stage.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return isCustomStageName(trimmed, id: stage.id) ? trimmed : "Stage \(position)"
-    }
-
-    private func isCustomStageName(_ name: String, id: StageID) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && trimmed != "Stage \(id.rawValue)"
     }
 
     private func nextGeneratedStageID(in scope: PersistentStageScope) -> StageID {
@@ -1190,13 +1180,7 @@ public final class RailController {
         liveWindowIDs: Set<WindowID>,
         now: Date = Date()
     ) -> [StageID] {
-        scope.stages
-            .filter { stage in
-                stage.members.contains {
-                    isRailRepresentedMember($0, liveWindowIDs: liveWindowIDs, now: now)
-                }
-            }
-            .map(\.id)
+        StagePresentationOrder(scope: scope, liveWindowIDs: liveWindowIDs, now: now).visibleStageIDs
     }
 
     nonisolated public static func railDisplayStage(
@@ -1232,18 +1216,13 @@ public final class RailController {
         )
     }
 
-    /// Stages non parquees sans aucun membre represente : cibles du clic ou du depot sur le vide du rail.
+    /// Vraies stages vides automatiques : les membres absents et noms personnels ne sont pas réutilisés.
     nonisolated static func railEmptyStageIDs(
         in scope: PersistentStageScope,
         liveWindowIDs: Set<WindowID>,
         now: Date = Date()
     ) -> [StageID] {
-        scope.stages
-            .filter { stage in
-                stage.parkingState != .parked
-                    && !stage.members.contains { isRailRepresentedMember($0, liveWindowIDs: liveWindowIDs, now: now) }
-            }
-            .map(\.id)
+        StagePresentationOrder(scope: scope, liveWindowIDs: liveWindowIDs, now: now).emptyStageIDs
     }
 
     // Un membre present dans le snapshot est toujours represente. Une fermeture AX confirmée masque
@@ -1315,7 +1294,7 @@ public final class RailController {
 struct RailDisplayContent {
     let scope: PersistentStageScope
     let presentationStates: [WindowID: WindowPresentationState]
-    /// Stages affichees (au moins un membre represente), dans l'ordre du scope, membres filtres.
+    /// Stages représentées ou nommées, dans l'ordre du scope, membres filtrés.
     let stages: [PersistentStage]
     let emptyStageIDs: [StageID]
     let signature: String
@@ -1325,10 +1304,9 @@ struct RailDisplayContent {
         let now = Date()
         self.scope = scope
         self.presentationStates = presentationStates
-        stages = scope.stages
-            .map { RailController.railDisplayStage($0, liveWindowIDs: liveWindowIDs, now: now) }
-            .filter { !$0.members.isEmpty }
-        emptyStageIDs = RailController.railEmptyStageIDs(in: scope, liveWindowIDs: liveWindowIDs, now: now)
+        let order = StagePresentationOrder(scope: scope, liveWindowIDs: liveWindowIDs, now: now)
+        stages = order.visibleStages
+        emptyStageIDs = order.emptyStageIDs
         var parts = ["desktop=\(scope.desktopID.rawValue)", "active=\(scope.activeStageID.rawValue)"]
         for stage in stages {
             let members = stage.members

@@ -1,0 +1,72 @@
+{
+  "browser": "Navigateur collaboratif T3",
+  "tabId": "tab_5_37bed20b-efa2-4e3a-859a-3295409b6500",
+  "checks": [
+    {
+      "step": 1,
+      "captionAndResultsMatch": true,
+      "imageVerified": true
+    },
+    {
+      "step": 2,
+      "captionAndResultsMatch": true,
+      "imageVerified": true
+    },
+    {
+      "step": 3,
+      "captionAndResultsMatch": true,
+      "imageVerified": true
+    },
+    {
+      "step": 4,
+      "captionAndResultsMatch": true,
+      "imageVerified": true
+    },
+    {
+      "step": 5,
+      "captionAndResultsMatch": true,
+      "imageVerified": true
+    },
+    {
+      "step": 6,
+      "captionAndResultsMatch": true,
+      "imageVerified": true
+    },
+    {
+      "step": 7,
+      "captionAndResultsMatch": true,
+      "imageVerified": true
+    },
+    {
+      "step": 8,
+      "captionAndResultsMatch": true,
+      "imageVerified": true
+    },
+    {
+      "step": 9,
+      "captionAndResultsMatch": true,
+      "imageVerified": true
+    },
+    {
+      "step": 10,
+      "captionAndResultsMatch": true,
+      "imageVerified": false
+    },
+    {
+      "step": 11,
+      "captionAndResultsMatch": true,
+      "imageVerified": false
+    }
+  ],
+  "manualPreviousNext": true,
+  "zoom": true,
+  "fullscreen": true,
+  "autoplay": {
+    "before": "1 / 11",
+    "after": "2 / 11",
+    "intervalMs": 2000
+  },
+  "pause": true,
+  "lastNextDisabled": true,
+  "allVerified": true
+}
