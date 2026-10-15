@@ -111,6 +111,7 @@ public final class LayoutMaintainer {
     /// Génération d'une commande appliquée sur un arbre, gardée par la passe interne suivante (T219).
     private var commandGeneration: UInt64?
     private var lastTreeWindowIDs: Set<UInt32> = []
+    private var unreadyPlacementWindows: Set<WindowID> = []
     // Mesure (A12, A20).
     private var pendingStability: PendingStability?
     private var lastPassEpisodeID: String?
@@ -408,6 +409,10 @@ public final class LayoutMaintainer {
             handleFullscreenScopeChanges(in: snapshot, changedWindowIDs: changedForChurn, fullscreenScopes: fullscreenScopes)
         }
 
+        let waitingPlacementScopes = unreadyCrossDisplayScopes(
+            in: snapshot, scopes: treeScopes.subtracting(tickExcludedScopes)
+        )
+        tickExcludedScopes.formUnion(waitingPlacementScopes)
         let liveTreeScopes = treeScopes.subtracting(tickExcludedScopes)
         lastTreeWindowIDs = Set(snapshot.windows.compactMap { entry in
             entry.scope.map(liveTreeScopes.contains) == true ? entry.window.id.rawValue : nil
@@ -450,7 +455,8 @@ public final class LayoutMaintainer {
         let writable = plan.entries.compactMap { command, priority -> ApplyCommand? in
             guard !defersFailedDrift(command.window, now: tickNow) else { return nil }
             guard let scope = scopesByID[command.window.id] else { return command }
-            if settlingScopes.contains(scope) || suspension.covers(scope) || waitingSettingsScopes.contains(scope) { return nil }
+            if settlingScopes.contains(scope) || suspension.covers(scope) || waitingSettingsScopes.contains(scope)
+                || waitingPlacementScopes.contains(scope) { return nil }
             if priority != .layout, treeDisplays.contains(scope.displayID),
                writesUsed(command.window.id.rawValue, generation: generation) >= LayoutTolerance.writeBudgetPerGeneration {
                 return nil
@@ -1050,6 +1056,44 @@ public final class LayoutMaintainer {
         let current = entry.window.frame.cgRect
         return abs(current.width - start.width) > LayoutTolerance.frameMatch
             || abs(current.height - start.height) > LayoutTolerance.frameMatch ? entry : nil
+    }
+
+    /// Une fenêtre CG peut précéder sa fenêtre AX. Ne pas réduire ses voisines sur l'écran
+    /// cible tant qu'elle n'est pas lisible. La passe de sécurité existante reprend l'attente.
+    /// O(n · d), d = écrans présents, plus une lecture AX par candidate sans écriture connue.
+    private func unreadyCrossDisplayScopes(in snapshot: DaemonSnapshot, scopes: Set<StageScope>) -> Set<StageScope> {
+        let displays = Dictionary(snapshot.displays.map { ($0.id, $0.frame.cgRect) }, uniquingKeysWith: { first, _ in first })
+        var waiting: Set<StageScope> = []
+        var unavailable: Set<WindowID> = []
+        for entry in snapshot.windows {
+            let id = entry.window.id
+            guard entry.window.isTileCandidate, entry.pin == nil,
+                  entry.window.furniture?.isNativeFullscreen != true,
+                  let scope = entry.scope, scopes.contains(scope), let display = displays[scope.displayID],
+                  !display.contains(entry.window.frame.center),
+                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
+                  displays.values.contains(where: { $0.contains(entry.window.frame.center) }),
+                  writtenFrames.entry(for: id.rawValue) == nil
+            else { continue }
+            if readFrame(entry.window) == nil {
+                waiting.insert(scope)
+                unavailable.insert(id)
+                if !unreadyPlacementWindows.contains(id) {
+                    events.append(RoadieEvent(type: "layout_window_waiting_for_ax", scope: scope, details: [
+                        "windowID": String(id.rawValue)
+                    ]))
+                }
+            } else if unreadyPlacementWindows.contains(id) {
+                // Aucun appel de placement AX enregistré : un ancien échec de résolution
+                // ne doit pas épuiser le budget avant la première écriture réelle.
+                writeCounts[id.rawValue] = nil
+                events.append(RoadieEvent(type: "layout_window_ax_ready", scope: scope, details: [
+                    "windowID": String(id.rawValue)
+                ]))
+            }
+        }
+        unreadyPlacementWindows = unavailable
+        return waiting
     }
 
     /// Disposition des scopes à arbre : l'arbre fait foi. Pour chaque fenêtre dont la frame
