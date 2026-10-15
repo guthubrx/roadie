@@ -65,5 +65,13 @@
         "operation": "insertDown"
       }
     }
-  ]
+  ],
+  "fullGestureRegression": {
+    "assertionFailuresWithoutFix": 27,
+    "passedWithFix": true,
+    "dropsPerCase": 2,
+    "maintenanceTicksAfterEachDrop": 3,
+    "cases": 2,
+    "proof": "drag-flow-verification.json"
+  }
 }

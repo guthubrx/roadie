@@ -1,7 +1,7 @@
 {
   "codeCommit": "1b1dd89c9c2a5211783e06a4ae8be7c7f435a779",
   "deliveryBase": "893c5fc6a7690ccc5737aee37e25f9600226621e",
-  "deliveryPatchSHA256": "9a69ce08eb42ada493c1df323d7ddb733744c8455e865ff4cf00b5792227006b",
+  "deliveryPatchSHA256": "3f437c5be2b6bf578600e64511ec534a3641d7d3ac910201290d074b8a1b1365",
   "uuid": "90AF0C93-3F33-3EA9-838C-1613EAB1DC33",
   "certificateLeaf": "78a75e8032f190a20072eb91cc2919aac344ef78",
   "pid": 34131,
@@ -230,6 +230,7 @@
     "Tests/RoadieDaemonTests/Spec031StageLabelsTests.swift": "95c85d6e370fd37b85a74502959481ec5edc09398ba1a41be091ea42c49e0594",
     "Tests/RoadieDaemonTests/Spec032RailGeometryTests.swift": "6d6d3fc68a44465562dbaf40339c554f4fafb59253962d5d1cc52d5faa1f466b",
     "Tests/RoadieDaemonTests/Spec033CaptionTests.swift": "3f38dc98beab407a41977c43c2acce46235dd32cd37d613304b4a08465355d8b",
+    "Tests/RoadieDaemonTests/Spec033DragFlowTests.swift": "e19cb4f6c82153f6b657e2ff9a5c399b26a92755e44f17af761db4ab6b0efb86",
     "Tests/RoadieDaemonTests/StageDisplayMoveTests.swift": "d300fd556049c4a7391cedc4862a6096a13c64df1766133e5e8934d6b0e28679",
     "Tests/RoadieDaemonTests/StateMigrationTests.swift": "444a42bff39e8f1f49caf837539c13be6dd934dea2ea1d26cb31e5ff2afdb2c4",
     "Tests/RoadieDaemonTests/StatePersistenceTests.swift": "7b06660c20de5db05faef1d8691dd0b71e62474ee7da461bc6a0ad040323c3f6",
@@ -270,11 +271,15 @@
     "Tests/RoadieTilerTests/SpatialBSPLayoutStrategyTests.swift": "2948093fd3d51e193badd93ce2038eb69fffc77a703d7b1b7ee12f64fe5ee765"
   },
   "isolatedTests": 1482,
-  "combinedTests": 1549,
+  "combinedTests": 1550,
   "testMode": "swift test --no-parallel",
   "captionFontSize": 14,
   "captionGap": 4,
   "followsPerspective": false,
   "slotHeight": 112,
-  "gap": 13
+  "gap": 13,
+  "combinedSuites": 168,
+  "isolatedAdditionalRegressionTests": 1,
+  "gestureRegressionCases": 2,
+  "productionSourcesUnchangedSinceInstall": true
 }

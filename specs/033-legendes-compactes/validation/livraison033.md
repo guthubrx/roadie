@@ -29,28 +29,38 @@ Captures locales, non versionnées :
 
 ## Dépôt Outlook
 
-Le test reproduit le retour au bas gauche en présence d'un ancien signal de fermeture.
-Il valide maintenant l'insertion sous Teams, le cadre de Teams réduit, T3 dans sa
-colonne entière et le maintien de cette disposition au cycle suivant. Il vérifie
-également qu'une fermeture ultérieure reste effective.
+Le test du geste complet reproduit le retour au bas gauche en présence d'un ancien
+signal de fermeture. Sans la confirmation du placement, il échoue sur 27 assertions,
+avec deux dépôts annoncés acceptés malgré le retour à l'ancienne disposition.
+
+Avec le correctif, les deux dépôts successifs passent, avec et sans ancien signal.
+Le test valide l'aperçu, Outlook sous Teams, le cadre de Teams réduit, T3 dans sa
+colonne entière, puis trois cycles de maintien après chaque dépôt. Les tests de
+commande vérifient également qu'une fermeture ultérieure reste effective.
 
 Le journal historique ne précise pas la cible de chaque aperçu ni l'identifiant de
 chaque notification AX détruite. Le diagnostic est une déduction soutenue par
-l'état concret et la reproduction. Aucun glisser physique n'a été rejoué : l'utilisateur
-a depuis changé le groupe d'Outlook. Un choix lui a été proposé ; sans réponse,
-son nouveau groupe est conservé.
+l'état concret et la reproduction. Le geste est rejoué par les contrôleurs réels
+dans un environnement de test isolé. Aucun glisser physique sur les applications
+de l'utilisateur n'est revendiqué. La disposition actuelle ne conditionne pas la
+validation de cette régression.
 
 ## Sources reproductibles
 
-1 482 tests isolés et 1 549 tests combinés, avec `swift test --no-parallel`.
+Suite isolée initiale : 1 482 tests. Nouveau test de geste isolé : deux cas réussis.
+Suite combinée complète : 1 550 tests dans 168 suites, avec `swift test --no-parallel`.
 Les tests IPC ne sont ni désactivés ni assouplis ; le mode concurrent sous Swift
 Testing provoque un délai dépassé pendant les balayages AppKit (voir implementation.md).
 
 Le patch delivery.patch est relatif à la base 893c5fc6, identifiant complet dans
 le manifeste. Il réunit les corrections déjà installées et la session 033.
-Les 262 empreintes Sources/Tests du manifeste ont été vérifiées en appliquant le
+Les 263 empreintes Sources/Tests du manifeste ont été vérifiées en appliquant le
 patch à un index Git isolé. Ne pas installer le seul main tant que le travail
 parallèle déjà utilisé n'y est pas intégré.
+
+Le complément ajoute uniquement un test. Toutes les sources de production restent
+identiques à celles de l'application installée. UUID, signature et quatre contrôles
+santé ont été revérifiés ; aucune réinstallation n'est nécessaire.
 
 Copie de compilation : /private/tmp/roadie031-livraison
 Sauvegarde de l'application, du CLI, de la configuration et de l'état précédents :

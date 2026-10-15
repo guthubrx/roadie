@@ -6,8 +6,10 @@
   la même géométrie. Conserver la visibilité temporaire existante.
 - Dimensionner le bloc aperçu + légende dans l'emplacement pour permettre une hauteur
   réduite sans collision. Les places vides gardent la même hauteur.
-- Reproduire le dépôt Outlook/T3/Teams par un test du chemin aperçu → commande → cycle
-  suivant. Identifier la première divergence entre arbre annoncé et arbre appliqué.
+- Reproduire le dépôt Outlook/T3/Teams par le contrôleur de geste complet : appui,
+  déplacement, aperçu, relâchement et maintien. Rejouer deux dépôts aux coordonnées
+  négatives de l'écran externe, avec trois cycles de maintien après chacun.
+  Identifier la première divergence entre arbre annoncé et arbre appliqué.
 - Appliquer la correction ciblée au propriétaire du défaut ; pas de nouveau moteur.
 - Réutiliser la copie de livraison combinée actuelle. Archiver le patch et ses empreintes.
 - Vérifier les suites, installer signé, régler les légendes, redémarrer et capturer les rails.

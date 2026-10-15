@@ -6,8 +6,8 @@ Spec: 033-legendes-compactes
 Titre: Légendes lisibles sous les aperçus et dépôt dans Teams
 Statut: Complete
 Priorité: P1
-Tâches: 5/5 (100%)
-Tests: 1549/1549 (100%)
+Tâches: 6/6 (100%)
+Tests: 1550/1550 (100%)
 
 Validation utilisateur le 2026-10-15 : légende sous les vignettes, numéro et nom,
 14 points, contraste renforcé, écart de 4 points réglable, perspective optionnelle.
@@ -26,7 +26,8 @@ Ajout explicite à la même session : regarder les deux déplacements Outlook re
 4. Conserver apparition et disparition temporaires, double Alt droit et double Alt gauche.
 5. Diagnostiquer les essais de 10 h 28 et reproduire le défaut avant correction.
    Le dépôt Outlook sous Teams doit produire la disposition annoncée et la garder
-   au cycle suivant, avec la fenêtre de gauche agrandie dans sa colonne.
+   après deux gestes successifs et trois cycles de maintien par geste, avec la
+   fenêtre de gauche agrandie dans sa colonne.
 6. Tester, installer une version qui conserve les corrections déjà installées,
    vérifier la signature, le redémarrage, la santé et les deux rails.
 

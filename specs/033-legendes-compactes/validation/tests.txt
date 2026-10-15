@@ -1,7 +1,24 @@
-Branche isolée
+isolatedInitialFull
+/private/tmp/roadie033-own-full.log
 􁁛  Test run with 1482 tests in 160 suites passed after 52.846 seconds.
 SHA256 : 9a2461f91ee1f2cb7357afd286ba921c45342c6bcf91ced8d00123cd5ec25970
 
-Version combinée
-􁁛  Test run with 1549 tests in 167 suites passed after 36.882 seconds.
-SHA256 : f24a9815616791d32b9557e589d88b2b04d6d8d65e7b0acf7405779109e4f5a9
+gestureWithoutFix
+/private/tmp/roadie033-drag-flow-before.log
+􀢄  Test run with 1 test in 1 suite failed after 0.132 seconds with 27 issues.
+SHA256 : 3ee581a100c86da8f91eec4a718fde1ae48aca5a8dcfa230fd88e1ab29330820
+
+gestureWithFix
+/private/tmp/roadie033-drag-flow.log
+􁁛  Test run with 1 test in 1 suite passed after 0.134 seconds.
+SHA256 : 45420217f5819bf0811091cf81f75cb7816eb96c796bb2e2a0fd8f1aa89483b1
+
+gestureOnIsolatedBranch
+/private/tmp/roadie033-own-drag-flow.log
+􁁛  Test run with 1 test in 1 suite passed after 0.128 seconds.
+SHA256 : ce8d81af37f532b5a2de2ef3dc5b77cd90e4e75fbcf4c5d2fa5c71f802a2fa8f
+
+combinedFull
+/private/tmp/roadie033-drag-flow-full.log
+􁁛  Test run with 1550 tests in 168 suites passed after 23.250 seconds.
+SHA256 : f54d8cd496bc3026aef64e616f974b029f83c10c46aef6f4436e98646843e4bd

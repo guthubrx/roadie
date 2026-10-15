@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-15",
+  "test": "Spec033DragFlowTests.twoBottomDropsOnExternalDisplayStayPlacedAcrossMaintenance",
+  "configuration": "Écran externe aux coordonnées négatives ; fenêtres et écritures isolées ; contrôleurs réels de geste et de maintien",
+  "cases": [
+    {
+      "staleDestroy": false,
+      "passed": true
+    },
+    {
+      "staleDestroy": true,
+      "passed": true
+    }
+  ],
+  "dropsPerCase": 2,
+  "maintenanceTicksAfterEachDrop": 3,
+  "withoutFix": {
+    "assertionFailures": 27,
+    "acceptedDrops": 2,
+    "outlookReturnedToBottomLeft": true,
+    "teamsStayedFullHeightOnRight": true
+  },
+  "withFix": {
+    "passed": true,
+    "outlookRemainedBelowTeams": true,
+    "teamsReducedToTopRight": true,
+    "t3FilledLeftColumn": true
+  },
+  "physicalGestureOnUserApplications": false,
+  "productionSourcesUnchangedSinceInstall": true,
+  "sourceAndTestHashesVerified": 263,
+  "parallelFilesVerifiedUnchanged": 46,
+  "logs": {
+    "isolatedInitialFull": {
+      "path": "/private/tmp/roadie033-own-full.log",
+      "sha256": "9a2461f91ee1f2cb7357afd286ba921c45342c6bcf91ced8d00123cd5ec25970",
+      "summary": "􁁛  Test run with 1482 tests in 160 suites passed after 52.846 seconds."
+    },
+    "gestureWithoutFix": {
+      "path": "/private/tmp/roadie033-drag-flow-before.log",
+      "sha256": "3ee581a100c86da8f91eec4a718fde1ae48aca5a8dcfa230fd88e1ab29330820",
+      "summary": "􀢄  Test run with 1 test in 1 suite failed after 0.132 seconds with 27 issues."
+    },
+    "gestureWithFix": {
+      "path": "/private/tmp/roadie033-drag-flow.log",
+      "sha256": "45420217f5819bf0811091cf81f75cb7816eb96c796bb2e2a0fd8f1aa89483b1",
+      "summary": "􁁛  Test run with 1 test in 1 suite passed after 0.134 seconds."
+    },
+    "gestureOnIsolatedBranch": {
+      "path": "/private/tmp/roadie033-own-drag-flow.log",
+      "sha256": "ce8d81af37f532b5a2de2ef3dc5b77cd90e4e75fbcf4c5d2fa5c71f802a2fa8f",
+      "summary": "􁁛  Test run with 1 test in 1 suite passed after 0.128 seconds."
+    },
+    "combinedFull": {
+      "path": "/private/tmp/roadie033-drag-flow-full.log",
+      "sha256": "f54d8cd496bc3026aef64e616f974b029f83c10c46aef6f4436e98646843e4bd",
+      "summary": "􁁛  Test run with 1550 tests in 168 suites passed after 23.250 seconds."
+    }
+  }
+}
