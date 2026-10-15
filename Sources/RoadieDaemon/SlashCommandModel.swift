@@ -76,6 +76,26 @@ public struct SlashCommandModel: Equatable, Sendable {
         inputEdited()
     }
 
+    /// Le champ natif peut remplacer une sélection ou éditer au milieu de la ligne. O(c + l).
+    public mutating func replaceInput(_ text: String) {
+        guard input != text else { return }
+        input = text
+        inputEdited()
+    }
+
+    public mutating func selectSuggestion(at index: Int) {
+        guard suggestions.indices.contains(index) else { return }
+        selected = index
+        completionCanAdvance = false
+    }
+
+    /// Accepter le choix explicite, sans avancer dans le cycle de Tab. O(c + l).
+    public mutating func acceptSelectedSuggestion() {
+        guard selected != nil else { return }
+        completionCanAdvance = false
+        complete()
+    }
+
     /// Effacer quand la saisie est vide retire le `/` initial : `isActive` devient faux.
     public mutating func deleteBackward() {
         message = nil

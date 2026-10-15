@@ -22,6 +22,14 @@ struct SearchBarLayout: Equatable {
         bar.contains(point) || panel?.contains(point) == true
     }
 
+    /// Le clic et le dessin utilisent la même tranche de propositions. O(s), s ≤ 8.
+    func suggestionIndex(at point: CGPoint, count: Int, selected: Int?) -> Int? {
+        let visible = Self.visibleSuggestions(count: count, selected: selected, rows: suggestionRows.count)
+        guard let row = suggestionRows.firstIndex(where: { $0.insetBy(dx: -6, dy: 0).contains(point) }) else { return nil }
+        let index = visible.lowerBound + row
+        return visible.contains(index) ? index : nil
+    }
+
     /// La largeur du contenu ne déplace plus la barre. Faute de place, les suggestions cèdent la
     /// place au message. Complexité : O(s + m), s ≤ 8 et m ≤ 12.
     static func make(
@@ -69,6 +77,8 @@ struct TargetSearchBar {
     var suggestions: [SlashSuggestion] = []
     var selectedSuggestion: Int? = nil
     var message: SlashMessage? = nil
+    /// Le champ AppKit affiche le texte à l'exécution ; les rendus hors écran le dessinent encore.
+    var usesNativeInput = false
 
     var inputText: String {
         if let commandInput { return "/\(commandInput)▏" }
@@ -115,6 +125,26 @@ struct SearchBarContentLayout: Equatable {
 /// Dessin AppKit de la barre Caps+F, réutilisé pour les rendus hors écran. O(s + m), au plus 20 lignes.
 @MainActor
 enum SearchBarRenderer {
+    static func inputFrame(_ state: TargetSearchBar, bar: CGRect, style: TargetOverlayStyle) -> CGRect {
+        let font = font(family: style.searchFontFamily, size: style.searchTextFontSize)
+        return contentLayout(counter: counter(state, font: font), isLoading: state.isLoading, bar: bar).input
+    }
+
+    private static func counter(_ state: TargetSearchBar, font: NSFont) -> NSAttributedString? {
+        state.counterText.map {
+            line($0, font: NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 2)),
+                 color: NSColor(calibratedWhite: 0.72, alpha: 1))
+        }
+    }
+
+    private static func contentLayout(counter: NSAttributedString?, isLoading: Bool, bar: CGRect) -> SearchBarContentLayout {
+        let size = counter.map { text in
+            let size = text.size()
+            return CGSize(width: size.width + (isLoading ? 10 : 0), height: size.height)
+        }
+        return SearchBarContentLayout.make(bar: bar, counterSize: size)
+    }
+
     static func draw(_ state: TargetSearchBar, in bounds: CGRect, style: TargetOverlayStyle) {
         // Résoudre les deux familles une fois par dessin, hors des boucles de suggestions.
         let inputFont = font(family: style.searchFontFamily, size: style.searchTextFontSize)
@@ -124,19 +154,12 @@ enum SearchBarRenderer {
         let layout = state.layout(in: bounds, style: style)
         guard layout.bar.width > 0, layout.bar.height > 0 else { return }
         drawSurface(layout.bar)
-        let counter = state.counterText.map {
-            line($0, font: NSFontManager.shared.convert(inputFont, toSize: max(8, style.searchTextFontSize - 2)),
-                 color: NSColor(calibratedWhite: 0.72, alpha: 1))
-        }
-        let counterSize = counter.map { text -> CGSize in
-            let size = text.size()
-            return CGSize(width: size.width + (state.isLoading ? 10 : 0), height: size.height)
-        }
-        let content = SearchBarContentLayout.make(bar: layout.bar, counterSize: counterSize)
+        let counter = counter(state, font: inputFont)
+        let content = contentLayout(counter: counter, isLoading: state.isLoading, bar: layout.bar)
         let placeholder = state.commandInput == nil && state.properties == nil && state.query.isEmpty
         let text = line(state.inputText, font: inputFont,
                         color: NSColor(calibratedWhite: placeholder ? 0.52 : 0.94, alpha: 1), truncation: .byTruncatingHead)
-        draw(text, in: content.input)
+        if !state.usesNativeInput { draw(text, in: content.input) }
         if let counter, let rect = content.counter {
             NSColor.white.withAlphaComponent(0.08).setFill()
             NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()

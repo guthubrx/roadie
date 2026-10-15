@@ -39,13 +39,18 @@ Sept mécanismes corrigés de 035 intégrés. 1587 tests dans 183 suites réussi
 PID 62842, signature stable, quatre contrôles santé OK. Dépôts natifs et plein écran
 35 s vérifiés sur l'écran interne. Stage 4 restaurée, tests temporaires retirés.
 Limites et preuves : specs/037-fiabilite-placement/validation/livraison037.md.
-Current SpecKit feature: `037-fiabilite-placement`.
+Session 038 implémentée et installée : champ de saisie AppKit, édition macOS,
+sélection des suggestions par Haut/Bas et clic, validation du choix par Retour.
+127 tests ciblés et 1597 tests / 185 suites réussis. Parcours natifs vérifiés.
+PID 96284, signature stable, quatre contrôles santé OK ; T3 conservé.
+Preuves et limites : specs/038-saisie-native/validation/livraison038.md.
+Current SpecKit feature: `038-saisie-native`.
 
 Contexte :
-- `specs/037-fiabilite-placement/spec.md`
-- `specs/037-fiabilite-placement/plan.md`
-- `specs/037-fiabilite-placement/implementation.md`
-- `specs/037-fiabilite-placement/tasks.md`
+- `specs/038-saisie-native/spec.md`
+- `specs/038-saisie-native/plan.md`
+- `specs/038-saisie-native/implementation.md`
+- `specs/038-saisie-native/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

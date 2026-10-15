@@ -293,17 +293,15 @@ extension KeyEventTapSession {
             if TargetSearchDismissal.isMouseDown(type), let search = session as? TargetSearchSession {
                 // installEventTap est isolé sur MainActor : cette source appartient à la boucle
                 // principale. Fermer ici, avant un timer de Retour, sans consommer le clic.
-                MainActor.assumeIsolated { search.handleMouseDown(at: event.location) }
+                let consumed = MainActor.assumeIsolated { search.handleMouseDown(at: event.location, type: type) }
+                if consumed { return nil }
                 return Unmanaged.passUnretained(event)
             }
             guard type == .keyDown else { return Unmanaged.passUnretained(event) }
-            // Mode recherche : décodage propre (ponctuation, Tab, modificateurs de Retour), selon l'état
-            // de la saisie (mode commande ou non) ; les modes lettres et grille gardent `KeyInput`.
-            if let search = session as? TargetSearchSession {
-                let input = SearchKeyInput(event: event, mode: search.keyMode.withLock { $0 })
-                guard input.swallowed else { return Unmanaged.passUnretained(event) }
-                Task { @MainActor in search.handleSearch(input) }
-                return nil
+            // La recherche possède un vrai champ key : AppKit reçoit texte, IME et raccourcis.
+            // Son panneau traite seulement navigation/validation ; lettres et grille gardent le tap.
+            if session is TargetSearchSession {
+                return Unmanaged.passUnretained(event)
             }
             let input = KeyInput(event: event)
             guard input.isRoadieHandled else {
@@ -866,9 +864,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var model: TargetSearchModel
     /// Mode commande : créé à la frappe du `/` dans une requête vide, nil en mode recherche.
     private var commandModel: SlashCommandModel?
-    /// État de la saisie pour le tap clavier, lu hors de l'acteur principal (T027) : mis à jour à
-    /// chaque affichage, remis en recherche à la fin de la session.
-    nonisolated let keyMode = OSAllocatedUnfairLock(initialState: SearchKeyInput.Mode.emptySearch)
+    private var inputPanel: SearchInputPanel?
     private var style: TargetOverlayStyle
     private let commands: SlashCommandRunner
     private let runDeferred: @MainActor ([String]) -> Void
@@ -937,7 +933,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         // Une fenêtre par écran : la barre reste sur l'écran du pointeur choisi à l'ouverture.
         windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: style) }
         windows.forEach { $0.orderFrontRegardless() }
+        let input = SearchInputPanel()
+        input.onChange = { [weak self] text in self?.replaceInput(text) }
+        input.onKey = { [weak self] key in self?.handleSearch(key) }
+        input.onCancel = { [weak self] in self?.cancel() }
+        inputPanel = input
         render()
+        input.beginEditing()
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
@@ -958,11 +960,43 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         finish(TargetActionResult(changed: false, message: "target_search_cancelled", error: "cancelled"))
     }
 
-    fileprivate func handleMouseDown(at point: CGPoint) {
-        guard !finished else { return }
+    fileprivate func handleMouseDown(at point: CGPoint, type: CGEventType) -> Bool {
+        guard !finished else { return false }
         let nsPoint = RoadieScreenCoordinate.axRectToNS(CGRect(origin: point, size: .zero)).origin
-        guard TargetSearchDismissal.cancelIfOutside(at: nsPoint, layout: searchBarLayout, model: &model) else { return }
-        cancel()
+        if let layout = searchBarLayout, layout.contains(nsPoint) {
+            lastInputAt = Date()
+            model.cancelPendingReturn()
+            if let panel = layout.panel, panel.contains(nsPoint) {
+                if type == .leftMouseDown, var command = commandModel,
+                   let index = layout.suggestionIndex(at: nsPoint, count: command.suggestions.count, selected: command.selected) {
+                    command.selectSuggestion(at: index)
+                    command.acceptSelectedSuggestion()
+                    commandModel = command
+                    render()
+                }
+                return true
+            }
+            return false // Le champ natif reçoit clic, sélection et menu contextuel.
+        }
+        if TargetSearchDismissal.cancelIfOutside(at: nsPoint, layout: searchBarLayout, model: &model) { cancel() }
+        return false
+    }
+
+    private func replaceInput(_ text: String) {
+        guard !finished else { return }
+        lastInputAt = Date()
+        model.cancelPendingReturn()
+        if text.hasPrefix("/") {
+            if commandModel == nil {
+                model.replaceQuery("/")
+                enterCommandMode()
+            }
+            commandModel?.replaceInput(String(text.dropFirst()))
+        } else {
+            commandModel = nil
+            model.replaceQuery(text)
+        }
+        render()
     }
 
     /// Exigé par `KeyEventTapSession` ; la recherche reçoit `SearchKeyInput` via `handleSearch`.
@@ -1069,9 +1103,6 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func render() {
-        // Chaque changement de saisie passe ici : le tap décode la touche suivante dans le bon mode.
-        let mode: SearchKeyInput.Mode = commandModel != nil ? .command : model.query.isEmpty ? .emptySearch : .search
-        keyMode.withLock { $0 = mode }
         if let command = commandModel {
             // Mode commande : la saisie, la liste et le message, sans aucune cible.
             show(badges: [], bar: TargetSearchBar(
@@ -1107,8 +1138,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func show(badges: [TargetOverlayBadge], bar: TargetSearchBar) {
+        var bar = bar
+        bar.usesNativeInput = true
         let barWindow = pointerScreen.flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
         searchBarLayout = barWindow.map { bar.layout(in: $0.frame, style: style) }
+        if let layout = searchBarLayout {
+            inputPanel?.update(text: commandModel.map { "/" + $0.input } ?? model.query,
+                frame: SearchBarRenderer.inputFrame(bar, bar: layout.bar, style: style),
+                font: SearchBarRenderer.font(family: style.searchFontFamily, size: style.searchTextFontSize))
+        }
         for window in windows {
             window.update(badges: badges, searchBar: window === barWindow ? bar : nil)
         }
@@ -1133,7 +1171,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         searchBarLayout = nil
         timer?.invalidate()
         timer = nil
-        keyMode.withLock { $0 = .search }
+        inputPanel?.endEditing()
+        inputPanel = nil
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
         }
@@ -1180,7 +1219,8 @@ enum CommandBoxKeyEffect: Equatable {
 extension SlashCommandModel {
     /// Aiguillage pur d'une touche en mode commande : la recherche n'en voit aucune. Maj + lettre écrit
     /// une majuscule, Tab complète, Maj-Tab et Ctrl-P remontent la liste, Ctrl-N la descend, les
-    /// flèches parcourent l'historique, Retour exécute sans attendre de second Retour.
+    /// flèches parcourent les suggestions (historique à vide/sans proposition), Retour accepte le
+    /// choix explicite puis exécute sans attendre de second Retour.
     /// Complexité : celle de l'opération appelée, O(c + l) au plus.
     mutating func handle(_ input: SearchKeyInput) -> CommandBoxKeyEffect {
         switch input.kind {
@@ -1193,17 +1233,24 @@ extension SlashCommandModel {
             if !isActive { return .leave }
         case .next:
             switch input.navigationSource {
-            case .arrow: historyDown()
+            case .arrow:
+                if self.input.isEmpty || historyCursor != nil || suggestions.isEmpty { historyDown() }
+                else { nextSuggestion() }
             case .control: nextSuggestion()
             case .tab, nil: complete()
             }
         case .previous:
             switch input.navigationSource {
-            case .arrow: historyUp()
+            case .arrow:
+                if self.input.isEmpty || historyCursor != nil || suggestions.isEmpty { historyUp() }
+                else { previousSuggestion() }
             case .tab, .control, nil: previousSuggestion()
             }
         case .confirm(_, _, let isRepeat):
-            if !isRepeat { return .submit(submit()) }
+            if !isRepeat {
+                acceptSelectedSuggestion()
+                return .submit(submit())
+            }
         case .escape:
             return .close
         case .ignored:

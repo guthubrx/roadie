@@ -102,6 +102,14 @@ public struct TargetSearchModel: Equatable, Sendable {
         refresh()
     }
 
+    /// Édition native de la requête complète, sans transformer les majuscules en labels. O(n + l).
+    public mutating func replaceQuery(_ text: String) {
+        guard query != text else { return }
+        properties = nil
+        query = text
+        refresh()
+    }
+
     public mutating func next() {
         guard let index = highlightedIndex else { return }
         highlightedIndex = (index + 1) % matches.count
