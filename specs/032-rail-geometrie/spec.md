@@ -4,9 +4,9 @@
 
 Spec: 032-rail-geometrie
 Titre: Alignement, hauteur des emplacements et dépôt précis
-Statut: In Progress
+Statut: Complete
 Priorité: P1
-Tâches: 3/4 (75%)
+Tâches: 4/4 (100%)
 Tests: 1544/1544 (100%)
 
 Validation utilisateur : « corrige », le 2026-10-15, après diagnostic et comparaison.

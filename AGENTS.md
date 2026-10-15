@@ -14,13 +14,16 @@ Session 030 implémentée et installée : récupération des fenêtres sur écra
 Session 031 implémentée et installée : numéro et nom temporaires ; Alt gauche grille, Alt droite libellés.
 1 540 tests combinés réussis, captures avant/après et expiration vérifiées, santé OK.
 Les repères des stages vides suivent aussi la visibilité temporaire des noms.
-Current SpecKit feature: `031-libelles-temporaires`.
+Session 032 implémentée et installée : avant des vignettes aligné, hauteur des emplacements réglable,
+repère de dépôt et géométrie stable pendant le glisser. Hauteur installée 120 points, gap 13 conservé.
+1477 tests isolés et 1544 tests combinés réussis. Deux rails vérifiés, dix scopes conservés.
+Current SpecKit feature: `032-rail-geometrie`.
 
 Contexte :
-- `specs/031-libelles-temporaires/spec.md`
-- `specs/031-libelles-temporaires/plan.md`
+- `specs/032-rail-geometrie/spec.md`
+- `specs/032-rail-geometrie/plan.md`
 - `specs/031-libelles-temporaires/implementation.md`
-- `specs/031-libelles-temporaires/tasks.md`
+- `specs/032-rail-geometrie/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

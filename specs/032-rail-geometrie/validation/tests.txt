@@ -1,0 +1,7 @@
+Branche isolée
+􁁛  Test run with 1477 tests in 159 suites passed after 8.767 seconds.
+SHA256 du log : a2f37b52212794ca3661270fd64462302b52c5985abccb2fafe9ee59edcbb857
+
+Copie combinée
+􁁛  Test run with 1544 tests in 166 suites passed after 7.130 seconds.
+SHA256 du log : 37eac151bb184b4940a9080d16be3dba81dade060bf631f9590edd258ebefc9f
