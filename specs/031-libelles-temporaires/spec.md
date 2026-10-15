@@ -4,10 +4,10 @@
 
 Spec: 031-libelles-temporaires
 Titre: Numéro et nom temporaires des stages
-Statut: In Progress
+Statut: Implemented
 Priorité: P1
-Tâches: 2/4 (50%)
-Tests: 0/0 (0%)
+Tâches: 4/4 (100%)
+Tests: 1539/1539 (100%)
 
 Validation utilisateur : 2026-10-15, avec séparation des deux touches Alt.
 

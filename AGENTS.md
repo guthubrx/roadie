@@ -11,13 +11,15 @@ Artefacts : specs/029-navrail-fermeture/. Reçu :
 specs/029-navrail-fermeture/validation/livraison029.md.
 Session 030 implémentée et installée : récupération des fenêtres sur écran absent au démarrage.
 1471 tests isolés et 1527 tests combinés réussis. Redémarrage vérifié, quatre contrôles santé OK.
-Current SpecKit feature: `030-recuperation-demarrage`.
+Session 031 implémentée et installée : numéro et nom temporaires ; Alt gauche grille, Alt droite libellés.
+1 539 tests combinés réussis, captures avant/après et expiration vérifiées, santé OK.
+Current SpecKit feature: `031-libelles-temporaires`.
 
 Contexte :
-- `specs/030-recuperation-demarrage/spec.md`
-- `specs/030-recuperation-demarrage/plan.md`
-- `specs/030-recuperation-demarrage/implementation.md`
-- `specs/030-recuperation-demarrage/tasks.md`
+- `specs/031-libelles-temporaires/spec.md`
+- `specs/031-libelles-temporaires/plan.md`
+- `specs/031-libelles-temporaires/implementation.md`
+- `specs/031-libelles-temporaires/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

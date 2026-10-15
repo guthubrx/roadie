@@ -1,0 +1,129 @@
+[
+  {
+    "timestamp": "2026-10-15T05:40:44Z",
+    "tsMs": 1792042844976,
+    "details": {
+      "thumbnailCaptureBudget": "8",
+      "displays": "1",
+      "stages": "3",
+      "reason": "start",
+      "durationMs": "49.0",
+      "snapshotMs": "0.1"
+    },
+    "type": "rail_refresh"
+  },
+  {
+    "timestamp": "2026-10-15T05:40:44Z",
+    "tsMs": 1792042844983,
+    "details": {},
+    "type": "target_mode.runtime_started"
+  },
+  {
+    "timestamp": "2026-10-15T05:40:44Z",
+    "tsMs": 1792042844996,
+    "details": {
+      "hotkey": "command+control+alt+f",
+      "state": "registered"
+    },
+    "type": "target_mode.search_hotkey"
+  },
+  {
+    "type": "layout_apply",
+    "timestamp": "2026-10-15T05:40:45Z",
+    "episodeId": "ep_1792042844997",
+    "details": {
+      "layoutVersion": "2",
+      "axWrites": "6",
+      "priorityWindowIDs": "",
+      "durationMs": "44.0",
+      "windowWrites": "75834:1,79862:1",
+      "pass": "1",
+      "clamped": "0",
+      "cause": "command:startup",
+      "scans": "1",
+      "applied": "2",
+      "commands": "2",
+      "failed": "0"
+    },
+    "tsMs": 1792042845186
+  },
+  {
+    "type": "layout_stable",
+    "timestamp": "2026-10-15T05:40:45Z",
+    "tsMs": 1792042845337,
+    "details": {
+      "layoutVersion": "2",
+      "stableAfterMs": "162",
+      "windows": "2"
+    },
+    "episodeId": "ep_1792042844997"
+  },
+  {
+    "details": {
+      "thumbnailCaptureBudget": "8",
+      "reason": "recording_status",
+      "durationMs": "5.1",
+      "stages": "3",
+      "displays": "1",
+      "snapshotMs": "0.3"
+    },
+    "tsMs": 1792042855496,
+    "type": "rail_refresh",
+    "timestamp": "2026-10-15T05:40:55Z"
+  },
+  {
+    "details": {
+      "display": "current",
+      "scope": "display",
+      "path": "",
+      "rootDisplay": "1",
+      "resolvedScope": "display",
+      "duration": "15.00"
+    },
+    "timestamp": "2026-10-15T05:41:11Z",
+    "tsMs": 1792042871577,
+    "type": "target_mode.grid_started"
+  },
+  {
+    "timestamp": "2026-10-15T05:41:11Z",
+    "tsMs": 1792042871607,
+    "details": {
+      "app": "T3 Code (Alpha)",
+      "windowID": "75411"
+    },
+    "type": "target_mode.grid_focus_followed"
+  },
+  {
+    "type": "target_mode.finished",
+    "timestamp": "2026-10-15T05:41:12Z",
+    "tsMs": 1792042872565,
+    "details": {
+      "error": "cancelled",
+      "changed": "false",
+      "message": "grid_interactive_cancelled",
+      "command": "grid.interactive"
+    }
+  },
+  {
+    "type": "target_mode.grid_started",
+    "details": {
+      "path": "",
+      "display": "current",
+      "scope": "display",
+      "rootDisplay": "1",
+      "resolvedScope": "display",
+      "duration": "15.00"
+    },
+    "tsMs": 1792042897411,
+    "timestamp": "2026-10-15T05:41:37Z"
+  },
+  {
+    "type": "target_mode.grid_focus_followed",
+    "details": {
+      "windowID": "75411",
+      "app": "T3 Code (Alpha)"
+    },
+    "timestamp": "2026-10-15T05:41:37Z",
+    "tsMs": 1792042897423
+  }
+]

@@ -1,0 +1,177 @@
+--- a/Sources/RoadieDaemon/StageCardView.swift
++++ b/Sources/RoadieDaemon/StageCardView.swift
+@@ -85,7 +85,6 @@
+     private let presentationStates: [WindowID: WindowPresentationState]
+     private let thumbnails: [WindowID: NSImage]
+     private let visualMembers: [PersistentStageMember]
+-    private let position: Int?
+     private let contentInset: CGFloat = 4
+ 
+     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+@@ -104,16 +103,15 @@
+     ) {
+         self.stage = stage
+         self.stageID = stage.id
+-        self.displayLabel = displayLabel
++        self.displayLabel = position.map { "\($0) — \(displayLabel)" } ?? displayLabel
+         self.isActive = isActive
+         self.accent = accent
+         self.config = config
+         self.presentationStates = presentationStates
+         self.thumbnails = thumbnails
+-        self.position = position
+         self.visualMembers = Self.focusFirstMembers(stage)
+         let width = Self.width(for: config)
+-        let height = Self.height(for: config, memberCount: stage.members.count, hasPosition: position != nil)
++        let height = Self.height(for: config, memberCount: stage.members.count)
+         super.init(frame: CGRect(x: 0, y: 0, width: width, height: height))
+         wantsLayer = true
+         translatesAutoresizingMaskIntoConstraints = false
+@@ -134,17 +132,16 @@
+         config.mode == .icons ? max(1, config.railWidth - 12) : 224
+     }
+ 
+-    static func height(for config: RailVisualConfig, memberCount: Int = 6, hasPosition: Bool = false) -> CGFloat {
++    static func height(for config: RailVisualConfig, memberCount: Int = 6) -> CGFloat {
+         // Les deux marges augmentent avec le texte ; le dessin et les zones de clic restent communs.
+         let extra = max(0, config.stageLabel.lineHeight - 16)
+-        let positionHeight = hasPosition ? config.stageLabel.lineHeight + 12 : 0
+         if config.mode == .icons {
+             let size = iconSize(for: config)
+             let columns = iconColumns(availableWidth: width(for: config) - 24, config: config)
+             let rows = max(1, ceil(CGFloat(min(7, memberCount)) / CGFloat(columns)))
+-            return 78 + extra * 2 + (rows - 1) * (size + 8) + positionHeight
+-        }
+-        return max(150, config.previewHeight + 66) + extra * 2 + positionHeight
++            return 78 + extra * 2 + (rows - 1) * (size + 8)
++        }
++        return max(150, config.previewHeight + 66) + extra * 2
+     }
+ 
+     private static func iconSize(for config: RailVisualConfig) -> CGFloat {
+@@ -193,11 +190,9 @@
+     }
+ 
+     private func drawCard() {
+-        let rect = previewContentRect
++        let rect = bounds.insetBy(dx: contentInset, dy: 12)
+         let preview = previewArea(in: rect, visibleCount: visiblePreviewCount)
+         let previewBounds = visualPreviewBounds(in: rect, preview: preview)
+-        NSGraphicsContext.saveGraphicsState()
+-        if position != nil { NSBezierPath(rect: rect).addClip() }
+         if config.stageLabel.enabled, config.stageLabel.zOrder == .below {
+             drawStageLabel(in: rect, previewBounds: previewBounds)
+         }
+@@ -205,35 +200,6 @@
+         if config.stageLabel.enabled, config.stageLabel.zOrder == .above {
+             drawStageLabel(in: rect, previewBounds: previewBounds)
+         }
+-        NSGraphicsContext.restoreGraphicsState()
+-        drawPosition()
+-    }
+-
+-    /// La bande numérotée a sa propre hauteur : elle ne masque ni vignette ni zone de dépôt.
+-    var previewContentRect: CGRect {
+-        var rect = bounds.insetBy(dx: contentInset, dy: 12)
+-        if position != nil { rect.size.height = max(0, rect.height - config.stageLabel.lineHeight - 12) }
+-        return rect
+-    }
+-
+-    var positionBadgeRect: CGRect? {
+-        guard let position else { return nil }
+-        let size = (String(position) as NSString).size(withAttributes: [.font: config.stageLabel.font])
+-        let available = max(1, min(bounds.width - 24, config.railWidth - 28))
+-        return CGRect(x: 8, y: previewContentRect.maxY + 6,
+-                      width: min(available, size.width + 12), height: config.stageLabel.lineHeight + 6)
+-    }
+-
+-    private func drawPosition() {
+-        guard let position, let rect = positionBadgeRect else { return }
+-        rounded(rect, radius: 6, color: NSColor(calibratedWhite: 0.12, alpha: 0.96))
+-        let text = String(position) as NSString
+-        let measured = text.size(withAttributes: [.font: config.stageLabel.font])
+-        let scale = min(1, max(1, rect.width - 12) / max(1, measured.width))
+-        let font = NSFontManager.shared.convert(config.stageLabel.font, toSize: config.stageLabel.font.pointSize * scale)
+-        let size = text.size(withAttributes: [.font: font])
+-        text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
+-                  withAttributes: [.font: font, .foregroundColor: NSColor.white])
+     }
+ 
+     private func drawStagePreview(in rect: CGRect, preview: CGRect) {
+@@ -392,7 +358,7 @@
+ 
+     /// Tous les cadres dessinés, compteur compris ; les cibles de clic ne comprennent que les membres.
+     func iconDisplayFrames() -> [CGRect] {
+-        let rect = previewContentRect.insetBy(dx: 8, dy: 18)
++        let rect = bounds.insetBy(dx: contentInset, dy: 12).insetBy(dx: 8, dy: 18)
+         return (0..<min(7, visualMembers.count)).map { iconFrame(in: rect, index: $0) }
+     }
+ 
+@@ -696,7 +662,7 @@
+     func windowInsertionIndex(at point: CGPoint) -> Int {
+         let count = stage.members.count
+         guard count > 0 else { return 0 }
+-        let cardRect = previewContentRect
++        let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
+         let preview = config.mode == .icons
+             ? cardRect.insetBy(dx: 8, dy: 18)
+             : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
+@@ -709,7 +675,6 @@
+     /// `localPoint` est le point dans le repère de l'aperçu avant transformation : en parallax, le clic est
+     /// ramené par l'inverse de la transformée du dessin, pour viser la forme réellement visible (REL-040).
+     private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect, localPoint: CGPoint)? {
+-        guard position == nil || previewContentRect.contains(point) else { return nil }
+         for item in hitPreviewItems() {
+             let localPoint = config.mode == .parallax
+                 ? point.applying(Self.parallaxTransform(for: item.rect, rotation: config.parallaxRotation).inverted())
+@@ -729,7 +694,7 @@
+     /// Aperçus dans l'ordre de test du clic, du dessus vers le dessous : en stacked/parallax, dessinés
+     /// de l'arrière vers l'avant, l'index 0 est visuellement au-dessus. Mêmes cadres que le dessin (MIN-001).
+     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
+-        let cardRect = previewContentRect
++        let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
+         let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
+         switch config.mode {
+         case .stacked, .parallax:
+--- a/Sources/RoadieDaemon/RailPanel.swift
++++ b/Sources/RoadieDaemon/RailPanel.swift
+@@ -350,7 +350,7 @@
+     private func stageLeadingSpacer(stages: [PersistentStage], config: RailVisualConfig) -> NSView? {
+         let count = stages.count
+         guard count > 0 else { return nil }
+-        let stageHeight = stages.reduce(CGFloat.zero) { $0 + StageCardView.height(for: config, memberCount: $1.members.count, hasPosition: true) }
++        let stageHeight = stages.reduce(CGFloat.zero) { $0 + StageCardView.height(for: config, memberCount: $1.members.count) }
+             + CGFloat(max(0, count - 1)) * config.layoutSpacing
+         let centeredTop = max(20, floor((frame.height - stageHeight) / 2))
+         let currentTop: CGFloat
+--- a/Tests/RoadieDaemonTests/Spec029RailTests.swift
++++ b/Tests/RoadieDaemonTests/Spec029RailTests.swift
+@@ -203,28 +203,4 @@
+         #expect(faded.contains { $0.kind == .desktopStage && $0.id == "1:2" && $0.label == "3 · Perso" })
+     }
+ 
+-    @Test(arguments: [8.0, 16.0, 48.0], [RailRenderMode.stacked, .mosaic, .parallax, .icons])
+-    func permanentNumberHasItsOwnUnclippedArea(size: Double, mode: RailRenderMode) throws {
+-        var config = RailVisualConfig()
+-        config.mode = mode
+-        config.railWidth = 90
+-        config.stageLabel.fontSize = CGFloat(size)
+-        config.stageLabel.fontFamily = "Helvetica Neue"
+-        config.stageLabel.opacity = 0.20
+-        config.stageLabel.visibilitySeconds = 5
+-        config.stageLabel.visibleUntil = 0
+-        let stage = PersistentStage(id: StageID(rawValue: "9"), name: "Perso", members: [member(1, now: now)])
+-        let card = StageCardView(stage: stage, displayLabel: "Perso", isActive: true, accent: .systemBlue,
+-                                 config: config, presentationStates: [:], thumbnails: [:], position: 12)
+-        let number = try #require(card.positionBadgeRect)
+-        #expect(config.stageLabel.opacityMultiplier() == 0)
+-        #expect(card.bounds.contains(number))
+-        #expect(number.maxX <= config.railWidth - 12)
+-        #expect(!number.intersects(card.previewContentRect))
+-        let center = CGPoint(x: number.midX, y: number.midY)
+-        #expect(card.windowID(at: center) == nil)
+-        if case .switchStage(let stageID) = card.action(at: center) { #expect(stageID == stage.id) }
+-        else { Issue.record("Le repère doit activer sa stage, sans glisser une fenêtre") }
+-        #expect(StageCardView.height(for: config, memberCount: 1, hasPosition: true) > StageCardView.height(for: config, memberCount: 1))
+-    }
+ }

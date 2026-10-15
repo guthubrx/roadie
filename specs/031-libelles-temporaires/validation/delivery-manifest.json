@@ -1,0 +1,100 @@
+{
+  "codeCommit": "893c5fc6a7690ccc5737aee37e25f9600226621e",
+  "combinedTests": 1539,
+  "suites": 165,
+  "targetedTests": 20,
+  "oldBadgeReproductionIssues": 20,
+  "otherSession": {
+    "base": "6a901de1dd0256dd50abd3e65607a7bce34a7860",
+    "head": "00fc6740186286806b7efb41ffcbdb196513df0e",
+    "patchSha256": "ac881e4e5fb9a5b25c26f6126d9eb43c3c448b1a784f1ee495efcd49a95299a8",
+    "tracked": [
+      "Sources/RoadieDaemon/DisplayParkingService.swift",
+      "Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+      "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "Sources/RoadieDaemon/RailController.swift",
+      "Sources/RoadieDaemon/RailPanel.swift",
+      "Sources/RoadieDaemon/StageCardView.swift",
+      "Sources/RoadieDaemon/StageCommands.swift",
+      "Sources/RoadieDaemon/StageStore.swift",
+      "Sources/RoadieDaemon/WindowContextActions.swift",
+      "Sources/roadied/main.swift",
+      "Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift",
+      "Tests/RoadieDaemonTests/ResizeHandlePickerTests.swift",
+      "Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift"
+    ],
+    "untracked": [
+      "Sources/RoadieDaemon/StagePresentationOrder.swift",
+      "Tests/RoadieDaemonTests/Spec029DisplayParkingTests.swift",
+      "Tests/RoadieDaemonTests/Spec029PickerOcclusionTests.swift",
+      "Tests/RoadieDaemonTests/Spec029RailTests.swift",
+      "Tests/RoadieDaemonTests/Spec029ResizeTests.swift",
+      "Tests/RoadieDaemonTests/Spec029RestorationRetryTests.swift",
+      "Tests/RoadieDaemonTests/Spec029StageMoveIdentityTests.swift"
+    ],
+    "files": {
+      "Sources/RoadieDaemon/DisplayParkingService.swift": "30330d6683db0a625030c770e40862a68fdcb21479effd6adac3dd2948bd9358",
+      "Sources/RoadieDaemon/FocusFollowsMouseController.swift": "083ea704c1eaf6f853807825b39159d9c0f43951c3866738ef3c9d633ecd7a04",
+      "Sources/RoadieDaemon/LayoutMaintainer.swift": "00a154a7cc50d5ebb441d16c532b9da6fa2a1f0b515d12131c1d99edd18da05e",
+      "Sources/RoadieDaemon/RailController.swift": "421396abdbf00da3d32b58bf930a95484866c60848841eb55d954158d407904e",
+      "Sources/RoadieDaemon/RailPanel.swift": "3102e6c2f562559d234f2167ee75eb538104f9d6dac16676b6059a0c984f66d5",
+      "Sources/RoadieDaemon/StageCardView.swift": "ef9a56e68cd2effc7846ffc55ad82eeb72c26b3ad357037cb7a5f1a19172919c",
+      "Sources/RoadieDaemon/StageCommands.swift": "dae368c139c9dcb4e99d2d5970b17ab2781a1333b47245e9c48d9666aa7203db",
+      "Sources/RoadieDaemon/StageStore.swift": "c7a8f4d82d3affb91246e942485ad42644a75c40990ee01bbe4d0c6707872d2e",
+      "Sources/RoadieDaemon/WindowContextActions.swift": "cd163d1b8822e17e1a623caaa12160d93d09693d232c24be8c49645150992c94",
+      "Sources/roadied/main.swift": "2274b1039e8bbc1c74eefb8b6d792136eb2b970e45496b86bc26484d3cda5e5e",
+      "Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift": "d22542303556b6c353ac4f952114055bfb9a50ee1df79346af17974486f7547f",
+      "Tests/RoadieDaemonTests/ResizeHandlePickerTests.swift": "66c03df1d372b8e59ca9248f6b960aa99d06b083f3740bebd175ca57828a943a",
+      "Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift": "9c67e2679cf20a40d170e7ffa85915315a40eab56f048aceeee7d4bb227635cc",
+      "Sources/RoadieDaemon/StagePresentationOrder.swift": "331d76e5514c6f9a3f4f691cc98f8980af78ab971c94960cf1760dcde19c8151",
+      "Tests/RoadieDaemonTests/Spec029DisplayParkingTests.swift": "6f6424b7fbc3ad260088a1507e131ce3bd9771f80fa61855319ecface77b4afa",
+      "Tests/RoadieDaemonTests/Spec029PickerOcclusionTests.swift": "6c7b51fe81d17e91b936d2a0a34a6750654b98bb28e02491032926756e915e31",
+      "Tests/RoadieDaemonTests/Spec029RailTests.swift": "a864d44c2c5be1a09da8b698bba3189bd1fceb1f3877efabd5e6d0e8df22085d",
+      "Tests/RoadieDaemonTests/Spec029ResizeTests.swift": "88a42b465002a787b30fd9c128bc073bb8b53401b95f749f2c1f97d6d1e096da",
+      "Tests/RoadieDaemonTests/Spec029RestorationRetryTests.swift": "730c242ee71cf46f0f937d498b34e472f10f8115a7d62c5cc64c5b6377958d9d",
+      "Tests/RoadieDaemonTests/Spec029StageMoveIdentityTests.swift": "a8d23e856052e2ab6ed72e2d2c8931f8e0dc01ee585c22deaec6acf60e53b54a"
+    }
+  },
+  "deliveredSources": {
+    "Sources/roadied/main.swift": "2274b1039e8bbc1c74eefb8b6d792136eb2b970e45496b86bc26484d3cda5e5e",
+    "Sources/RoadieDaemon/StagePresentationOrder.swift": "331d76e5514c6f9a3f4f691cc98f8980af78ab971c94960cf1760dcde19c8151",
+    "Sources/RoadieDaemon/DisplayParkingService.swift": "30330d6683db0a625030c770e40862a68fdcb21479effd6adac3dd2948bd9358",
+    "Sources/RoadieDaemon/DaemonHealth.swift": "722281499b3ca4386cd39f92399f70befaae4bad42f207e18e4bdff240d5012c",
+    "Sources/RoadieDaemon/StageStore.swift": "023ae68d16a7587ea4284d2885e849b1fc9331edb3413e7d7d70398541f6be98",
+    "Sources/RoadieDaemon/LayoutMaintainer.swift": "06004e6bbddaa0687b7c826a0680dad1125778848b31a33efe05795f75b10a6c",
+    "Sources/RoadieDaemon/RailPanel.swift": "de4524a6a87ed11b5e997ea1d976dc2a4cbff0fd85de6610290a5fbbb1d4061a",
+    "Sources/RoadieDaemon/WindowContextActions.swift": "cd163d1b8822e17e1a623caaa12160d93d09693d232c24be8c49645150992c94",
+    "Sources/RoadieDaemon/StageCommands.swift": "dae368c139c9dcb4e99d2d5970b17ab2781a1333b47245e9c48d9666aa7203db",
+    "Sources/RoadieDaemon/FocusFollowsMouseController.swift": "083ea704c1eaf6f853807825b39159d9c0f43951c3866738ef3c9d633ecd7a04",
+    "Sources/RoadieDaemon/RailController.swift": "54b22f8d492fe32a61af6ff5f2aeef9b9dc0344e86c97246d8c40058466842b5",
+    "Sources/RoadieDaemon/StageCardView.swift": "83cb1a0231e079b7c5272b8dd54d6fde90b0f8b74e5939a918a06d76fec04b67"
+  },
+  "installedMachOUUID": "9D135F82-6211-33BD-9F12-A2D9767C47F5",
+  "signature": "78a75e8032f190a20072eb91cc2919aac344ef78",
+  "pidBefore": 60128,
+  "pidAfter": 2722,
+  "retainedScopedWindows": 5,
+  "railStages": 3,
+  "combinedPatchSha256": "ac29d6368c3c49f2c23de43f67c55202f128e72fb9331bde03f3286f650fdd05",
+  "deliveryWorktree": "/private/tmp/roadie031-livraison",
+  "backup": "/private/tmp/roadie031-before-install",
+  "visualChecks": {
+    "rest": "no numbers",
+    "reveal": [
+      "1 — Work",
+      "2 — Com",
+      "3 — Perso"
+    ],
+    "expiry": "no numbers or names",
+    "grid": "nine cells on display"
+  },
+  "screenshots": [
+    "/private/tmp/roadie031-screen-after-rest.png",
+    "/private/tmp/roadie031-screen-expired.png",
+    "/private/tmp/roadie031-screen-grid-active.png",
+    "/private/tmp/roadie031-screen-labels.png",
+    "/private/tmp/roadie031-screen-before.png",
+    "/private/tmp/roadie031-screen-grid.png"
+  ],
+  "physicalKeyDoubleTapTested": false
+}

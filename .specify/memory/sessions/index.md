@@ -14,3 +14,5 @@
 | 028 | Clôturée, installée et validée | `session-028-search-dismissal` (fusionnée, supprimée) | `specs/028-search-dismissal` | Libellés natifs recherchables, lectures AX inutiles réduites, fermeture au clic extérieur ; 1 458 tests Swift, 26 tests des scripts, revue et essai utilisateur confirmés |
 
 | 030 | Implémentée, installée et redémarrée | `session-030-recuperation-demarrage` | `specs/030-recuperation-demarrage` | Récupération sur passe stable sans notification écran ; 1471 tests isolés, 1527 combinés, santé OK |
+
+| 031 | Implémentée, installée et redémarrée | `session-031-libelles-temporaires` | `specs/031-libelles-temporaires` | Numéro et nom temporaires ; double Alt gauche grille, droite libellés ; 1 539 tests, captures et santé OK |

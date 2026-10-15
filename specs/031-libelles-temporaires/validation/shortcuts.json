@@ -1,0 +1,24 @@
+{
+  "leftAlt": {
+    "owner": "BetterTouchTool",
+    "uuid": "59DBB2A3-52ED-44D8-802A-DC42CADABA11",
+    "keycode": 58,
+    "action": "/Users/moi/.local/bin/roadie grid interactive --scope display --duration 15 >> /tmp/roadie-grid-mode.log 2>&1",
+    "enabled": true
+  },
+  "rightAlt": {
+    "owner": "Karabiner",
+    "profile": "Default profile",
+    "action": "/opt/homebrew/bin/roadie rail labels show",
+    "keycode": "right_option",
+    "doubleTapMilliseconds": 350
+  },
+  "disabledConflict": {
+    "owner": "BetterTouchTool",
+    "uuid": "54EAC784-B5C4-4C1C-AE82-7EE7BEE0B816",
+    "enabled": 0,
+    "enabled2": 0
+  },
+  "backup": "/Users/moi/Library/Application Support/BetterTouchTool/backup-roadie031-20261015-073307",
+  "physicalKeyboardTest": false
+}
