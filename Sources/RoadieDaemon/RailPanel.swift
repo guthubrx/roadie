@@ -305,7 +305,8 @@ final class RailPanel: NSPanel {
                 accent: config.accent(for: stage.id),
                 config: config,
                 presentationStates: content.presentationStates,
-                thumbnails: thumbnails.images(for: stage.members)
+                thumbnails: thumbnails.images(for: stage.members),
+                position: index + 1
             )
             stack.addArrangedSubview(card)
         }

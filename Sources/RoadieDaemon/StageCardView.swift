@@ -98,11 +98,12 @@ final class StageCardView: NSControl {
         accent: NSColor,
         config: RailVisualConfig,
         presentationStates: [WindowID: WindowPresentationState],
-        thumbnails: [WindowID: NSImage]
+        thumbnails: [WindowID: NSImage],
+        position: Int? = nil
     ) {
         self.stage = stage
         self.stageID = stage.id
-        self.displayLabel = displayLabel
+        self.displayLabel = position.map { "\($0) — \(displayLabel)" } ?? displayLabel
         self.isActive = isActive
         self.accent = accent
         self.config = config
