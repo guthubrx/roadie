@@ -73,8 +73,10 @@ extension SettingsCatalog {
                   "Place de la liste des stages dans la hauteur du rail.", .choice(positions), .string("center")),
             entry(.rail, t, "alignment", "Alignement des cartes",
                   "Alignement horizontal des cartes de stage.", .choice(alignments), .string("center")),
-            entry(.rail, t, "gap", "Espace entre les cartes (points)",
-                  "Espace entre deux cartes de stage.", .double(0...80), .double(13)),
+            entry(.rail, t, "slot_height", "Hauteur d’un emplacement (points)",
+                  "Hauteur commune des stages vides et occupés. Minimum 80 points ; 0 conserve la hauteur automatique.", .double(0...320), .double(0)),
+            entry(.rail, t, "gap", "Espace entre les emplacements (points)",
+                  "Espace ajouté entre deux emplacements. La hauteur des emplacements règle aussi la distance entre les vignettes.", .double(0...80), .double(13)),
         ]
     }()
 

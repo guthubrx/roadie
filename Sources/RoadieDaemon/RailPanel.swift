@@ -386,23 +386,36 @@ final class RailPanel: NSPanel {
     }
 
     func stageReorderPosition(at screenPoint: CGPoint, sourceStageID: StageID) -> Int? {
+        stageReorderTarget(at: screenPoint, sourceStageID: sourceStageID)?.position
+    }
+
+    func showStageReorderPreview(at screenPoint: CGPoint, sourceStageID: StageID) {
+        stack.insertionY = stageReorderTarget(at: screenPoint, sourceStageID: sourceStageID)?.lineY
+    }
+
+    func hideStageReorderPreview() {
+        stack.insertionY = nil
+    }
+
+    /// Le repère et le dépôt utilisent le même calcul, y compris les emplacements nommés vides.
+    private func stageReorderTarget(at screenPoint: CGPoint, sourceStageID: StageID) -> (position: Int, lineY: CGFloat)? {
         guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
         let windowPoint = convertPoint(fromScreen: screenPoint)
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        var cardsByID: [StageID: StageCardView] = [:]
-        for view in stack.arrangedSubviews {
-            guard let card = view as? StageCardView else { continue }
-            cardsByID[card.stageID] = card
+        let point = stack.convert(windowPoint, from: nil)
+        let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
+            .filter { $0.stageID != sourceStageID }
+        guard let last = cards.last else { return nil }
+        let targets = cards.map { card in
+            let preview = card.previewDisplayFrames().first ?? card.bounds
+            return (stageID: card.stageID, midY: stack.convert(preview, from: card).midY)
         }
-        let targetCards = visibleStageIDs
-            .filter { $0 != sourceStageID }
-            .compactMap { cardsByID[$0] }
-        return Self.persistentReorderPosition(
-            pointY: contentPoint.y,
-            targets: targetCards.map { (stageID: $0.stageID, midY: contentView.convert($0.frame, from: stack).midY) },
-            orderedStageIDs: orderedStageIDs,
-            sourceStageID: sourceStageID
-        )
+        guard let position = Self.persistentReorderPosition(
+            pointY: point.y, targets: targets, orderedStageIDs: orderedStageIDs, sourceStageID: sourceStageID
+        ) else { return nil }
+        let before = targets.firstIndex { point.y >= $0.midY }
+        let lineY = before.map { cards[$0].frame.maxY + stack.spacing / 2 }
+            ?? (last.frame.minY - stack.spacing / 2)
+        return (position, min(max(2, lineY), contentView.bounds.height - 2))
     }
 
     /// Rang (base 1) attendu par `PersistentStageScope.reorderStage`, calculé dans l'ordre complet des stages
@@ -535,6 +548,9 @@ final class RailPanel: NSPanel {
 
 @MainActor
 final class RailStackView: NSStackView {
+    var insertionY: CGFloat? {
+        didSet { needsDisplay = true }
+    }
     var railBackgroundColor: NSColor = .clear {
         didSet { needsDisplay = true }
     }
@@ -544,9 +560,14 @@ final class RailStackView: NSStackView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        guard railBackgroundOpacity > 0 else { return }
-        railBackgroundColor.withAlphaComponent(railBackgroundOpacity).setFill()
-        bounds.fill()
+        if railBackgroundOpacity > 0 {
+            railBackgroundColor.withAlphaComponent(railBackgroundOpacity).setFill()
+            bounds.fill()
+        }
+        if let insertionY {
+            NSColor.controlAccentColor.setFill()
+            CGRect(x: 6, y: insertionY - 1, width: max(1, bounds.width - 24), height: 2).fill()
+        }
     }
 }
 

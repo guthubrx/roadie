@@ -139,8 +139,9 @@ final class StageCardView: NSControl {
             let size = iconSize(for: config)
             let columns = iconColumns(availableWidth: width(for: config) - 24, config: config)
             let rows = max(1, ceil(CGFloat(min(7, memberCount)) / CGFloat(columns)))
-            return 78 + extra * 2 + (rows - 1) * (size + 8)
+            return max(config.slotHeight, 78 + extra * 2 + (rows - 1) * (size + 8))
         }
+        if config.slotHeight > 0 { return max(80, config.slotHeight) }
         return max(150, config.previewHeight + 66) + extra * 2
     }
 
@@ -191,7 +192,7 @@ final class StageCardView: NSControl {
 
     private func drawCard() {
         let rect = bounds.insetBy(dx: contentInset, dy: 12)
-        let preview = previewArea(in: rect, visibleCount: visiblePreviewCount)
+        let preview = previewArea(in: rect)
         let previewBounds = visualPreviewBounds(in: rect, preview: preview)
         if config.stageLabel.enabled, config.stageLabel.zOrder == .below {
             drawStageLabel(in: rect, previewBounds: previewBounds)
@@ -232,7 +233,7 @@ final class StageCardView: NSControl {
         let maxWidth = max(64, rect.maxX - left - 8)
         let labelRect = CGRect(
             x: left,
-            y: baseY + labelConfig.offsetY,
+            y: min(max(0, baseY + labelConfig.offsetY), max(0, bounds.height - lineHeight)),
             width: maxWidth,
             height: lineHeight
         )
@@ -329,10 +330,6 @@ final class StageCardView: NSControl {
         rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(opacity))
     }
 
-    private var visiblePreviewCount: Int {
-        min(visualMembers.count, 5)
-    }
-
     private func mosaicPreviewFrames(in rect: CGRect) -> [CGRect] {
         let count = min(visualMembers.count, 6)
         guard count > 0 else { return [] }
@@ -378,18 +375,34 @@ final class StageCardView: NSControl {
         )
     }
 
-    private func previewArea(in rect: CGRect, visibleCount: Int) -> CGRect {
-        let width = min(config.previewWidth, rect.width - config.leadingPadding - config.trailingPadding)
-        let height = min(config.previewHeight, rect.height - 60)
+    /// Même réserve pour cinq fenêtres : la première vignette reste sur la même colonne.
+    /// La réserve se réduit si nécessaire pour garder l'éventail dans la largeur du rail.
+    private var previewAvailableWidth: CGFloat {
+        max(1, min(bounds.width - 8, config.railWidth - 20) - config.leadingPadding - config.trailingPadding)
+    }
+
+    private var parallaxXScale: CGFloat {
+        Self.parallaxTransform(for: .zero, rotation: config.parallaxRotation).a
+    }
+
+    private func horizontalStep(width: CGFloat) -> CGFloat {
+        let scale = config.mode == .parallax ? parallaxXScale : 1
+        let shrink = config.mode == .parallax ? config.parallaxScale : config.stackedScale
+        let requested = config.mode == .parallax ? config.parallaxOffsetX : config.stackedOffsetX * 0.18
+        return min(requested, max(0, (previewAvailableWidth - width * scale) / 4 + width * shrink * scale / 2))
+    }
+
+    private func previewArea(in rect: CGRect) -> CGRect {
+        let scale = config.mode == .parallax ? parallaxXScale : 1
+        let width = min(config.previewWidth, previewAvailableWidth / scale)
+        let verticalReserve = config.slotHeight > 0 ? 2 * config.verticalPadding : 60
+        let height = max(1, min(config.previewHeight, rect.height - verticalReserve))
         let leftCompensation: CGFloat
         switch config.mode {
-        case .parallax:
-            let deepestOffset = CGFloat(max(visibleCount - 1, 0))
-            let deepestScale = max(0, 1 - deepestOffset * config.parallaxScale)
-            let scaledInset = width * (1 - deepestScale) / 2
-            leftCompensation = max(0, deepestOffset * config.parallaxOffsetX - scaledInset)
-        case .stacked:
-            leftCompensation = CGFloat(max(visibleCount - 1, 0)) * config.stackedOffsetX * 0.18
+        case .parallax, .stacked:
+            let shrink = config.mode == .parallax ? config.parallaxScale : config.stackedScale
+            leftCompensation = 4 * max(0, horizontalStep(width: width) - width * shrink * scale / 2)
+                - width * (1 - scale) / 2
         case .mosaic, .icons:
             leftCompensation = 0
         }
@@ -399,6 +412,15 @@ final class StageCardView: NSControl {
             width: width,
             height: height
         )
+    }
+
+    /// Cadres réellement dessinés, aussi utilisés par le repère de dépôt et les vérifications de géométrie.
+    func previewDisplayFrames() -> [CGRect] {
+        hitPreviewItems().map { item in
+            config.mode == .parallax
+                ? item.rect.applying(Self.parallaxTransform(for: item.rect, rotation: config.parallaxRotation))
+                : item.rect
+        }
     }
 
     private func previewRects(in rect: CGRect, maxCount: Int) -> [CGRect] {
@@ -415,13 +437,13 @@ final class StageCardView: NSControl {
             case .stacked:
                 let offset = CGFloat(index)
                 let scale = 1 - offset * config.stackedScale
-                let dx = -offset * config.stackedOffsetX * 0.18
+                let dx = -offset * horizontalStep(width: preview.width)
                 let dy = offset * config.stackedOffsetY * 0.10
                 return (index, preview.scaled(by: scale).offsetBy(dx: dx, dy: dy))
             case .parallax:
                 let offset = CGFloat(index)
                 let scale = 1 - offset * config.parallaxScale
-                return (index, preview.scaled(by: scale).offsetBy(dx: -offset * config.parallaxOffsetX, dy: offset * config.parallaxOffsetY))
+                return (index, preview.scaled(by: scale).offsetBy(dx: -offset * horizontalStep(width: preview.width), dy: offset * config.parallaxOffsetY))
             case .mosaic, .icons:
                 return (index, preview)
             }
@@ -668,7 +690,7 @@ final class StageCardView: NSControl {
         let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
         let preview = config.mode == .icons
             ? cardRect.insetBy(dx: 8, dy: 18)
-            : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
+            : previewArea(in: cardRect)
         let bounds = visualPreviewBounds(in: cardRect, preview: preview)
         let clampedY = min(max(point.y, bounds.minY), bounds.maxY)
         let unitFromTop = 1 - ((clampedY - bounds.minY) / max(1, bounds.height))
@@ -698,7 +720,7 @@ final class StageCardView: NSControl {
     /// de l'arrière vers l'avant, l'index 0 est visuellement au-dessus. Mêmes cadres que le dessin (MIN-001).
     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
         let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
-        let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
+        let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect)
         switch config.mode {
         case .stacked, .parallax:
             return previewItems(in: rect, maxCount: 5)

@@ -760,8 +760,9 @@ public struct TargetHintService {
 
     private static func railStageHeight(_ settings: RailSettings) -> CGFloat {
         if settings.renderer == "icons-only" || settings.renderer == "icons" {
-            return 78
+            return max(78, CGFloat(settings.stages.slotHeight))
         }
+        if settings.stages.slotHeight > 0 { return max(80, CGFloat(settings.stages.slotHeight)) }
         let previewHeight = (settings.renderer == "parallax-45" || settings.renderer == "parallax")
             ? settings.parallax.height
             : settings.preview.height

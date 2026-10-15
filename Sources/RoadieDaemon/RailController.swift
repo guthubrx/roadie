@@ -220,11 +220,12 @@ public final class RailController {
         // sur un panneau, c'est que celui-ci laissait passer le clic (passthrough). Le rail ne doit pas
         // agir en plus de la fenetre qui a recu le clic.
         if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
+            let screenPoint = NSEvent.mouseLocation
             DispatchQueue.main.async {
                 if Self.isRightMouseEvent(event.type) {
-                    _ = self?.handleRightMouse(event.type, at: NSEvent.mouseLocation, fromGlobalMonitor: true)
+                    _ = self?.handleRightMouse(event.type, at: screenPoint, fromGlobalMonitor: true)
                 } else {
-                    self?.handleMouse(event.type, at: NSEvent.mouseLocation, fromGlobalMonitor: true)
+                    self?.handleMouse(event.type, at: screenPoint, fromGlobalMonitor: true)
                 }
             }
         }) {
@@ -277,6 +278,7 @@ public final class RailController {
         }
         if rightStale {
             pendingStageReorder = nil
+            panels.values.forEach { $0.hideStageReorderPreview() }
         }
         dragGhost?.hide()
         dragReleasedSince = nil
@@ -285,6 +287,7 @@ public final class RailController {
     private func cancelRailDrags() {
         pendingDrag = nil
         pendingStageReorder = nil
+        panels.values.forEach { $0.hideStageReorderPreview() }
         dragGhost?.hide()
         dropPreview.endDrag()
     }
@@ -411,16 +414,22 @@ public final class RailController {
                 }
                 reorder.didDrag = true
                 pendingStageReorder = reorder
+                panels[reorder.displayID]?.showStageReorderPreview(at: screenPoint, sourceStageID: reorder.stageID)
             }
             return true
 
         case .rightMouseUp:
             guard let reorder = pendingStageReorder else { return false }
             pendingStageReorder = nil
+            panels.values.forEach { $0.hideStageReorderPreview() }
             dragGhost?.hide()
             guard let panel = panels[reorder.displayID] else { return true }
             if reorder.didDrag {
                 if let position = panel.stageReorderPosition(at: screenPoint, sourceStageID: reorder.stageID) {
+                    events.append(RoadieEvent(type: "rail_stage_drop", details: [
+                        "stage_id": reorder.stageID.rawValue, "display_id": reorder.displayID.rawValue,
+                        "x": String(Double(screenPoint.x)), "y": String(Double(screenPoint.y)), "position": String(position),
+                    ]))
                     perform(.moveStage(reorder.stageID, position), displayID: reorder.displayID)
                     rebuildPanels()
                 }
@@ -859,6 +868,8 @@ public final class RailController {
     /// stages, membres, etats de presentation, ecrans masques, configuration, vignettes.
     // Complexite : O(d * (s + n)) - d = ecrans, s = stages, n = fenetres du snapshot.
     private func rebuildPanels(reason: String = "direct", requestedAt: Date? = nil, railSignature: String? = nil) {
+        // Les cartes restent fixes entre l'appui et le dépôt ; le cycle suivant applique les nouveautés.
+        guard pendingStageReorder == nil else { return }
         let startedAt = Date()
         let latencyMs = requestedAt.map { startedAt.timeIntervalSince($0) * 1000 }
         let configPath = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()

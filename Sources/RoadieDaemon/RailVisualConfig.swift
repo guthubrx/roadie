@@ -48,6 +48,7 @@ struct RailVisualConfig {
     var parallaxDarken: CGFloat = 0.15
     var headerPosition: RailHeaderPosition = .top
     var stagesPosition: RailStagesPosition = .center
+    var slotHeight: CGFloat = 0
     var layoutSpacing: CGFloat = 13
     var layoutTopPadding: CGFloat = 26
     var layoutBottomPadding: CGFloat = 16
@@ -108,6 +109,7 @@ struct RailVisualConfig {
             parallaxDarken: CGFloat(parallax.darkenPerLayer),
             headerPosition: RailHeaderPosition(rawValue: settings.layout.headerPosition) ?? .top,
             stagesPosition: RailStagesPosition(rawValue: settings.stages.position) ?? RailStagesPosition(rawValue: settings.layout.stagesPosition) ?? .center,
+            slotHeight: CGFloat(settings.stages.slotHeight),
             layoutSpacing: CGFloat(settings.stages.gap > 0 ? settings.stages.gap : settings.layout.spacing),
             layoutTopPadding: CGFloat(settings.layout.topPadding),
             layoutBottomPadding: CGFloat(settings.layout.bottomPadding),

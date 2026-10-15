@@ -101,10 +101,11 @@ struct Audit022R4LotT8Tests {
 
     // MARK: - REL-040
 
-    private static func card(mode: RailRenderMode, rotation: CGFloat = 35) -> StageCardView {
+    private static func card(mode: RailRenderMode, rotation: CGFloat = 35, railWidth: CGFloat = 150) -> StageCardView {
         var config = RailVisualConfig()
         config.mode = mode
         config.parallaxRotation = rotation
+        config.railWidth = railWidth
         let stage = PersistentStage(id: id("1"), members: [member(1), member(2)])
         let card = StageCardView(
             stage: stage,
@@ -132,22 +133,31 @@ struct Audit022R4LotT8Tests {
         #expect(abs(clamped.b - sin(75 * CGFloat.pi / 180) * 0.12) < 0.0001)
     }
 
-    @Test func rel040LeClicParallaxViseLaVignetteDessinee() {
-        let card = Self.card(mode: .parallax)
-        // (35, 90) est dans le rectangle brut du premier aperçu mais hors de sa forme dessinée ;
-        // seule la seconde vignette est visible à cet endroit.
-        #expect(card.windowID(at: CGPoint(x: 35, y: 90)) == WindowID(rawValue: 2))
-        // Le centre du premier aperçu reste à la première vignette, dessinée au-dessus.
-        #expect(card.windowID(at: CGPoint(x: 110.6, y: 85)) == WindowID(rawValue: 1))
+    @Test func rel040LeClicParallaxViseLaVignetteDessinee() throws {
+        let card = Self.card(mode: .parallax, railWidth: 300)
+        let front = try #require(card.previewDisplayFrames().first)
+        // Dans le rectangle brut de devant, mais à gauche de sa forme comprimée : l'arrière gagne.
+        let point = CGPoint(x: front.minX - 10, y: front.midY + 5)
+        #expect(card.windowID(at: point) == WindowID(rawValue: 2))
+        #expect(card.windowID(at: CGPoint(x: front.midX, y: front.midY)) == WindowID(rawValue: 1))
     }
 
     @Test func rel040LePointDePriseUtiliseLePointLocalDeLaVignette() throws {
-        let card = Self.card(mode: .parallax)
-        let payload = try #require(card.dragPayload(at: CGPoint(x: 35, y: 90)))
+        let card = Self.card(mode: .parallax, railWidth: 300)
+        let frames = card.previewDisplayFrames()
+        let front = try #require(frames.first)
+        let point = CGPoint(x: front.minX - 10, y: front.midY + 5)
+        let payload = try #require(card.dragPayload(at: point))
         #expect(payload.windowID == WindowID(rawValue: 2))
-        // Second aperçu brut (12, 63.44, 147.2, 79.12) ; point local (23.82881, 94.25166).
-        #expect(abs(payload.grabUnit.x - (23.82881 - 12) / 147.2) < 0.001)
-        #expect(abs(payload.grabUnit.y - (94.25166 - 63.44) / 79.12) < 0.001)
+        // Reconstituer le rectangle arrière à partir de sa forme dessinée, puis inverser la projection.
+        let drawn = frames[1]
+        let projection = StageCardView.parallaxTransform(for: .zero, rotation: 35)
+        let width = drawn.width / projection.a
+        let height = drawn.height - width * abs(projection.b)
+        let raw = CGRect(x: drawn.midX - width / 2, y: drawn.midY - height / 2, width: width, height: height)
+        let local = point.applying(StageCardView.parallaxTransform(for: raw, rotation: 35).inverted())
+        #expect(abs(payload.grabUnit.x - (local.x - raw.minX) / raw.width) < 0.001)
+        #expect(abs(payload.grabUnit.y - (local.y - raw.minY) / raw.height) < 0.001)
     }
 
     @Test func rel040SansRotationLeClicParallaxResteSurLesRectanglesBruts() {

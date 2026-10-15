@@ -97,6 +97,7 @@ public struct RailSettings: Equatable, Sendable {
         public var position: String
         public var alignment: String
         public var gap: Double
+        public var slotHeight: Double = 0
     }
 
     private struct LegacyHeader: Equatable {
@@ -237,7 +238,8 @@ public struct RailSettings: Equatable, Sendable {
             stages: Stages(
                 position: normalizedChoice(stages["position"], allowed: ["top", "center", "bottom"], default: normalizedChoice(layout["stages_position"], allowed: ["top", "center", "bottom"], default: "center")),
                 alignment: normalizedChoice(stages["alignment"], allowed: ["left", "center", "right"], default: "center"),
-                gap: number(stages["gap"], default: 13, min: 0, max: 80)
+                gap: number(stages["gap"], default: 13, min: 0, max: 80),
+                slotHeight: number(stages["slot_height"], default: 0, min: 0, max: 320)
             ),
             stageAccents: stageAccents(from: raw)
         )
@@ -320,6 +322,7 @@ public struct RailSettings: Equatable, Sendable {
             "stages.position=\(stages.position)",
             "stages.alignment=\(stages.alignment)",
             "stages.gap=\(stages.gap)",
+            "stages.slot_height=\(stages.slotHeight)",
         ]
     }
 
