@@ -230,6 +230,7 @@ public final class LayoutMaintainer {
         // La précision des paramètres n'est jamais conservée dans les autres appels du service.
         defer { service.exactLayoutScopes = [] }
         let startedAt = Date()
+        let observationStartedAt = now()
         var scans = 1
         var snapshot = service.producerSnapshot(cycle: intervalSeconds)
         globalSuspensionUntil = nil
@@ -343,7 +344,7 @@ public final class LayoutMaintainer {
         // dans ce processus, le dépôt consomme la session avant cette passe (un glisser encore en
         // cours arrête la passe plus haut sans la consommer) ; d'un autre processus, il laisse sa
         // preuve dans le fichier partagé du glisser, postérieure au début de la session.
-        var gesture = layoutGesture(in: &snapshot, excluding: settlingScopes.union(waitingSettingsScopes), now: tickNow)
+        var gesture = layoutGesture(in: &snapshot, excluding: settlingScopes.union(waitingSettingsScopes), now: tickNow, observationStartedAt: observationStartedAt)
         observedFrames = scopedFrames(in: snapshot)
         if let raw = gesture?.windowID,
            let scope = snapshot.windows.first(where: { $0.window.id.rawValue == raw })?.scope,
@@ -1151,7 +1152,7 @@ public final class LayoutMaintainer {
     /// Capture une fois, puis observe sans prolonger le plafond du relâchement. O(w), mémoire O(1).
     /// Seul un mouvement réel autorise l'attente d'une frame tardive ; les fixtures immédiates
     /// et les déplacements déjà visibles suivent le chemin existant, sans nouvelle inférence AX.
-    private func layoutGesture(in snapshot: inout DaemonSnapshot, excluding blocked: Set<StageScope>, now: Date) -> GestureSession? {
+    private func layoutGesture(in snapshot: inout DaemonSnapshot, excluding blocked: Set<StageScope>, now: Date, observationStartedAt: Date) -> GestureSession? {
         if let session = takeGesture() {
             pendingGesture = nil
             if let raw = session.windowID, session.startFrame != nil,
@@ -1165,7 +1166,9 @@ public final class LayoutMaintainer {
         let dropped = dragActivity.lastDrop(now: now).map {
             $0.windowID == pending.windowID && $0.at >= pending.session.startedAt
         } ?? false
-        guard !dropped, now < pending.expiresAt, validPendingGesture(pending, in: snapshot),
+        // Une observation commencée à temps reste recevable si AX met plusieurs secondes
+        // à répondre. Le délai avant cette observation reste borné depuis le relâchement.
+        guard !dropped, observationStartedAt < pending.expiresAt, validPendingGesture(pending, in: snapshot),
               !tickFullscreen.contains(where: { $0.entry.scope == pending.scope }),
               let index = snapshot.windows.firstIndex(where: { $0.window.id == pending.windowID }),
               let start = pending.session.startFrame
@@ -1176,13 +1179,14 @@ public final class LayoutMaintainer {
         // Un simple clic ne doit créer ni délai ni échéance d'observation.
         if !pending.session.didDrag && !changed { pendingGesture = nil; return nil }
         if blocked.contains(pending.scope) {
+            guard now < pending.expiresAt else { pendingGesture = nil; return nil }
             pending.lastObservationAt = nil
             pending.pollAt = min(now.addingTimeInterval(0.05), pending.expiresAt)
             pendingGesture = pending
             return nil
         }
         if let previous = pending.lastObservationAt {
-            pending.observationRemaining -= max(0, now.timeIntervalSince(previous))
+            pending.observationRemaining -= max(0, observationStartedAt.timeIntervalSince(previous))
         }
         guard pending.observationRemaining > 0.001 else { pendingGesture = nil; return nil }
         pending.lastObservationAt = now

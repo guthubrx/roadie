@@ -173,16 +173,17 @@ public final class TitlebarContextMenuController {
         debug("start enabled=\(config.enabled) height=\(config.height) leading=\(config.leadingExclusion) trailing=\(config.trailingExclusion)")
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown], handler: { [weak self] event in
             guard let self else { return event }
-            return self.handleRightMouseDown(at: NSEvent.mouseLocation, source: "local") ? nil : event
+            return self.handleRightMouseDown(at: RoadieScreenCoordinate.mouseEventPoint(event), source: "local") ? nil : event
         }) {
             monitors.append(local)
             debug("local-monitor=installed")
         } else {
             debug("local-monitor=failed")
         }
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.rightMouseDown], handler: { [weak self] _ in
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.rightMouseDown], handler: { [weak self] event in
+            let point = RoadieScreenCoordinate.mouseEventPoint(event)
             DispatchQueue.main.async {
-                _ = self?.handleRightMouseDown(at: NSEvent.mouseLocation, source: "global")
+                _ = self?.handleRightMouseDown(at: point, source: "global")
             }
         }) {
             monitors.append(global)

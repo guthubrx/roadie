@@ -4504,6 +4504,28 @@ struct SnapshotStabilizationTests {
         #expect(second.windows.first { $0.window.id == unknown.id }?.window.isTileCandidate == false)
     }
 
+    @Test(arguments: [false, true])
+    func slowSnapshotIsReusableAfterPublication(producer: Bool) {
+        let provider = SnapshotCallCountingProvider(display: display, windows: [powerWindow(1, x: 0)])
+        let clock = StabilizationClock()
+        provider.onWindows = { clock.now += 2 }
+        let service = SnapshotService(provider: provider, frameWriter: RecordingWriter(),
+            config: RoadieConfig(), stageStore: StageStore(path: tempPath("slow-snapshot-stages")),
+            events: EventLog(path: tempPath("slow-snapshot-events")), persistStateChanges: false,
+            clock: { clock.now })
+        if producer { _ = service.producerSnapshot(cycle: 2) }
+        else { _ = service.snapshot() }
+        clock.now += 0.1
+        _ = service.sharedSnapshot()
+        #expect(provider.windowsCalls == 1)
+        clock.now += producer ? 0.51 : 0.06
+        _ = service.sharedSnapshot()
+        #expect(provider.windowsCalls == 2)
+        service.invalidateSharedSnapshot()
+        _ = service.sharedSnapshot()
+        #expect(provider.windowsCalls == 3)
+    }
+
     @Test
     func sharedSnapshotReusesRecentSnapshotUntilExpiredOrInvalidated() {
         let provider = SnapshotCallCountingProvider(display: display, windows: [powerWindow(1, x: 0)])

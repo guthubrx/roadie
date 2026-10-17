@@ -3,6 +3,27 @@ import Testing
 @testable import RoadieAX
 
 @Suite struct Spec037AttachedWindowsTests {
+    @Test func knownVisibleWindowsDoNotReadAttachedControls() {
+        let root = AXUIElementCreateApplication(1001)
+        var childReads = 0
+        let entries = AXApplicationWindows.attachedWindowEntries(roots: [(1, root)], children: { _ in
+            childReads += 1; return []
+        }, identifier: { _ in nil }, isSheet: { _ in false }, requiredWindowIDs: [1])
+        #expect(entries.isEmpty)
+        #expect(childReads == 0)
+    }
+
+    @Test func missingVisibleXPCWindowStillResolvesThroughItsSheet() {
+        let root = AXUIElementCreateApplication(1001)
+        let sheet = AXUIElementCreateApplication(1002)
+        let content = AXUIElementCreateApplication(1003)
+        let entries = AXApplicationWindows.attachedWindowEntries(roots: [(1, root)], children: {
+            CFEqual($0, root) ? [sheet] : (CFEqual($0, sheet) ? [content] : [])
+        }, identifier: { CFEqual($0, sheet) ? 2 : 3 }, isSheet: { CFEqual($0, sheet) }, requiredWindowIDs: [1, 3])
+        #expect(entries.compactMap(\.id) == [2, 3])
+        #expect(entries.last.map { CFEqual($0.element, sheet) } == true)
+    }
+
     @Test func xpcContentKeepsItsSheetIdentityWithoutAdoptingNormalControls() {
         let root = AXUIElementCreateApplication(1001)
         let control = AXUIElementCreateApplication(1002)

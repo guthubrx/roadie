@@ -118,6 +118,14 @@ struct CLICommandRouterTests {
     }
 
     @Test
+    func daemonHealthUsesDaemonPermissionsWithoutRoutingLifecycleActions() {
+        #expect(CLICommandRouter.isDaemonRouted(["daemon", "health", "--json"]))
+        #expect(!CLICommandRouter.isDaemonRouted(["daemon", "health", "--help"]))
+        #expect(!CLICommandRouter.isDaemonRouted(["daemon", "restart"]))
+        #expect(!CLICommandRouter.isDaemonRouted(["daemon", "heal"]))
+    }
+
+    @Test
     func daemonRoutingIsAnExplicitList() {
         #expect(CLICommandRouter.isDaemonRouted(["focus", "left"]))
         #expect(CLICommandRouter.isDaemonRouted(["stage", "switch", "2"]))

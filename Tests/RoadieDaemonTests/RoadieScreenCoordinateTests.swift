@@ -1,9 +1,22 @@
+import AppKit
 import CoreGraphics
 import Testing
 @testable import RoadieDaemon
 
 @Suite
 struct RoadieScreenCoordinateTests {
+    @Test(arguments: [CGEventType.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown])
+    @MainActor func delayedMouseEventKeepsItsOwnPosition(type: CGEventType) throws {
+        // Ne poste aucun événement et ne déplace pas la souris réelle.
+        for point in [CGPoint(x: 17, y: 23), CGPoint(x: 4535, y: -745)] {
+            let cg = try #require(CGEvent(mouseEventSource: nil, mouseType: type,
+                mouseCursorPosition: point, mouseButton: type == .rightMouseDown ? .right : .left))
+            let event = try #require(NSEvent(cgEvent: cg))
+            let captured = RoadieScreenCoordinate.mouseEventPoint(event)
+            #expect(RoadieScreenCoordinate.nsPointToAX(captured) == point)
+        }
+    }
+
     @Test
     func convertsPrimaryScreenPointBetweenNSAndAXCoordinates() {
         let frames = [CGRect(x: 0, y: 0, width: 900, height: 600)]

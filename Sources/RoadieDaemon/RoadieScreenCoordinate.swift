@@ -2,6 +2,15 @@ import AppKit
 import CoreGraphics
 
 enum RoadieScreenCoordinate {
+    /// Position attachée à l'événement, même si le fil principal le traite plus tard.
+    static func mouseEventPoint(_ event: NSEvent) -> CGPoint {
+        if let point = event.cgEvent?.location {
+            return axRectToNS(CGRect(origin: point, size: .zero)).origin
+        }
+        // Événements AppKit locaux sans CGEvent : coordonnées relatives à leur fenêtre.
+        return event.window?.convertPoint(toScreen: event.locationInWindow) ?? event.locationInWindow
+    }
+
     static func nsPointToAX(_ point: CGPoint) -> CGPoint {
         nsPointToAX(point, screenFrames: NSScreen.screens.map(\.frame), primaryHeight: primaryHeight)
     }

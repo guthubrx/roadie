@@ -504,7 +504,7 @@ struct AXApplicationWindows {
     private let byID: [CGWindowID: AXUIElement]
 
     /// nil si l'application est mise de côté, ne répond pas ou refuse l'énumération. O(m).
-    init?(pid: pid_t) {
+    init?(pid: pid_t, requiredWindowIDs: Set<CGWindowID>? = nil) {
         let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return nil }
         var raw: CFTypeRef?
@@ -534,7 +534,7 @@ struct AXApplicationWindows {
                 let error = AXUIElementGetWindowID(element, &id)
                 registry.noteResult(error, pid: pid)
                 return error == .success && id > 0 ? id : nil
-            }, isSheet: { value($0, kAXRoleAttribute) as? String == kAXSheetRole })
+            }, isSheet: { value($0, kAXRoleAttribute) as? String == kAXSheetRole }, requiredWindowIDs: requiredWindowIDs)
         guard !registry.isQuarantined(pid) else { return nil }
         self.init(pid: pid, entries: entries + attached)
     }
@@ -546,10 +546,14 @@ struct AXApplicationWindows {
         roots: [(id: CGWindowID?, element: AXUIElement)],
         children: (AXUIElement) -> [AXUIElement],
         identifier: (AXUIElement) -> CGWindowID?,
-        isSheet: (AXUIElement) -> Bool
+        isSheet: (AXUIElement) -> Bool,
+        requiredWindowIDs: Set<CGWindowID>? = nil
     ) -> [(id: CGWindowID?, element: AXUIElement)] {
         var result: [(id: CGWindowID?, element: AXUIElement)] = []
         var seen = Set(roots.compactMap(\.id))
+        // Les fenêtres déjà résolues ne nécessitent aucune lecture de leurs contrôles.
+        // nil conserve la découverte complète pour les autres appelants (cibles, écrivain).
+        if let requiredWindowIDs, requiredWindowIDs.isSubset(of: seen) { return [] }
         var remaining = 256
         for root in roots {
             guard remaining > 0 else { return result }
@@ -713,6 +717,20 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         let currentPID = ProcessInfo.processInfo.processIdentifier
         // Fenetres AX par application pour ce snapshot (nil memorise = application illisible).
         var appWindows: [pid_t: AXApplicationWindows?] = [:]
+        // O(n) : préparer toutes les cibles CG avant l'unique énumération AX par PID.
+        // Sur-ensemble conservateur des candidats : aucune fenêtre attachée nécessaire oubliée.
+        var requiredWindowIDs: [pid_t: Set<CGWindowID>] = [:]
+        for info in raw {
+            guard let id = info[kCGWindowNumber as String] as? UInt32, id > 0,
+                  let pid = info[kCGWindowOwnerPID as String] as? Int32, pid != currentPID,
+                  (info[kCGWindowLayer as String] as? Int ?? 0) == 0,
+                  (info[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+                  let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary),
+                  rect.width >= 80, rect.height >= 60
+            else { continue }
+            requiredWindowIDs[pid, default: []].insert(id)
+        }
 
         let result = raw.compactMap { info -> WindowSnapshot? in
             guard let number = info[kCGWindowNumber as String] as? UInt32,
@@ -748,7 +766,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 && rect.height >= 60
                 && !bundleID.hasPrefix("com.apple.WindowManager")
 
-            let attrs = tileCandidate ? attributes(forCGWindowID: number, pid: pid, appWindows: &appWindows) : nil
+            let attrs = tileCandidate ? attributes(forCGWindowID: number, pid: pid, requiredWindowIDs: requiredWindowIDs[pid], appWindows: &appWindows) : nil
 
             return WindowSnapshot(
                 id: WindowID(rawValue: number),
@@ -776,6 +794,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
     private func attributes(
         forCGWindowID id: CGWindowID,
         pid: pid_t,
+        requiredWindowIDs: Set<CGWindowID>?,
         appWindows: inout [pid_t: AXApplicationWindows?]
     ) -> AXWindowAttributes? {
         let cache = AXAttributeCache.shared
@@ -786,7 +805,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         if let memo = appWindows[pid] {
             index = memo
         } else {
-            index = AXApplicationWindows(pid: pid)
+            index = AXApplicationWindows(pid: pid, requiredWindowIDs: requiredWindowIDs)
             appWindows.updateValue(index, forKey: pid)
         }
         let lastKnown = cache.lastKnown(for: id)

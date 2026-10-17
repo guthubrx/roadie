@@ -207,11 +207,12 @@ public final class RailController {
     private func startClickMonitors() {
         guard clickMonitors.isEmpty else { return }
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
+            let screenPoint = RoadieScreenCoordinate.mouseEventPoint(event)
             if Self.isRightMouseEvent(event.type),
-               self?.handleRightMouse(event.type, at: NSEvent.mouseLocation) == true {
+               self?.handleRightMouse(event.type, at: screenPoint) == true {
                 return nil
             }
-            self?.handleMouse(event.type, at: NSEvent.mouseLocation)
+            self?.handleMouse(event.type, at: screenPoint)
             return event
         }) {
             clickMonitors.append(local)
@@ -220,7 +221,7 @@ public final class RailController {
         // sur un panneau, c'est que celui-ci laissait passer le clic (passthrough). Le rail ne doit pas
         // agir en plus de la fenetre qui a recu le clic.
         if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
-            let screenPoint = NSEvent.mouseLocation
+            let screenPoint = RoadieScreenCoordinate.mouseEventPoint(event)
             DispatchQueue.main.async {
                 if Self.isRightMouseEvent(event.type) {
                     _ = self?.handleRightMouse(event.type, at: screenPoint, fromGlobalMonitor: true)

@@ -345,6 +345,9 @@ public final class CLICommandRouter {
             return args.dropFirst().first == "unhide-all"
         case "state":
             return ["dump", "audit"].contains(args.dropFirst().first ?? "")
+        // Le diagnostic utilise les permissions du daemon, pas celles du terminal appelant.
+        case "daemon":
+            return args.dropFirst().first == "health"
         // `config reload` : l'instance partagée à recharger est celle du daemon (REL-014).
         case "config":
             return args.dropFirst().first == "reload"

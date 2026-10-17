@@ -31,6 +31,7 @@ private final class Resize029World: SystemSnapshotProviding, WindowFrameWriting,
     var writes: [WindowID: [Rect]] = [:]
     var freshReads = 0
     var physicalMouseButtonsPressed = false
+    var snapshotDelay: TimeInterval = 0
     let registry = WrittenFrameRegistry()
     let clock = Resize029Clock()
 
@@ -38,7 +39,8 @@ private final class Resize029World: SystemSnapshotProviding, WindowFrameWriting,
     func displays() -> [DisplaySnapshot] { [display] }
     func focusedWindowID() -> WindowID? { nil }
     func windows() -> [WindowSnapshot] {
-        frames.keys.sorted().map { id in
+        clock.advance(snapshotDelay)
+        return frames.keys.sorted().map { id in
             WindowSnapshot(id: id, pid: pids[id] ?? Int32(id.rawValue + 100), appName: "Test",
                 bundleID: "test.resize.\(id.rawValue)", title: "Test", frame: laggedFrames[id] ?? frames[id]!,
                 isOnScreen: true, isTileCandidate: true,
@@ -417,6 +419,23 @@ struct Spec029ResizeTests {
         _ = h.maintainer.tick(cause: "deadline")
 
         #expect(h.manualGestures == 1)
+        #expect(h.world.frames[resize029Second]?.x == 700)
+    }
+
+    @Test(arguments: [false, true])
+    func resizeObservationStartedOnTimeSurvivesASlowSnapshot(pendingPoll: Bool) throws {
+        let h = try Resize029Harness()
+        defer { h.dispose() }
+        h.drag()
+        if pendingPoll {
+            _ = h.maintainer.tick(cause: "drag")
+            h.world.clock.advance(0.05)
+        }
+        h.world.frames[resize029First] = Rect(x: 0, y: 0, width: 700, height: 500)
+        h.world.snapshotDelay = 3
+        _ = h.maintainer.tick(cause: "drag")
+        #expect(h.manualGestures == 1)
+        #expect(h.world.frames[resize029First]?.width == 700)
         #expect(h.world.frames[resize029Second]?.x == 700)
     }
 

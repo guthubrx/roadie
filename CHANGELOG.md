@@ -7,6 +7,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Conservation des redimensionnements lorsque la lecture des fenêtres macOS est lente.
+- Clics et glissements du rail, et menu de fenêtre, fondés sur la position enregistrée
+  du geste même lorsque son traitement est retardé.
+- Réduction des lectures répétées des fenêtres et de leurs panneaux attachés.
+- Diagnostic `daemon health` exécuté avec les permissions du service Roadie.
 - Recherche des libellés de contrôles natifs portés par leurs enfants, notamment
   les dossiers Outlook, avec moins de lectures inutiles des éléments hors fenêtre.
 - Fermeture de la barre de recherche et de commandes au clic extérieur, sans

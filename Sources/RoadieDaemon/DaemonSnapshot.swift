@@ -353,7 +353,8 @@ public struct SnapshotService {
             snapshot,
             followFocus: followFocus,
             maxAge: sharedMaxAge,
-            at: now,
+            // Une lecture AX lente ne doit pas épuiser le cache avant sa publication.
+            at: clock(),
             stateStamp: fileModificationStamp(stageStore.fileURL.path),
             config: config
         )
