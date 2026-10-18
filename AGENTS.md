@@ -57,13 +57,13 @@ puis 22 tests ciblés après revue ; deux revues traitées. UUID
 3533388F-83B1-3F5A-995C-B525D7656291, PID 83654, quatre contrôles santé OK.
 Preuves visuelles incomplètes : bureau inaccessible. Validation :
 specs/041-apercu-reordonnancement/validation/validation.md.
-Current SpecKit feature: `041-apercu-reordonnancement`.
+Current SpecKit feature: `042-couts-traitement`.
 
 Contexte :
-- `specs/041-apercu-reordonnancement/spec.md`
-- `specs/041-apercu-reordonnancement/plan.md`
-- `specs/041-apercu-reordonnancement/research.md`
-- `specs/041-apercu-reordonnancement/tasks.md`
+- `specs/042-couts-traitement/spec.md`
+- `specs/042-couts-traitement/plan.md`
+- `specs/042-couts-traitement/research.md`
+- `specs/042-couts-traitement/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
