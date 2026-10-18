@@ -55,13 +55,13 @@ struct Audit022R2LotHTests {
     }
 
     @Test
-    func refreshSendsGroupLabelOfActiveMemberToThePanel() {
+    func refreshSendsGroupLabelOfActiveMemberToThePanel() async {
         let rig = makeRig()
         _ = rig.groups.create(id: "docs", windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2), WindowID(rawValue: 3)])
         _ = rig.groups.focus(windowID: WindowID(rawValue: 2), in: "docs")
         focus(2, in: rig)
 
-        rig.controller.refresh()
+        await rig.controller.refresh()
 
         let model = rig.panel.rendered.last
         #expect(rig.panel.rendered.count == 1)
@@ -73,13 +73,13 @@ struct Audit022R2LotHTests {
     }
 
     @Test
-    func refreshSendsNoLabelOutsideGroupAndDropsItAfterDissolution() {
+    func refreshSendsNoLabelOutsideGroupAndDropsItAfterDissolution() async {
         let rig = makeRig()
         _ = rig.groups.create(id: "pair", windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)])
 
         // Fenêtre 3 : hors groupe.
         focus(3, in: rig)
-        rig.controller.refresh()
+        await rig.controller.refresh()
         let outside = rig.panel.rendered.last
         #expect(outside != nil)
         #expect(outside?.groupLabel == nil)
@@ -87,21 +87,21 @@ struct Audit022R2LotHTests {
 
         // Fenêtre 1 : membre du groupe, puis groupe dissous.
         focus(1, in: rig)
-        rig.controller.refresh()
+        await rig.controller.refresh()
         #expect(rig.panel.rendered.count == 2)
         #expect(rig.panel.rendered.last?.groupLabel == "pair 1/2")
 
         _ = rig.groups.dissolve(id: "pair")
         rig.service.invalidateSharedSnapshot()
-        rig.controller.refresh()
+        await rig.controller.refresh()
         #expect(rig.panel.rendered.count == 3)
         #expect(rig.panel.rendered.last?.groupLabel == nil)
     }
 
     @Test
-    func refreshHidesPanelWhenBordersAreDisabled() {
+    func refreshHidesPanelWhenBordersAreDisabled() async {
         let rig = makeRig(bordersEnabled: false)
-        rig.controller.refresh()
+        await rig.controller.refresh()
         #expect(rig.panel.rendered.isEmpty)
         #expect(rig.panel.hideCount == 1)
     }

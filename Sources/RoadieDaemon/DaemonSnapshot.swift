@@ -11,19 +11,23 @@ public struct DaemonSnapshot: Equatable, Codable, Sendable {
     public var windows: [ScopedWindowSnapshot]
     public var state: RoadieState
     public var focusedWindowID: WindowID?
+    /// Inventaire CG du même relevé, réutilisé par le rail sans nouvelle énumération.
+    public var existingWindowPIDs: [WindowID: Int32]?
 
     public init(
         permissions: PermissionSnapshot,
         displays: [DisplaySnapshot],
         windows: [ScopedWindowSnapshot],
         state: RoadieState,
-        focusedWindowID: WindowID? = nil
+        focusedWindowID: WindowID? = nil,
+        existingWindowPIDs: [WindowID: Int32]? = nil
     ) {
         self.permissions = permissions
         self.displays = displays
         self.windows = windows
         self.state = state
         self.focusedWindowID = focusedWindowID
+        self.existingWindowPIDs = existingWindowPIDs
     }
 }
 
@@ -67,7 +71,7 @@ public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
     }
 }
 
-public struct SnapshotService {
+public struct SnapshotService: Sendable {
     /// Une application explicite de géométrie ne laisse pas la tolérance anti-jitter
     /// absorber un pas de réglage d'un point. Ce contexte est local à la passe du maintainer.
     var exactLayoutScopes: Set<StageScope> = []
@@ -177,7 +181,7 @@ public struct SnapshotService {
     public func railWindowIDs(in snapshot: DaemonSnapshot, state: PersistentStageState? = nil) -> Set<WindowID> {
         Self.existingManagedWindowIDs(
             in: state ?? stageStore.state(), windows: snapshot.windows.map(\.window),
-            inventory: provider.existingWindowPIDs()
+            inventory: snapshot.existingWindowPIDs
         )
     }
 
@@ -220,6 +224,51 @@ public struct SnapshotService {
             return (recent, false)
         }
         return (snapshot(followFocus: followFocus), true)
+    }
+
+    /// Acquisition des lecteurs graphiques : aucune attente AX sur MainActor.
+    /// Les commandes gardent sharedSnapshot/snapshot et leur contrat synchrone.
+    @MainActor
+    func readerSnapshot(followFocus: Bool = true) async -> DaemonSnapshot? {
+        func recent() -> DaemonSnapshot? {
+            processState.recentSnapshot(followFocus: followFocus, now: clock(),
+                                       stateStamp: fileModificationStamp(stageStore.fileURL.path), config: config)
+        }
+        if let snapshot = recent() { return snapshot }
+        let expectedConfig = config
+        let stamp = fileModificationStamp(stageStore.fileURL.path)
+        let displays = provider.displays() // AppKit reste sur le fil principal.
+        let permissions = provider.permissions(prompt: false)
+        let acquisition: SnapshotProcessState.ReaderAcquisition
+        if let pending = processState.readerAcquisition {
+            acquisition = pending
+        } else {
+            let provider = self.provider
+            acquisition = .init(revision: processState.publicationRevision, stateStamp: stamp, config: expectedConfig, displays: displays, task: Task.detached(priority: .userInitiated) {
+                SnapshotWindowObservation(windows: provider.windows(), inventory: provider.existingWindowPIDs(),
+                                          focusedWindowID: provider.focusedWindowID())
+            })
+            processState.readerAcquisition = acquisition
+        }
+        let observation = await acquisition.task.value
+        if processState.readerAcquisition?.id == acquisition.id { processState.readerAcquisition = nil }
+        guard !Task.isCancelled else { return nil }
+        // Un autre lecteur ou le producteur peut avoir publié pendant l'attente.
+        if let snapshot = recent() { return snapshot }
+        guard processState.publicationRevision == acquisition.revision,
+              acquisition.config == config, acquisition.stateStamp == fileModificationStamp(stageStore.fileURL.path),
+              acquisition.displays == provider.displays() else { return nil }
+        let prepared = PreparedSnapshot(permissions: permissions, displays: displays,
+                                       observation: observation, mouseLocation: provider.mouseLocation())
+        return snapshot(promptForPermissions: false, followFocus: followFocus,
+                        sharedMaxAge: SnapshotProcessState.sharedSnapshotMaxAge, producer: false, prepared: prepared)
+    }
+
+    private struct PreparedSnapshot {
+        let permissions: PermissionSnapshot
+        let displays: [DisplaySnapshot]
+        let observation: SnapshotWindowObservation
+        let mouseLocation: CGPoint?
     }
 
     /// Oublie le snapshot partagé (après une commande qui change fenêtres ou focus).
@@ -267,17 +316,17 @@ public struct SnapshotService {
         processState.treeScopeAppliedAt(scope)
     }
 
-    private func snapshot(promptForPermissions: Bool, followFocus: Bool, sharedMaxAge: TimeInterval, producer: Bool) -> DaemonSnapshot {
+    private func snapshot(promptForPermissions: Bool, followFocus: Bool, sharedMaxAge: TimeInterval, producer: Bool, prepared: PreparedSnapshot? = nil) -> DaemonSnapshot {
         let config = self.config
         let now = clock()
         // Énumération Accessibility HORS verrou (R1) : seule la réconciliation, fonction pure
         // de (état, fenêtres vivantes), tourne sous le verrou de `StageStore.mutate`.
-        let permissions = provider.permissions(prompt: promptForPermissions)
-        let displays = provider.displays()
+        let permissions = prepared?.permissions ?? provider.permissions(prompt: promptForPermissions)
+        let displays = prepared?.displays ?? provider.displays()
         if producer, persistStateChanges, processState.claimLegacyTreeMigration() {
             migrateLegacyTreeModes(displays: displays)
         }
-        let rawWindows = provider.windows()
+        let rawWindows = prepared?.observation.windows ?? provider.windows()
         // Pre-calcule les structures lourdes (Set subroles, regles triees) une seule fois
         // par snapshot pour eviter O(n_windows) recompactations dans applyTilingPolicy.
         let policyContext = TilingPolicyContext(config: config)
@@ -287,8 +336,9 @@ public struct SnapshotService {
         let stageManagedWindowIDs = Set(windows.compactMap { window in
             window.isTileCandidate ? window.id : nil
         })
-        let providerFocusedID = provider.focusedWindowID()
-        let mouseLocation = provider.mouseLocation()
+        let providerFocusedID = prepared.map { $0.observation.focusedWindowID } ?? provider.focusedWindowID()
+        let mouseLocation = prepared.map { $0.mouseLocation } ?? provider.mouseLocation()
+        let inventory = prepared.map { $0.observation.inventory } ?? provider.existingWindowPIDs()
         let liveDisplayIDs = Set(displays.map(\.id))
         let hiddenWindowIDs = processState.observedHiddenWindowIDs(windows, in: displays, now: now)
         // FR-009 : un changement de stage par le focus exige une saisie utilisateur récente,
@@ -307,7 +357,7 @@ public struct SnapshotService {
             hiddenWindowIDs: hiddenWindowIDs,
             lastObservedWindowAt: observation.lastSeenAt,
             stageManagedWindowIDs: stageManagedWindowIDs,
-            existingWindowPIDs: provider.existingWindowPIDs(),
+            existingWindowPIDs: inventory,
             liveDisplayIDs: liveDisplayIDs,
             providerFocusedID: providerFocusedID,
             mouseLocation: mouseLocation,
@@ -347,7 +397,8 @@ public struct SnapshotService {
             displays: displays,
             windows: result.scopedWindows,
             state: result.state,
-            focusedWindowID: result.focusedWindowID
+            focusedWindowID: result.focusedWindowID,
+            existingWindowPIDs: inventory
         )
         processState.publish(
             snapshot,
@@ -2313,6 +2364,12 @@ public enum SnapshotEncoding {
 /// dernier snapshot publié (FR-023), fenêtres vivantes précédentes (FR-009) et dernier classement
 /// tilable lisible (FR-008). La clé est le chemin du fichier d'état : les tests, qui injectent
 /// chacun leur `StageStore`, restent isolés.
+private struct SnapshotWindowObservation: Sendable {
+    let windows: [WindowSnapshot]
+    let inventory: [WindowID: Int32]?
+    let focusedWindowID: WindowID?
+}
+
 final class SnapshotProcessState: @unchecked Sendable {
     /// Validité du snapshot partagé : couvre la bordure (120 ms) et le focus-souris (100 ms).
     static let sharedSnapshotMaxAge: TimeInterval = 0.15
@@ -2355,6 +2412,18 @@ final class SnapshotProcessState: @unchecked Sendable {
         var retryAt: Date?
     }
 
+    struct ReaderAcquisition {
+        let id = UUID()
+        let revision: UInt64
+        let stateStamp: [Int64]
+        let config: RoadieConfig
+        let displays: [DisplaySnapshot]
+        fileprivate let task: Task<SnapshotWindowObservation, Never>
+    }
+    @MainActor var readerAcquisition: ReaderAcquisition?
+    private var revision: UInt64 = 0
+    var publicationRevision: UInt64 { lock.withLock { revision } }
+
     private let lock = NSLock()
     /// Clé : option `followFocus` du snapshot publié.
     private var published: [Bool: Published] = [:]
@@ -2377,6 +2446,7 @@ final class SnapshotProcessState: @unchecked Sendable {
 
     func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, maxAge: TimeInterval, at date: Date, stateStamp: [Int64], config: RoadieConfig) {
         lock.withLock {
+            revision &+= 1
             published[followFocus] = Published(snapshot: snapshot, maxAge: maxAge, at: date, stateStamp: stateStamp, config: config)
         }
     }
@@ -2395,7 +2465,7 @@ final class SnapshotProcessState: @unchecked Sendable {
     }
 
     func invalidatePublished() {
-        lock.withLock { published.removeAll() }
+        lock.withLock { revision &+= 1; published.removeAll() }
     }
 
     /// Garde la preuve de masquage tant que l'identité et la frame observées sont les mêmes.
@@ -2448,6 +2518,7 @@ final class SnapshotProcessState: @unchecked Sendable {
     func republish(frames: [WindowID: Rect]) {
         guard !frames.isEmpty else { return }
         lock.withLock {
+            revision &+= 1
             for (key, entry) in published {
                 var snapshot = entry.snapshot
                 for index in snapshot.windows.indices {
@@ -2463,6 +2534,8 @@ final class SnapshotProcessState: @unchecked Sendable {
     func noteDestroyed(_ id: WindowID, at date: Date) {
         lock.withLock {
             guard destroyed.insert(id).inserted else { return }
+            revision &+= 1
+            published.removeAll()
             destroyedEvidence[id] = DestroyedWindowEvidence(
                 observedAt: date,
                 scheduledRetries: 0,

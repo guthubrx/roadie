@@ -25,6 +25,7 @@ public final class BorderController {
     private let configLoader: () -> RoadieConfig
     private let panel: BorderRendering
     private var refreshTimer: Timer?
+    private var isRefreshing = false
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
@@ -48,23 +49,27 @@ public final class BorderController {
     public func start() {
         NSApplication.shared.setActivationPolicy(.accessory)
         UserInputActivity.shared.startMonitoring()
-        refresh()
+        Task { await refresh() }
         refreshTimer?.invalidate()
         let newTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in await self?.refresh() }
         }
         refreshTimer = newTimer
         RunLoop.main.add(newTimer, forMode: .common)
     }
 
-    func refresh() {
+    func refresh() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
         let config = configLoader().fx.borders
         guard config.enabled else {
             hidePanel()
             return
         }
 
-        let snapshot = snapshotService.sharedSnapshot()
+        guard let snapshot = await snapshotService.readerSnapshot() else { return }
+        guard configLoader().fx.borders == config else { return }
         guard let focusedWindowID = snapshot.focusedWindowID,
               let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
               entry.window.isTileCandidate,

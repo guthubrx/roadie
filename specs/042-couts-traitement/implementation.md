@@ -12,3 +12,11 @@
 - Cadre actualisé par la relecture après écriture, supprimé si l’écriture échoue. Titres lus par l’interface injectable existante.
 - 17 tests AX passent. Quatre cibles absentes et trois candidats : trois lectures de cadre et trois de titre, aucune écriture. Test distinct : un cadre modifié ne peut plus résoudre une autre cible par son ancienne position.
 - Relecture : unicité, candidats réservés et quarantaine conservés. O(k·m) comparaisons en mémoire restent possibles ; les échanges AX sont bornés à O(m+k). Aucun cache permanent ajouté.
+
+## T004 — Acquisition des lecteurs
+- Acquisition AX asynchrone, partagée par fichier d’état. Écrans et réconciliation restent sur MainActor. Aucun allongement du cache.
+- Contrôles de révision, configuration, fichier et écrans avant réconciliation. Les acquisitions invalidées sont abandonnées ; un relevé récent du producteur reste prioritaire.
+- Inventaire CG conservé dans le relevé. Les lecteurs ne le redemandent plus.
+- 47 tests dans cinq suites réussis : lecteurs concurrents, aucun scan sur le fil principal, une seule lecture d’inventaire, invalidation et mutation d’état pendant le relevé, producteur partagé, bordure et présence hors Space.
+- Relecture : un seul traitement en vol par contrôleur, annulation au stop du rail, geste et déplacement de souris recontrôlés après attente. Pas de nouveau verrou couvrant les appels AX.
+- Limite explicite : le tiler et les commandes restent synchrones (ADR 013). Une acquisition de lecteur déjà démarrée peut coïncider avec un producteur ; son résultat devenu ancien est écarté.

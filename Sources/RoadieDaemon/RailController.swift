@@ -25,6 +25,8 @@ public final class RailController {
     /// Cadres (coordonnees AX) des fenetres gerees de la stage active de chaque ecran, releves au dernier cycle.
     /// Le survol du rail les lit au lieu de demander un snapshot complet (SPEC-016 FR-024).
     private var managedWindowFrames: [DisplayID: [CGRect]] = [:]
+    private var rebuildTask: Task<Void, Never>?
+    private var pendingRebuild: (reason: String, requestedAt: Date?)?
     private var lastRenderSignature: String?
     private var lastRenderedSettings: RailSettings?
     private var lastConfigRefreshPath: String?
@@ -92,6 +94,9 @@ public final class RailController {
     /// Arrete tout ce que `start()` a mis en place : timers, surveillances de fichiers, moniteurs souris,
     /// observateur d'ecran et panneaux. Appelable plusieurs fois ; `start()` peut ensuite etre rappele.
     public func stop() {
+        rebuildTask?.cancel()
+        rebuildTask = nil
+        pendingRebuild = nil
         refreshTimer?.invalidate()
         refreshTimer = nil
         hoverTimer?.invalidate()
@@ -857,6 +862,26 @@ public final class RailController {
     /// stages, membres, etats de presentation, ecrans masques, configuration, vignettes.
     // Complexite : O(d * (s + n)) - d = ecrans, s = stages, n = fenetres du snapshot.
     private func rebuildPanels(reason: String = "direct", requestedAt: Date? = nil, railSignature: String? = nil) {
+        guard pendingStageReorder == nil else { return }
+        pendingRebuild = (reason, requestedAt)
+        guard rebuildTask == nil else { return }
+        let service = snapshotService
+        rebuildTask = Task { [weak self] in
+            let result = await service.readerSnapshot()
+            guard !Task.isCancelled else { return }
+            guard let snapshot = result else {
+                self?.rebuildTask = nil
+                return
+            }
+            guard let self else { return }
+            let request = self.pendingRebuild ?? (reason, requestedAt)
+            self.pendingRebuild = nil
+            self.rebuildTask = nil
+            self.renderPanels(snapshot: snapshot, reason: request.reason, requestedAt: request.requestedAt)
+        }
+    }
+
+    private func renderPanels(snapshot: DaemonSnapshot, reason: String, requestedAt: Date?) {
         // Les cartes restent fixes entre l'appui et le dépôt ; le cycle suivant applique les nouveautés.
         guard pendingStageReorder == nil else { return }
         let startedAt = Date()
@@ -864,11 +889,10 @@ public final class RailController {
         let configPath = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
         lastConfigRefreshPath = configPath
         lastConfigRefreshStamp = fileModificationStamp(configPath)
-        let snapshot = snapshotService.sharedSnapshot()
         let snapshotMs = Date().timeIntervalSince(startedAt) * 1000
         updateFocusSensitiveCaptureProtection(from: snapshot)
         let state = store.state()
-        lastStageStoreRailSignature = railSignature ?? Self.railSignature(for: state)
+        lastStageStoreRailSignature = Self.railSignature(for: state)
         let settings = RailSettings.load(path: configPath)
         var config = RailVisualConfig.load(settings: settings)
         let runtimeState = railRuntimeStateStore.load()

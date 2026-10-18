@@ -13,6 +13,7 @@ public final class FocusFollowsMouseController {
     private var timer: Timer?
     private var lastFocusedWindowID: WindowID?
     private var lastMousePoint: CGPoint?
+    private var isReading = false
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
@@ -26,13 +27,14 @@ public final class FocusFollowsMouseController {
         UserInputActivity.shared.startMonitoring()
         timer?.invalidate()
         let newTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            Task { @MainActor in await self?.tick() }
         }
         timer = newTimer
         RunLoop.main.add(newTimer, forMode: .common)
     }
 
-    private func tick() {
+    private func tick() async {
+        guard !isReading else { return }
         guard configLoader().focus.focusFollowsMouse,
               let mousePoint = CGEvent(source: nil)?.location
         else { return }
@@ -45,7 +47,13 @@ public final class FocusFollowsMouseController {
               NSEvent.pressedMouseButtons == 0
         else { return }
 
-        let snapshot = snapshotService.sharedSnapshot()
+        isReading = true
+        defer { isReading = false }
+        guard let snapshot = await snapshotService.readerSnapshot(),
+              configLoader().focus.focusFollowsMouse, NSEvent.pressedMouseButtons == 0,
+              let currentPoint = CGEvent(source: nil)?.location,
+              hypot(currentPoint.x - mousePoint.x, currentPoint.y - mousePoint.y) <= Self.minimumMovement
+        else { return }
         guard let target = FocusFollowsMousePicker.targetWindow(at: mousePoint, in: snapshot),
               target.window.id != (snapshot.focusedWindowID ?? lastFocusedWindowID)
         else { return }
