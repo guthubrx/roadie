@@ -7,4 +7,4 @@
 - [x] T005 Classer et traiter les autres causes confirmées de placement ou de délai.
 - [x] T006 Revue indépendante, tests ciblés et suite complète.
 - [x] T007 Compiler, installer, relancer et vérifier la santé ; documenter les preuves.
-- [ ] T008 Commit, intégration, push et nettoyage des éléments temporaires de cette session.
+- [x] T008 Commit, intégration, push et nettoyage des éléments temporaires de cette session.

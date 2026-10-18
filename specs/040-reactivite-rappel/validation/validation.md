@@ -37,3 +37,7 @@ Aucun échec layout_failed ou restore.unhide_all_failed pendant les 68 secondes 
 Application : /Users/moi/Applications/Roadie.app. CLI : /Users/moi/.local/bin/roadie. UUID du daemon : EAC639A1-B54B-339F-98AD-950C4D5F0F3E. PID après redémarrage : 46802. Quatre contrôles de santé OK, autorisation Accessibilité valide. Les 278 empreintes Sources/Tests correspondent aux fichiers validés et compilés.
 
 Les corrections livrées couvrent les notifications parasites du rail, les rappels de fenêtres bloqués sur une cible absente, la restauration des fenêtres réduites, l'arrêt des appels AX après délai dépassé et les détails manquants des échecs de masquage. Les incidents historiques non reproductibles restent explicitement distingués des causes corrigées.
+
+## Intégration et nettoyage
+
+Correction 6067c5a8 intégrée par avance rapide dans main et poussée sur origin/main. Branche session-040-reactivite-rappel supprimée après intégration. Fichiers de compilation et cache Python de cette session supprimés. Le dépôt principal et le worktree actif lié à ce fil restent disponibles ; aucun autre worktree ni branche de session ne reste. Traces et ancienne application conservées hors Git pour diagnostic et retour arrière.
