@@ -1,0 +1,25 @@
+1:# Plan - 048 Consommation au repos
+2:
+3:Swift 6, AppKit, Swift Testing. Aucun nouveau fichier source ni dépendance.
+4:
+5:1. A-01 `Sources/RoadieDaemon/DaemonSnapshot.swift` : `SnapshotProcessState` garde une
+6:   génération d'observation globale (`noteObservationChange()`), mémorisée à la
+7:   publication. `recentSnapshot(..., quietMaxAge:)` accepte un relevé plus ancien que
+8:   `maxAge` si la génération est inchangée et l'âge inférieur à `quietMaxAge`.
+9:   `readerSnapshot` passe `quietMaxAge = 1 s` ; `sharedSnapshot` garde 0.
+10:   L'acquisition lecteur capture la génération à son départ.
+11:   `Sources/RoadieDaemon/TickScheduler.swift` : `request` appelle `noteObservationChange()`
+12:   pour toute demande hors filet de sécurité.
+13:2. C-01 `Sources/RoadieDaemon/RailThumbnailStore.swift` : cache `SCWindow` par identifiant,
+14:   énumération si un identifiant manque ou après échec ; dimension depuis le cadre du membre.
+15:3. C-02 `Sources/RoadieDaemon/RailController.swift` : statut d'enregistrement mémorisé,
+16:   rechargé sur `recording_status`, vivacité vérifiée à chaque tick.
+17:4. C-03 `RailController.swift`, `RailPanel.swift`, `StageCardView.swift` : signature de
+18:   structure et signature de vignettes séparées ; `RailPanel.refreshThumbnails` met à jour
+19:   les cartes existantes.
+20:5. Tests ciblés, suite complète, mesure après dans les mêmes conditions, ADR 015.
+21:
+22:Complexité : réutilisation O(1) ; cache SCWindow O(k) par lot (k fenêtres demandées) ;
+23:mise à jour des vignettes O(c × m) (cartes × membres), sans recréation de vues.
+24:
+25:Retour arrière : chaque point est indépendant et réversible commit par commit.

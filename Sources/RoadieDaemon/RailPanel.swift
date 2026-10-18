@@ -327,6 +327,14 @@ final class RailPanel: NSPanel {
         }
     }
 
+    /// Nouvelles vignettes sans changement de structure (SPEC-048 C-03) : les cartes existantes
+    /// reçoivent leurs images, sans recréation de vues. O(c × m), c cartes, m membres.
+    func refreshThumbnails(_ thumbnails: RailThumbnailStore) {
+        for case let card as StageCardView in stack.arrangedSubviews {
+            card.updateThumbnails(thumbnails.images(for: card.members))
+        }
+    }
+
     private func showRecordingIndicator(_ status: TargetRecordingStatus, bottomOffset: CGFloat, textConfig: RailStageLabelConfig) {
         let indicator = RecordingIndicatorView(status: status, textConfig: textConfig)
         recordingIndicatorView = indicator

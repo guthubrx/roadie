@@ -1,6 +1,7 @@
 # 013 — Acquisition asynchrone des lecteurs graphiques
 
-Date : 2026-10-18. Statut : accepté, session 042.
+Date : 2026-10-18. Statut : accepté, session 042. Clause des durées amendée par
+`015-releves-lecteurs-au-repos.md` (session 048).
 
 ## Contexte
 Les lecteurs graphiques peuvent lancer un scan AX depuis MainActor après expiration du cache partagé. Allonger le cache masquerait des changements réels. Le tiler et les commandes ont déjà un contrat de réconciliation synchrone.

@@ -84,7 +84,7 @@ final class StageCardView: NSControl {
     private let config: RailVisualConfig
     private let captionLineHeight: CGFloat
     private let presentationStates: [WindowID: WindowPresentationState]
-    private let thumbnails: [WindowID: NSImage]
+    private var thumbnails: [WindowID: NSImage]
     private let visualMembers: [PersistentStageMember]
     private let contentInset: CGFloat = 4
 
@@ -135,6 +135,18 @@ final class StageCardView: NSControl {
         StageCardView(stage: stage, displayLabel: StagePresentationOrder.name(stage, position: position),
                       isActive: isActive, accent: accent, config: config,
                       presentationStates: presentationStates, thumbnails: thumbnails, position: position)
+    }
+
+    var members: [PersistentStageMember] { stage.members }
+
+    /// Nouvelles vignettes (SPEC-048 C-03) : redessin seulement si une image a changé. O(m).
+    @discardableResult
+    func updateThumbnails(_ images: [WindowID: NSImage]) -> Bool {
+        guard images.count != thumbnails.count
+            || images.contains(where: { thumbnails[$0.key] !== $0.value }) else { return false }
+        thumbnails = images
+        needsDisplay = true
+        return true
     }
 
     /// Seule la légende varie pendant le geste ; miniatures, styles et contraintes sont réutilisés.

@@ -1,0 +1,20 @@
+{
+  "label": "apres-a01",
+  "captured_at": "2026-10-18T16:52:08.730301+00:00",
+  "pid": 24536,
+  "window_s": 120,
+  "idle_at_start_s": 60.5,
+  "cpu_s": 7.37,
+  "cpu_percent_of_core": 6.14,
+  "rss_kb": 99728,
+  "rejected_windows": 0,
+  "sample_file": "/tmp/roadie-048-apres-a01-sample.txt",
+  "frames": {
+    "releve_ax_complet": 446,
+    "bordure": 28,
+    "rail_refresh": 0,
+    "screencapturekit_enumeration": 275,
+    "config_courante": 79,
+    "focus_souris": 16
+  }
+}

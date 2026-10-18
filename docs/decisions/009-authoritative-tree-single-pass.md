@@ -33,4 +33,4 @@ yabai, lui, garde un arbre en mémoire qui fait foi. Il traite chaque événemen
 
 - Comportement changé pour les utilisateurs de `mutableBsp` : la disposition suit l'arbre, et non plus la géométrie observée. La migration construit l'arbre initial depuis la géométrie pour éviter un saut.
 - Les modes `bsp` et `masterStack` gardent leur stratégie dérivée de la géométrie. Ils profitent du plan unique et de la reconnaissance d'écho, sans la garantie d'une passe.
-- Les lecteurs du snapshot (bordure, focus qui suit la souris) gardent leur cadence actuelle, avec un relevé au plus toutes les 150 ms.
+- Les lecteurs du snapshot (bordure, focus qui suit la souris) gardent leur cadence actuelle, avec un relevé au plus toutes les 150 ms. Amendé par `015-releves-lecteurs-au-repos.md` : sans changement observé, un relevé reste réutilisable jusqu'au filet du tiler.

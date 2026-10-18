@@ -23,6 +23,12 @@ final class RailThumbnailStore {
     private var capturedAt: [WindowID: Date] = [:]
     private var attemptedAt: [WindowID: Date] = [:]
     private var inFlight: Set<WindowID> = []
+    /// Fenêtres ScreenCaptureKit déjà énumérées (SPEC-048 C-01) : un lot ne réénumère tout le
+    /// système que si une fenêtre demandée manque. Une fenêtre absente n'est recherchée à nouveau
+    /// qu'après `absentRetryInterval` (membres gardés 15 s après fermeture).
+    private var shareableWindows: [WindowID: SCWindow] = [:]
+    private var absentUntil: [WindowID: Date] = [:]
+    private let absentRetryInterval: TimeInterval = 5
     private var didLogMissingPermission = false
     private let drmRefreshInterval: TimeInterval = 2
     private let refreshInterval: TimeInterval = 5
@@ -53,6 +59,8 @@ final class RailThumbnailStore {
         images = images.filter { ids.contains($0.key) }
         fallbacks = fallbacks.filter { ids.contains($0.key) }
         signatures = signatures.filter { ids.contains($0.key) }
+        shareableWindows = shareableWindows.filter { ids.contains($0.key) }
+        absentUntil = absentUntil.filter { ids.contains($0.key) }
         capturedAt = capturedAt.filter { ids.contains($0.key) }
         attemptedAt = attemptedAt.filter { ids.contains($0.key) }
     }
@@ -69,9 +77,11 @@ final class RailThumbnailStore {
     /// Lance en arrière-plan la capture des vignettes périmées, au plus `budget` fenêtres, les plus anciennes d'abord.
     /// Un seul lot à la fois. Les fenêtres protégées (contenu DRM juste après un changement de focus) sont ignorées.
     // O(m log m) - m = nombre de membres affichés.
+    /// `liveFrames` : cadres du relevé courant ; ils fixent les proportions de la capture.
     func requestCaptures(
         for members: [PersistentStageMember],
         protectedWindowIDs: Set<WindowID>,
+        liveFrames: [WindowID: Rect],
         displayWidth: CGFloat,
         budget: Int
     ) {
@@ -83,9 +93,12 @@ final class RailThumbnailStore {
             .prefix(budget)
         guard !due.isEmpty else { return }
         let ids = due.map(\.windowID)
+        let sizes = Dictionary(due.map {
+            ($0.windowID, (liveFrames[$0.windowID] ?? $0.frame).cgRect.size)
+        }, uniquingKeysWith: { first, _ in first })
         inFlight = Set(ids)
         Task { [weak self] in
-            await self?.capture(ids, displayWidth: displayWidth)
+            await self?.capture(ids, sizes: sizes, displayWidth: displayWidth)
         }
     }
 
@@ -98,7 +111,17 @@ final class RailThumbnailStore {
         max(capturedAt[windowID] ?? .distantPast, attemptedAt[windowID] ?? .distantPast)
     }
 
-    private func capture(_ ids: [WindowID], displayWidth: CGFloat) async {
+    /// Vrai si une fenêtre demandée n'est ni en cache ni en attente après une absence. O(k).
+    nonisolated static func needsEnumeration(
+        requested ids: [WindowID],
+        cached: Set<WindowID>,
+        absentUntil: [WindowID: Date],
+        now: Date
+    ) -> Bool {
+        ids.contains { !cached.contains($0) && (absentUntil[$0].map { now >= $0 } ?? true) }
+    }
+
+    private func capture(_ ids: [WindowID], sizes: [WindowID: CGSize], displayWidth: CGFloat) async {
         defer { inFlight.removeAll() }
         let startedAt = Date()
         ids.forEach { attemptedAt[$0] = startedAt }
@@ -110,18 +133,27 @@ final class RailThumbnailStore {
             }
             return
         }
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else {
-            return
+        if Self.needsEnumeration(requested: ids, cached: Set(shareableWindows.keys),
+                                 absentUntil: absentUntil, now: startedAt) {
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else {
+                return
+            }
+            shareableWindows = Dictionary(
+                content.windows.map { (WindowID(rawValue: $0.windowID), $0) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            for id in ids where shareableWindows[id] == nil {
+                absentUntil[id] = startedAt.addingTimeInterval(absentRetryInterval)
+            }
         }
-        let windowsByID = Dictionary(
-            content.windows.map { (WindowID(rawValue: $0.windowID), $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
         for id in ids {
-            guard let window = windowsByID[id],
-                  let cgImage = await screenshot(of: window, displayWidth: displayWidth),
-                  !cgImage.looksBlank
-            else { continue }
+            guard let window = shareableWindows[id], let size = sizes[id] else { continue }
+            guard let cgImage = await screenshot(of: window, size: size, displayWidth: displayWidth) else {
+                // Fenêtre fermée ou changée : la prochaine demande la recherche à nouveau.
+                shareableWindows.removeValue(forKey: id)
+                continue
+            }
+            guard !cgImage.looksBlank else { continue }
             // Taille en points = pixels / 2 : la vignette garde sa netteté sur un écran Retina.
             images[id] = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width / 2, height: cgImage.height / 2))
             capturedAt[id] = Date()
@@ -130,12 +162,12 @@ final class RailThumbnailStore {
         }
     }
 
-    private func screenshot(of window: SCWindow, displayWidth: CGFloat) async -> CGImage? {
-        guard window.frame.width > 0, window.frame.height > 0 else { return nil }
-        let pixelWidth = min(displayWidth * 2, window.frame.width * 2)
+    private func screenshot(of window: SCWindow, size: CGSize, displayWidth: CGFloat) async -> CGImage? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        let pixelWidth = min(displayWidth * 2, size.width * 2)
         let configuration = SCStreamConfiguration()
         configuration.width = max(1, Int(pixelWidth.rounded()))
-        configuration.height = max(1, Int((pixelWidth * window.frame.height / window.frame.width).rounded()))
+        configuration.height = max(1, Int((pixelWidth * size.height / size.width).rounded()))
         configuration.showsCursor = false
         configuration.ignoreShadowsSingleWindow = true
         let filter = SCContentFilter(desktopIndependentWindow: window)

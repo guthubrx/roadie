@@ -1,0 +1,11 @@
+1:# Tâches
+2:
+3:- [x] T001 Mesurer l'état de départ au repos (`mesures/avant.json`).
+4:- [x] T002 Tests rouges A-01 : relevé lecteur réutilisé sans changement jusqu'à 1 s, refusé après un changement ou au-delà de 1 s ; commandes inchangées à 150 ms ; demande de passe hors filet incrémente la génération (`Tests/RoadieDaemonTests/Spec048QuietReaderTests.swift`).
+5:- [x] T003 Implémenter A-01 dans `Sources/RoadieDaemon/DaemonSnapshot.swift` et `Sources/RoadieDaemon/TickScheduler.swift`.
+6:- [x] T004 Tests puis implémentation C-01 : énumération seulement si un identifiant manque (`Sources/RoadieDaemon/RailThumbnailStore.swift`).
+7:- [x] T005 Implémenter C-02 : statut d'enregistrement mémorisé (`Sources/RoadieDaemon/RailController.swift`).
+8:- [x] T006 Tests puis implémentation C-03 : vignettes mises à jour en place (`RailController.swift`, `RailPanel.swift`, `StageCardView.swift`).
+9:- [x] T007 Suite complète, revue indépendante, ADR 015.
+10:- [x] T008 Installer, redémarrer, santé ; mesurer après (`mesures/apres.json`) ; publier avant/après.
+11:- [ ] T009 Consigner, committer, intégrer sur main, pousser, nettoyer.

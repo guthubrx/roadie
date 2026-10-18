@@ -1,0 +1,9 @@
+187:        let signature = Self.railSignature(for: store.state())
+597:        var state = store.state()
+614:        let state = store.state()
+650:        var state = store.state()
+929:        let state = store.state()
+931:        let settings = RailSettings.load(path: configPath)
+933:        let runtimeState = railRuntimeStateStore.load()
+-rw-r--r--  1 moi  staff    498 Oct 18 10:47 /Users/moi/.local/state/roadies/rail.json
+-rw-r--r--  1 moi  staff  58084 Oct 18 19:06 /Users/moi/.roadies/stages.json

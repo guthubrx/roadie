@@ -236,7 +236,8 @@ public struct SnapshotService: Sendable {
     func readerSnapshot(followFocus: Bool = true) async -> DaemonSnapshot? {
         func recent() -> DaemonSnapshot? {
             processState.recentSnapshot(followFocus: followFocus, now: clock(),
-                                       stateStamp: fileModificationStamp(stageStore.fileURL.path), config: config)
+                                       stateStamp: fileModificationStamp(stageStore.fileURL.path), config: config,
+                                       allowQuietReuse: true)
         }
         if let snapshot = recent() { return snapshot }
         let expectedConfig = config
@@ -249,7 +250,8 @@ public struct SnapshotService: Sendable {
         } else {
             let provider = self.provider
             let clock = self.clock
-            acquisition = .init(revision: processState.publicationRevision, stateStamp: stamp, config: expectedConfig, displays: displays, task: Task.detached(priority: .userInitiated) {
+            acquisition = .init(revision: processState.publicationRevision, observation: processState.observationGeneration,
+                                stateStamp: stamp, config: expectedConfig, displays: displays, task: Task.detached(priority: .userInitiated) {
                 let windows = provider.windows()
                 let inventory = provider.existingWindowPIDs()
                 // Sélectionner l'application après le relevé des fenêtres, sur MainActor.
@@ -270,7 +272,8 @@ public struct SnapshotService: Sendable {
               clock().timeIntervalSince(observation.completedAt) < SnapshotProcessState.sharedSnapshotMaxAge
         else { return nil }
         let prepared = PreparedSnapshot(permissions: permissions, displays: displays,
-                                       observation: observation, mouseLocation: provider.mouseLocation())
+                                       observation: observation, mouseLocation: provider.mouseLocation(),
+                                       observationGeneration: acquisition.observation)
         return snapshot(promptForPermissions: false, followFocus: followFocus,
                         sharedMaxAge: SnapshotProcessState.sharedSnapshotMaxAge, producer: false, prepared: prepared)
     }
@@ -280,6 +283,21 @@ public struct SnapshotService: Sendable {
         let displays: [DisplaySnapshot]
         let observation: SnapshotWindowObservation
         let mouseLocation: CGPoint?
+        /// Génération d'observation au départ de l'acquisition (SPEC-048).
+        let observationGeneration: UInt64
+    }
+
+    /// Changement observé (événement AX ou NSWorkspace, commande, écrans) : les lecteurs ne
+    /// réutilisent plus le relevé publié au-delà de la règle des 150 ms (SPEC-048). O(1).
+    public func noteObservationChange() {
+        processState.noteObservationChange()
+    }
+
+    /// Active la réutilisation silencieuse pour les lecteurs de ce fichier d'état (SPEC-048, ADR 015).
+    /// Réservé au processus dont le tiler signale chaque événement : un lecteur sans ordonnanceur
+    /// (mode modulaire, `--no-live-events`) garde la règle des 150 ms. `cap` : intervalle du filet.
+    public func enableQuietReaderReuse(cap: TimeInterval) {
+        processState.enableQuietReuse(cap: cap)
     }
 
     /// Oublie le snapshot partagé (après une commande qui change fenêtres ou focus).
@@ -330,6 +348,7 @@ public struct SnapshotService: Sendable {
     private func snapshot(promptForPermissions: Bool, followFocus: Bool, sharedMaxAge: TimeInterval, producer: Bool, prepared: PreparedSnapshot? = nil) -> DaemonSnapshot {
         let config = self.config
         let now = clock()
+        let observationGeneration = prepared?.observationGeneration ?? processState.observationGeneration
         // Énumération Accessibility HORS verrou (R1) : seule la réconciliation, fonction pure
         // de (état, fenêtres vivantes), tourne sous le verrou de `StageStore.mutate`.
         let permissions = prepared?.permissions ?? provider.permissions(prompt: promptForPermissions)
@@ -418,7 +437,8 @@ public struct SnapshotService: Sendable {
             // Une lecture AX lente ne doit pas épuiser le cache avant sa publication.
             at: prepared?.observation.completedAt ?? clock(),
             stateStamp: fileModificationStamp(stageStore.fileURL.path),
-            config: config
+            config: config,
+            observationGeneration: observationGeneration
         )
         return snapshot
     }
@@ -2425,6 +2445,7 @@ final class SnapshotProcessState: @unchecked Sendable {
         let at: Date
         let stateStamp: [Int64]
         let config: RoadieConfig
+        let observationGeneration: UInt64
     }
 
     private struct DestroyedWindowEvidence {
@@ -2436,6 +2457,7 @@ final class SnapshotProcessState: @unchecked Sendable {
     struct ReaderAcquisition {
         let id = UUID()
         let revision: UInt64
+        let observation: UInt64
         let stateStamp: [Int64]
         let config: RoadieConfig
         let displays: [DisplaySnapshot]
@@ -2444,6 +2466,14 @@ final class SnapshotProcessState: @unchecked Sendable {
     @MainActor var readerAcquisition: ReaderAcquisition?
     private var revision: UInt64 = 0
     var publicationRevision: UInt64 { lock.withLock { revision } }
+    private var observation: UInt64 = 0
+    /// Génération d'observation : incrémentée à chaque changement signalé (SPEC-048). O(1).
+    var observationGeneration: UInt64 { lock.withLock { observation } }
+    func noteObservationChange() { lock.withLock { observation &+= 1 } }
+    /// Durée de réutilisation silencieuse pour les lecteurs ; 0 tant que le tiler ne l'active pas.
+    /// Elle borne les changements sans notification (titre, application sans observateur).
+    private var quietReuseCap: TimeInterval = 0
+    func enableQuietReuse(cap: TimeInterval) { lock.withLock { quietReuseCap = max(0, cap) } }
 
     private let lock = NSLock()
     /// Clé : option `followFocus` du snapshot publié.
@@ -2465,19 +2495,25 @@ final class SnapshotProcessState: @unchecked Sendable {
     /// Rang de la dernière passe de commande dans son épisode (`pass` de `layout_apply`, A12).
     private var commandPass: (episode: String, pass: Int)?
 
-    func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, maxAge: TimeInterval, at date: Date, stateStamp: [Int64], config: RoadieConfig) {
+    func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, maxAge: TimeInterval, at date: Date, stateStamp: [Int64],
+                 config: RoadieConfig, observationGeneration: UInt64) {
         lock.withLock {
             revision &+= 1
-            published[followFocus] = Published(snapshot: snapshot, maxAge: maxAge, at: date, stateStamp: stateStamp, config: config)
+            published[followFocus] = Published(snapshot: snapshot, maxAge: maxAge, at: date, stateStamp: stateStamp,
+                                               config: config, observationGeneration: observationGeneration)
         }
     }
 
     /// Dernier snapshot publié s'il est récent et que ni l'état persisté ni la config n'ont changé.
-    func recentSnapshot(followFocus: Bool, now: Date, stateStamp: [Int64], config: RoadieConfig) -> DaemonSnapshot? {
+    /// `allowQuietReuse` (lecteurs) : au-delà de `maxAge`, le relevé reste valable si aucun changement
+    /// n'a été observé depuis son acquisition et si son âge reste sous `quietReuseCap`. O(1).
+    func recentSnapshot(followFocus: Bool, now: Date, stateStamp: [Int64], config: RoadieConfig,
+                        allowQuietReuse: Bool = false) -> DaemonSnapshot? {
         lock.withLock {
             guard let entry = published[followFocus] else { return nil }
             let age = now.timeIntervalSince(entry.at)
-            guard age >= 0, age < entry.maxAge,
+            let quiet = allowQuietReuse && entry.observationGeneration == observation && age < quietReuseCap
+            guard age >= 0, age < entry.maxAge || quiet,
                   entry.stateStamp == stateStamp,
                   entry.config == config
             else { return nil }
@@ -2547,7 +2583,8 @@ final class SnapshotProcessState: @unchecked Sendable {
                         snapshot.windows[index].window.frame = frame
                     }
                 }
-                published[key] = Published(snapshot: snapshot, maxAge: entry.maxAge, at: entry.at, stateStamp: entry.stateStamp, config: entry.config)
+                published[key] = Published(snapshot: snapshot, maxAge: entry.maxAge, at: entry.at, stateStamp: entry.stateStamp,
+                                           config: entry.config, observationGeneration: entry.observationGeneration)
             }
         }
     }

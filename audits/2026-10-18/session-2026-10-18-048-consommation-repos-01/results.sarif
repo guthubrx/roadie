@@ -1,0 +1,68 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Audit Code V15",
+          "version": "15.0.0"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "spec048.r3-file-reread",
+          "level": "warning",
+          "message": {
+            "text": "R3 partielle : la minuterie du rail relit et décode stages.json et rail.json chaque seconde: R3 interdit toute relecture de fichier inchangé par la minuterie du rail. store.state() et railRuntimeStateStore.load() lisent et décodent le disque à chaque tick, sans cache (JSONPersistence.load). Seul recording.json est mémorisé. Coût non mesuré."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "62220d6c2a827922c88d"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/RailController.swift"
+                },
+                "region": {
+                  "startLine": 932
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "spec048.r3-file-reread",
+          "level": "warning",
+          "message": {
+            "text": "Variante hors diff : les poignées décodent stages.json toutes les 150 ms au repos: Minuterie 0,15 s (l. 37) -> refresh -> readerSnapshot -> update(snapshot:) qui appelle effectiveStageStore.state() (l. 167) : lecture et décodage d'environ 58 Ko à chaque tick quand les poignées sont actives. Antérieur à 048. Coût non mesuré ; la nécessité d'une lecture fraîche plutôt que snapshot.state n'est pas établie."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "8d3b5fedd4b3ec996f1a"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "medium"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/DividerResizeRuntime.swift"
+                },
+                "region": {
+                  "startLine": 167
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

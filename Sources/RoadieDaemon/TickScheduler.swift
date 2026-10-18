@@ -55,6 +55,9 @@ public final class TickScheduler {
     private let schedule: Schedule
     private let episodes: EpisodeContext
     private let events: EventLog?
+    /// Changement observé (SPEC-048) : toute demande hors filet périodique signale aux lecteurs
+    /// que le dernier relevé publié peut être périmé.
+    private let onObservationChange: @MainActor () -> Void
     private var pending: Pending?
     /// Échéance interne sur laquelle le minuteur est armé, et instant de l'armement. `fire()` la
     /// déclenche même si le maintainer ne la rend plus (échéance future seulement, T211).
@@ -68,8 +71,10 @@ public final class TickScheduler {
         now: @escaping @MainActor () -> Date = { Date() },
         schedule: @escaping Schedule = TickScheduler.dispatchAfter,
         episodes: EpisodeContext = .shared,
-        events: EventLog? = EventLog()
+        events: EventLog? = EventLog(),
+        onObservationChange: @escaping @MainActor () -> Void = {}
     ) {
+        self.onObservationChange = onObservationChange
         self.tick = tick
         self.nextDeadline = nextDeadline
         self.isBlocked = isBlocked
@@ -84,6 +89,7 @@ public final class TickScheduler {
     /// d'une application à notre écriture (A12). La cause gardée est la première de la demande,
     /// sauf une cause du filet, remplacée par un événement. O(1) hors `nextDeadline`.
     public func request(cause: String, delay coalescing: Coalescing = .event) {
+        if coalescing != .safetyNet { onObservationChange() }
         let date = now()
         switch coalescing {
         case .event:

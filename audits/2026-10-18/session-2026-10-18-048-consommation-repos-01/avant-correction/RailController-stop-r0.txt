@@ -1,0 +1,41 @@
+100:    }
+101:
+102:    /// Arrete tout ce que `start()` a mis en place : timers, surveillances de fichiers, moniteurs souris,
+103:    /// observateur d'ecran et panneaux. Appelable plusieurs fois ; `start()` peut ensuite etre rappele.
+104:    public func stop() {
+105:        rebuildTask?.cancel()
+106:        rebuildTask = nil
+107:        pendingRebuild = nil
+108:        refreshTimer?.invalidate()
+109:        refreshTimer = nil
+110:        hoverTimer?.invalidate()
+111:        hoverTimer = nil
+112:        stageLabelTimer?.invalidate()
+113:        stageLabelTimer = nil
+114:        pendingStageStoreRefresh?.cancel()
+115:        pendingStageStoreRefresh = nil
+116:        pendingStageStoreRailSignature = nil
+117:        [configWatcher, recordingStatusWatcher, stageStoreWatcher].forEach { $0?.stop() }
+118:        clickMonitors.forEach { NSEvent.removeMonitor($0) }
+119:        clickMonitors.removeAll()
+120:        if let screenObserver {
+121:            NotificationCenter.default.removeObserver(screenObserver)
+122:        }
+123:        screenObserver = nil
+124:        if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
+125:        settingsObserver = nil
+126:        cancelRailDrags()
+127:        panels.values.forEach { $0.orderOut(nil) }
+128:        panels.removeAll()
+129:        screenFrames.removeAll()
+130:        lastRenderSignatures.removeAll()
+131:        lastThumbnailSignatures.removeAll()
+132:        contentCache = RailDisplayContentCache()
+133:        lastRenderedSettings = nil
+134:        lastConfigRefreshPath = nil
+135:        lastConfigRefreshStamp = nil
+136:    }
+137:
+138:    private func startWatchers() {
+139:        configWatcher = RailFileWatcher(
+140:            path: { ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath() },

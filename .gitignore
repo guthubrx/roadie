@@ -29,3 +29,7 @@ DerivedData/
 *.p12
 *.pfx
 *.mobileprovision
+
+# Sorties brutes des outils d'audit V15 : gardées sur disque, hors Git (empreintes dans manifest.json).
+audits/**/runs/
+audits/**/configs/

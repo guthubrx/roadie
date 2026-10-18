@@ -1,0 +1,20 @@
+{
+  "label": "avant",
+  "captured_at": "2026-10-18T16:34:14.956223+00:00",
+  "pid": 64518,
+  "window_s": 120,
+  "idle_at_start_s": 62.9,
+  "cpu_s": 13.74,
+  "cpu_percent_of_core": 11.45,
+  "rss_kb": 112128,
+  "rejected_windows": 1,
+  "sample_file": "/tmp/roadie-048-avant-sample.txt",
+  "frames": {
+    "releve_ax_complet": 539,
+    "bordure": 69,
+    "rail_refresh": 0,
+    "screencapturekit_enumeration": 298,
+    "config_courante": 96,
+    "focus_souris": 18
+  }
+}

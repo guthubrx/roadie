@@ -1,0 +1,244 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": true,
+    "decision": "inconclusive"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 2,
+    "low": 0,
+    "info": 0,
+    "total": 2,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "roadie.cache-not-reset-on-stop",
+      "file": "Sources/RoadieDaemon/RailController.swift",
+      "symbol": "RailController.stop",
+      "instance": "recording-status-cache-survives-watcher-stop",
+      "line": 138,
+      "category": "correctness",
+      "title": "Statut d'enregistrement mémorisé conservé après l'arrêt du watcher",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "stop() arrête le watcher recording_status sans remettre recordingStatusDirty à vrai ; RailFileWatcher.start() reprend l'empreinte courante, donc un changement pendant l'arrêt n'est jamais signalé. Défaut latent : stop() n'est appelé qu'à l'arrêt du daemon aujourd'hui, mais son contrat autorise un redémarrage.",
+      "remediation": "Remettre recordingStatusCache à nil et recordingStatusDirty à vrai dans stop().",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "d039abe2f159fed55f096b4ff616032902ec24ff42d484f79dac5d5993d65d2b"
+        },
+        {
+          "kind": "artifact",
+          "path": "avant-correction/RailController-stop-r0.txt",
+          "sha256": "9a8972e4a12141a01dc36819ef0ee3071b18f07df4be93e96dfcbe69c778f3fa"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/RailController.swift",
+          "sha256": "4dbbc975245806ddbf7839004ac079a97318384872f2c3c96e17ee38eac27751",
+          "line": 138
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Niveau source + compilation + suite complète en révision 1 (1 721 tests verts). Pas de test dédié : le redémarrage du rail crée des panneaux et des watchers réels ; pas d'observation runtime (redémarrage du daemon interdit).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/diff-corrections.md",
+            "sha256": "1c8e269a2146e1f9395be2b99adbe3aa5b4472b2913e26a3ac94d10f102ef58a"
+          },
+          {
+            "kind": "artifact",
+            "path": "runs/20261018T173021917521Z/run.json",
+            "sha256": "1affef6d79f30cf6b9496853de96a46030f1219855184c8ddcd181aeb8cac5ad"
+          },
+          {
+            "kind": "artifact",
+            "path": "runs/20261018T173027311569Z/run.json",
+            "sha256": "dce96334f6fade34b9a8a78f6fce51eb109e69b621cd462c0f2cafbd2ba4a5f0"
+          }
+        ]
+      },
+      "fingerprint": "9619f4d1404af7da63b9"
+    },
+    {
+      "rule_id": "spec048.r3-file-reread",
+      "file": "Sources/RoadieDaemon/RailController.swift",
+      "symbol": "RailController.renderPanels",
+      "instance": "unchanged-state-files-reread-per-tick",
+      "line": 932,
+      "category": "performance",
+      "title": "R3 partielle : la minuterie du rail relit et décode stages.json et rail.json chaque seconde",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "R3 interdit toute relecture de fichier inchangé par la minuterie du rail. store.state() et railRuntimeStateStore.load() lisent et décodent le disque à chaque tick, sans cache (JSONPersistence.load). Seul recording.json est mémorisé. Coût non mesuré.",
+      "remediation": "Mettre en cache par empreinte (modèle RailSettingsCache) puis mesurer, ou réduire le texte de R3 et le documenter dans validation.md.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "d039abe2f159fed55f096b4ff616032902ec24ff42d484f79dac5d5993d65d2b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/r3-lectures-par-tick.txt",
+          "sha256": "75ffd2b5e6f2d2a57b1e08b25dff404a43cd15d1ff64d0ebd633847d552a6220"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/RailController.swift",
+          "sha256": "4dbbc975245806ddbf7839004ac079a97318384872f2c3c96e17ee38eac27751",
+          "line": 932
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+          }
+        ]
+      },
+      "requirements": [
+        "R3"
+      ],
+      "fingerprint": "62220d6c2a827922c88d"
+    },
+    {
+      "rule_id": "spec048.doc-drift",
+      "file": "specs/048-consommation-repos/plan.md",
+      "symbol": "plan.A-01",
+      "instance": "quiet-cap-1s-vs-safety-net",
+      "line": 7,
+      "category": "documentation",
+      "title": "Plan, tâches et recherche décrivent quietMaxAge = 1 s, contredits par le code",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Le code utilise allowQuietReuse et un plafond égal au filet du tiler (2 s), activé seulement avec les événements en direct ; plan.md, tasks.md T002 et research.md décrivent encore une API quietMaxAge et 1 s.",
+      "remediation": "Aligner le texte sur le code et l'ADR 015 en gardant l'historique.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "d039abe2f159fed55f096b4ff616032902ec24ff42d484f79dac5d5993d65d2b"
+        },
+        {
+          "kind": "artifact",
+          "path": "avant-correction/plan-r0.txt",
+          "sha256": "7d70bdb9840055c82df25bdacb40676e7af9c9761f7c6bc75a112219d2a66e42"
+        },
+        {
+          "kind": "artifact",
+          "path": "avant-correction/tasks-r0.txt",
+          "sha256": "6b8eefc8dcaae41645d2758fbe35a49224b5e4dee8406b30a92a8912a42eff65"
+        },
+        {
+          "kind": "source",
+          "path": "specs/048-consommation-repos/plan.md",
+          "sha256": "1b479e4a570705b670dcf586cf2d393b3c78c82cf8ab925aa0dec5810d48c179",
+          "line": 7
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+          }
+        ]
+      },
+      "requirements": [
+        "R1"
+      ],
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Diff conservé ; nouvelle recherche des motifs quietMaxAge et « jusqu'à 1 s » : plus aucune description contradictoire (research.md garde la valeur initiale avec la mention de révision).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/diff-corrections.md",
+            "sha256": "1c8e269a2146e1f9395be2b99adbe3aa5b4472b2913e26a3ac94d10f102ef58a"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+          }
+        ]
+      },
+      "fingerprint": "4c4f52fc002aae4b9535"
+    },
+    {
+      "rule_id": "spec048.r3-file-reread",
+      "file": "Sources/RoadieDaemon/DividerResizeRuntime.swift",
+      "symbol": "DividerResizeCoordinator.update",
+      "instance": "stage-state-reread-every-150ms",
+      "line": 167,
+      "category": "performance",
+      "title": "Variante hors diff : les poignées décodent stages.json toutes les 150 ms au repos",
+      "severity": "MEDIUM",
+      "confidence": "medium",
+      "status": "confirmed",
+      "rationale": "Minuterie 0,15 s (l. 37) -> refresh -> readerSnapshot -> update(snapshot:) qui appelle effectiveStageStore.state() (l. 167) : lecture et décodage d'environ 58 Ko à chaque tick quand les poignées sont actives. Antérieur à 048. Coût non mesuré ; la nécessité d'une lecture fraîche plutôt que snapshot.state n'est pas établie.",
+      "remediation": "Session 051 : réutiliser snapshot.state ou un cache par empreinte, puis mesurer.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "d039abe2f159fed55f096b4ff616032902ec24ff42d484f79dac5d5993d65d2b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes.md",
+          "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DividerResizeRuntime.swift",
+          "sha256": "793e8714eac64fff88773a4ea141fb75a0abe10fa6e8219f53845c14edbd440a",
+          "line": 167
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+          }
+        ]
+      },
+      "fingerprint": "8d3b5fedd4b3ec996f1a"
+    }
+  ],
+  "suppressed": []
+}

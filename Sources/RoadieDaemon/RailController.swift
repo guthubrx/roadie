@@ -28,10 +28,17 @@ public final class RailController {
     private var rebuildTask: Task<Void, Never>?
     private var pendingRebuild: (reason: String, requestedAt: Date?)?
     private var lastRenderSignatures: [DisplayID: String] = [:]
+    /// Révisions des vignettes par écran (SPEC-048 C-03) : un changement seul met à jour les images
+    /// des cartes existantes, sans reconstruire le panneau.
+    private var lastThumbnailSignatures: [DisplayID: String] = [:]
     private var contentCache = RailDisplayContentCache()
     private var lastRenderedSettings: RailSettings?
     private var lastConfigRefreshPath: String?
     private var lastConfigRefreshStamp: [Int64]?
+    /// Statut d'enregistrement mémorisé (SPEC-048 C-02) : relu quand le watcher signale un
+    /// changement, ou quand le processus enregistreur a disparu ; sinon aucune lecture par tick.
+    private var recordingStatusCache: TargetRecordingStatus?
+    private var recordingStatusDirty = true
     private var refreshTimer: Timer?
     private var hoverTimer: Timer?
     private var stageLabelTimer: Timer?
@@ -121,10 +128,14 @@ public final class RailController {
         panels.removeAll()
         screenFrames.removeAll()
         lastRenderSignatures.removeAll()
+        lastThumbnailSignatures.removeAll()
         contentCache = RailDisplayContentCache()
         lastRenderedSettings = nil
         lastConfigRefreshPath = nil
         lastConfigRefreshStamp = nil
+        // Watcher arrêté : un changement pendant l'arrêt ne serait jamais signalé (SPEC-048 C-02).
+        recordingStatusCache = nil
+        recordingStatusDirty = true
     }
 
     private func startWatchers() {
@@ -138,7 +149,10 @@ public final class RailController {
                 return TargetRecordingStatusStore.directoryURL.path
             },
             observedFile: { TargetRecordingStatusStore.defaultURL.path },
-            onChange: { [weak self] in self?.rebuildPanels(reason: "recording_status") }
+            onChange: { [weak self] in
+                self?.recordingStatusDirty = true
+                self?.rebuildPanels(reason: "recording_status")
+            }
         )
         let stageStorePath = store.fileURL.path
         stageStoreWatcher = RailFileWatcher(
@@ -883,6 +897,28 @@ public final class RailController {
         }
     }
 
+    /// O(1) par tick : décodage seulement après un signal du watcher ou la fin de l'enregistreur.
+    private func currentRecordingStatus() -> TargetRecordingStatus? {
+        let next = Self.recordingStatus(cached: recordingStatusCache, dirty: recordingStatusDirty,
+                                        isAlive: ProcessLiveness.isAlive,
+                                        load: { TargetRecordingStatusStore().activeStatus() })
+        recordingStatusCache = next
+        recordingStatusDirty = false
+        return next
+    }
+
+    /// Statut à afficher : relu seulement si le watcher l'a signalé ou si l'enregistreur a disparu. O(1).
+    nonisolated static func recordingStatus(
+        cached: TargetRecordingStatus?,
+        dirty: Bool,
+        isAlive: (pid_t) -> Bool,
+        load: () -> TargetRecordingStatus?
+    ) -> TargetRecordingStatus? {
+        if dirty { return load() }
+        guard let cached else { return nil }
+        return isAlive(cached.pid) ? cached : load()
+    }
+
     private func renderPanels(snapshot: DaemonSnapshot, reason: String, requestedAt: Date?) {
         // Les cartes restent fixes entre l'appui et le dépôt ; le cycle suivant applique les nouveautés.
         guard pendingStageReorder == nil else { return }
@@ -900,9 +936,13 @@ public final class RailController {
         let runtimeState = railRuntimeStateStore.load()
         config.stageLabel.visibleUntil = runtimeState.stageLabelsVisibleUntil
         let recordConfig = snapshotService.effectiveConfig.experimental.targetRecord
-        let recordingStatus = recordConfig.indicator.showsNavrail
-            ? TargetRecordingStatusStore().activeStatus()
-            : nil
+        let recordingStatus: TargetRecordingStatus?
+        if recordConfig.indicator.showsNavrail {
+            recordingStatus = currentRecordingStatus()
+        } else {
+            recordingStatus = nil
+            recordingStatusDirty = true // relu au réaffichage de l'indicateur
+        }
         let recordingIndicatorBottomOffset = CGFloat(recordConfig.navrailBottomOffset)
         let liveWindowIDs = snapshotService.railWindowIDs(in: snapshot, state: state)
         let protectedWindowIDs = Set(protectedBlurredWindows.keys)
@@ -927,6 +967,7 @@ public final class RailController {
         // Contenu visible de chaque ecran : sert a la signature, aux captures de vignettes et au rendu.
         var contents: [DisplayID: RailDisplayContent] = [:]
         var displaySignatures: [DisplayID: String] = [:]
+        var thumbnailSignatures: [DisplayID: String] = [:]
         let sharedSignature = [
             "recording=\(recordingStatus?.name ?? "-"):\(recordingIndicatorBottomOffset)",
             "pinned=\(runtimeState.isPinned)",
@@ -946,7 +987,8 @@ public final class RailController {
             )
             contents[displayID] = content
             let memberIDs = content.stages.flatMap(\.members).map(\.windowID)
-            displaySignatures[displayID] = "\(sharedSignature)|hidden=\(hiddenDisplayIDs.contains(displayID))|\(screen.frame)|\(screen.visibleFrame)|\(screen.localizedName)|\(content.signature)|thumbnails=\(thumbnails.revisionSignature(for: memberIDs))"
+            displaySignatures[displayID] = "\(sharedSignature)|hidden=\(hiddenDisplayIDs.contains(displayID))|\(screen.frame)|\(screen.visibleFrame)|\(screen.localizedName)|\(content.signature)"
+            thumbnailSignatures[displayID] = thumbnails.revisionSignature(for: memberIDs)
             if !hiddenDisplayIDs.contains(displayID) {
                 visibleMembers.append(contentsOf: content.stages.flatMap(\.members))
             }
@@ -955,9 +997,15 @@ public final class RailController {
         // Les membres encore representes (retenus 15 s) gardent leur vignette ; seuls les autres sont purges.
         thumbnails.prune(keeping: representedWindowIDs)
         let initialThumbnailCaptureBudget = thumbnailCaptureBudget(for: reason, now: startedAt)
+        let visibleIDs = Set(visibleMembers.map(\.windowID))
+        let liveFrames = Dictionary(
+            snapshot.windows.compactMap { visibleIDs.contains($0.window.id) ? ($0.window.id, $0.window.frame) : nil },
+            uniquingKeysWith: { first, _ in first }
+        )
         thumbnails.requestCaptures(
             for: visibleMembers,
             protectedWindowIDs: protectedWindowIDs,
+            liveFrames: liveFrames,
             displayWidth: config.previewWidth,
             budget: initialThumbnailCaptureBudget
         )
@@ -967,6 +1015,12 @@ public final class RailController {
 
         let changedDisplays = Self.changedDisplayIDs(previous: lastRenderSignatures, current: displaySignatures,
                                                      settingsChanged: settings != lastRenderedSettings)
+        let thumbnailOnlyDisplays = Self.changedDisplayIDs(previous: lastThumbnailSignatures, current: thumbnailSignatures,
+                                                           settingsChanged: false).subtracting(changedDisplays)
+        lastThumbnailSignatures = thumbnailSignatures
+        for displayID in thumbnailOnlyDisplays where !hiddenDisplayIDs.contains(displayID) {
+            panels[displayID]?.refreshThumbnails(thumbnails)
+        }
         guard !changedDisplays.isEmpty else { return }
         lastRenderSignatures = displaySignatures
         lastRenderedSettings = settings

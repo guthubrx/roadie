@@ -369,7 +369,8 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
             let now = Date()
             return UserInputActivity.shared.blocksLayout(mouseButtonsPressed: NSEvent.pressedMouseButtons != 0)
                 || now < displaySettlingUntil || now < tickSuspendedUntil
-        }
+        },
+        onObservationChange: { service.noteObservationChange() }
     )
 
     let settingsController = SettingsLiveApplyController(
@@ -419,6 +420,9 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     }
 
     guard enableLiveEvents else { return }
+    // SPEC-048 : chaque événement passe désormais par l'ordonnanceur ; sans changement observé, les
+    // lecteurs réutilisent le dernier relevé jusqu'au filet suivant au lieu de relever toutes les 150 ms.
+    service.enableQuietReaderReuse(cap: safetyNetInterval)
     // Session de geste (A4) : la fenêtre gérée sous le curseur au clic, d'après le snapshot partagé.
     UserInputActivity.shared.observeGestures(
         target: { point in

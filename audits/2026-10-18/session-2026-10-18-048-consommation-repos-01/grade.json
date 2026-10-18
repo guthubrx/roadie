@@ -1,0 +1,35 @@
+{
+  "protocol": "15.0.0",
+  "grade": "N/A",
+  "score": 94,
+  "date": "2026-10-18",
+  "spec": "specs/048-consommation-repos/spec.md",
+  "scope": "Revue différentielle session 048 consommation au repos (base d32105c8, modifications locales et nouveaux fichiers)",
+  "decision": "inconclusive",
+  "release_blocked": true,
+  "coverage_percent": 92.31,
+  "controls_verified": 12,
+  "controls_applicable": 13,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 2,
+    "low": 0,
+    "info": 0,
+    "total": 2,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [
+    "contrôle non vérifié : security.history",
+    "outil gitleaks-history: timeout",
+    "sous-contrôle d'axe non vérifié : axes.security.03",
+    "sous-contrôle d'axe non vérifié : axes.tests.04",
+    "sous-contrôle d'axe non vérifié : axes.performance.04",
+    "sous-contrôle d'axe non vérifié : axes.quality.03"
+  ],
+  "source_drift": [],
+  "input_sha256": "831d3a436658fdc5027932b0882bc14b07b4b12df872db731cbd4ddcf29eea41",
+  "manifest_sha256": "de4e9da0cb1bb00454fef02a889b6738cb311bb7ee6dc263c387873636c08efa",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

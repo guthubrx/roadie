@@ -1,0 +1,589 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T170637790381Z/run.json",
+          "sha256": "9f5f036518c9bdf11b5b0bb7e567360fa3ca654b58a166059fc77daa46d32b35"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T170641769932Z/run.json",
+          "sha256": "dd1c4235a3523063fd77df1dd26942d615e34110b2f3a534b09791469c2d1307"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "unknown",
+      "rationale": "timeout, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T170642056975Z/run.json",
+          "sha256": "e9b064040c5c7f21a4284acc6f8dd1a34f6b1ebcf87113141d13b2b9553b5155"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "unknown",
+      "rationale": "error, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T171142543043Z/run.json",
+          "sha256": "6c85190494cbe471cba4afadd931a9d73970e6d6e536bb9ed9f231aafc504baf"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "roadie.cache-not-reset-on-stop",
+      "file": "Sources/RoadieDaemon/RailController.swift",
+      "symbol": "RailController.stop",
+      "instance": "recording-status-cache-survives-watcher-stop",
+      "line": 136,
+      "category": "correctness",
+      "title": "Statut d'enregistrement mémorisé conservé après l'arrêt du watcher",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "stop() arrête le watcher recording_status sans remettre recordingStatusDirty à vrai ; RailFileWatcher.start() reprend l'empreinte courante, donc un changement pendant l'arrêt n'est jamais signalé. Défaut latent : stop() n'est appelé qu'à l'arrêt du daemon aujourd'hui, mais son contrat autorise un redémarrage.",
+      "remediation": "Remettre recordingStatusCache à nil et recordingStatusDirty à vrai dans stop().",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "d039abe2f159fed55f096b4ff616032902ec24ff42d484f79dac5d5993d65d2b"
+        },
+        {
+          "kind": "artifact",
+          "path": "avant-correction/RailController-stop-r0.txt",
+          "sha256": "9a8972e4a12141a01dc36819ef0ee3071b18f07df4be93e96dfcbe69c778f3fa"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "spec048.r3-file-reread",
+      "file": "Sources/RoadieDaemon/RailController.swift",
+      "symbol": "RailController.renderPanels",
+      "instance": "unchanged-state-files-reread-per-tick",
+      "line": 929,
+      "category": "performance",
+      "title": "R3 partielle : la minuterie du rail relit et décode stages.json et rail.json chaque seconde",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "R3 interdit toute relecture de fichier inchangé par la minuterie du rail. store.state() et railRuntimeStateStore.load() lisent et décodent le disque à chaque tick, sans cache (JSONPersistence.load). Seul recording.json est mémorisé. Coût non mesuré.",
+      "remediation": "Mettre en cache par empreinte (modèle RailSettingsCache) puis mesurer, ou réduire le texte de R3 et le documenter dans validation.md.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "d039abe2f159fed55f096b4ff616032902ec24ff42d484f79dac5d5993d65d2b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/r3-lectures-par-tick.txt",
+          "sha256": "75ffd2b5e6f2d2a57b1e08b25dff404a43cd15d1ff64d0ebd633847d552a6220"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+          }
+        ]
+      },
+      "requirements": [
+        "R3"
+      ]
+    },
+    {
+      "rule_id": "spec048.doc-drift",
+      "file": "specs/048-consommation-repos/plan.md",
+      "symbol": "plan.A-01",
+      "instance": "quiet-cap-1s-vs-safety-net",
+      "line": 7,
+      "category": "documentation",
+      "title": "Plan, tâches et recherche décrivent quietMaxAge = 1 s, contredits par le code",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Le code utilise allowQuietReuse et un plafond égal au filet du tiler (2 s), activé seulement avec les événements en direct ; plan.md, tasks.md T002 et research.md décrivent encore une API quietMaxAge et 1 s.",
+      "remediation": "Aligner le texte sur le code et l'ADR 015 en gardant l'historique.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "d039abe2f159fed55f096b4ff616032902ec24ff42d484f79dac5d5993d65d2b"
+        },
+        {
+          "kind": "artifact",
+          "path": "avant-correction/plan-r0.txt",
+          "sha256": "7d70bdb9840055c82df25bdacb40676e7af9c9761f7c6bc75a112219d2a66e42"
+        },
+        {
+          "kind": "artifact",
+          "path": "avant-correction/tasks-r0.txt",
+          "sha256": "6b8eefc8dcaae41645d2758fbe35a49224b5e4dee8406b30a92a8912a42eff65"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+          }
+        ]
+      },
+      "requirements": [
+        "R1"
+      ]
+    },
+    {
+      "rule_id": "spec048.r3-file-reread",
+      "file": "Sources/RoadieDaemon/DividerResizeRuntime.swift",
+      "symbol": "DividerResizeCoordinator.update",
+      "instance": "stage-state-reread-every-150ms",
+      "line": 167,
+      "category": "performance",
+      "title": "Variante hors diff : les poignées décodent stages.json toutes les 150 ms au repos",
+      "severity": "MEDIUM",
+      "confidence": "medium",
+      "status": "confirmed",
+      "rationale": "Minuterie 0,15 s (l. 37) -> refresh -> readerSnapshot -> update(snapshot:) qui appelle effectiveStageStore.state() (l. 167) : lecture et décodage d'environ 58 Ko à chaque tick quand les poignées sont actives. Antérieur à 048. Coût non mesuré ; la nécessité d'une lecture fraîche plutôt que snapshot.state n'est pas établie.",
+      "remediation": "Session 051 : réutiliser snapshot.state ou un cache par empreinte, puis mesurer.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "d039abe2f159fed55f096b4ff616032902ec24ff42d484f79dac5d5993d65d2b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes.md",
+          "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "4cc1a88d52e4995b35d0bb3dbb455486f3877d22bad9ae5599744fa13425852b"
+          }
+        ]
+      }
+    }
+  ],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Analyse statique et validation des entrées",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Protection des secrets courants",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Maîtrise des secrets historiques",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Authentification et séparation des droits",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Maîtrise des dépendances vulnérables",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "À examiner : Confidentialité et pseudonymisation",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "À examiner : Permissions des appels externes",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "À examiner : Résistance aux instructions malveillantes",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Conservation et rotation des sauvegardes",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Reprise des traitements interrompus",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Continuité pendant une bascule",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Restauration après sinistre",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Typage des sources et des tests",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Analyse de style et erreurs statiques",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Régressions et cas limites",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Qualification du runtime livré",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Tests interface et intégration des données",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Admission et saturation des demandes",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Budget mémoire",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Délais, annulation et libération",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Mesures représentatives de latence et charge",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "À examiner : Complexité des points d’entrée",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "À examiner : Bornes des parcours et allocations",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "À examiner : Coût des accès et écritures de données",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "À examiner : Gestion des refus et messages utilisateur",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "À examiner : Gestion des erreurs partielles",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "À examiner : Ergonomie des parcours concernés",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Frontières et résolution des dépendances",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Maîtrise des cycles",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Séparation construction et exécution",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Assemblages et dépendances dynamiques",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "À examiner : Invariants et compromis expliqués",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "À examiner : Périmètre et maintenabilité du changement",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "À examiner : Revue contradictoire et responsabilité",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "À examiner : Dépendances nécessaires en exploitation",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "À examiner : Poids et ressources justifiés",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "À examiner : Code mort et simplifications possibles",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "À examiner : Fidélité des données lues",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "À examiner : Cohérence et idempotence des versions",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "À examiner : Conformité aux règles et données de référence",
+      "evidence": []
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pending",
+      "rationale": "À examiner : Lien constats, corrections et preuves",
+      "evidence": []
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pending",
+      "rationale": "À examiner : Couverture des exigences obligatoires",
+      "evidence": []
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : non mesuré.",
+  "responsibility": "Vertus LLM et responsabilité future : non vérifiées."
+}
