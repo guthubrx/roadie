@@ -32,3 +32,10 @@
 - Copies conservées pendant tout le geste ; seules leur position et leur légende changent. Les originaux restent les cibles des clics.
 - 19 tests dans trois suites réussis, dont les 12 combinaisons de modes et d’alignements. Les identités des copies sont identiques après changement de destination. Le retour du test franchit la zone d’hystérésis, comme un geste réel.
 - Relecture : sortie, dépôt et rendu effacent le cache du geste ; noms personnalisés, stages cachées, opacité et ordre conservés. Aucune lecture AX ni nouvelle capture ajoutée.
+
+## Revue — protections complémentaires
+- Risque confirmé de publication AX périmée : générations vérifiées dans les deux caches partagés. Un scan récent, une invalidation ou une réénumération d’écrivain empêche un ancien remplacement.
+- Contexte NSWorkspace capturé sur MainActor après l’inventaire, lecture AX du focus hors fil principal. NSRunningApplication est documenté comme thread-safe.
+- Horodatage à la fin effective de l’acquisition, pas au réveil du lecteur. Une acquisition devenue trop ancienne dans la file principale est abandonnée.
+- 61 tests dans sept suites passent. Nouveaux scénarios : cache ancien après scan récent, invalidation, réénumération ; capture du contexte focus sur MainActor et lecture AX hors MainActor.
+- Relecture ciblée : garder la mutualisation plutôt que lancer des scans supplémentaires après un délai. Les limites AX existantes restent actives.

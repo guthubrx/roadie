@@ -10,6 +10,8 @@ private final class ReaderProvider042: SystemSnapshotProviding, Sendable {
         var scans = 0
         var inventories = 0
         var mainThreadScans = 0
+        var focusPreparedOnMain = false
+        var focusReadOnMain = false
     }
     let state = OSAllocatedUnfairLock(initialState: State())
     let duringScan = OSAllocatedUnfairLock<(@Sendable () -> Void)?>(initialState: nil)
@@ -19,6 +21,13 @@ private final class ReaderProvider042: SystemSnapshotProviding, Sendable {
         state.withLock { $0.scans += 1; if Thread.isMainThread { $0.mainThreadScans += 1 } }
         duringScan.withLock { $0 }?()
         return [powerWindow(1, x: 100)]
+    }
+    @MainActor func focusedWindowReader() -> @Sendable () -> WindowID? {
+        state.withLock { $0.focusPreparedOnMain = Thread.isMainThread }
+        return {
+            self.state.withLock { $0.focusReadOnMain = Thread.isMainThread }
+            return nil
+        }
     }
     func existingWindowPIDs() -> [WindowID: Int32]? {
         state.withLock { $0.inventories += 1 }
@@ -47,6 +56,8 @@ struct Spec042SnapshotReaderTests {
         #expect(provider.state.withLock { $0.scans } == 1)
         #expect(provider.state.withLock { $0.mainThreadScans } == 0)
         #expect(provider.state.withLock { $0.inventories } == 1)
+        #expect(provider.state.withLock { $0.focusPreparedOnMain })
+        #expect(!provider.state.withLock { $0.focusReadOnMain })
         service.invalidateSharedSnapshot()
         #expect(await service.readerSnapshot() != nil)
         #expect(provider.state.withLock { $0.scans } == 2)

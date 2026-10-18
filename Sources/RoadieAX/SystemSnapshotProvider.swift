@@ -12,12 +12,15 @@ public protocol SystemSnapshotProviding: Sendable {
     /// Identités CG existantes, y compris sur les Spaces inactifs ; nil si indisponible.
     func existingWindowPIDs() -> [WindowID: Int32]?
     func focusedWindowID() -> WindowID?
+    /// Capture sur MainActor le contexte AppKit, puis effectue seulement la lecture AX en arrière-plan.
+    @MainActor func focusedWindowReader() -> @Sendable () -> WindowID?
     func mouseLocation() -> CGPoint?
 }
 
 public extension SystemSnapshotProviding {
     func existingWindowPIDs() -> [WindowID: Int32]? { nil }
     func focusedWindowID() -> WindowID? { nil }
+    @MainActor func focusedWindowReader() -> @Sendable () -> WindowID? { { self.focusedWindowID() } }
     func mouseLocation() -> CGPoint? { nil }
 }
 
@@ -444,6 +447,8 @@ final class AXAttributeCache: @unchecked Sendable {
 
     private let lock = NSLock()
     private var entries: [CGWindowID: Entry] = [:]
+    private var generation: UInt64 = 0
+    func beginSnapshot() -> UInt64 { lock.withLock { generation &+= 1; return generation } }
     private let now: @Sendable () -> Date
 
     init(now: @escaping @Sendable () -> Date = { Date() }) {
@@ -469,8 +474,9 @@ final class AXAttributeCache: @unchecked Sendable {
 
     /// Enregistre l'état lu. La partie stable n'entre en cache que si elle vient d'être lue
     /// et si la fenêtre est connue depuis au moins `minimumAge`. O(1).
-    func record(_ attributes: AXWindowAttributes, for id: CGWindowID, pid: pid_t, stableIsFresh: Bool) {
+    func record(_ attributes: AXWindowAttributes, for id: CGWindowID, pid: pid_t, stableIsFresh: Bool, generation expected: UInt64? = nil) {
         lock.withLock {
+            guard expected == nil || expected == generation else { return }
             let date = now()
             var entry = entries[id] ?? Entry(pid: pid, firstSeen: date)
             entry.lastKnown = attributes
@@ -486,13 +492,17 @@ final class AXAttributeCache: @unchecked Sendable {
     /// état connu des fenêtres. O(n).
     func invalidate(pid: pid_t) {
         lock.withLock {
+            generation &+= 1
             for (id, entry) in entries where entry.pid == pid { entries[id]?.stable = nil }
         }
     }
 
     /// Retire les fenêtres absentes du dernier snapshot. O(n).
-    func retain(only ids: Set<CGWindowID>) {
-        lock.withLock { entries = entries.filter { ids.contains($0.key) } }
+    func retain(only ids: Set<CGWindowID>, generation expected: UInt64? = nil) {
+        lock.withLock {
+            guard expected == nil || expected == generation else { return }
+            entries = entries.filter { ids.contains($0.key) }
+        }
     }
 }
 
@@ -610,22 +620,27 @@ final class AXWindowIndexCache: @unchecked Sendable {
 
     private let lock = NSLock()
     private var byPID: [pid_t: AXApplicationWindows] = [:]
+    private var generation: UInt64 = 0
+    func beginSnapshot() -> UInt64 { lock.withLock { generation &+= 1; return generation } }
 
     func windows(for pid: pid_t) -> AXApplicationWindows? {
         lock.withLock { byPID[pid] }
     }
 
     func store(_ windows: AXApplicationWindows) {
-        lock.withLock { byPID[windows.pid] = windows }
+        lock.withLock { generation &+= 1; byPID[windows.pid] = windows }
     }
 
     /// Remplace l'index par celui d'un snapshot complet : les applications absentes en sortent. O(p).
-    func replaceAll(with windows: [AXApplicationWindows]) {
-        lock.withLock { byPID = Dictionary(windows.map { ($0.pid, $0) }, uniquingKeysWith: { $1 }) }
+    func replaceAll(with windows: [AXApplicationWindows], generation expected: UInt64? = nil) {
+        lock.withLock {
+            guard expected == nil || expected == generation else { return }
+            byPID = Dictionary(windows.map { ($0.pid, $0) }, uniquingKeysWith: { $1 })
+        }
     }
 
     func invalidate(pid: pid_t) {
-        lock.withLock { byPID[pid] = nil }
+        lock.withLock { generation &+= 1; byPID[pid] = nil }
     }
 }
 
@@ -714,6 +729,9 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
 
     // O(n + Σm) : n fenetres CG, une enumeration kAXWindows (m elements) par application.
     public func windows() -> [WindowSnapshot] {
+        // Un scan ancien ne peut publier après un événement AX ou un scan plus récent.
+        let attributesGeneration = AXAttributeCache.shared.beginSnapshot()
+        let indexGeneration = AXWindowIndexCache.shared.beginSnapshot()
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             return []
@@ -771,7 +789,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 && rect.height >= 60
                 && !bundleID.hasPrefix("com.apple.WindowManager")
 
-            let attrs = tileCandidate ? attributes(forCGWindowID: number, pid: pid, requiredWindowIDs: requiredWindowIDs[pid], appWindows: &appWindows) : nil
+            let attrs = tileCandidate ? attributes(forCGWindowID: number, pid: pid, requiredWindowIDs: requiredWindowIDs[pid], appWindows: &appWindows, generation: attributesGeneration) : nil
 
             return WindowSnapshot(
                 id: WindowID(rawValue: number),
@@ -788,8 +806,8 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
             )
         }
 
-        AXAttributeCache.shared.retain(only: Set(result.map { $0.id.rawValue }))
-        AXWindowIndexCache.shared.replaceAll(with: appWindows.values.compactMap { $0 })
+        AXAttributeCache.shared.retain(only: Set(result.map { $0.id.rawValue }), generation: attributesGeneration)
+        AXWindowIndexCache.shared.replaceAll(with: appWindows.values.compactMap { $0 }, generation: indexGeneration)
         return result
     }
 
@@ -800,7 +818,8 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         forCGWindowID id: CGWindowID,
         pid: pid_t,
         requiredWindowIDs: Set<CGWindowID>?,
-        appWindows: inout [pid_t: AXApplicationWindows?]
+        appWindows: inout [pid_t: AXApplicationWindows?],
+        generation: UInt64
     ) -> AXWindowAttributes? {
         let cache = AXAttributeCache.shared
         let registry = AXUnresponsiveApps.shared
@@ -823,7 +842,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         let fresh = cached == nil ? Self.readStable(element, pid: pid) : nil
         guard let stable = cached ?? fresh ?? lastKnown?.stable else { return nil }
         let attrs = AXWindowAttributes(stable: stable, volatile: reading.resolved(lastKnown: lastKnown?.volatile))
-        cache.record(attrs, for: id, pid: pid, stableIsFresh: fresh != nil)
+        cache.record(attrs, for: id, pid: pid, stableIsFresh: fresh != nil, generation: generation)
         return attrs
     }
 
@@ -909,8 +928,16 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
     }
 
     public func focusedWindowID() -> WindowID? {
-        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
-        let pid = app.processIdentifier
+        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return nil }
+        return focusedWindowID(pid: pid)
+    }
+
+    @MainActor public func focusedWindowReader() -> @Sendable () -> WindowID? {
+        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        return { pid.flatMap { self.focusedWindowID(pid: $0) } }
+    }
+
+    private func focusedWindowID(pid: pid_t) -> WindowID? {
         let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return nil }
         var rawFocused: CFTypeRef?

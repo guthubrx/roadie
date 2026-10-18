@@ -244,9 +244,14 @@ public struct SnapshotService: Sendable {
             acquisition = pending
         } else {
             let provider = self.provider
+            let clock = self.clock
             acquisition = .init(revision: processState.publicationRevision, stateStamp: stamp, config: expectedConfig, displays: displays, task: Task.detached(priority: .userInitiated) {
-                SnapshotWindowObservation(windows: provider.windows(), inventory: provider.existingWindowPIDs(),
-                                          focusedWindowID: provider.focusedWindowID())
+                let windows = provider.windows()
+                let inventory = provider.existingWindowPIDs()
+                // Sélectionner l'application après le relevé des fenêtres, sur MainActor.
+                let readFocus = await provider.focusedWindowReader()
+                return SnapshotWindowObservation(windows: windows, inventory: inventory,
+                                                 focusedWindowID: readFocus(), completedAt: clock())
             })
             processState.readerAcquisition = acquisition
         }
@@ -257,7 +262,9 @@ public struct SnapshotService: Sendable {
         if let snapshot = recent() { return snapshot }
         guard processState.publicationRevision == acquisition.revision,
               acquisition.config == config, acquisition.stateStamp == fileModificationStamp(stageStore.fileURL.path),
-              acquisition.displays == provider.displays() else { return nil }
+              acquisition.displays == provider.displays(),
+              clock().timeIntervalSince(observation.completedAt) < SnapshotProcessState.sharedSnapshotMaxAge
+        else { return nil }
         let prepared = PreparedSnapshot(permissions: permissions, displays: displays,
                                        observation: observation, mouseLocation: provider.mouseLocation())
         return snapshot(promptForPermissions: false, followFocus: followFocus,
@@ -405,7 +412,7 @@ public struct SnapshotService: Sendable {
             followFocus: followFocus,
             maxAge: sharedMaxAge,
             // Une lecture AX lente ne doit pas épuiser le cache avant sa publication.
-            at: clock(),
+            at: prepared?.observation.completedAt ?? clock(),
             stateStamp: fileModificationStamp(stageStore.fileURL.path),
             config: config
         )
@@ -2368,6 +2375,7 @@ private struct SnapshotWindowObservation: Sendable {
     let windows: [WindowSnapshot]
     let inventory: [WindowID: Int32]?
     let focusedWindowID: WindowID?
+    let completedAt: Date
 }
 
 final class SnapshotProcessState: @unchecked Sendable {
