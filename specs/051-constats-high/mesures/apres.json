@@ -1,0 +1,24 @@
+{
+  "label": "apres-051",
+  "captured_at": "2026-10-18T18:18:48.359094+00:00",
+  "pid": 38887,
+  "window_s": 120,
+  "idle_at_start_s": 64.9,
+  "cpu_s": 2.83,
+  "cpu_percent_of_core": 2.36,
+  "rss_kb": 101488,
+  "rejected_windows": 2,
+  "sample_file": "~/.roadies/diagnostics/2026-10-18-session048/apres-051-sample.txt",
+  "sample_s": 30,
+  "sample_idle": true,
+  "frames": {
+    "releve_ax_complet": 187,
+    "bordure": 39,
+    "rail_refresh": 0,
+    "screencapturekit_enumeration": 0,
+    "config_courante": 66,
+    "focus_souris": 1
+  },
+  "contaminated": true,
+  "contamination": "Compilation d'audit V15 (swift build, 54 s) de 18:17:45 à 18:18:39 UTC pendant la fenêtre 18:16:48–18:18:48 ; à refaire sur la version intégrée."
+}
