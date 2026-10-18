@@ -21,4 +21,6 @@ Le minuteur de placement ne tourne que pendant le geste. Une seule cible est con
 L'accès natif au bureau est indisponible : CUA renvoie `CUA_REPL_ENABLED_SURFACES is required` et screencapture renvoie `could not create image from display`. Aucun clic réel, aucune capture ni diaporama vérifié n'est revendiqué. Les tests AppKit et d'intégration ne remplacent pas les gestes réels. Restent à vérifier sur la version installée : glisser une poignée avec deux puis quatre fenêtres, relâcher, revenir au point de départ et désactiver/réactiver les poignées dans Tuilage.
 
 ## Livraison
-Compilation et installation en cours. Aucun changement de version ni nouvelle release publique prévu.
+Compilation Release réussie et installée le 18 octobre 2026. Les 292 empreintes Sources/Tests sont inchangées depuis la suite complète. UUID du daemon compilé et installé : C17A941A-2EAE-3084-BA67-E379185E9EA9. Signature stricte vérifiée ; certificat conservé : 78a75e8032f190a20072eb91cc2919aac344ef78.
+
+Application : /Users/moi/Applications/Roadie.app. CLI : /Users/moi/.local/bin/roadie. Redémarrage confirmé, PID 89776. Quatre contrôles de santé OK, Accessibilité et configuration valides. Empreinte SHA-256 de la configuration personnelle inchangée : 301d7d43737c1deb31d2acaa3146ca5b285450a1bad65d27bd8cd095e19a3d77. Aucun changement de version ni nouvelle release publique.

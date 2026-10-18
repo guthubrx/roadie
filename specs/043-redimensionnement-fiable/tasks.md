@@ -6,5 +6,5 @@
 - [x] T004 [P] Refus de taille et intention récente : reproduction déterministe puis correction.
 - [x] T005 Intégrer les poignées au runtime et au service de commande ; ajouter réglage immédiat.
 - [x] T006 Vérifier intégration, documentation, ADR et suite complète.
-- [ ] T007 Compiler, installer, relancer, recueillir les preuves et finaliser les commits/livraison.
+- [x] T007 Compiler, installer, relancer, recueillir les preuves disponibles et finaliser les commits/livraison. Parcours réel restant non vérifié : bureau inaccessible, détail dans validation/validation.md.
 

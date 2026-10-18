@@ -23,3 +23,4 @@
 | 035 | Intégrée ; documents récupérés le 18 octobre | `session-035-audit-global` (fusionnée) | `specs/035-audit-global` | Corrections et tests livrés dans 037 ; coût des observations corrigé par lot ; rapports bruts archivés |
 
 | 042 | Clôturée, intégrée et installée | `session-042-couts-traitement` (fusionnée, supprimée) | `specs/042-couts-traitement` | Six coûts corrigés ; 1 628 tests / 192 suites, santé OK, sans benchmark ; revue initiale traitée, second passage indisponible |
+| 043 | Implémentée et installée ; gestes réels non vérifiés | `session-043-redimensionnement-fiable` | `specs/043-redimensionnement-fiable` | Trois P1 ; 1 685 tests / 199 suites et 26 tests de scripts, deuxième revue favorable, santé OK ; bureau inaccessible |

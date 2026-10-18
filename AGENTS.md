@@ -64,7 +64,12 @@ Générations des caches AX vérifiées après revue. 1 628 tests / 192 suites r
 sans benchmark. UUID 7C7282EB-E1CB-3F6A-8AE6-0974BEA2DAF5, PID 8095,
 signature conservée et quatre contrôles santé OK. Deuxième passage de revue
 indisponible (transport Bridget) ; limites dans specs/042-couts-traitement/validation/validation.md.
-Session 043 en cours : poignées BSP, historique borné des cadres AX et refus de taille.
+Session 043 implémentée et installée : poignées des séparations spatialBsp réglables
+dans Tuilage, historique AX borné et priorité des gestes récents face aux refus de taille.
+1 685 tests / 199 suites et 26 tests de scripts réussis ; deuxième revue T3 favorable.
+UUID C17A941A-2EAE-3084-BA67-E379185E9EA9, PID 89776, quatre contrôles santé OK.
+Signature et configuration conservées. Preuves incomplètes : bureau inaccessible ;
+gestes natifs à vérifier. Détail : specs/043-redimensionnement-fiable/validation/validation.md.
 Trois sous-agents T3 avec fichiers exclusifs ; intégration et validation par le parent.
 Current SpecKit feature: `043-redimensionnement-fiable`.
 
