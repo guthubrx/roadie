@@ -153,7 +153,8 @@ public struct DisplayParkingService: Sendable {
                 firstOriginDisplayID = firstOriginDisplayID ?? staleScope.displayID
                 firstLogicalDisplayID = firstLogicalDisplayID ?? logicalDisplayID
 
-                let parkedID = uniqueParkedStageID(
+                let reusableIndex = reusableEmptySlot(for: sourceStage, in: hostScope)
+                let parkedID = reusableIndex.map { hostScope.stages[$0].id } ?? uniqueParkedStageID(
                     originDisplayID: staleScope.displayID,
                     originStageID: sourceStage.id,
                     in: hostScope
@@ -175,7 +176,8 @@ public struct DisplayParkingService: Sendable {
                 parkedStage.origin = origin
                 parkedStage.hostDisplayID = hostDisplay.id
                 parkedStage.restoredAt = nil
-                hostScope.stages.append(parkedStage)
+                if let reusableIndex { hostScope.stages[reusableIndex] = parkedStage }
+                else { hostScope.stages.append(parkedStage) }
 
                 staleScope.stages[stageIndex].members = []
                 staleScope.stages[stageIndex].groups = []
@@ -299,6 +301,9 @@ public struct DisplayParkingService: Sendable {
                     }) {
                         restoredStage.id = originalStageID
                         targetScope.stages[placeholderIndex] = restoredStage
+                    } else if let reusableIndex = reusableEmptySlot(for: restoredStage, in: targetScope) {
+                        restoredStage.id = targetScope.stages[reusableIndex].id
+                        targetScope.stages[reusableIndex] = restoredStage
                     } else {
                         // Une modification du placeholder lui donne sa propre existence.
                         // La copie retrouve sa position sans écraser ce choix utilisateur.
@@ -543,12 +548,8 @@ public struct DisplayParkingService: Sendable {
         in scope: PersistentStageScope,
         excluding excludedIndex: Int
     ) -> StageID {
-        if let sameNameEmpty = scope.stages.enumerated().first(where: { item in
-            item.offset != excludedIndex
-                && item.element.parkingState != .parked
-                && canReuseMaterializationSlot(item.element, for: stage)
-        })?.element.id {
-            return sameNameEmpty
+        if let reusableIndex = reusableEmptySlot(for: stage, in: scope), reusableIndex != excludedIndex {
+            return scope.stages[reusableIndex].id
         }
 
         let preferred = stage.origin?.stageID ?? stage.id
@@ -572,7 +573,19 @@ public struct DisplayParkingService: Sendable {
     private func canReuseMaterializationSlot(_ slot: PersistentStage, for stage: PersistentStage) -> Bool {
         slot.parkingState != .parked && slot.members.isEmpty
             && slot.name == stage.name && slot.mode == stage.mode
-            && slot.groups.isEmpty && slot.bspTree == nil
+            && slot.groups.isEmpty && slot.focusedWindowID == nil && slot.previousFocusedWindowID == nil
+    }
+
+    /// Un homonyme vide unique peut être réutilisé ; les homonymes ambigus restent distincts. O(s).
+    private func reusableEmptySlot(for stage: PersistentStage, in scope: PersistentStageScope) -> Int? {
+        let compatible = scope.stages.indices.filter { canReuseMaterializationSlot(scope.stages[$0], for: stage) }
+        if let origin = stage.origin,
+           let sameOrigin = compatible.first(where: {
+               let candidate = scope.stages[$0].origin
+               return candidate?.logicalDisplayID == origin.logicalDisplayID
+                   && candidate?.desktopID == origin.desktopID && candidate?.stageID == origin.stageID
+           }) { return sameOrigin }
+        return compatible.count == 1 ? compatible.first : nil
     }
 
     private func firstSelectableStage(in scope: PersistentStageScope) -> PersistentStage? {

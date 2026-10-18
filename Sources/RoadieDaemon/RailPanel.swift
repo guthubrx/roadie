@@ -107,7 +107,8 @@ final class RailDragGhostView: NSView {
 
 @MainActor
 final class RailPanel: NSPanel {
-    private let stack = RailStackView()
+    let stack = RailStackView()
+    let stageScrollView = NSScrollView()
     private let horizontalInset: CGFloat = 6
     private var visibleStageIDs: [StageID] = []
     /// Ordre complet du scope, stages vides comprises : base du rang transmis à reorderStage (REL-039).
@@ -162,7 +163,17 @@ final class RailPanel: NSPanel {
         stack.alignment = .leading
         stack.spacing = 13
         stack.edgeInsets = NSEdgeInsets(top: 20, left: horizontalInset, bottom: 20, right: 18)
-        contentView = stack
+        // Le panneau reste de la hauteur de l'écran, même quand les cartes débordent.
+        let root = NSView()
+        contentView = root
+        stageScrollView.frame = root.bounds
+        stageScrollView.autoresizingMask = [.width, .height]
+        stageScrollView.drawsBackground = false
+        stageScrollView.hasVerticalScroller = true
+        stageScrollView.autohidesScrollers = true
+        stageScrollView.scrollerStyle = .overlay
+        stageScrollView.documentView = stack
+        root.addSubview(stageScrollView)
     }
 
     func position(on screen: NSScreen, displayID: DisplayID, config: RailVisualConfig, runtimeStore: RailRuntimeStateStore) {
@@ -330,6 +341,16 @@ final class RailPanel: NSPanel {
         if let recordingStatus {
             showRecordingIndicator(recordingStatus, bottomOffset: recordingIndicatorBottomOffset, textConfig: config.stageLabel)
         }
+        layoutStageDocument()
+    }
+
+    private func layoutStageDocument() {
+        let clip = stageScrollView.contentView
+        let oldTop = max(0, stack.frame.height - clip.bounds.maxY)
+        stack.setFrameSize(CGSize(width: frame.width, height: max(clip.bounds.height, stack.fittingSize.height)))
+        stack.layoutSubtreeIfNeeded()
+        clip.scroll(to: CGPoint(x: 0, y: max(0, stack.frame.height - clip.bounds.height - oldTop)))
+        stageScrollView.reflectScrolledClipView(clip)
     }
 
     /// Nouvelles vignettes sans changement de structure (SPEC-048 C-03) : les cartes existantes
@@ -455,8 +476,10 @@ final class RailPanel: NSPanel {
         guard let first = reorderOriginals.first?.card else { return }
         var futureOrder = orderedStageIDs.filter { $0 != sourceStageID }
         futureOrder.insert(sourceStageID, at: min(max(0, position - 1), futureOrder.count))
+        let copies = futureOrder.compactMap { reorderCopies[$0] }
+        let presented = copies.filter { !$0.members.isEmpty } + copies.filter { $0.members.isEmpty }
         var top = first.frame.maxY
-        for (index, copy) in futureOrder.compactMap({ reorderCopies[$0] }).enumerated() {
+        for (index, copy) in presented.enumerated() {
             copy.setReorderPreviewPosition(index + 1)
             copy.setFrameOrigin(CGPoint(x: copy.frame.minX, y: top - copy.frame.height))
             top = copy.frame.minY - stack.spacing

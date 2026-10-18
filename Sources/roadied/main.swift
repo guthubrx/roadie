@@ -426,20 +426,16 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     // Session de geste (A4) : la fenêtre gérée sous le curseur au clic, d'après le snapshot partagé.
     UserInputActivity.shared.observeGestures(
         target: { point in
-            let snapshot = service.sharedSnapshot()
+            guard let snapshot = service.cachedGestureSnapshot() else { return nil }
             let target = FocusFollowsMousePicker.gestureTargetWindow(at: point, in: snapshot)
-            let front = FocusFollowsMousePicker.frontWindow(at: point, in: snapshot)
-            EventLog().append(RoadieEvent(type: "window_gesture_target", details: [
-                "point": "\(point.x),\(point.y)",
-                "windowID": target.map { String($0.window.id.rawValue) } ?? "none",
-                "frame": target.map { "\($0.window.frame.x),\($0.window.frame.y) \($0.window.frame.width)x\($0.window.frame.height)" } ?? "none",
-                "hit": target.map { $0.window.frame.cgRect.contains(point) ? "interior" : "resize_handle" } ?? "none",
-                "frontWindowID": front.map { String($0.window.id.rawValue) } ?? "none",
-                "frontApp": front?.window.appName ?? "none",
-                "frontTileCandidate": front.map { String($0.window.isTileCandidate) } ?? "false",
-                "frontScope": front?.scope?.description ?? "none"
-            ]))
             return target.map { ($0.window.id.rawValue, $0.window.frame.cgRect) }
+        },
+        onDragStart: { gesture in
+            _ = service.sharedSnapshot()
+            EventLog().append(RoadieEvent(type: "window_gesture_target", details: [
+                "windowID": gesture.windowID.map(String.init) ?? "none",
+                "phase": "drag_started"
+            ]))
         },
         onRelease: { scheduler.buttonsReleased(gestureEnded: $0) }
     )

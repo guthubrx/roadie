@@ -119,6 +119,7 @@ public final class UserInputActivity: @unchecked Sendable {
     private var physicalReleaseObservedAt: Date?
     private var gestureTarget: GestureTarget?
     private var releaseHandler: ReleaseHandler?
+    private var dragStartHandler: (@MainActor (GestureSession) -> Void)?
 
     /// `monitoring: true` simule un moniteur actif (tests).
     public init(monitoring: Bool = false) {
@@ -152,9 +153,12 @@ public final class UserInputActivity: @unchecked Sendable {
 
     /// Branche la session de geste sur le tiler : `target` trouve la fenêtre sous le curseur au
     /// clic, `onRelease` reçoit chaque relâchement. Sans branchement, les sessions n'ont pas de cible.
-    public func observeGestures(target: @escaping GestureTarget, onRelease: @escaping ReleaseHandler) {
+    public func observeGestures(target: @escaping GestureTarget,
+                                onDragStart: (@MainActor (GestureSession) -> Void)? = nil,
+                                onRelease: @escaping ReleaseHandler) {
         lock.withLock {
             gestureTarget = target
+            dragStartHandler = onDragStart
             releaseHandler = onRelease
         }
     }
@@ -195,7 +199,13 @@ public final class UserInputActivity: @unchecked Sendable {
 
     @MainActor
     func mouseDragged() {
-        lock.withLock { gesture?.didDrag = true }
+        let first = lock.withLock { () -> GestureSession? in
+            guard var current = gesture, !current.didDrag else { return nil }
+            current.didDrag = true
+            gesture = current
+            return current
+        }
+        if let first { lock.withLock { dragStartHandler }?(first) }
     }
 
     /// Relâchement d'un bouton. Celui du bouton gauche ferme la session ; une session sans cible

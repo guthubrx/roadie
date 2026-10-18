@@ -81,12 +81,13 @@ struct Spec029RailTests {
         let reordered = persisted.reorderStage(StageID(rawValue: "2"), to: 1)
         #expect(reordered)
         let order = StagePresentationOrder(scope: persisted, liveWindowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)], now: now)
-        #expect(order.visibleStageIDs.map(\.rawValue) == ["2", "1", "9"])
-        #expect(order.stageID(at: 1)?.rawValue == "2")
-        #expect(StagePresentationOrder.menuLabel(order.visibleStages[0], position: 1) == "1 · Perso")
-        #expect(StagePresentationOrder.name(order.visibleStages[0], position: 1) == "Perso")
+        // Les stages occupées restent prioritaires, même après déplacement d'une carte vide.
+        #expect(order.visibleStageIDs.map(\.rawValue) == ["1", "9", "2"])
+        #expect(order.stageID(at: 3)?.rawValue == "2")
+        #expect(StagePresentationOrder.menuLabel(order.visibleStages[2], position: 3) == "3 · Perso")
+        #expect(StagePresentationOrder.name(order.visibleStages[2], position: 3) == "Perso")
         try #require(order.visibleStages.count == 3)
-        #expect(StagePresentationOrder.menuLabel(order.visibleStages[2], position: 3) == "Stage 3")
+        #expect(StagePresentationOrder.menuLabel(order.visibleStages[1], position: 2) == "Stage 2")
     }
 
     private func fixture() -> (StageStore, SnapshotService, WindowSnapshot) {

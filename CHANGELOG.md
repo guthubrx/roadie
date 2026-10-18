@@ -38,6 +38,12 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Le rail garde les stages occupées en tête et permet de faire défiler les cartes
+  quand elles dépassent l'écran. L'aperçu de déplacement et les menus suivent le même ordre.
+- Le rapatriement des stages réutilise un emplacement vide compatible et unique,
+  sans écraser une stage occupée ou fusionner des homonymes ambigus.
+- Un clic simple ne déclenche plus le relevé des fenêtres du geste natif : il part
+  au premier mouvement de glisser, en conservant l'ancrage mémorisé au clic.
 - Conservation des gestes sur les bords proches d'une poignée ou d'une bordure
   décorative ; seule une poignée ayant reçu le clic remplace le geste natif.
 - Affichage des poignées conservé avec les bordures JankyBorders, avec un repère

@@ -32,3 +32,4 @@
 | 051 | Clôturée, intégrée et installée | `session-051-constats-high` (fusionnée, supprimée) | `specs/051-constats-high` | 8 constats HIGH corrigés, D-02 laissé ; audit V15 inconclusive (option A) |
 | 049 | Clôturée, intégrée et installée | `session-049-reglages-macos` (fusionnée, supprimée) | `specs/049-reglages-macos` | Santé `macos-window-settings` ; ok en réel |
 | 050 | Clôturée, intégrée et installée | `session-050-double-clic-titre` (fusionnée, supprimée) | `specs/050-double-clic-titre` | Double-clic désactivé par défaut ; 1 744 tests |
+| 052 | Installée ; intégration en cours | `session-052-rail-reconnexions` | `specs/052-rail-reconnexions` | Rail défilable, priorité aux stages occupées, parking réutilisé, A-11 et V15 borné ; 1 749 tests, santé OK |

@@ -107,12 +107,21 @@ double-clic de barre de titre désactivé par défaut. 1 744 tests / 208 suites.
 Audits V15 inconclusive : historique Git analysé seulement depuis v0.4.0 (option A,
 sans fuite), adaptateur V15 sans arguments. UUID 7FAEFA94-B08E-3C14-B9B4-852B532C97E3.
 Reçus : specs/048-consommation-repos/, 051-constats-high/, 049-reglages-macos/, 050-double-clic-titre/.
-Current SpecKit feature: `050-double-clic-titre`.
+Session 052 implémentée et installée : nettoyage autorisé des douze stages vides,
+stages occupées prioritaires, rail défilable et fantôme aligné avec les destinations.
+Parking réutilisant les emplacements vides compatibles ; homonymes ambigus préservés.
+A-11 : ancrage mémorisé au clic, acquisition au premier glisser seulement.
+1 749 tests / 209 suites réussis. UUID 302CADB3-689D-3EF0-88D0-37693C9168F4,
+PID 69262, cinq contrôles santé OK. Quatre stages occupées et dix membres conservés.
+V15 : historique borné explicite, 63 tests courants/39 isolés, commit 744f30b dans
+00.Generic. Preuves visuelles incomplètes : bureau inaccessible. Reçu :
+specs/052-rail-reconnexions/validation.md.
+Current SpecKit feature: `052-rail-reconnexions`.
 
 Contexte :
-- `specs/050-double-clic-titre/spec.md`
-- `specs/050-double-clic-titre/plan.md`
-- `specs/050-double-clic-titre/tasks.md`
+- `specs/052-rail-reconnexions/spec.md`
+- `specs/052-rail-reconnexions/plan.md`
+- `specs/052-rail-reconnexions/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

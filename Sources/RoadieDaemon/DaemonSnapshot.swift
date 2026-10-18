@@ -217,6 +217,11 @@ public struct SnapshotService: Sendable {
         sharedSnapshotCountingScan(followFocus: followFocus).snapshot
     }
 
+    /// Ancrage au clic sans acquisition ni E/S ; ne vaut pas une observation fraîche. O(1).
+    public func cachedGestureSnapshot() -> DaemonSnapshot? {
+        processState.latestPublishedSnapshot()
+    }
+
     /// `sharedSnapshot`, avec `scanned` vrai si un relevé complet a été fait (compteur `scans`, A12).
     private func sharedSnapshotCountingScan(followFocus: Bool) -> (snapshot: DaemonSnapshot, scanned: Bool) {
         if let recent = processState.recentSnapshot(
@@ -2490,6 +2495,11 @@ final class SnapshotProcessState: @unchecked Sendable {
     private let lock = NSLock()
     /// Clé : option `followFocus` du snapshot publié.
     private var published: [Bool: Published] = [:]
+    private var gestureSnapshot: DaemonSnapshot?
+
+    func latestPublishedSnapshot() -> DaemonSnapshot? {
+        lock.withLock { gestureSnapshot }
+    }
     private var liveWindowIDs: Set<WindowID>?
     private var recentWindowObservations: [WindowID: Date] = [:]
     private var lastDisappearanceAt: Date?
@@ -2511,6 +2521,7 @@ final class SnapshotProcessState: @unchecked Sendable {
                  config: RoadieConfig, observationGeneration: UInt64) {
         lock.withLock {
             revision &+= 1
+            gestureSnapshot = snapshot
             published[followFocus] = Published(snapshot: snapshot, maxAge: maxAge, at: date, stateStamp: stateStamp,
                                                config: config, observationGeneration: observationGeneration)
         }
@@ -2588,6 +2599,12 @@ final class SnapshotProcessState: @unchecked Sendable {
         guard !frames.isEmpty else { return }
         lock.withLock {
             revision &+= 1
+            if var cached = gestureSnapshot {
+                for index in cached.windows.indices {
+                    if let frame = frames[cached.windows[index].window.id] { cached.windows[index].window.frame = frame }
+                }
+                gestureSnapshot = cached
+            }
             for (key, entry) in published {
                 var snapshot = entry.snapshot
                 for index in snapshot.windows.indices {

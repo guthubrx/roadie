@@ -46,7 +46,7 @@ struct Spec048RailTests {
                                                  liveWindowIDs: Set(stages.flatMap { $0.members.map(\.windowID) })),
                      displayName: "Test", config: config, thumbnails: store, recordingStatus: nil,
                      recordingIndicatorBottomOffset: 0)
-        let stack = try #require(panel.contentView as? RailStackView)
+        let stack = panel.stack
         let before = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
         #expect(before.count == 2)
 

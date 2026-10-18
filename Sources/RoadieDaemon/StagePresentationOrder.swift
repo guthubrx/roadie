@@ -8,12 +8,15 @@ struct StagePresentationOrder {
     let emptyStageIDs: [StageID]
 
     init(scope: PersistentStageScope, liveWindowIDs: Set<WindowID>, now: Date = Date()) {
-        visibleStages = scope.stages.compactMap { stage in
+        let representedStages = scope.stages.compactMap { stage -> PersistentStage? in
             let represented = RailController.railDisplayStage(stage, liveWindowIDs: liveWindowIDs, now: now)
             let named = Self.isNamed(stage) && (stage.parkingState != .parked || !stage.members.isEmpty)
             guard !represented.members.isEmpty || named else { return nil }
             return represented
         }
+        // Partition stable : les destinations et le rail partagent les mêmes rangs. O(s).
+        visibleStages = representedStages.filter { !$0.members.isEmpty }
+            + representedStages.filter { $0.members.isEmpty }
         // Un membre absent du relevé n'est pas une place libre : ne jamais y mélanger une nouvelle
         // fenêtre. Les stages nommées ont déjà leur carte et ne sont pas le dépôt « prochaine vide ».
         emptyStageIDs = scope.stages.filter {

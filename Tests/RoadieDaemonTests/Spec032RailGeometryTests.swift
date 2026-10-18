@@ -118,7 +118,7 @@ struct Spec032RailGeometryTests {
                        runtimeStore: RailRuntimeStateStore(path: directory.appendingPathComponent("runtime.json").path))
         panel.render(content: RailDisplayContent(scope: scope, presentationStates: [:], liveWindowIDs: Set(stages.flatMap { $0.members.map(\.windowID) })),
                      displayName: "Test", config: config, thumbnails: RailThumbnailStore(), recordingStatus: nil, recordingIndicatorBottomOffset: 0)
-        let stack = try #require(panel.contentView as? RailStackView)
+        let stack = panel.stack
         stack.layoutSubtreeIfNeeded()
         let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
         #expect(cards.map(\.stageID) == stages.map(\.id))

@@ -109,7 +109,7 @@ struct Spec041RailReorderPreviewTests {
         let panel = RailPanel()
         panel.position(on: screen, displayID: scope.displayID, config: config,
                        runtimeStore: RailRuntimeStateStore(path: directory.appendingPathComponent("runtime.json").path))
-        let stack = try #require(panel.contentView as? RailStackView)
+        let stack = panel.stack
         func render(_ value: PersistentStageScope) {
             panel.render(content: RailDisplayContent(scope: value, presentationStates: [:], liveWindowIDs: live),
                          displayName: "Écran de test", config: config, thumbnails: RailThumbnailStore(),

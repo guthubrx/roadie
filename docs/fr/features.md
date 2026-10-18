@@ -146,8 +146,10 @@ Cas d'usage :
 
 ## Navrail
 
-Le navrail est le panneau lateral par ecran qui represente les stages non vides.
-Une stage vide n'y est pas affichee, meme si elle a ete renommee.
+Le rail affiche d'abord les stages contenant des fenêtres, puis les stages vides
+nommées. Fais défiler le rail lorsque les cartes dépassent la hauteur de l'écran.
+Les menus de destination et l'aperçu du réordonnancement suivent le même ordre.
+Les stages vides sans nom restent accessibles par « Prochaine stage vide ».
 
 Les vignettes de fenetres peuvent aussi exposer leur etat de presentation. Une
 fenetre `maximized` reste dans sa stage normale et est marquee par une bordure a
