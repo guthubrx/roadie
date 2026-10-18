@@ -64,13 +64,15 @@ Générations des caches AX vérifiées après revue. 1 628 tests / 192 suites r
 sans benchmark. UUID 7C7282EB-E1CB-3F6A-8AE6-0974BEA2DAF5, PID 8095,
 signature conservée et quatre contrôles santé OK. Deuxième passage de revue
 indisponible (transport Bridget) ; limites dans specs/042-couts-traitement/validation/validation.md.
-Current SpecKit feature: `042-couts-traitement`.
+Session 043 en cours : poignées BSP, historique borné des cadres AX et refus de taille.
+Trois sous-agents T3 avec fichiers exclusifs ; intégration et validation par le parent.
+Current SpecKit feature: `043-redimensionnement-fiable`.
 
 Contexte :
-- `specs/042-couts-traitement/spec.md`
-- `specs/042-couts-traitement/plan.md`
-- `specs/042-couts-traitement/research.md`
-- `specs/042-couts-traitement/tasks.md`
+- `specs/043-redimensionnement-fiable/spec.md`
+- `specs/043-redimensionnement-fiable/plan.md`
+- `specs/043-redimensionnement-fiable/research.md`
+- `specs/043-redimensionnement-fiable/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
