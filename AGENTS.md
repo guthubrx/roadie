@@ -86,8 +86,13 @@ UUID 60B2AD40-0F27-3EB6-BA6D-08570FEF5290, PID 65772, quatre contrôles santé O
 Configuration et certificat conservés. Parcours réel assisté : gestes reconnus et taille
 conservée, confirmation utilisateur. Preuves visuelles incomplètes : bureau inaccessible.
 Reçu : specs/045-capture-redimensionnement/validation.md.
-Session 046 en cours : écran actif par défaut pour les nouvelles fenêtres, texte
-des paramètres et documentation alignés, choix explicites conservés.
+Session 046 implémentée et installée : écran actif par défaut pour les nouvelles
+fenêtres, choix français et aide dans Tuilage, choix explicites conservés et repli
+sur l'écran de la fenêtre si aucun écran actif n'est connu. Docs FR/EN alignées.
+1 696 tests / 199 suites réussis, revue traitée. UUID
+4203C4C0-E22C-3F80-BC7E-4A624E9C0A13, PID 76046, quatre contrôles santé OK.
+Configuration et certificat conservés. Preuves visuelles incomplètes : bureau
+inaccessible. Reçu : specs/046-placement-ecran-actif/validation.md.
 Current SpecKit feature: `046-placement-ecran-actif`.
 
 Contexte :

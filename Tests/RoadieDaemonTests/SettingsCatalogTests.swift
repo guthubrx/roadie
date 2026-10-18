@@ -40,6 +40,18 @@ struct SettingsCatalogTests {
     }
 
     @Test
+    func placementChoicesUseReadableLabelsAndMatchTheConfigDefault() throws {
+        let setting = try #require(SettingsCatalog.find(id: "window_placement.new_apps_target"))
+        #expect(setting.defaultValue == .string(WindowPlacementConfig().newAppsTarget))
+        guard case .choice(let values) = setting.kind else { Issue.record("choix attendu"); return }
+        #expect(values == ["focused_display", "mouse", "macos"])
+        #expect(setting.choiceLabel("focused_display") == "Écran actif (recommandé)")
+        #expect(setting.choiceLabel("mouse") == "Écran de la souris")
+        #expect(setting.choiceLabel("macos") == "Choix de macOS")
+        #expect(setting.choiceLabel("future") == "future")
+    }
+
+    @Test
     func strategyAliasesMatchTheLoader() throws {
         let strategy = try #require(SettingsCatalog.find(id: "tiling.default_strategy"))
         guard case .choice(let choices) = strategy.kind else { Issue.record("choix attendu"); return }

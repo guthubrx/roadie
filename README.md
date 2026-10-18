@@ -35,7 +35,7 @@ and Stage Manager's window groups.
 |---|---|
 | Arrange windows | Automatic tiling, multiple layouts and divider handles in persistent tree layouts |
 | Switch projects | Named stages, previews and workspace switching from the rail |
-| Use multiple displays | Independent desktops and layouts, window and stage transfers |
+| Use multiple displays | Independent desktops, new windows on the active display by default, window and stage transfers |
 | Keep a window within reach | Pins, bookmarks and window groups |
 | Work from the keyboard | Labels, grids and the search and command bar |
 | Personalize the interface | Live settings, independent sizes and font choices |

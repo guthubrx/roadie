@@ -242,7 +242,7 @@ private final class TransientFailureWriter: WindowFrameWriting, @unchecked Senda
 @Suite
 struct SnapshotServiceTests {
     @Test
-    func tileCandidatesAreAssignedToDefaultStageOnContainingDisplay() {
+    func tileCandidatesKeepTheirDisplaysWhenNoFocusedDisplayIsKnown() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")
         let stageStore = StageStore(path: tempPath("snapshot-default-stage-containing-display"))
@@ -369,7 +369,7 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func newTileCandidatesCanFollowFocusedDisplay() {
+    func newTileCandidatesFollowFocusedDisplayByDefault() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")
         let stagePath = FileManager.default.temporaryDirectory
@@ -398,7 +398,7 @@ struct SnapshotServiceTests {
                 windowSnapshots: [window],
                 mousePoint: CGPoint(x: 1500, y: 200)
             ),
-            config: RoadieConfig(windowPlacement: WindowPlacementConfig(newAppsTarget: "focused_display")),
+            config: RoadieConfig(),
             stageStore: StageStore(path: stagePath)
         )
 

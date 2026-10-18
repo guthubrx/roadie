@@ -436,7 +436,7 @@ public struct WindowPlacementConfig: Equatable, Codable, Sendable {
     /// "right" = nouvelle fenêtre à droite/en bas du pane focalisé ; "left" = gauche/haut.
     public var newWindowSide: String
 
-    public init(newAppsTarget: String = "macos", newWindowSide: String = "right") {
+    public init(newAppsTarget: String = "focused_display", newWindowSide: String = "right") {
         self.newAppsTarget = newAppsTarget
         self.newWindowSide = newWindowSide
     }
@@ -448,8 +448,8 @@ public struct WindowPlacementConfig: Equatable, Codable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        let value = try c.decodeIfPresent(String.self, forKey: .newAppsTarget) ?? "macos"
-        self.newAppsTarget = ["mouse", "focused_display", "macos"].contains(value) ? value : "macos"
+        let value = try c.decodeIfPresent(String.self, forKey: .newAppsTarget) ?? "focused_display"
+        self.newAppsTarget = ["mouse", "focused_display", "macos"].contains(value) ? value : "focused_display"
         let side = try c.decodeIfPresent(String.self, forKey: .newWindowSide) ?? "right"
         self.newWindowSide = ["right", "left"].contains(side) ? side : "right"
     }

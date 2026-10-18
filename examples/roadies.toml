@@ -57,8 +57,10 @@ mouse_follows_focus = false
 
 # EN: Where new application windows go: mouse | focused_display | macos.
 # FR: Où vont les nouvelles fenêtres : mouse | focused_display | macos.
+# EN: Default: the active display's current stage, even when the pointer is elsewhere.
+# FR: Défaut : stage courant de l'écran actif, même si la souris est ailleurs.
 [window_placement]
-new_apps_target = "macos"
+new_apps_target = "focused_display"
 new_window_side = "right"
 
 # EN: Width presets used by: roadie layout width next|prev.

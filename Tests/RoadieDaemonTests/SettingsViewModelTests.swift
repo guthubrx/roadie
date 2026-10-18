@@ -35,6 +35,24 @@ struct SettingsViewModelTests {
     }
 
     @Test
+    func placementPreservesExplicitChoiceUntilResetThenUsesFocusedDisplay() throws {
+        let original = "[window_placement]\nnew_apps_target = \"mouse\"\n"
+        let (model, config) = try makeModel(original)
+        defer { try? FileManager.default.removeItem(at: config.deletingLastPathComponent()) }
+        model.select(.tuilage)
+        let setting = try descriptor("window_placement.new_apps_target")
+        #expect(model.text(for: setting) == "mouse")
+        #expect(try String(contentsOf: config, encoding: .utf8) == original)
+        model.reset(setting)
+        #expect(model.errors[setting.id] == nil)
+        #expect(model.text(for: setting) == "focused_display")
+        #expect(try RoadieConfigLoader.load(from: config.path).windowPlacement.newAppsTarget == "focused_display")
+        let reopened = SettingsViewModel(service: SettingsService(configPath: config.path, afterWrite: {}))
+        reopened.select(.tuilage)
+        #expect(reopened.text(for: setting) == "focused_display")
+    }
+
+    @Test
     func typingAFontKeepsDecimalDraftAndUpdatesImmediately() throws {
         let (model, _) = try makeModel()
         let setting = try descriptor("interface.settings_text_font_size")

@@ -13,6 +13,13 @@ jour et les limites connues ; les README décrivent la version courante.
   à sa future place, et les cartes voisines montrent l’ordre qui sera appliqué au dépôt.
   Une aimantation réglable dans les paramètres stabilise la destination.
 
+### Changements
+
+- Sans préférence de placement enregistrée, les nouvelles fenêtres rejoignent
+  désormais le stage courant de l'écran actif, même si le pointeur est ailleurs.
+  Ce défaut remplace le placement de macOS. Les choix explicites restent conservés ;
+  le réglage et ses alternatives sont expliqués dans les paramètres.
+
 ### Corrections
 
 - Conservation des gestes sur les bords proches d'une poignée ou d'une bordure

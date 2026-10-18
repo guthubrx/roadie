@@ -83,26 +83,36 @@ struct ConfigTests {
         #expect(config.focus.stageMoveFollowsFocus)
     }
 
-    @Test
-    func windowPlacementConfigDecodesFromToml() throws {
+    @Test(arguments: ["mouse", "focused_display", "macos"])
+    func windowPlacementConfigPreservesExplicitChoice(target: String) throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-window-placement-\(UUID().uuidString).toml")
         try """
         [window_placement]
-        new_apps_target = "mouse"
+        new_apps_target = "\(target)"
         """.write(to: url, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: url) }
 
         let config = try RoadieConfigLoader.load(from: url.path)
 
-        #expect(config.windowPlacement.newAppsTarget == "mouse")
+        #expect(config.windowPlacement.newAppsTarget == target)
     }
 
     @Test
-    func windowPlacementDefaultsToMacOS() {
+    func windowPlacementDefaultsToFocusedDisplay() {
         let config = RoadieConfig()
 
-        #expect(config.windowPlacement.newAppsTarget == "macos")
+        #expect(config.windowPlacement.newAppsTarget == "focused_display")
+    }
+
+    @Test(arguments: ["", "[window_placement]\nnew_window_side = \"left\"", "[window_placement]\nnew_apps_target = \"unknown\""])
+    func missingOrInvalidPlacementUsesFocusedDisplay(toml: String) throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-placement-default-\(UUID()).toml")
+        try toml.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let config = try RoadieConfigLoader.load(from: url.path)
+        #expect(config.windowPlacement.newAppsTarget == "focused_display")
     }
 
     @Test

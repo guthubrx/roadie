@@ -1117,7 +1117,7 @@ public struct SnapshotService: Sendable {
                liveDisplayIDs.contains(activeDisplayID) {
                 return activeDisplayID
             }
-            return fallbackDisplayID ?? displayID(containing: window.frame.center, in: displays)
+            return displayID(containing: window.frame.center, in: displays) ?? fallbackDisplayID
         case "macos":
             fallthrough
         default:

@@ -89,7 +89,9 @@ struct Spec034PlacementReadinessTests {
             }, bspTree: tree)])],
             desktopSelections: [PersistentDesktopSelection(displayID: external.id, currentDesktopID: scope.desktopID)],
             activeDisplayID: external.id))
-        let config = RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 0))
+        // Ce scénario d'attente AX conserve volontairement les fenêtres sur leurs écrans initiaux.
+        let config = RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 0),
+            windowPlacement: WindowPlacementConfig(newAppsTarget: "macos"))
         let clock = Placement034Clock()
         let registry = WrittenFrameRegistry()
         let writer = Placement034Writer(provider: provider, registry: registry, clock: clock, unavailable: [terminal.id])

@@ -210,19 +210,28 @@ include_desktop_destinations = true
 include_display_destinations = true
 ```
 
-## New App Placement
+## New Window Placement
 
-Roadie can choose the landing display for a new real application window when it
-is discovered. Popups, dialogs, and non-tileable windows are not affected.
+By default, a new window joins the current stage on the active display. Opening
+a terminal with ⌘N keeps it in your workspace even when the pointer is on another
+display. Roadie adds it to the layout as soon as it is available. Popups, dialogs,
+and non-tileable windows are not affected.
+
+Choose the destination in **Settings > Tiling > New window display**
+(**Tuilage > Écran des nouvelles fenêtres** in the interface). Saved choices are
+preserved; Reset selects the active display.
 
 ```toml
 [window_placement]
-new_apps_target = "mouse" # mouse | focused_display | macos
+new_apps_target = "focused_display" # default; mouse | focused_display | macos
 ```
 
-- `mouse`: assigns the new window to the active stage on the display under the pointer.
-- `focused_display`: assigns the new window to the active stage on Roadie's focused display.
-- `macos`: keeps the display initially chosen by macOS.
+- **Active display (recommended)** (`focused_display`, default): the current stage on Roadie's active display.
+- **Pointer display** (`mouse`): the current stage on the display under the pointer.
+- **macOS placement** (`macos`): the display initially chosen by the application and macOS.
+
+In the configuration file, use these exact lowercase values without extra spaces.
+An invalid value falls back to `focused_display`.
 
 Available actions:
 

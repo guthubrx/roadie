@@ -12,3 +12,6 @@ Aligner constructeur, décodage sans clé ou valeur invalide, catalogue et exemp
 Documenter le défaut dans les guides français/anglais et le changelog. Ne modifier
 ni l'ordonnanceur, ni les délais, ni le mécanisme de placement : l'essai réel a
 confirmé que le réglage existant suffit. Aucun gain chiffré de performance revendiqué.
+
+Sécuriser le repli révélé par la suite : si aucun écran actif n'est encore connu,
+conserver l'écran qui contient la fenêtre plutôt que choisir le premier écran.

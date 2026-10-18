@@ -90,6 +90,9 @@ public struct SettingDescriptor: Equatable, Sendable {
     public func choiceLabel(_ value: String) -> String {
         let label: String
         switch (id, value) {
+        case ("window_placement.new_apps_target", "focused_display"): return "Écran actif (recommandé)"
+        case ("window_placement.new_apps_target", "mouse"): return "Écran de la souris"
+        case ("window_placement.new_apps_target", "macos"): return "Choix de macOS"
         case ("tiling.default_strategy", "bsp"): label = "Arbre automatique"
         case ("tiling.default_strategy", "spatialBsp"): label = "Arbre persistant"
         case ("tiling.default_strategy", "masterStack"): label = "Fenêtre principale et pile"
@@ -283,9 +286,9 @@ extension SettingsCatalog {
                       "Liste des sous-rôles d'accessibilité acceptés par le tuilage."),
         readOnlyEntry(.tuilage, "tiling", "display_overrides", "Marges par écran",
                       "Tableau de marges extérieures propres à chaque écran."),
-        entry(.tuilage, "window_placement", "new_apps_target", "Écran des nouvelles applications",
-              "Écran où s'ouvre une nouvelle application : celui de la souris (mouse), de la fenêtre active (focused_display) ou celui choisi par macOS (macos).",
-              .choice(["mouse", "focused_display", "macos"]), .string("macos")),
+        entry(.tuilage, "window_placement", "new_apps_target", "Écran des nouvelles fenêtres",
+              "Par défaut, les nouvelles fenêtres rejoignent le stage courant de l’écran actif, même si la souris est ailleurs. Utile avec ⌘N. Les autres choix suivent la souris ou le placement de macOS.",
+              .choice(["focused_display", "mouse", "macos"]), .string("focused_display")),
         entry(.tuilage, "window_placement", "new_window_side", "Côté d'insertion des nouvelles fenêtres",
               "Côté où apparaît une nouvelle fenêtre par rapport à la fenêtre active, en mode spatialBsp.",
               .choice(["right", "left"]), .string("right")),

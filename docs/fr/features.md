@@ -215,20 +215,28 @@ include_desktop_destinations = true
 include_display_destinations = true
 ```
 
-## Placement des nouvelles applications
+## Placement des nouvelles fenêtres
 
-Roadie peut choisir l'ecran d'accueil d'une nouvelle vraie fenetre d'application
-au moment ou elle est decouverte. Les popups, dialogues et fenetres non tileables
-ne sont pas concernes.
+Par défaut, une nouvelle fenêtre rejoint le stage courant de l'écran actif.
+Ainsi, ⌘N depuis un terminal garde la nouvelle fenêtre dans ton espace de travail,
+même si la souris est restée sur un autre écran. Roadie l'intègre au tuilage dès
+qu'elle est disponible. Les popups, dialogues et fenêtres non tuilables ne sont
+pas concernés.
+
+Ce choix se règle dans **Paramètres > Tuilage > Écran des nouvelles fenêtres**.
+Les choix déjà enregistrés restent conservés ; « Rétablir » sélectionne l'écran actif.
 
 ```toml
 [window_placement]
-new_apps_target = "mouse" # mouse | focused_display | macos
+new_apps_target = "focused_display" # défaut ; mouse | focused_display | macos
 ```
 
-- `mouse` : assigne la nouvelle fenetre a la stage active de l'ecran sous la souris.
-- `focused_display` : assigne la nouvelle fenetre a la stage active de l'ecran focus par Roadie.
-- `macos` : garde l'ecran choisi initialement par macOS.
+- **Écran actif (recommandé)** (`focused_display`, défaut) : stage courant de l'écran actif dans Roadie.
+- **Écran de la souris** (`mouse`) : stage courant de l'écran sous le pointeur.
+- **Choix de macOS** (`macos`) : écran choisi initialement par l'application et macOS.
+
+Dans le fichier de configuration, ces valeurs s'écrivent exactement comme ci-dessus,
+en minuscules et sans espace ajouté. Une valeur invalide reprend le défaut `focused_display`.
 
 Actions disponibles :
 
