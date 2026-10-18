@@ -18,4 +18,4 @@ Compilation Release réussie et installée le 18 octobre 2026. Les 286 empreinte
 
 Application : /Users/moi/Applications/Roadie.app. CLI : /Users/moi/.local/bin/roadie. Redémarrage confirmé, PID 8095. Quatre contrôles de santé OK, Accessibilité et configuration valides. La première requête a précédé l’ouverture de la socket ; celle faite après initialisation réussit. Configuration personnelle conservée. Pas de nouvelle release ni de changement de version.
 
-Intégration et nettoyage : en cours.
+Intégration par avance rapide dans main, commit ed9a1ccd poussé sur origin/main. Branche session-042-couts-traitement supprimée. Le dépôt principal et le worktree actif de cette conversation sont les deux seuls worktrees ; ce dernier reste détaché de main pour préserver le fil. Fichiers de compilation retirés. Santé vérifiée après nettoyage : quatre contrôles OK. Journaux et sauvegarde conservés hors Git. Un commit documentaire de clôture consigne ces résultats.

@@ -39,3 +39,9 @@
 - Horodatage à la fin effective de l’acquisition, pas au réveil du lecteur. Une acquisition devenue trop ancienne dans la file principale est abandonnée.
 - 61 tests dans sept suites passent. Nouveaux scénarios : cache ancien après scan récent, invalidation, réénumération ; capture du contexte focus sur MainActor et lecture AX hors MainActor.
 - Relecture ciblée : garder la mutualisation plutôt que lancer des scans supplémentaires après un délai. Les limites AX existantes restent actives.
+
+## T007 — Livraison
+- Suite complète : 1 628 tests / 192 suites, benchmark désactivé. Build Release réussi, 286 empreintes Sources/Tests identiques après compilation et installation.
+- Installation avec certificat conservé, UUID compilé/ installé identiques, redémarrage PID 8095 et quatre contrôles santé OK, puis contrôle identique après nettoyage.
+- Configuration personnelle inchangée. Documentation et changelog mis à jour sans version ni release supplémentaire.
+- Main intégré et poussé ; branche de correction et fichiers de compilation supprimés. Seul le worktree nécessaire au fil reste avec le dépôt principal. Relecture du diff effectuée, limites du second passage indépendant consignées dans le reçu.
