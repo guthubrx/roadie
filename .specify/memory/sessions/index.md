@@ -21,3 +21,5 @@
 
 | 029 | Intégrée ; documents récupérés le 18 octobre | `session-029-resize-rail` (fusionnée) | `specs/029-resize-rail` | Code livré dans 037, complété dans 039 ; anciens badges remplacés dans 031–033 ; réserve sur le geste natif conservée |
 | 035 | Intégrée ; documents récupérés le 18 octobre | `session-035-audit-global` (fusionnée) | `specs/035-audit-global` | Corrections et tests livrés dans 037 ; coût des observations corrigé par lot ; rapports bruts archivés |
+
+| 042 | Implémentée, installée et redémarrée | `session-042-couts-traitement` | `specs/042-couts-traitement` | Six coûts corrigés ; 1 628 tests / 192 suites, santé OK, sans benchmark ; revue initiale traitée, second passage indisponible |

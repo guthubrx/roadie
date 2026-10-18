@@ -13,6 +13,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Acquisition des relevés du rail, des bordures et du focus souris en arrière-plan,
+  avec regroupement des demandes et rejet des données invalidées.
+- Réduction du travail répété dans le rail, la recherche, les arbres de tuilage
+  et les lectures macOS de secours, sans changer les réglages ni les dispositions.
+
 - Rafraîchissement de l'indicateur d'enregistrement limité aux changements de son propre fichier.
 - Rappel d'un stage poursuivi sur les autres fenêtres si la cible préférée est introuvable,
   avec exclusion des fermetures confirmées et restauration des fenêtres réduites.

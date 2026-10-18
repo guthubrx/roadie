@@ -57,6 +57,13 @@ puis 22 tests ciblés après revue ; deux revues traitées. UUID
 3533388F-83B1-3F5A-995C-B525D7656291, PID 83654, quatre contrôles santé OK.
 Preuves visuelles incomplètes : bureau inaccessible. Validation :
 specs/041-apercu-reordonnancement/validation/validation.md.
+Session 042 implémentée et installée : acquisitions des lecteurs hors fil principal,
+cache du rail par écran, lectures AX de secours mutualisées, mutations BSP linéaires,
+textes de recherche préparés et copies de réordonnancement réutilisées.
+Générations des caches AX vérifiées après revue. 1 628 tests / 192 suites réussis,
+sans benchmark. UUID 7C7282EB-E1CB-3F6A-8AE6-0974BEA2DAF5, PID 8095,
+signature conservée et quatre contrôles santé OK. Deuxième passage de revue
+indisponible (transport Bridget) ; limites dans specs/042-couts-traitement/validation/validation.md.
 Current SpecKit feature: `042-couts-traitement`.
 
 Contexte :

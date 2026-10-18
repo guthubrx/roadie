@@ -12,3 +12,8 @@ Avant de publier, contrôler la révision du cache, la configuration, le fichier
 
 ## Conséquences
 Les commandes explicites et le producteur du tiler gardent leur comportement. Leur déplacement hors du fil principal n’est pas inclus dans cette correction. Une acquisition de lecteur peut déjà être en cours quand le producteur démarre ; son résultat sera écarté. Les demandes de plusieurs lecteurs sont regroupées, pas les commandes. Les tests vérifient les appels, les invalidations et le fil d’exécution ; aucun gain temporel n’est annoncé.
+
+## Protections après revue
+Les caches AX associent une génération à chaque scan. Une invalidation, une réénumération de l’écrivain ou un scan plus récent interdit la publication d’un ancien index et la purge d’attributs récents. Le cache reste disponible aux processus lecteurs autonomes.
+
+L’âge partagé part de la fin effective de l’acquisition, avant la reprise sur MainActor. Le contexte NSWorkspace du focus est préparé sur MainActor après l’inventaire ; seule sa lecture AX est déportée. Aucune multiplication des scans après timeout : les délais AX et la quarantaine restent les protections applicables.
