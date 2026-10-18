@@ -18,4 +18,6 @@ contrôle réel depuis v0.4.0 réussi sans candidat. Commit 744f30b poussé dans
 Release installée, UUID 302CADB3-689D-3EF0-88D0-37693C9168F4, PID 69262, cinq
 contrôles santé OK. Certificat et configuration conservés. Rail réel de 150 × 1125
 points. Capture impossible ; reconnexion physique non réalisée à distance.
-Reçu : specs/052-rail-reconnexions/validation.md. Intégration Git à consigner.
+Reçu : specs/052-rail-reconnexions/validation.md. Correction 640eaca1 fusionnée et
+poussée sur main. Branche supprimée, fichiers de compilation et recette temporaire
+retirés. Worktree lié à la conversation conservé détaché ; sauvegardes conservées.

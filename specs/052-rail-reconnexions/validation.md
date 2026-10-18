@@ -69,3 +69,7 @@ externe n'est revendiquée. Contrôles et relecture réalisés par le responsabl
 Preuves visuelles incomplètes : screencapture échoue avec « could not create image
 from display ». Aucun diaporama fabriqué. Le rebranchement physique de l'écran
 externe n'est pas réalisable à distance ; les cycles sont vérifiés en tests.
+
+Correction 640eaca1 intégrée et poussée sur main. Branche de session supprimée,
+compilation et recette d'installation temporaire retirées. Worktree de cette
+conversation conservé détaché. Sauvegardes et diagnostics conservés hors Git.
