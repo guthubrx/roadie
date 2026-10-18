@@ -37,3 +37,7 @@ Revue complémentaire 339955bd-d3b7-403e-9932-283f02b96235 : aucun risque bloqua
 18 octobre 2026 : compilation Release et installation terminées. Signature vérifiée et certificat conservé : 78a75e8032f190a20072eb91cc2919aac344ef78. UUID du daemon installé : 3533388F-83B1-3F5A-995C-B525D7656291. Application : /Users/moi/Applications/Roadie.app ; CLI : /Users/moi/.local/bin/roadie.
 
 Redémarrage confirmé, PID 83654. Les quatre contrôles de santé sont OK, Accessibilité et configuration valides. Le premier appel a précédé l’ouverture de la socket au démarrage ; le contrôle après initialisation réussit. `roadie rail status` confirme `stages.reorder_magnetism=50.0`. Configuration personnelle inchangée. Aucun numéro de version ni release publique ajouté.
+
+## Intégration et nettoyage
+
+Commit bad9680a intégré par avance rapide dans main et poussé sur origin/main. Branche session-041-apercu-reordonnancement supprimée. Fichiers de compilation de la session retirés. Le dépôt principal et le worktree actif lié à ce fil restent disponibles ; aucune autre branche de session ni autre worktree. Traces et copie de la version précédente conservées hors Git pour diagnostic et retour arrière.

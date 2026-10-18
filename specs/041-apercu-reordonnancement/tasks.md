@@ -5,6 +5,6 @@
 - [x] T003 Remplacer le trait et le fantôme mobile par les cartes à leur future place.
 - [x] T004 Traiter la revue indépendante et réussir les tests ciblés puis complets.
 - [x] T005 Vérifier le rendu accessible, compiler, installer et contrôler la santé.
-- [ ] T006 Documenter, intégrer, pousser et nettoyer les fichiers temporaires propres à la session.
+- [x] T006 Documenter, intégrer, pousser et nettoyer les fichiers temporaires propres à la session.
 
 - [x] T007 Ajouter l’aimantation réglable validée, tester sa stabilité et le dépôt correspondant.
