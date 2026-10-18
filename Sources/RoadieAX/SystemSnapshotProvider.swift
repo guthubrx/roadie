@@ -1057,7 +1057,7 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
     // O(n + Σm) : regroupement par pid, index AX du dernier snapshot (au plus une enumeration
     // kAXWindows de m elements par application et par lot), resolution par ID en O(1). Le repli
-    // par cadre/titre, en O(m), reste l'exception.
+    // par cadre/titre garde O(k·m) comparaisons mais au plus O(m + k) lectures AX par lot.
     // Point commun d'écriture : une fenêtre dont le budget A13 de `generation` est épuisé n'est pas
     // écrite (résultat nil, aucun appel AX) ; l'appelant le signale (T213).
     public func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?] {
@@ -1093,6 +1093,10 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
                                 update, generation: generation, on: element, pid: pid,
                                 nativeCode: nativeError.rawValue, nativeFullscreen: nativeFullscreen
                             )
+                            // Une écriture partielle peut avoir changé le cadre même en échec.
+                            // La relecture réussie est réutilisable ; sinon la prochaine résolution relira.
+                            if let applied { windows?.observations.frames.updateValue(applied, forKey: element) }
+                            else { windows?.observations.frames.removeValue(forKey: element) }
                         }
                     }
                 }
@@ -1224,6 +1228,13 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     private struct PIDWindows {
         var index: AXApplicationWindows?
         var isFresh: Bool
+        let observations = FallbackObservations()
+    }
+
+    /// Durée de vie : un lot et un index AX. nil mémorise aussi une lecture de cadre impossible.
+    private final class FallbackObservations {
+        var frames: [AXUIElement: CGRect?] = [:]
+        var titles: [AXUIElement: String] = [:]
     }
 
     /// Enumere les fenetres de l'application et met l'index en cache.
@@ -1248,7 +1259,7 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
             windows = enumerateWindows(pid: pid)
         }
         guard let index = windows?.index else { return nil }
-        return element(in: index, id: id, title: title, frame: frame, reserved: reserved)
+        return element(in: index, id: id, title: title, frame: frame, reserved: reserved, observations: windows!.observations)
     }
 
     // O(1) si l'ID est connu d'AX, O(m) pour le repli. Priorite : ID exact > cadre unique > titre unique.
@@ -1259,7 +1270,8 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         id: WindowID,
         title: String,
         frame: Rect,
-        reserved: Set<CGWindowID> = []
+        reserved: Set<CGWindowID> = [],
+        observations: FallbackObservations
     ) -> AXUIElement? {
         if let exact = appWindows.element(id: id.rawValue) { return exact }
         let pid = appWindows.pid
@@ -1270,7 +1282,10 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         if frame.width > 0, frame.height > 0 {
             var frameMatches: [AXUIElement] = []
             for candidate in candidates {
-                if let actual = self.frame(of: candidate, pid: pid), Self.isClose(actual, frame) {
+                if observations.frames[candidate] == nil {
+                    observations.frames.updateValue(self.frame(of: candidate, pid: pid), forKey: candidate)
+                }
+                if let actual = observations.frames[candidate] ?? nil, Self.isClose(actual, frame) {
                     frameMatches.append(candidate)
                 }
                 if registry.isQuarantined(pid) { return nil }
@@ -1281,7 +1296,10 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         guard !title.isEmpty else { return nil }
         var titleMatches: [AXUIElement] = []
         for candidate in candidates {
-            if self.title(of: candidate, pid: pid) == title { titleMatches.append(candidate) }
+            if observations.titles[candidate] == nil {
+                observations.titles[candidate] = self.title(of: candidate, pid: pid)
+            }
+            if observations.titles[candidate] == title { titleMatches.append(candidate) }
             if registry.isQuarantined(pid) { return nil }
         }
         return titleMatches.count == 1 ? titleMatches[0] : nil
@@ -1295,8 +1313,7 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     }
 
     func title(of element: AXUIElement, pid: pid_t) -> String {
-        var rawTitle: CFTypeRef?
-        let error = AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &rawTitle)
+        let (error, rawTitle) = io.value(of: kAXTitleAttribute, on: element)
         registry.noteResult(error, pid: pid)
         guard error == .success, let title = rawTitle as? String else { return "" }
         return title

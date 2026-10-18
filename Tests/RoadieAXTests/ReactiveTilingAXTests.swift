@@ -18,7 +18,9 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
     var nativeFullscreenReadError: AXError?
     var setErrors: [String: AXError] = [:]
     var actionError: AXError = .success
+    var titles: [AXUIElement: String] = [:]
     var readBackError: AXError?
+    var frameAfterWrite: CGRect?
     var readBack = CGRect(x: 0, y: 0, width: 100, height: 100)
 
     func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
@@ -28,6 +30,7 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
 
     func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?) {
         calls.append("get \(attribute)")
+        if attribute == kAXTitleAttribute { return (.success, (titles[element] ?? "") as CFString) }
         if attribute == kAXMinimizedAttribute {
             if let error = minimizedReadError { return (error, nil) }
             if let minimized { return (.success, minimized ? kCFBooleanTrue : kCFBooleanFalse) }
@@ -57,6 +60,7 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
             return .success
         }
         calls.append("set \(attribute)")
+        if let frameAfterWrite { readBack = frameAfterWrite }
         return setErrors[attribute] ?? .success
     }
 
@@ -103,6 +107,41 @@ private struct WriterFixture {
 
 @Suite
 struct AXWindowFrameWriterTests {
+    @Test
+    func missingIDsReadEachFallbackCandidateOncePerBatch() {
+        let fixture = WriterFixture()
+        fixture.io.windows[50] = index(pid: 50, ids: [901, 902, 903])
+        let updates = (1...4).map { WindowFrameUpdate(window: window(UInt32($0), pid: 50), frame: .zero) }
+        let results = fixture.writer.setFrames(updates, generation: 1)
+        #expect(results.values.allSatisfy { $0 == nil })
+        #expect(fixture.io.calls.filter { $0.hasPrefix("read ") }.count == 3)
+        #expect(fixture.io.calls.filter { $0 == "get AXTitle" }.count == 3)
+        #expect(fixture.io.enumerations == 1)
+        #expect(fixture.io.frameWrites.isEmpty)
+    }
+
+    @Test
+    func fallbackFrameIsUpdatedAfterWritingAndTitlesStayCached() {
+        let fixture = WriterFixture()
+        let element = AXUIElementCreateApplication(901)
+        fixture.io.windows[50] = AXApplicationWindows(pid: 50, entries: [(id: 901, element: element)])
+        fixture.io.titles[element] = "w1"
+        // La première fenêtre est trouvée par cadre. La seconde ne doit pas réutiliser ce cadre ancien.
+        var first = window(1, pid: 50)
+        first.frame = Rect(fixture.io.readBack)
+        var second = window(2, pid: 50)
+        second.frame = first.frame
+        fixture.io.frameAfterWrite = CGRect(x: 500, y: 300, width: 400, height: 300)
+        let result = fixture.writer.setFrames([
+            WindowFrameUpdate(window: first, frame: fixture.io.frameAfterWrite!),
+            WindowFrameUpdate(window: second, frame: .zero)
+        ], generation: 1)
+        #expect(result[first.id] != nil)
+        #expect(result[second.id] == .some(nil))
+        #expect(fixture.io.calls.filter { $0.hasPrefix("read ") }.count == 2) // observation + relecture d'écriture
+        #expect(fixture.io.frameWrites.count == 3)
+    }
+
     @Test
     func freshNativeFullscreenPreventsWritesWithoutConsumingTheBudget() {
         let fixture = WriterFixture()
