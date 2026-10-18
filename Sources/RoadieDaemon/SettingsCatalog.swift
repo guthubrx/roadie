@@ -287,7 +287,7 @@ extension SettingsCatalog {
         readOnlyEntry(.tuilage, "tiling", "display_overrides", "Marges par écran",
                       "Tableau de marges extérieures propres à chaque écran."),
         entry(.tuilage, "window_placement", "new_apps_target", "Écran des nouvelles fenêtres",
-              "Par défaut, les nouvelles fenêtres rejoignent le stage courant de l’écran actif, même si la souris est ailleurs. Utile avec ⌘N. Les autres choix suivent la souris ou le placement de macOS.",
+              "Par défaut, les nouvelles fenêtres rejoignent le stage courant de l’écran actif, même si la souris est ailleurs. Utile avec ⌘N. Ce choix peut aussi améliorer la réactivité en limitant les déplacements et les réorganisations entre écrans. Les autres choix suivent la souris ou le placement de macOS.",
               .choice(["focused_display", "mouse", "macos"]), .string("focused_display")),
         entry(.tuilage, "window_placement", "new_window_side", "Côté d'insertion des nouvelles fenêtres",
               "Côté où apparaît une nouvelle fenêtre par rapport à la fenêtre active, en mode spatialBsp.",

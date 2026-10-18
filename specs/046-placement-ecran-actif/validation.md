@@ -65,3 +65,19 @@ est vérifié dans le catalogue et ses tests, sans capture d'écran ni diaporama
 Correction 597314cc intégrée et poussée sur main. Branche de session supprimée,
 fichiers de compilation et recette temporaire retirés. Worktree de la conversation
 conservé détaché ; traces et revue conservées hors Git.
+
+## Complément de texte demandé après livraison
+
+L'aide du panneau et les guides FR/EN précisent que le choix de l'écran actif peut
+améliorer la réactivité en limitant les déplacements et réorganisations entre
+écrans. L'effet dépend du placement initial de l'application ; aucun gain
+systématique ou chiffré n'est annoncé. Le retour utilisateur motive cette
+formulation conditionnelle, sans constituer un benchmark comparatif.
+
+Une seule chaîne d'aide change dans le code de production. Aucun comportement
+modifié, aucun nouveau test ajouté ou résultat de suite complète revendiqué pour
+ce complément. Compilation Release réussie, binaire compilé/installé identique :
+90FAA3EE-A562-3103-8953-A520E2A0AE62. Signature vérifiée, certificat et configuration
+conservés. Redémarrage vérifié, PID 83745, quatre contrôles santé OK.
+Diagnostics : /Users/moi/.roadies/diagnostics/2026-10-18-session046-aide/.
+Preuves visuelles incomplètes : bureau inaccessible ; texte relu dans les sources.

@@ -90,7 +90,8 @@ Session 046 implémentée et installée : écran actif par défaut pour les nouv
 fenêtres, choix français et aide dans Tuilage, choix explicites conservés et repli
 sur l'écran de la fenêtre si aucun écran actif n'est connu. Docs FR/EN alignées.
 1 696 tests / 199 suites réussis, revue traitée. UUID
-4203C4C0-E22C-3F80-BC7E-4A624E9C0A13, PID 76046, quatre contrôles santé OK.
+90FAA3EE-A562-3103-8953-A520E2A0AE62, PID 83745, quatre contrôles santé OK.
+Complément d'aide : effet possible sur la réactivité expliqué, sans gain garanti.
 Configuration et certificat conservés. Preuves visuelles incomplètes : bureau
 inaccessible. Reçu : specs/046-placement-ecran-actif/validation.md.
 Current SpecKit feature: `046-placement-ecran-actif`.

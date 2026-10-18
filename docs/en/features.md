@@ -221,6 +221,10 @@ Choose the destination in **Settings > Tiling > New window display**
 (**Tuilage > Écran des nouvelles fenêtres** in the interface). Saved choices are
 preserved; Reset selects the active display.
 
+Choosing the active display can also improve perceived responsiveness by limiting
+window transfers and layout changes across displays. The effect depends on the
+application's initial placement and the displays in use.
+
 ```toml
 [window_placement]
 new_apps_target = "focused_display" # default; mouse | focused_display | macos

@@ -226,6 +226,10 @@ pas concernés.
 Ce choix se règle dans **Paramètres > Tuilage > Écran des nouvelles fenêtres**.
 Les choix déjà enregistrés restent conservés ; « Rétablir » sélectionne l'écran actif.
 
+Choisir l'écran actif peut aussi améliorer la réactivité perçue en limitant les
+déplacements et les réorganisations entre écrans. L'effet dépend du placement
+initial de l'application et des écrans utilisés.
+
 ```toml
 [window_placement]
 new_apps_target = "focused_display" # défaut ; mouse | focused_display | macos

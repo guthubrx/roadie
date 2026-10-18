@@ -22,3 +22,9 @@ bureau inaccessible. Détails dans specs/046-placement-ecran-actif/validation.md
 Correction 597314cc intégrée et poussée sur main. Branche de session supprimée,
 fichiers de compilation et recette temporaire retirés. Worktree lié à la
 conversation conservé détaché, diagnostics conservés hors Git.
+
+Complément demandé : aide des paramètres et guides FR/EN expliquant l'effet
+possible sur la réactivité, sans gain garanti. Texte seul, compilation Release
+vérifiée puis installation et redémarrage ; UUID
+90FAA3EE-A562-3103-8953-A520E2A0AE62, PID 83745, santé OK, configuration/signature
+conservées. Aucun nouveau test ou benchmark revendiqué pour ce complément.
