@@ -5298,3 +5298,32 @@ extension PlacementTransitionRegressionTests {
         #expect(writer.frameHistory[sibling.id, default: []].contains { HiddenWindowPlacement.isHidden($0.cgRect, in: [display]) })
     }
 }
+
+extension PlacementTransitionRegressionTests {
+    @Test func failedInactiveWindowHideReportsItsIdentity() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("hide-failure-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let active = powerWindow(1, x: 100)
+        let inactive = powerWindow(2, x: 500)
+        let provider = PowerUserProvider(windows: [active, inactive])
+        let store = StageStore(path: directory.appendingPathComponent("stages.json").path)
+        let display = powerDisplay()
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: display.id,
+            activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .float, members: [
+                    PersistentStageMember(windowID: active.id, bundleID: active.bundleID, title: active.title, frame: active.frame)]),
+                PersistentStage(id: StageID(rawValue: "2"), mode: .float, members: [
+                    PersistentStageMember(windowID: inactive.id, bundleID: inactive.bundleID, title: inactive.title, frame: inactive.frame)]),
+            ])]))
+        let events = directory.appendingPathComponent("events.jsonl")
+        let service = SnapshotService(provider: provider, frameWriter: FailingWriter(),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .float)), stageStore: store)
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: events.path), store: store, spaceProbe: { _ in false })
+        let tick = maintainer.tick(cause: "command:startup")
+        #expect(tick.failed == 1)
+        let details = try placementEventDetails("layout_failed", text: String(contentsOf: events, encoding: .utf8))
+        #expect(details["windowID"] == String(inactive.id.rawValue))
+        #expect(details["requested"] != nil)
+    }
+}

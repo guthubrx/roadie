@@ -44,6 +44,12 @@ sélection des suggestions par Haut/Bas et clic, validation du choix par Retour.
 127 tests ciblés et 1597 tests / 185 suites réussis. Parcours natifs vérifiés.
 PID 96284, signature stable, quatre contrôles santé OK ; T3 conservé.
 Preuves et limites : specs/038-saisie-native/validation/livraison038.md.
+Session 040 implémentée et installée : watcher du statut d'enregistrement filtré,
+rappel poursuivi sur les autres membres, fenêtres réduites restaurées avant focus,
+arrêt AX après délai dépassé et échecs de masquage détaillés.
+1 612 tests / 188 suites et 26 tests de scripts réussis. Revue traitée.
+UUID EAC639A1-B54B-339F-98AD-950C4D5F0F3E, PID 46802, quatre contrôles santé OK.
+Preuves visuelles indisponibles ; limites : specs/040-reactivite-rappel/validation/validation.md.
 Current SpecKit feature: `040-reactivite-rappel`.
 
 Contexte :

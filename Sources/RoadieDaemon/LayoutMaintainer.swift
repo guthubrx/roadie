@@ -891,7 +891,10 @@ public final class LayoutMaintainer {
         result = result.merged(with: resolution.result)
         let nonTreeAll = nonTreeCommands.commands + repairPlan.commands + resolution.commands
         record(result, from: ApplyPlan(commands: nonTreeAll))
-        appendItemEvents(result.merged(with: ApplyResult.filtering(directResult) { layoutWindowIDs.contains($0.windowID) }), generation: generation)
+        // Les refus de masquage et de restauration doivent aussi identifier leur fenêtre.
+        appendItemEvents(result.merged(with: ApplyResult.filtering(directResult) {
+            layoutWindowIDs.contains($0.windowID) || $0.status == .failed
+        }), generation: generation)
         result = result.merged(with: directResult)
         result.applied += resolution.hidden
         return PlanApplication(

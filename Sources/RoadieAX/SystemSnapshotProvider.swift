@@ -635,9 +635,14 @@ protocol AXFrameIO: Sendable {
     func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?)
     func values(of attributes: [String], on element: AXUIElement) -> (AXError, [AnyObject])
     func setValue(_ value: CFTypeRef, of attribute: String, on element: AXUIElement) -> AXError
+    func performAction(_ action: String, on element: AXUIElement) -> AXError
 }
 
 struct LiveAXFrameIO: AXFrameIO {
+    func performAction(_ action: String, on element: AXUIElement) -> AXError {
+        AXUIElementPerformAction(element, action as CFString)
+    }
+
     func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
         AXApplicationWindows(pid: pid)
     }
@@ -1159,17 +1164,30 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     /// (sans option ignoree depuis macOS 14) puis kAXFrontmostAttribute avant AXRaise.
     /// Abandonne au premier delai depasse.
     private func focus(_ element: AXUIElement, pid: pid_t) -> Bool {
+        guard !registry.isQuarantined(pid) else { return false }
+        // AXRaise ne restaure pas systématiquement une fenêtre réduite dans le Dock.
+        // Une application qui ne propose pas cet attribut conserve le chemin de focus habituel.
+        let (minimizedError, minimized) = io.value(of: kAXMinimizedAttribute, on: element)
+        if registry.noteResult(minimizedError, pid: pid) { return false }
+        // Une lecture facultative refusée ne doit pas supprimer un focus qui fonctionnait.
+        // Un élément détruit, en revanche, ne peut plus être focalisé.
+        guard minimizedError != .invalidUIElement else { return false }
+        if minimizedError == .success, (minimized as? Bool) == true {
+            let error = io.setValue(kCFBooleanFalse, of: kAXMinimizedAttribute, on: element)
+            registry.noteResult(error, pid: pid)
+            guard error == .success else { return false }
+        }
         let application = NSRunningApplication(processIdentifier: pid)
         application?.activate()
         let frontmost = setFrontmostError(pid: pid)
         guard !registry.isQuarantined(pid) else { return false }
         let app = AXMessaging.application(pid)
-        let focusedWindow = AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element)
+        let focusedWindow = io.setValue(element, of: kAXFocusedWindowAttribute, on: app)
         if registry.noteResult(focusedWindow, pid: pid) {
             return false
         }
-        let raise = AXUIElementPerformAction(element, kAXRaiseAction as CFString)
-        registry.noteResult(raise, pid: pid)
+        let raise = io.performAction(kAXRaiseAction, on: element)
+        if registry.noteResult(raise, pid: pid) { return false }
         // Relectures seulement quand une écriture a échoué (REL-010) : l'état réel tranche.
         let focusedWindowConfirmed = focusedWindow != .success
             && elementAttribute(app, kAXFocusedWindowAttribute, pid: pid).map { CFEqual($0, element) } == true
@@ -1189,16 +1207,14 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
     private func setFrontmostError(pid: pid_t) -> AXError {
         guard !registry.isQuarantined(pid) else { return .cannotComplete }
-        let error = AXUIElementSetAttributeValue(
-            AXMessaging.application(pid), kAXFrontmostAttribute as CFString, kCFBooleanTrue as CFTypeRef
-        )
+        let error = io.setValue(kCFBooleanTrue, of: kAXFrontmostAttribute, on: AXMessaging.application(pid))
         registry.noteResult(error, pid: pid)
         return error
     }
 
     private func elementAttribute(_ element: AXUIElement, _ attribute: String, pid: pid_t) -> AXUIElement? {
-        var raw: CFTypeRef?
-        let error = AXUIElementCopyAttributeValue(element, attribute as CFString, &raw)
+        guard !registry.isQuarantined(pid) else { return nil }
+        let (error, raw) = io.value(of: attribute, on: element)
         registry.noteResult(error, pid: pid)
         guard error == .success, let raw, CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
         return (raw as! AXUIElement)

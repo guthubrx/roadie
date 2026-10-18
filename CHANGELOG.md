@@ -7,6 +7,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Rafraîchissement de l'indicateur d'enregistrement limité aux changements de son propre fichier.
+- Rappel d'un stage poursuivi sur les autres fenêtres si la cible préférée est introuvable,
+  avec exclusion des fermetures confirmées et restauration des fenêtres réduites.
+- Identification des fenêtres dont le masquage ou la restauration échoue dans les journaux.
+
 - Conservation des redimensionnements lorsque la lecture des fenêtres macOS est lente.
 - Clics et glissements du rail, et menu de fenêtre, fondés sur la position enregistrée
   du geste même lorsque son traitement est retardé.

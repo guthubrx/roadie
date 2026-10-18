@@ -12,9 +12,12 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
     var enumerations = 0
     var windows: [pid_t: AXApplicationWindows] = [:]
     var enhancedUserInterface = false
+    var minimized: Bool?
+    var minimizedReadError: AXError?
     var nativeFullscreen: Bool?
     var nativeFullscreenReadError: AXError?
     var setErrors: [String: AXError] = [:]
+    var actionError: AXError = .success
     var readBackError: AXError?
     var readBack = CGRect(x: 0, y: 0, width: 100, height: 100)
 
@@ -25,6 +28,11 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
 
     func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?) {
         calls.append("get \(attribute)")
+        if attribute == kAXMinimizedAttribute {
+            if let error = minimizedReadError { return (error, nil) }
+            if let minimized { return (.success, minimized ? kCFBooleanTrue : kCFBooleanFalse) }
+            return (.attributeUnsupported, nil)
+        }
         if attribute == "AXFullScreen" {
             if let error = nativeFullscreenReadError { return (error, nil) }
             if let nativeFullscreen { return (.success, nativeFullscreen ? kCFBooleanTrue : kCFBooleanFalse) }
@@ -50,6 +58,11 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
         }
         calls.append("set \(attribute)")
         return setErrors[attribute] ?? .success
+    }
+
+    func performAction(_ action: String, on element: AXUIElement) -> AXError {
+        calls.append("action \(action)")
+        return actionError
     }
 
     var frameWrites: [String] { calls.filter { $0 == "set AXSize" || $0 == "set AXPosition" } }
@@ -606,5 +619,71 @@ struct SpaceProbeTests {
         } ?? uuid
         let answer = SpaceProbe.isUserSpaceActive(displayUUID: uuid)
         #expect(answer == true || answer == false || answer == nil)
+    }
+}
+
+@Suite struct MinimizedFocus040Tests {
+    @Test func restoresMinimizedWindowBeforeRaisingIt() {
+        let fixture = WriterFixture()
+        let pid: pid_t = 9_999_999
+        fixture.io.windows[pid] = index(pid: pid, ids: [501])
+        fixture.io.minimized = true
+        #expect(fixture.writer.focus(window(501, pid: pid)))
+        let writes = fixture.io.calls.filter { $0.hasPrefix("set ") || $0.hasPrefix("action ") }
+        #expect(writes == ["set AXMinimized", "set AXFrontmost", "set AXFocusedWindow", "action AXRaise"])
+    }
+}
+
+extension MinimizedFocus040Tests {
+    @Test(arguments: [false, true])
+    func visibleOrUnsupportedWindowsAreNotRestored(unsupported: Bool) {
+        let fixture = WriterFixture()
+        let pid: pid_t = 9_999_999
+        fixture.io.windows[pid] = index(pid: pid, ids: [501])
+        fixture.io.minimized = unsupported ? nil : false
+        #expect(fixture.writer.focus(window(501, pid: pid)))
+        #expect(!fixture.io.calls.contains("set AXMinimized"))
+        #expect(fixture.io.calls.contains("action AXRaise"))
+    }
+
+    @Test(arguments: [true, false])
+    func failedRestorationDoesNotClaimFocusOrActivateApplication(readFailure: Bool) {
+        let fixture = WriterFixture()
+        let pid: pid_t = 9_999_999
+        fixture.io.windows[pid] = index(pid: pid, ids: [501])
+        fixture.io.minimized = true
+        if readFailure { fixture.io.minimizedReadError = .cannotComplete }
+        else { fixture.io.setErrors[kAXMinimizedAttribute] = .cannotComplete }
+        let writer = fixture.writer
+        #expect(!writer.focus(window(501, pid: pid)))
+        #expect(!fixture.io.calls.contains("set AXFrontmost"))
+        #expect(!fixture.io.calls.contains("action AXRaise"))
+        let count = fixture.io.calls.count
+        #expect(!writer.focus(window(501, pid: pid)))
+        #expect(fixture.io.calls.count == count, "une application en délai dépassé reste en quarantaine")
+    }
+}
+
+extension MinimizedFocus040Tests {
+    @Test(arguments: [AXError.failure, .notImplemented, .actionUnsupported, .illegalArgument])
+    func optionalMinimizedReadFailurePreservesExistingFocus(error: AXError) {
+        let fixture = WriterFixture()
+        let pid: pid_t = 9_999_999
+        fixture.io.windows[pid] = index(pid: pid, ids: [501])
+        fixture.io.minimizedReadError = error
+        #expect(fixture.writer.focus(window(501, pid: pid)))
+        #expect(!fixture.io.calls.contains("set AXMinimized"))
+        #expect(fixture.io.calls.contains("action AXRaise"))
+    }
+
+    @Test func raiseTimeoutStopsBeforeFocusConfirmationRead() {
+        let fixture = WriterFixture()
+        let pid: pid_t = 9_999_999
+        fixture.io.windows[pid] = index(pid: pid, ids: [501])
+        fixture.io.setErrors[kAXFocusedWindowAttribute] = .failure
+        fixture.io.actionError = .cannotComplete
+        #expect(!fixture.writer.focus(window(501, pid: pid)))
+        #expect(fixture.io.calls.last == "action AXRaise")
+        #expect(!fixture.io.calls.contains("get AXFocusedWindow"))
     }
 }

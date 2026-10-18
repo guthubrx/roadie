@@ -30,6 +30,7 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
     private(set) var zoomed: [WindowID] = []
     private(set) var nativeFullscreen: [WindowID] = []
     var applicationWindowFocusResult = false
+    var applicationWindowFocusResults: [WindowID: Bool] = [:]
     private(set) var focusedApplicationWindows: [WindowID] = []
     private(set) var activatedBundleIDs: [String] = []
 
@@ -62,10 +63,11 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
 
     func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool {
         focusedApplicationWindows.append(windowID)
-        if applicationWindowFocusResult {
+        let result = applicationWindowFocusResults[windowID] ?? applicationWindowFocusResult
+        if result {
             provider.focusedID = windowID
         }
-        return applicationWindowFocusResult
+        return result
     }
 
     func activateApplication(bundleID: String) -> Bool {

@@ -1083,7 +1083,7 @@ public struct StageCommandService {
             let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
             let liveWindowIDs = Set(windowsByID.keys)
             let nativeFullscreenMember = targetMembers
-                .first { $0.presentationState == .nativeFullscreen && !liveWindowIDs.contains($0.windowID) }
+                .first { $0.confirmedClosedAt == nil && $0.presentationState == .nativeFullscreen && !liveWindowIDs.contains($0.windowID) }
             let activatedNativeFullscreen = nativeFullscreenMember.map {
                 service.activateApplication(bundleID: $0.bundleID)
             } ?? false
@@ -1148,20 +1148,11 @@ public struct StageCommandService {
                        let window = windowsByID[focusedID] {
                         focusedWindow = service.focus(window)
                     }
-                    var focusedApplicationWindow = false
-                    var activatedApplication = false
-                    if !focusedWindow,
-                       let member = targetMembers.first(where: { $0.windowID == targetFocusedWindowID }) ?? targetMembers.last {
-                        focusedApplicationWindow = service.focusApplicationWindow(
-                            bundleID: member.bundleID,
-                            windowID: member.windowID,
-                            title: member.title,
-                            frame: member.frame
-                        )
-                        if !focusedApplicationWindow {
-                            activatedApplication = service.activateApplication(bundleID: member.bundleID)
-                        }
-                    }
+                    let recall = !focusedWindow
+                        ? recallMissingWindows(in: targetStage, preferredWindowID: targetFocusedWindowID, includeMaximized: true)
+                        : MissingWindowRecall()
+                    let focusedApplicationWindow = recall.focusedWindowID != nil
+                    let activatedApplication = recall.activatedApplication
                     events.append(RoadieEvent(
                         type: "stage_switch_reconcile",
                         scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
@@ -1174,6 +1165,8 @@ public struct StageCommandService {
                             "applied": String(applied),
                             "focusedWindow": String(focusedWindow),
                             "focusedApplicationWindow": String(focusedApplicationWindow),
+                            "recallAttemptedWindowIDs": recall.attempted.map { String($0.rawValue) }.joined(separator: ","),
+                            "recalledWindowID": recall.focusedWindowID.map { String($0.rawValue) } ?? "-",
                             "activatedApplication": String(activatedApplication),
                             "activeDisplayChanged": String(activeDisplayChanged),
                             "persistMs": formatMs(persistMs),
@@ -1253,7 +1246,7 @@ public struct StageCommandService {
                 // grâce des membres absents.
                 let targetMissing = !targetMembers.isEmpty && targetLiveMemberIDs.isEmpty
                 let nativeFullscreenMember = targetMissing
-                    ? targetStage?.members.first { $0.presentationState == .nativeFullscreen }
+                    ? targetStage?.members.first { $0.confirmedClosedAt == nil && $0.presentationState == .nativeFullscreen }
                     : nil
                 scope.activeStageID = stageID
                 state.update(scope)
@@ -1289,6 +1282,7 @@ public struct StageCommandService {
             var hidden = 0
             var focusedApplicationWindow = false
             var activatedApplication = false
+            var recall = MissingWindowRecall()
             if let nativeFullscreenMember = transition.nativeFullscreenMember {
                 // La fenêtre vit dans son propre Space : activer l'application suffit.
                 activatedApplication = service.activateApplication(bundleID: nativeFullscreenMember.bundleID)
@@ -1302,17 +1296,9 @@ public struct StageCommandService {
                     events: events
                 ).result
                 hidden = result.applied + result.clamped
-                if let focusMember = preferredMissingFocusMember(in: transition.targetStage) {
-                    focusedApplicationWindow = service.focusApplicationWindow(
-                        bundleID: focusMember.bundleID,
-                        windowID: focusMember.windowID,
-                        title: focusMember.title,
-                        frame: focusMember.frame
-                    )
-                    if !focusedApplicationWindow {
-                        activatedApplication = service.activateApplication(bundleID: focusMember.bundleID)
-                    }
-                }
+                recall = recallMissingWindows(in: transition.targetStage)
+                focusedApplicationWindow = recall.focusedWindowID != nil
+                activatedApplication = recall.activatedApplication
             }
             events.append(RoadieEvent(
                 type: "stage_switch_pending_missing_target",
@@ -1326,6 +1312,8 @@ public struct StageCommandService {
                     "stateChanged": "true",
                     "hidden": String(hidden),
                     "focusedApplicationWindow": String(focusedApplicationWindow),
+                    "recallAttemptedWindowIDs": recall.attempted.map { String($0.rawValue) }.joined(separator: ","),
+                    "recalledWindowID": recall.focusedWindowID.map { String($0.rawValue) } ?? "-",
                     "activatedApplication": String(activatedApplication),
                     "nativeFullscreenActivation": String(transition.nativeFullscreenMember != nil && activatedApplication),
                     "activeDisplayChanged": String(transition.activeDisplayChanged),
@@ -1430,18 +1418,42 @@ public struct StageCommandService {
         return fullscreenIDs.first
     }
 
-    private func preferredMissingFocusMember(in stage: PersistentStage?) -> PersistentStageMember? {
-        guard let stage else { return nil }
-        let candidates = stage.members.filter { member in
-            !member.bundleID.isEmpty && member.presentationState != .maximized
+    struct MissingWindowRecall {
+        var attempted: [WindowID] = []
+        var focusedWindowID: WindowID?
+        var activatedApplication = false
+    }
+
+    static func missingFocusCandidates(in stage: PersistentStage?, preferredWindowID: WindowID? = nil, includeMaximized: Bool = false) -> [PersistentStageMember] {
+        guard let stage else { return [] }
+        let preferred = preferredWindowID ?? stage.focusedWindowID
+        return stage.members.filter {
+            !$0.bundleID.isEmpty && $0.confirmedClosedAt == nil && (includeMaximized || $0.presentationState != .maximized)
+        }.sorted { lhs, rhs in
+            if lhs.windowID == preferred { return rhs.windowID != preferred }
+            if rhs.windowID == preferred { return false }
+            let left = lhs.lastSeenAt ?? .distantPast
+            let right = rhs.lastSeenAt ?? .distantPast
+            return left == right ? lhs.windowID.rawValue < rhs.windowID.rawValue : left > right
         }
-        if let focusedWindowID = stage.focusedWindowID,
-           let member = candidates.first(where: { $0.windowID == focusedWindowID }) {
-            return member
+    }
+
+    /// Chaque membre éligible est essayé au plus une fois ; arrêt au premier focus réussi.
+    private func recallMissingWindows(in stage: PersistentStage?, preferredWindowID: WindowID? = nil, includeMaximized: Bool = false) -> MissingWindowRecall {
+        let candidates = Self.missingFocusCandidates(in: stage, preferredWindowID: preferredWindowID, includeMaximized: includeMaximized)
+        var result = MissingWindowRecall()
+        for member in candidates {
+            result.attempted.append(member.windowID)
+            if service.focusApplicationWindow(bundleID: member.bundleID, windowID: member.windowID,
+                                              title: member.title, frame: member.frame) {
+                result.focusedWindowID = member.windowID
+                return result
+            }
         }
-        return candidates.max { lhs, rhs in
-            (lhs.lastSeenAt ?? .distantPast) < (rhs.lastSeenAt ?? .distantPast)
+        if let member = candidates.first {
+            result.activatedApplication = service.activateApplication(bundleID: member.bundleID)
         }
+        return result
     }
 
     /// Frames de masquage des fenêtres `ids` vivantes, sur l'écran de la commande. O(k).

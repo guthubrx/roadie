@@ -130,6 +130,7 @@ public final class RailController {
                 try? FileManager.default.createDirectory(at: TargetRecordingStatusStore.directoryURL, withIntermediateDirectories: true)
                 return TargetRecordingStatusStore.directoryURL.path
             },
+            observedFile: { TargetRecordingStatusStore.defaultURL.path },
             onChange: { [weak self] in self?.rebuildPanels(reason: "recording_status") }
         )
         let stageStorePath = store.fileURL.path

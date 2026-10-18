@@ -9,18 +9,23 @@ import Foundation
 @MainActor
 final class RailFileWatcher {
     private let path: () -> String
+    private let observedFile: (() -> String)?
+    private var observedStamp: [Int64]?
     private let onChange: @MainActor () -> Void
     private var source: DispatchSourceFileSystemObject?
 
     /// `path` est évalué à chaque (ré)armement : le chemin peut dépendre d'un état (dossier créé entre-temps).
-    init(path: @escaping () -> String, onChange: @escaping @MainActor () -> Void) {
+    init(path: @escaping () -> String, observedFile: (() -> String)? = nil, onChange: @escaping @MainActor () -> Void) {
         self.path = path
+        self.observedFile = observedFile
         self.onChange = onChange
     }
 
     func start() {
         stop()
-        let fd = open(path(), O_EVTONLY)
+        let watchedPath = path()
+        observedStamp = observedFile.map { Self.stamp($0()) }
+        let fd = open(watchedPath, O_EVTONLY)
         guard fd >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
@@ -33,7 +38,15 @@ final class RailFileWatcher {
             Task { @MainActor in
                 // Une source annulée entre-temps (stop ou réarmement) ne doit plus rien déclencher.
                 guard let self, self.source === source else { return }
-                self.onChange()
+                if let observedFile = self.observedFile {
+                    let stamp = Self.stamp(observedFile())
+                    if stamp != self.observedStamp {
+                        self.observedStamp = stamp
+                        self.onChange()
+                    }
+                } else {
+                    self.onChange()
+                }
                 if mustRearm {
                     self.start()
                 }
@@ -44,6 +57,13 @@ final class RailFileWatcher {
         }
         self.source = source
         source.resume()
+    }
+
+    /// Le dossier reste observé même si le fichier n’existe pas encore.
+    private static func stamp(_ path: String) -> [Int64] {
+        var info = stat()
+        guard stat(path, &info) == 0 else { return [-1] }
+        return [Int64(info.st_ino), Int64(info.st_mtimespec.tv_sec), Int64(info.st_mtimespec.tv_nsec), Int64(info.st_size)]
     }
 
     func stop() {
