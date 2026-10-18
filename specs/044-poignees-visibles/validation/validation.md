@@ -26,3 +26,6 @@ Avant correction, CoreGraphics n'expose aucun panneau de poignée. Après relanc
 
 ## Preuves incomplètes
 CUA renvoie `CUA_REPL_ENABLED_SURFACES is required` et screencapture `could not create image from display`. Aucune capture, aucun clic ni diaporama vérifié n'est revendiqué. La présence du panneau dans macOS est établie ; son aspect et un glisser réel restent à confirmer. Les traces sont conservées hors Git dans /Users/moi/.roadies/diagnostics/2026-10-18-session044/.
+
+## Git et nettoyage
+Correction 826c2eeb intégrée par avance rapide et poussée sur origin/main. Branche session-044-poignees-visibles supprimée. Fichiers de compilation et recette temporaire d'installation retirés ; journaux conservés hors Git. Les deux seuls worktrees sont le dépôt principal et le worktree actif de la conversation, conservé détaché. Quatre contrôles santé OK après nettoyage. Un commit documentaire de clôture consigne ces opérations.

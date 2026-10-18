@@ -24,4 +24,4 @@
 
 | 042 | Clôturée, intégrée et installée | `session-042-couts-traitement` (fusionnée, supprimée) | `specs/042-couts-traitement` | Six coûts corrigés ; 1 628 tests / 192 suites, santé OK, sans benchmark ; revue initiale traitée, second passage indisponible |
 | 043 | Intégrée et installée ; gestes réels non vérifiés | `session-043-redimensionnement-fiable` (fusionnée, supprimée) | `specs/043-redimensionnement-fiable` | Trois P1 ; 1 685 tests / 199 suites et 26 tests de scripts, deuxième revue favorable, santé OK ; bureau inaccessible |
-| 044 | Implémentée et installée ; geste réel non vérifié | `session-044-poignees-visibles` | `specs/044-poignees-visibles` | Poignées avec JankyBorders, repère plus lisible, 1 689 tests / 199 suites, comparatif logiciel partiel, présence native et santé OK |
+| 044 | Intégrée et installée ; geste réel non vérifié | `session-044-poignees-visibles` (fusionnée, supprimée) | `specs/044-poignees-visibles` | Poignées avec JankyBorders, repère plus lisible, 1 689 tests / 199 suites, comparatif logiciel partiel, présence native et santé OK |
