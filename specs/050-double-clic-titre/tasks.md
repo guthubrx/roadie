@@ -4,6 +4,6 @@
 - [x] T002 Réglage `double_click_maximize` dans `Sources/RoadieCore/Config.swift` et le catalogue.
 - [x] T003 Moniteur et action dans `Sources/RoadieDaemon/TitlebarContextMenuController.swift`.
 - [x] T004 Conflit dans le contrôle de santé (`Sources/RoadieDaemon/DaemonHealth.swift`).
-- [ ] T005 Docs FR/EN, exemple, CHANGELOG ; suite complète ; revue ; installation et santé.
-- [ ] T006 Consigner, committer, intégrer, pousser, nettoyer.
+- [x] T005 Docs FR/EN, exemple, CHANGELOG ; suite complète ; revue ; installation et santé.
+- [x] T006 Consigner, committer, intégrer, pousser, nettoyer.
 - [x] T007 Revue 1 (APPROVE_WITH_CHANGES) : refus des éléments interactifs sous le pointeur (champs, boutons, onglets, liens, contenu web) et des fenêtres flottantes ; relevé frais comme le clic droit ; garde en double retirée.

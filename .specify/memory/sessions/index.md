@@ -28,3 +28,7 @@
 | 045 | Clôturée, intégrée et installée ; essai réel confirmé | `session-045-capture-redimensionnement` (fusionnée, supprimée) | `specs/045-capture-redimensionnement` | Capture native et poignée arbitrées à l'acceptation ; 1 693 tests / 199 suites, revue traitée, taille conservée et santé OK |
 | 046 | Clôturée, intégrée et installée | `session-046-placement-ecran-actif` (fusionnée, supprimée) | `specs/046-placement-ecran-actif` | Écran actif par défaut, paramètres et docs alignés, choix explicites conservés ; 1 696 tests / 199 suites, revue traitée, santé OK |
 | 047 | Clôturée, intégrée et installée | `session-047-fenetre-flottante` (fusionnée, supprimée) | `specs/047-fenetre-flottante` | `toggle floating` par épinglage de portée stage ; 1 707 tests / 200 suites, aller-retour réel, santé OK |
+| 048 | Clôturée, intégrée et installée | `session-048-consommation-repos` (fusionnée, supprimée) | `specs/048-consommation-repos` | CPU au repos 11,45 % → 2,34 % ; ADR 015 ; audit V15 inconclusive (option A) |
+| 051 | Clôturée, intégrée et installée | `session-051-constats-high` (fusionnée, supprimée) | `specs/051-constats-high` | 8 constats HIGH corrigés, D-02 laissé ; audit V15 inconclusive (option A) |
+| 049 | Clôturée, intégrée et installée | `session-049-reglages-macos` (fusionnée, supprimée) | `specs/049-reglages-macos` | Santé `macos-window-settings` ; ok en réel |
+| 050 | Clôturée, intégrée et installée | `session-050-double-clic-titre` (fusionnée, supprimée) | `specs/050-double-clic-titre` | Double-clic désactivé par défaut ; 1 744 tests |

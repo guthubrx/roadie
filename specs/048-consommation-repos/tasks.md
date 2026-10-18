@@ -8,4 +8,4 @@
 - [x] T006 Tests puis implémentation C-03 : vignettes mises à jour en place (`RailController.swift`, `RailPanel.swift`, `StageCardView.swift`).
 - [x] T007 Suite complète, revue indépendante, ADR 015.
 - [x] T008 Installer, redémarrer, santé ; mesurer après (`mesures/apres.json`) ; publier avant/après.
-- [ ] T009 Consigner, committer, intégrer sur main, pousser, nettoyer.
+- [x] T009 Consigner, committer, intégrer sur main, pousser, nettoyer.

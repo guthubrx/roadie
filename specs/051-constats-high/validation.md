@@ -36,3 +36,17 @@ Constats : MEDIUM R5 (session de geste A-11 hors périmètre, R5 réécrite) ; L
 ## D-02
 
 Laissé en l'état par décision de l'utilisateur du 18 octobre. Recommandation dans `research.md`.
+
+## Mesure
+
+`mesures/apres.json` : 2,36 % d'un cœur au repos (2,34 % après la 048), contaminée par une
+compilation d'audit concomitante. La mesure propre sur la version intégrée n'a pas pu être prise :
+la machine n'est pas restée inactive. L'utilisateur a accepté ce manque le 18 octobre. Aucun gain
+au repos n'est revendiqué pour la 051 ; ses gains vérifiés sont par test : un relevé par commande
+en arbre au lieu de deux, aucun verrou d'état sans changement.
+
+## Installation
+
+Version intégrée installée : UUID 7FAEFA94-B08E-3C14-B9B4-852B532C97E3, puis relance à la demande
+de l'utilisateur (PID 5718). Cinq contrôles santé OK. Écran externe débranché : rail sur l'écran
+intégré seul (13 stages). Capture d'écran refusée par macOS : affichage non vérifié visuellement.

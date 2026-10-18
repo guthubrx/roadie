@@ -100,12 +100,19 @@ les versions antérieures). Menu « Fenêtre » aligné, commande routée vers l
 1 707 tests / 200 suites réussis ; revue traitée. UUID 7DE5FFC6-67B3-3CD2-A7B3-3C4CB9A1694E,
 PID 64518, quatre contrôles santé OK. Aller-retour réel vérifié sur Firefox.
 Reçu : specs/047-fenetre-flottante/validation.md.
-Current SpecKit feature: `047-fenetre-flottante`.
+Sessions 048, 051, 049 et 050 implémentées et installées (pipeline du 18 octobre) :
+consommation au repos 11,45 % → 2,34 % d'un cœur (ADR 015), constats HIGH de l'audit
+performance corrigés sauf D-02 (décision utilisateur), santé `macos-window-settings`,
+double-clic de barre de titre désactivé par défaut. 1 744 tests / 208 suites.
+Audits V15 inconclusive : historique Git analysé seulement depuis v0.4.0 (option A,
+sans fuite), adaptateur V15 sans arguments. UUID 7FAEFA94-B08E-3C14-B9B4-852B532C97E3.
+Reçus : specs/048-consommation-repos/, 051-constats-high/, 049-reglages-macos/, 050-double-clic-titre/.
+Current SpecKit feature: `050-double-clic-titre`.
 
 Contexte :
-- `specs/047-fenetre-flottante/spec.md`
-- `specs/047-fenetre-flottante/plan.md`
-- `specs/047-fenetre-flottante/tasks.md`
+- `specs/050-double-clic-titre/spec.md`
+- `specs/050-double-clic-titre/plan.md`
+- `specs/050-double-clic-titre/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
