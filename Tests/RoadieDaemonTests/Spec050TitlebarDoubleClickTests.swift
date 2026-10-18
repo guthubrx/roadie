@@ -41,13 +41,13 @@ struct Spec050TitlebarDoubleClickTests {
         #expect(!TitlebarContextMenuController.isDoubleClickTarget(pinned: true, role: "AXWindow"))
     }
 
-    @Test func settingDefaultsToEnabledAndDecodes() throws {
-        #expect(TitlebarContextMenuConfig().doubleClickMaximize)
+    @Test func settingDefaultsToDisabledAndDecodes() throws {
+        #expect(!TitlebarContextMenuConfig().doubleClickMaximize)
         let path = tempPath("spec050-config.toml")
-        try "[experimental.titlebar_context_menu]\ndouble_click_maximize = false\n"
+        try "[experimental.titlebar_context_menu]\ndouble_click_maximize = true\n"
             .write(toFile: path, atomically: true, encoding: .utf8)
         let config = try RoadieConfigLoader.load(from: path)
-        #expect(!config.experimental.titlebarContextMenu.doubleClickMaximize)
+        #expect(config.experimental.titlebarContextMenu.doubleClickMaximize)
     }
 
     @Test func healthWarnsWhenMacOSAlsoHandlesTheDoubleClick() {

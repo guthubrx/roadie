@@ -20,7 +20,7 @@ intercepter tous les clics en permanence. Roadie n'agit donc que si ce réglage 
 - R1 Double-clic dans la bande de titre d'une fenêtre gérée et tuilée, hors marges des
   boutons : `toggle maximize` sur cette fenêtre.
 - R2 Réglage `[experimental.titlebar_context_menu] double_click_maximize`, booléen, défaut
-  `true`, lu à chaud, indépendant du menu par clic droit ; réutilise la hauteur et les
+  `false`, lu à chaud, indépendant du menu par clic droit ; réutilise la hauteur et les
   marges de la barre de titre.
 - R3 Aucune action si l'action macOS du double-clic n'est pas « Ne rien faire ».
 - R4 Coût : aucun relevé pour un clic simple ; relevé seulement sur un double-clic.

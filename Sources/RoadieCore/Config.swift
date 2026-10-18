@@ -1095,7 +1095,7 @@ public struct TitlebarContextMenuConfig: Equatable, Codable, Sendable {
         includeStageDestinations: Bool = true,
         includeDesktopDestinations: Bool = true,
         includeDisplayDestinations: Bool = true,
-        doubleClickMaximize: Bool = true
+        doubleClickMaximize: Bool = false
     ) {
         self.doubleClickMaximize = doubleClickMaximize
         self.enabled = enabled
@@ -1134,7 +1134,7 @@ public struct TitlebarContextMenuConfig: Equatable, Codable, Sendable {
             includeStageDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeStageDestinations) ?? true,
             includeDesktopDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeDesktopDestinations) ?? true,
             includeDisplayDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeDisplayDestinations) ?? true,
-            doubleClickMaximize: try c.decodeIfPresent(Bool.self, forKey: .doubleClickMaximize) ?? true
+            doubleClickMaximize: try c.decodeIfPresent(Bool.self, forKey: .doubleClickMaximize) ?? false
         )
     }
 }

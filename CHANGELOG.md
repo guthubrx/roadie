@@ -8,8 +8,8 @@ jour et les limites connues ; les README décrivent la version courante.
 ### Nouveautés
 
 - Double-clic sur la barre de titre d'une fenêtre gérée : maximisation Roadie, puis retour
-  à la disposition. Actif seulement si macOS ne fait rien de ce double-clic ; la santé signale
-  le réglage à changer.
+  à la disposition (`double_click_maximize`, désactivé par défaut). N'agit que si macOS ne fait
+  rien de ce double-clic ; la santé signale le réglage macOS à changer.
 - `roadie daemon health` et `roadie query health` signalent les réglages macOS qui
   déplacent les fenêtres à la place de Roadie (Stage Manager, juxtaposition native,
   clic sur le fond d'écran), avec leur emplacement dans Réglages Système.
@@ -23,6 +23,14 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Changements
 
+- Consommation au repos réduite : la bordure, le rail et les poignées réutilisent le
+  dernier relevé des fenêtres tant qu'aucun changement n'est signalé ; les vignettes du
+  rail ne réénumèrent plus toutes les fenêtres du système et se mettent à jour sans
+  recréer les cartes. Mesure du 18 octobre au repos : 11,45 % puis 2,34 % d'un cœur.
+- Relevé des fenêtres allégé (index des fenêtres par application réutilisé, une requête
+  par application) ; aucun verrou sur l'état sans changement ; un clic hors d'une barre de
+  titre ne déclenche plus de relevé ; pas de vignette pour un rail replié ; une commande
+  en arbre ne relève qu'une fois ; focus-souris désactivé : un réveil par seconde.
 - Sans préférence de placement enregistrée, les nouvelles fenêtres rejoignent
   désormais le stage courant de l'écran actif, même si le pointeur est ailleurs.
   Ce défaut remplace le placement de macOS. Les choix explicites restent conservés ;

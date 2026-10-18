@@ -509,7 +509,7 @@ extension SettingsCatalog {
             entry(.avance, menu, "double_click_maximize", "Double-clic sur la barre de titre",
                   "Affiche la fenêtre seule, en gardant le rail libre, puis rend la disposition au double-clic suivant. "
                   + "N'agit que si macOS ne fait rien de ce double-clic (Bureau et Dock > « Ne rien faire »).",
-                  .bool, .bool(true)),
+                  .bool, .bool(false)),
             entry(.avance, menu, "height", "Hauteur de la zone (points)",
                   "Hauteur de la barre de titre qui réagit au clic droit.", .double(12...96), .double(36)),
             entry(.avance, menu, "leading_exclusion", "Zone exclue à gauche (points)",

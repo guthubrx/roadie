@@ -58,8 +58,6 @@ public struct DaemonHealReport: Equatable, Codable, Sendable {
     }
 }
 
-/// Réglages macOS qui déplacent ou redimensionnent les fenêtres à la place de Roadie (SPEC-049).
-/// Lecture seule : Roadie ne modifie jamais ces réglages.
 /// Action de macOS au double-clic sur une barre de titre (SPEC-050).
 public enum MacOSDoubleClickAction: Equatable, Sendable {
     case zoom
@@ -67,6 +65,8 @@ public enum MacOSDoubleClickAction: Equatable, Sendable {
     case none
 }
 
+/// Réglages macOS qui déplacent ou redimensionnent les fenêtres à la place de Roadie (SPEC-049).
+/// Lecture seule : Roadie ne modifie jamais ces réglages.
 public struct MacOSWindowSetting: Equatable, Sendable {
     public var domain: String
     public var key: String

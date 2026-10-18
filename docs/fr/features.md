@@ -213,14 +213,14 @@ tile_candidates_only = true
 include_stage_destinations = true
 include_desktop_destinations = true
 include_display_destinations = true
-double_click_maximize = true
+double_click_maximize = false
 ```
 
 ### Double-clic sur la barre de titre
 
 Un double-clic dans la même zone haute affiche la fenêtre seule, avec la maximisation Roadie
 qui garde le rail libre. Un second double-clic rend la disposition, comme
-`roadie toggle maximize`. Ce réglage (`double_click_maximize`, actif par défaut) ne dépend
+`roadie toggle maximize`. Ce réglage (`double_click_maximize`, désactivé par défaut) ne dépend
 pas du menu par clic droit.
 
 macOS agit déjà sur ce double-clic et Roadie ne peut pas l'en empêcher. Roadie n'agit donc

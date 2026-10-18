@@ -208,14 +208,14 @@ tile_candidates_only = true
 include_stage_destinations = true
 include_desktop_destinations = true
 include_display_destinations = true
-double_click_maximize = true
+double_click_maximize = false
 ```
 
 ### Title Bar Double-Click
 
 A double-click in the same top band shows the window on its own, with Roadie maximize
 keeping the rail clear. A second double-click restores the layout, like
-`roadie toggle maximize`. This setting (`double_click_maximize`, on by default) does not
+`roadie toggle maximize`. This setting (`double_click_maximize`, off by default) does not
 depend on the right-click menu.
 
 macOS already acts on this double-click and Roadie cannot stop it. Roadie therefore acts
