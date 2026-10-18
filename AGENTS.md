@@ -71,13 +71,14 @@ UUID C17A941A-2EAE-3084-BA67-E379185E9EA9, PID 89776, quatre contrôles santé O
 Signature et configuration conservées. Preuves incomplètes : bureau inaccessible ;
 gestes natifs à vérifier. Détail : specs/043-redimensionnement-fiable/validation/validation.md.
 Trois sous-agents T3 avec fichiers exclusifs ; intégration et validation par le parent.
-Current SpecKit feature: `043-redimensionnement-fiable`.
+Session 044 en cours : poignées visibles avec les bordures décoratives et comparaison des chemins de redimensionnement.
+Current SpecKit feature: `044-poignees-visibles`.
 
 Contexte :
-- `specs/043-redimensionnement-fiable/spec.md`
-- `specs/043-redimensionnement-fiable/plan.md`
-- `specs/043-redimensionnement-fiable/research.md`
-- `specs/043-redimensionnement-fiable/tasks.md`
+- `specs/044-poignees-visibles/spec.md`
+- `specs/044-poignees-visibles/plan.md`
+- `specs/044-poignees-visibles/research.md`
+- `specs/044-poignees-visibles/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
