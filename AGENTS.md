@@ -44,13 +44,13 @@ sélection des suggestions par Haut/Bas et clic, validation du choix par Retour.
 127 tests ciblés et 1597 tests / 185 suites réussis. Parcours natifs vérifiés.
 PID 96284, signature stable, quatre contrôles santé OK ; T3 conservé.
 Preuves et limites : specs/038-saisie-native/validation/livraison038.md.
-Current SpecKit feature: `039-anomalies-journee`.
+Current SpecKit feature: `040-reactivite-rappel`.
 
 Contexte :
-- `specs/039-anomalies-journee/spec.md`
-- `specs/039-anomalies-journee/plan.md`
-- `specs/039-anomalies-journee/research.md`
-- `specs/039-anomalies-journee/tasks.md`
+- `specs/040-reactivite-rappel/spec.md`
+- `specs/040-reactivite-rappel/plan.md`
+- `specs/040-reactivite-rappel/research.md`
+- `specs/040-reactivite-rappel/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
