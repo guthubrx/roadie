@@ -19,4 +19,6 @@ Défaut et choix explicite vérifiés avec la CLI installée. Essai réel préal
 du même mécanisme confirmé par l'utilisateur ; nouveau panneau non capturé,
 bureau inaccessible. Détails dans specs/046-placement-ecran-actif/validation.md.
 
-Intégration et nettoyage Git à consigner après livraison.
+Correction 597314cc intégrée et poussée sur main. Branche de session supprimée,
+fichiers de compilation et recette temporaire retirés. Worktree lié à la
+conversation conservé détaché, diagnostics conservés hors Git.

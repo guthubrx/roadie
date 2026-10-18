@@ -61,3 +61,7 @@ Diagnostics de compilation, revue et tests :
 
 Preuves visuelles incomplètes : bureau inaccessible. Le nouveau texte du panneau
 est vérifié dans le catalogue et ses tests, sans capture d'écran ni diaporama.
+
+Correction 597314cc intégrée et poussée sur main. Branche de session supprimée,
+fichiers de compilation et recette temporaire retirés. Worktree de la conversation
+conservé détaché ; traces et revue conservées hors Git.

@@ -3,4 +3,4 @@
 - [x] T001 Aligner les défauts, le texte des paramètres et les exemples documentés.
 - [x] T002 Tester chargement, choix explicites, rétablissement du défaut et placement.
 - [x] T003 Compiler, installer et vérifier santé et configuration conservées.
-- [ ] T004 Consigner la validation, intégrer sur main et nettoyer.
+- [x] T004 Consigner la validation, intégrer sur main et nettoyer.
