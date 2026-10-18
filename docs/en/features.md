@@ -35,7 +35,9 @@ proportions. Other dividers keep their relative positions. The result is saved i
 the tree. Native resizing with window edges remains available.
 
 **Tiling > Resize handles** shows or hides the handles without retiling windows
-(`tiling.resize_handles`, enabled by default). Handles only appear in a free gap
+(`tiling.resize_handles`, enabled by default). A handle is a contrasting short line
+at the centre of a divider. JankyBorders decorations do not hide it; real windows
+covering the gap remain protected. Handles only appear in a free gap
 on an active, compatible stage. With no gap, use window edges or `resize`.
 Changing stages or displays interrupts the gesture and discards its pending target.
 

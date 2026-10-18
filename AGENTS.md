@@ -71,7 +71,14 @@ UUID C17A941A-2EAE-3084-BA67-E379185E9EA9, PID 89776, quatre contrôles santé O
 Signature et configuration conservées. Preuves incomplètes : bureau inaccessible ;
 gestes natifs à vérifier. Détail : specs/043-redimensionnement-fiable/validation/validation.md.
 Trois sous-agents T3 avec fichiers exclusifs ; intégration et validation par le parent.
-Session 044 en cours : poignées visibles avec les bordures décoratives et comparaison des chemins de redimensionnement.
+Session 044 implémentée et installée : fenêtres décoratives JankyBorders exclues du
+masquage des poignées ; repère contrasté 4 × 32 points, réglage existant conservé.
+1 689 tests / 199 suites réussis, comparaison logicielle à deux/quatre fenêtres et
+revue indépendante favorable bornée. Aucun gain de latence réelle revendiqué.
+UUID DEA0CA0C-6175-35D6-8A08-68473D919EC1, PID 54197, quatre contrôles santé OK.
+macOS confirme un panneau de poignée pour les deux fenêtres de l'écran externe.
+Signature/configuration conservées. Geste réel et capture non vérifiés : bureau
+inaccessible. Reçu : specs/044-poignees-visibles/validation/validation.md.
 Current SpecKit feature: `044-poignees-visibles`.
 
 Contexte :

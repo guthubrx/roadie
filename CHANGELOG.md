@@ -15,6 +15,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Affichage des poignées conservé avec les bordures JankyBorders, avec un repère
+  plus lisible et un interrupteur immédiat dans Tuilage.
 - Conservation des gestes récents face aux anciens refus de taille ; minimums appris
   liés au processus, à la stage et au mode de la fenêtre.
 - Reconnaissance des notifications de placement arrivées en retard, avec un historique

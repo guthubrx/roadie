@@ -187,7 +187,16 @@ final class DividerResizeCoordinator {
             }) else { continue }
             // Même derrière une fenêtre tuilée, une autre application peut être visible dans son interstice.
             // Les cadres réels des fenêtres tuilées comptent aussi : la tolérance de placement ne libère pas des pixels.
-            let occupied = snapshot.windows.filter { $0.window.isOnScreen }.map { $0.window.frame.cgRect }
+            let occupied = snapshot.windows.compactMap { entry -> CGRect? in
+                let window = entry.window
+                guard window.isOnScreen else { return nil }
+                // JankyBorders expose un rectangle CG plein autour d'un contenu transparent.
+                // Exception étroite : une vraie fenêtre ou une application AX illisible reste protégée.
+                let borderDecoration = window.appName == "borders" && window.bundleID.isEmpty
+                    && window.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && window.role == nil && window.subrole == nil && window.furniture == nil
+                return borderDecoration ? nil : window.frame.cgRect
+            }
             let dividers = tree.dividers(in: geometry.container, innerGap: geometry.innerGap, excluding: geometry.absent)
             handles += dividers.filter { divider in
                 !divider.hitRect.isEmpty && !occupied.contains { $0.intersects(divider.hitRect) }

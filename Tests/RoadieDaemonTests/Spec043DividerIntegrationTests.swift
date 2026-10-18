@@ -95,6 +95,119 @@ private final class Divider043Fixture {
 
 @Suite @MainActor
 struct Spec043DividerIntegrationTests {
+    /// Comparaison logicielle : vrais coordinateurs et persistance, fournisseur/écrivain simulés.
+    /// La présentation initiale, les délais des événements et les appels AX réels sont exclus.
+    private func compareResize(four: Bool, explicit: Bool) throws -> (Double, Int, Int) {
+        let f = try Divider043Fixture(four: four)
+        defer { f.clean() }
+        var pending: GestureSession?
+        var now = Date()
+        let maintainer = LayoutMaintainer(service: f.service,
+            events: EventLog(path: f.directory.appendingPathComponent("native-events.jsonl").path),
+            dragActivity: WindowDragActivity(path: f.directory.appendingPathComponent("drag.json").path),
+            commandActivity: LayoutCommandActivity(path: f.directory.appendingPathComponent("command.json").path),
+            mouseButtonsPressed: { false }, writtenFrames: f.registry, generations: f.generations,
+            takeGesture: { defer { pending = nil }; return pending }, spaceProbe: { _ in true },
+            readFrame: { window in f.provider.entries.first { $0.id == window.id }?.frame.cgRect },
+            configService: ConfigReloadService(activeConfig: f.config, activePath: f.directory.appendingPathComponent("config.toml").path),
+            now: { now })
+        _ = maintainer.tick(cause: "command:startup")
+        now.addTimeInterval(5)
+        let point = CGPoint(x: 700, y: 400)
+        let grip = try f.grip()
+        if explicit {
+            #expect(f.coordinator.begin(grip, at: grip.divider.position))
+            f.coordinator.queue(grip, at: point)
+        } else {
+            let index = try #require(f.provider.entries.firstIndex { $0.id == WindowID(rawValue: 1) })
+            let start = f.provider.entries[index].frame.cgRect
+            // macOS a déjà redimensionné la fenêtre manipulée ; Roadie doit ajuster ses voisines.
+            f.provider.entries[index].frame.width = point.x - 5 - start.minX
+            pending = GestureSession(windowID: 1, startFrame: start, startedAt: now.addingTimeInterval(-0.5),
+                                     endedAt: now, didDrag: true)
+            f.service.invalidateSharedSnapshot()
+        }
+        f.provider.windowsRead = 0
+        f.writer.requests = 0
+        let start = DispatchTime.now().uptimeNanoseconds
+        if explicit { f.coordinator.end(cancelled: false) }
+        else { _ = maintainer.tick(cause: "drag") }
+        let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+        let wanted = try #require(f.original.movingDivider(at: [], to: point,
+            in: f.provider.screen.visibleFrame.cgRect, innerGap: 10))
+        let expected = wanted.place(in: f.provider.screen.visibleFrame.cgRect, innerGap: 10)
+        let persisted = try #require(f.store.state().bspTree(for: f.scope))
+        #expect(persisted.place(in: f.provider.screen.visibleFrame.cgRect, innerGap: 10) == expected)
+        #expect(f.provider.entries.allSatisfy { expected[$0.id] == $0.frame.cgRect })
+        return (ms, f.provider.windowsRead, f.writer.requests)
+    }
+
+    @Test(arguments: [false, true])
+    func nativeAndExplicitResizeReachTheSameLayout(four: Bool) throws {
+        let native = try compareResize(four: four, explicit: false)
+        let explicit = try compareResize(four: four, explicit: true)
+        #expect(native.1 > 0)
+        #expect(explicit.1 == 0)
+        #expect(native.2 > 0 && explicit.2 > 0)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ROADIE_RESIZE_BENCHMARK"] == "1"))
+    func benchmarkNativeAndExplicitSoftwarePaths() throws {
+        for four in [false, true] {
+            // Un échauffement de chaque chemin, puis sept paires dans un ordre alterné.
+            _ = try compareResize(four: four, explicit: false)
+            _ = try compareResize(four: four, explicit: true)
+            for round in 0..<7 {
+                for explicit in (round.isMultiple(of: 2) ? [false, true] : [true, false]) {
+                    let (ms, scans, writes) = try compareResize(four: four, explicit: explicit)
+                    print("RESIZE044 windows=\(four ? 4 : 2) route=\(explicit ? "handle" : "native") round=\(round) software_ms=\(ms) snapshots=\(scans) writes=\(writes) simulated_ax=true")
+                }
+            }
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func borderDecorationsDoNotHideHandlesAndSettingStillControlsThem(four: Bool) throws {
+        let f = try Divider043Fixture(four: four)
+        defer { f.clean() }
+        let expected = f.coordinator.update(snapshot: f.snapshot)
+        #expect(expected.count == (four ? 3 : 1))
+        let tiles = f.snapshot.windows
+        for (index, tile) in tiles.enumerated() {
+            let border = WindowSnapshot(id: WindowID(rawValue: UInt32(100 + index)), pid: 7233,
+                appName: "borders", bundleID: "", title: "",
+                frame: Rect(tile.window.frame.cgRect.insetBy(dx: -12, dy: -12)),
+                isOnScreen: true, isTileCandidate: false)
+            f.snapshot.windows.append(ScopedWindowSnapshot(window: border, scope: nil))
+        }
+        #expect(f.coordinator.update(snapshot: f.snapshot) == expected)
+        f.config.tiling.resizeHandles = false
+        #expect(f.coordinator.update(snapshot: f.snapshot).isEmpty)
+        f.config.tiling.resizeHandles = true
+        #expect(f.coordinator.update(snapshot: f.snapshot) == expected)
+        #expect(f.store.state().bspTree(for: f.scope) == f.original)
+        #expect(f.writer.requests == 0)
+    }
+
+    @Test(arguments: ["unknown", "title", "bundle", "role", "subrole", "furniture"])
+    func onlyUnidentifiedBorderDecorationIsIgnored(kind: String) throws {
+        let f = try Divider043Fixture()
+        defer { f.clean() }
+        var overlay = WindowSnapshot(id: WindowID(rawValue: 100), pid: 7233,
+            appName: "borders", bundleID: "", title: "", frame: Rect(x: 450, y: 200, width: 100, height: 100),
+            isOnScreen: true, isTileCandidate: false)
+        switch kind {
+        case "unknown": overlay.appName = "Unknown"
+        case "title": overlay.title = "Document"
+        case "bundle": overlay.bundleID = "com.example.editor"
+        case "role": overlay.role = "AXWindow"
+        case "subrole": overlay.subrole = "AXStandardWindow"
+        default: overlay.furniture = WindowFurniture(hasCloseButton: true)
+        }
+        f.snapshot.windows.append(ScopedWindowSnapshot(window: overlay, scope: nil))
+        #expect(f.coordinator.update(snapshot: f.snapshot).isEmpty)
+    }
+
     @Test
     func clickingWithoutMovingDoesNotPersistRoundingNoise() throws {
         let f = try Divider043Fixture()

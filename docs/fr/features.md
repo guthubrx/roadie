@@ -38,6 +38,9 @@ des fenêtres reste disponible.
 Le réglage **Tuilage > Poignées de redimensionnement** masque ou affiche ces prises
 sans retuiler les fenêtres (`tiling.resize_handles`, activé par défaut). Les poignées
 n'apparaissent que dans un espace libre entre fenêtres, sur une stage active compatible.
+Le repère est un petit trait contrasté au milieu de la séparation. Les bordures
+décoratives JankyBorders ne le masquent pas ; une vraie fenêtre qui recouvre cet
+espace reste protégée.
 Sans espace entre les fenêtres, utilise leurs bords ou la commande `resize`.
 Un changement de stage ou d'écran interrompt le geste sans appliquer sa cible en attente.
 

@@ -247,11 +247,11 @@ private final class SplitResizeView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let mark = orientation == .vertical
-            ? CGRect(x: bounds.midX - min(2, bounds.width) / 2, y: bounds.midY - min(24, bounds.height) / 2,
-                     width: min(2, bounds.width), height: min(24, bounds.height))
-            : CGRect(x: bounds.midX - min(24, bounds.width) / 2, y: bounds.midY - min(2, bounds.height) / 2,
-                     width: min(24, bounds.width), height: min(2, bounds.height))
-        NSColor.secondaryLabelColor.withAlphaComponent(0.55).setFill()
-        NSBezierPath(roundedRect: mark, xRadius: 1, yRadius: 1).fill()
+            ? CGRect(x: bounds.midX - min(4, bounds.width) / 2, y: bounds.midY - min(32, bounds.height) / 2,
+                     width: min(4, bounds.width), height: min(32, bounds.height))
+            : CGRect(x: bounds.midX - min(32, bounds.width) / 2, y: bounds.midY - min(4, bounds.height) / 2,
+                     width: min(32, bounds.width), height: min(4, bounds.height))
+        NSColor.labelColor.withAlphaComponent(0.9).setFill()
+        NSBezierPath(roundedRect: mark, xRadius: 2, yRadius: 2).fill()
     }
 }
