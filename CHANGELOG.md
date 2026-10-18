@@ -5,6 +5,12 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+### Nouveautés
+
+- Aperçu du réordonnancement dans le rail : la stage déplacée apparaît en transparence
+  à sa future place, et les cartes voisines montrent l’ordre qui sera appliqué au dépôt.
+  Une aimantation réglable dans les paramètres stabilise la destination.
+
 ### Corrections
 
 - Rafraîchissement de l'indicateur d'enregistrement limité aux changements de son propre fichier.

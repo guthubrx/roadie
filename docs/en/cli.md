@@ -106,7 +106,7 @@ The nav rail also supports mouse interactions:
 - drag a thumbnail to a stage;
 - drag a thumbnail into the active workspace;
 - drag an application window by its title bar onto a stage or empty rail space;
-- drag a stage with the right mouse button to reorder it;
+- drag a stage with the right mouse button to preview its destination and the new card order; release to apply, or release outside the rail to cancel;
 - right-click a stage to open its menu (rename, send to another display).
 
 ## Safety And Generated Files

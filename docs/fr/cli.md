@@ -106,7 +106,7 @@ Le navrail accepte aussi les interactions souris :
 - drag d'une miniature vers une stage;
 - drag d'une miniature vers l'espace actif;
 - drag d'une fenetre d'application par sa barre de titre vers une stage ou une zone vide;
-- drag d'une stage avec le bouton droit pour la reordonner;
+- glisser une stage avec le bouton droit pour voir sa future place et le nouvel ordre ; relâcher pour appliquer, ou relâcher hors du rail pour annuler ;
 - clic droit sur une stage pour ouvrir son menu (renommer, envoyer vers un autre ecran).
 
 ## Securite et fichiers generes

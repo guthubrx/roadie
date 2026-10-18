@@ -62,6 +62,8 @@ Clés sans effet aujourd'hui : toute la table `[desktops]`, ainsi que `enabled` 
 
 Toutes les tables lues par le rail sont acceptées : `[fx.rail]` et ses sous-tables `layout`, `header`, `header.display`, `header.desktop`, `stages`, `preview`, `stacked`, `stage_labels` et `parallax`.
 
+Dans **Paramètres > Rail**, « Aimantation du réordonnancement (%) » stabilise la destination de l’aperçu lors du glisser droit. La clé `fx.rail.stages.reorder_magnetism` va de 0 à 100 (défaut 50). À 0, elle est désactivée. Le curseur de souris reste libre. Le réglage s’applique sans redémarrage.
+
 ## Layout
 
 Exemple :

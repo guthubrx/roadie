@@ -10,3 +10,7 @@ Pendant le glisser droit d’une stage, montrer ses fenêtres en transparence à
 - La géométrie, les légendes, les noms personnalisés et les stages vides respectent le rendu normal.
 - Sortir du rail ou annuler restaure les cartes sans changer l’ordre enregistré.
 - Le glisser gauche des fenêtres reste inchangé. Aucune écriture d’état pendant l’aperçu.
+
+## Extension validée pendant la session
+
+L’utilisateur demande une aimantation réglable et choisit explicitement de stabiliser la destination de l’aperçu, sans attirer le curseur. Ajouter dans Paramètres > Rail un curseur « Aimantation du réordonnancement (%) », de 0 à 100, défaut 50. Une intensité élevée impose de dépasser davantage la séparation avant de changer de destination. À 0, comportement sans stabilisation. Le dépôt reprend la destination affichée, y compris dans la zone de tolérance. Le réglage suit le rechargement dynamique existant et ne modifie pas l’attraction du bord du rail.

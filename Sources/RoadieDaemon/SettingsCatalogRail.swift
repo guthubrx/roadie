@@ -73,6 +73,8 @@ extension SettingsCatalog {
                   "Place de la liste des stages dans la hauteur du rail.", .choice(positions), .string("center")),
             entry(.rail, t, "alignment", "Alignement des cartes",
                   "Alignement horizontal des cartes de stage.", .choice(alignments), .string("center")),
+            entry(.rail, t, "reorder_magnetism", "Aimantation du réordonnancement (%)",
+                  "Stabilise la destination de l’aperçu pendant le glissement. 0 désactive l’aimantation ; 100 tolère davantage de petits mouvements. Le curseur ne bouge pas tout seul.", .double(0...100), .double(50)),
             entry(.rail, t, "slot_height", "Hauteur d’un emplacement (points)",
                   "Hauteur commune des stages vides et occupés. Minimum 80 points ; 0 conserve la hauteur automatique.", .double(0...320), .double(0)),
             entry(.rail, t, "gap", "Espace entre les emplacements (points)",

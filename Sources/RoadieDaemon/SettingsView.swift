@@ -263,7 +263,7 @@ private struct SettingRow: View {
             .labelsHidden()
         case .int, .double:
             VStack(alignment: .leading, spacing: 6) {
-                if isFontSize, case .double(let range?) = descriptor.kind {
+                if isFontSize || descriptor.id == "rail.stages.reorder_magnetism", case .double(let range?) = descriptor.kind {
                     Slider(value: Binding(
                         get: {
                             if case .double(let value) = model.value(descriptor) {

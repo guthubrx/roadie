@@ -140,7 +140,7 @@ Main interactions:
 - drag a thumbnail into the active workspace to summon it;
 - drag an application window by its title bar onto a stage to move it there;
 - drag an application window by its title bar onto empty rail space to create or use an empty stage;
-- drag a stage with the right mouse button to reorder it;
+- drag a stage with the right mouse button to preview its destination and the new card order; release to apply, or release outside the rail to cancel;
 - right-click a stage without dragging to open its menu: rename the stage, send it to another display, or send a window to another stage.
 
 macOS-reserved areas such as the menu bar are ignored by empty rail click handling.

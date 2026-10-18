@@ -50,6 +50,13 @@ arrêt AX après délai dépassé et échecs de masquage détaillés.
 1 612 tests / 188 suites et 26 tests de scripts réussis. Revue traitée.
 UUID EAC639A1-B54B-339F-98AD-950C4D5F0F3E, PID 46802, quatre contrôles santé OK.
 Preuves visuelles indisponibles ; limites : specs/040-reactivite-rappel/validation/validation.md.
+Session 041 implémentée et installée : aperçu translucide du réordonnancement à la
+future place des cartes, trait bleu retiré, destinations fixes et aimantation réglable
+0–100 % dans Paramètres > Rail (défaut 50). 1 616 tests / 189 suites réussis,
+puis 22 tests ciblés après revue ; deux revues traitées. UUID
+3533388F-83B1-3F5A-995C-B525D7656291, PID 83654, quatre contrôles santé OK.
+Preuves visuelles incomplètes : bureau inaccessible. Validation :
+specs/041-apercu-reordonnancement/validation/validation.md.
 Current SpecKit feature: `041-apercu-reordonnancement`.
 
 Contexte :

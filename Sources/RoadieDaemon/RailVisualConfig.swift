@@ -49,6 +49,7 @@ struct RailVisualConfig {
     var headerPosition: RailHeaderPosition = .top
     var stagesPosition: RailStagesPosition = .center
     var slotHeight: CGFloat = 0
+    var reorderMagnetism: CGFloat = 50
     var layoutSpacing: CGFloat = 13
     var layoutTopPadding: CGFloat = 26
     var layoutBottomPadding: CGFloat = 16
@@ -110,6 +111,7 @@ struct RailVisualConfig {
             headerPosition: RailHeaderPosition(rawValue: settings.layout.headerPosition) ?? .top,
             stagesPosition: RailStagesPosition(rawValue: settings.stages.position) ?? RailStagesPosition(rawValue: settings.layout.stagesPosition) ?? .center,
             slotHeight: CGFloat(settings.stages.slotHeight),
+            reorderMagnetism: CGFloat(settings.stages.reorderMagnetism),
             layoutSpacing: CGFloat(settings.stages.gap > 0 ? settings.stages.gap : settings.layout.spacing),
             layoutTopPadding: CGFloat(settings.layout.topPadding),
             layoutBottomPadding: CGFloat(settings.layout.bottomPadding),

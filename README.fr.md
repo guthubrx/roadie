@@ -533,8 +533,10 @@ Interactions supportées :
 - Drag une thumbnail vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.
 - Glisser une fenêtre d’application par sa barre de titre vers une stage pour l’y déplacer.
 - Glisser une fenêtre d’application par sa barre de titre vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.
-- Glisser une stage avec le bouton droit de la souris pour réordonner les stages.
+- Glisser une stage avec le bouton droit de la souris pour réordonner les stages. Un aperçu translucide montre sa future place ; les cartes voisines montrent le nouvel ordre. Relâcher pour l’appliquer, ou sortir du rail avant de relâcher pour annuler.
 - Faire un clic droit sur une stage, sans glisser, pour ouvrir son menu : renommer la stage, l’envoyer vers un autre écran ou envoyer une fenêtre vers une autre stage.
+
+L’intensité de l’aimantation se règle dans **Paramètres > Rail > Aimantation du réordonnancement (%)**. À 0, elle est désactivée ; une valeur plus élevée stabilise davantage la destination malgré les petits mouvements de souris.
 
 Le rendu du rail se configure dans `~/.config/roadies/roadies.toml`.
 

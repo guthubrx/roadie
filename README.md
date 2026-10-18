@@ -533,9 +533,11 @@ Supported interactions:
 - Drag a thumbnail to an empty rail area to place it in an empty or newly created stage.
 - Drag an application window by its title bar onto a stage to move it there.
 - Drag an application window by its title bar onto empty rail space to place it in an empty or newly created stage.
-- Drag a stage with the right mouse button to reorder stages.
+- Drag a stage with the right mouse button to reorder stages. A translucent preview shows its destination, while neighboring cards show the new order. Release to apply it, or move outside the rail before releasing to cancel.
 - Right-click a stage without dragging to open its menu: rename the stage, send the stage to another display, or send a window to another stage.
 - Clicks in macOS-reserved areas such as the menu bar are ignored by rail empty-click handling.
+
+Adjust the strength in **Settings > Rail > Aimantation du réordonnancement (%)**. At 0, snapping is disabled; higher values keep the preview at its destination through small pointer movements.
 
 Rail rendering is configured in `~/.config/roadies/roadies.toml`.
 

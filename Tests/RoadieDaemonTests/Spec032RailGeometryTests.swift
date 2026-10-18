@@ -102,7 +102,7 @@ struct Spec032RailGeometryTests {
         }
     }
 
-    @Test func actualPanelSpacingAndDropIndicatorUseSameSlots() throws {
+    @Test func actualPanelPreviewMatchesCommittedOrderAndKeepsDropTargetsStable() throws {
         let screen = try #require(NSScreen.screens.first)
         var config = config()
         config.headerPosition = .hidden
@@ -125,23 +125,47 @@ struct Spec032RailGeometryTests {
         #expect(abs(cards[0].frame.midY - cards[1].frame.midY - 133) < 0.01)
         #expect(abs(cards[1].frame.midY - cards[2].frame.midY - 133) < 0.01)
         let source = stages[2].id
-        // Déposer T3 juste au-dessus de Firefox doit donner le rang 2 et un trait entre Word et Firefox.
+        // Déposer T3 au-dessus de Firefox montre déjà le résultat final, sans déplacer les cibles.
+        let originalFrames = cards.map(\.frame)
         let targetPreview = try #require(cards[1].previewDisplayFrames().first)
         let targetFrame = stack.convert(targetPreview, from: cards[1])
         let local = CGPoint(x: 50, y: targetFrame.midY + 10)
         let point = panel.convertPoint(toScreen: stack.convert(local, to: nil))
         #expect(panel.stageReorderPosition(at: point, sourceStageID: source) == 2)
         panel.showStageReorderPreview(at: point, sourceStageID: source)
-        let line = try #require(stack.insertionY)
-        #expect(line > cards[1].frame.maxY && line < cards[0].frame.minY)
+        let overlay = try #require(stack.subviews.first { view in
+            !stack.arrangedSubviews.contains(view) && view.subviews.contains { $0 is StageCardView }
+        })
+        let projected = overlay.subviews.compactMap { $0 as? StageCardView }
+        #expect(projected.map(\.stageID.rawValue) == ["word", "t3", "firefox"])
+        let projectedFrames = projected.map(\.frame)
+        #expect(projected[1].alphaValue > 0 && projected[1].alphaValue < 1)
+        #expect(projected[0].alphaValue == 1 && projected[2].alphaValue == 1)
+        #expect(cards.map(\.frame) == originalFrames)
+        #expect(cards.allSatisfy { $0.layer?.opacity == 0 })
+        #expect(panel.stageReorderPosition(at: point, sourceStageID: source) == 2)
+        #expect(overlay.hitTest(local) == nil)
+        panel.showStageReorderPreview(at: point, sourceStageID: source)
+        #expect(overlay.superview === stack)
+        #expect(overlay.subviews.first === projected.first)
+        // Les cartes masquées restent les cibles natives de la souris.
+        #expect(panel.stageID(at: point) == stages[1].id)
         var changed = scope
         let reordered = changed.reorderStage(source, to: 2)
         #expect(reordered)
         #expect(changed.stages.map(\.id.rawValue) == ["word", "t3", "firefox"])
         panel.showStageReorderPreview(at: CGPoint(x: panel.frame.maxX + 30, y: point.y), sourceStageID: source)
-        #expect(stack.insertionY == nil)
+        #expect(overlay.superview == nil)
+        #expect(cards.allSatisfy { $0.alphaValue == 1 && $0.layer?.opacity == 1 })
         panel.showStageReorderPreview(at: point, sourceStageID: source)
         panel.hideStageReorderPreview()
-        #expect(stack.insertionY == nil)
+        #expect(stack.subviews.allSatisfy { $0.subviews.allSatisfy { !($0 is StageCardView) } })
+        #expect(cards.map(\.frame) == originalFrames)
+        #expect(cards.allSatisfy { $0.alphaValue == 1 && $0.layer?.opacity == 1 })
+        panel.render(content: RailDisplayContent(scope: changed, presentationStates: [:], liveWindowIDs: Set(stages.flatMap { $0.members.map(\.windowID) })),
+                     displayName: "Test", config: config, thumbnails: RailThumbnailStore(), recordingStatus: nil, recordingIndicatorBottomOffset: 0)
+        stack.layoutSubtreeIfNeeded()
+        let committed = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
+        #expect(committed.map(\.frame) == projectedFrames)
     }
 }

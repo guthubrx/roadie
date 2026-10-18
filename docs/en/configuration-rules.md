@@ -59,6 +59,8 @@ Keys without effect today: the whole `[desktops]` table, and `enabled` and `hide
 
 Every table that the rail reads is accepted: `[fx.rail]` and its sub-tables `layout`, `header`, `header.display`, `header.desktop`, `stages`, `preview`, `stacked`, `stage_labels`, and `parallax`.
 
+In **Settings > Rail**, “Aimantation du réordonnancement (%)” stabilizes the preview destination during a right-button drag. `fx.rail.stages.reorder_magnetism` ranges from 0 to 100 (default 50). At 0, it is disabled. The pointer remains free. Changes apply without restarting.
+
 ## Layout
 
 Example:

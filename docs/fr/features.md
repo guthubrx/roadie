@@ -142,7 +142,7 @@ Interactions principales :
 - tirer une miniature vers l'espace de travail actif pour y rappeler la fenetre;
 - tirer une fenetre d'application par sa barre de titre vers une stage pour l'y deplacer;
 - tirer une fenetre d'application par sa barre de titre vers une zone vide du navrail pour creer ou utiliser une stage vide;
-- tirer une stage avec le bouton droit de la souris pour la reordonner;
+- tirer une stage avec le bouton droit : son aperçu translucide et les cartes voisines montrent le futur ordre ; relâcher pour appliquer, ou relâcher hors du rail pour annuler ;
 - faire un clic droit sur une stage, sans tirer, pour ouvrir son menu : renommer la stage, l'envoyer vers un autre ecran ou envoyer une fenetre vers une autre stage.
 
 Les zones reservees par macOS, comme la barre de menu, sont ignorees par les actions de clic vide du navrail.

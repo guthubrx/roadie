@@ -130,6 +130,13 @@ final class StageCardView: NSControl {
         layer?.shadowOffset = .zero
     }
 
+    /// Même rendu et mêmes miniatures, avec la légende de la position future.
+    func reorderPreview(position: Int) -> StageCardView {
+        StageCardView(stage: stage, displayLabel: StagePresentationOrder.name(stage, position: position),
+                      isActive: isActive, accent: accent, config: config,
+                      presentationStates: presentationStates, thumbnails: thumbnails, position: position)
+    }
+
     static func width(for config: RailVisualConfig) -> CGFloat {
         config.mode == .icons ? max(1, config.railWidth - 12) : 224
     }

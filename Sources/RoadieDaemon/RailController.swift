@@ -384,6 +384,10 @@ public final class RailController {
         switch type {
         case .rightMouseDown:
             dragGhost?.hide()
+            if pendingStageReorder != nil {
+                panels.values.forEach { $0.hideStageReorderPreview() }
+                pendingStageReorder = nil
+            }
             for (displayID, panel) in panels {
                 guard panel.isVisible,
                       panel.frame.contains(screenPoint),
@@ -393,8 +397,6 @@ public final class RailController {
                 pendingStageReorder = PendingStageReorder(
                     displayID: displayID,
                     stageID: payload.stageID,
-                    image: payload.image,
-                    grabUnit: payload.grabUnit,
                     windowID: payload.windowID,
                     startPoint: screenPoint,
                     didDrag: false
@@ -405,15 +407,7 @@ public final class RailController {
 
         case .rightMouseDragged:
             guard var reorder = pendingStageReorder else { return false }
-            if hypot(screenPoint.x - reorder.startPoint.x, screenPoint.y - reorder.startPoint.y) > 6 {
-                if !reorder.didDrag {
-                    if dragGhost == nil {
-                        dragGhost = RailDragGhostWindow()
-                    }
-                    dragGhost?.show(image: reorder.image, at: screenPoint, grabUnit: reorder.grabUnit, usesBackdrop: false)
-                } else {
-                    dragGhost?.move(to: screenPoint, grabUnit: reorder.grabUnit)
-                }
+            if reorder.didDrag || hypot(screenPoint.x - reorder.startPoint.x, screenPoint.y - reorder.startPoint.y) > 6 {
                 reorder.didDrag = true
                 pendingStageReorder = reorder
                 panels[reorder.displayID]?.showStageReorderPreview(at: screenPoint, sourceStageID: reorder.stageID)
@@ -422,12 +416,15 @@ public final class RailController {
 
         case .rightMouseUp:
             guard let reorder = pendingStageReorder else { return false }
+            // Lire la destination aimantée avant de retirer l’aperçu qui la mémorise.
+            let position = reorder.didDrag
+                ? panels[reorder.displayID]?.stageReorderPosition(at: screenPoint, sourceStageID: reorder.stageID) : nil
             pendingStageReorder = nil
             panels.values.forEach { $0.hideStageReorderPreview() }
             dragGhost?.hide()
             guard let panel = panels[reorder.displayID] else { return true }
             if reorder.didDrag {
-                if let position = panel.stageReorderPosition(at: screenPoint, sourceStageID: reorder.stageID) {
+                if let position {
                     events.append(RoadieEvent(type: "rail_stage_drop", details: [
                         "stage_id": reorder.stageID.rawValue, "display_id": reorder.displayID.rawValue,
                         "x": String(Double(screenPoint.x)), "y": String(Double(screenPoint.y)), "position": String(position),
@@ -1375,8 +1372,6 @@ struct RailDragPayload {
 
 struct RailStageDragPayload {
     var stageID: StageID
-    var image: NSImage?
-    var grabUnit: CGPoint
     var windowID: WindowID?
 }
 
@@ -1393,8 +1388,6 @@ struct PendingRailDrag {
 struct PendingStageReorder {
     var displayID: DisplayID
     var stageID: StageID
-    var image: NSImage?
-    var grabUnit: CGPoint
     var windowID: WindowID?
     var startPoint: CGPoint
     var didDrag: Bool
