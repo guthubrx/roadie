@@ -200,6 +200,8 @@ final class RailPanel: NSPanel {
             isCollapsed = true
         }
         applyAutoHideFrame(animated: false)
+        stageScrollView.frame = CGRect(x: 0, y: interactionFrame.minY - frame.minY,
+                                       width: self.frame.width, height: interactionFrame.height)
     }
 
     func updateAutoHide(mouse: CGPoint, canHide: Bool) {
@@ -434,8 +436,11 @@ final class RailPanel: NSPanel {
             hideStageReorderPreview()
             guard orderedStageIDs.contains(sourceStageID) else { return nil }
             let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
-            guard cards.contains(where: { $0.stageID == sourceStageID }) else { return nil }
-            let targets = cards.filter { $0.stageID != sourceStageID }.map { card in
+            guard let source = cards.first(where: { $0.stageID == sourceStageID }) else { return nil }
+            // La priorité occupées/vides reste fixe ; les rangs sont croissants dans chaque groupe.
+            let targets = cards.filter {
+                $0.stageID != sourceStageID && $0.members.isEmpty == source.members.isEmpty
+            }.map { card in
                 let preview = card.previewDisplayFrames().first ?? card.bounds
                 return (stageID: card.stageID, midY: stack.convert(preview, from: card).midY)
             }

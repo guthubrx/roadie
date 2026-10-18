@@ -110,9 +110,11 @@ Reçus : specs/048-consommation-repos/, 051-constats-high/, 049-reglages-macos/,
 Session 052 implémentée et installée : nettoyage autorisé des douze stages vides,
 stages occupées prioritaires, rail défilable et fantôme aligné avec les destinations.
 Parking réutilisant les emplacements vides compatibles ; homonymes ambigus préservés.
-A-11 : ancrage mémorisé au clic, acquisition au premier glisser seulement.
-1 749 tests / 209 suites réussis. UUID 302CADB3-689D-3EF0-88D0-37693C9168F4,
-PID 69262, cinq contrôles santé OK. Quatre stages occupées et dix membres conservés.
+A-11 : ancrage mémorisé au clic, acquisition au premier glisser avec cible gérée.
+Revue traitée : réordonnancement par groupe, case vide active protégée, ancrage
+invalidé abandonné et hauteur de défilement limitée à la zone utilisable.
+1 754 tests / 209 suites réussis. UUID DFB9822B-301D-38BE-85FB-5586254D4370,
+PID 25248, cinq contrôles santé OK. Quatre stages occupées et dix membres conservés.
 V15 : historique borné explicite, 63 tests courants/39 isolés, commit 744f30b dans
 00.Generic. Preuves visuelles incomplètes : bureau inaccessible. Reçu :
 specs/052-rail-reconnexions/validation.md.

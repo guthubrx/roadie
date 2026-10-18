@@ -149,6 +149,7 @@ Cas d'usage :
 Le rail affiche d'abord les stages contenant des fenêtres, puis les stages vides
 nommées. Fais défiler le rail lorsque les cartes dépassent la hauteur de l'écran.
 Les menus de destination et l'aperçu du réordonnancement suivent le même ordre.
+Le glisser réordonne les stages au sein de leur groupe : occupées ou vides.
 Les stages vides sans nom restent accessibles par « Prochaine stage vide ».
 
 Les vignettes de fenetres peuvent aussi exposer leur etat de presentation. Une

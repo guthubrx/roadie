@@ -21,3 +21,12 @@ points. Capture impossible ; reconnexion physique non réalisée à distance.
 Reçu : specs/052-rail-reconnexions/validation.md. Correction 640eaca1 fusionnée et
 poussée sur main. Branche supprimée, fichiers de compilation et recette temporaire
 retirés. Worktree lié à la conversation conservé détaché ; sauvegardes conservées.
+
+Complément après revue indépendante en lecture seule : réordonnancement corrigé
+au sein des groupes occupées/vides ; les tests reproduisent l'ancien blocage.
+Glisser sans cible, ancrage invalidé et case vide active protégés. La zone de
+défilement respecte la hauteur utilisable de l'écran. 91 tests ciblés puis
+1 754 tests / 209 suites réussis. Revue bornée : pas de shell ni d'écran chez le
+réviseur ; diff et reproductions contrôlés par le responsable.
+Complément installé : UUID DFB9822B-301D-38BE-85FB-5586254D4370, PID 25248,
+cinq contrôles santé OK. Configuration et certificat inchangés.

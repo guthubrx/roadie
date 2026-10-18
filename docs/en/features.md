@@ -143,7 +143,8 @@ Use cases:
 
 The nav rail shows stages with windows first, followed by named empty stages.
 Scroll the rail when the cards exceed the display height. Destination menus and
-the reorder preview follow the same order. Anonymous empty stages remain available
+the reorder preview follow the same order. Dragging reorders stages within their
+group: occupied or empty. Anonymous empty stages remain available
 through the next-empty-stage action.
 
 Window thumbnails can also expose their presentation state. A `maximized`

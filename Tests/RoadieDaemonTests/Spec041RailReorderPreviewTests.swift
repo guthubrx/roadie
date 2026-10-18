@@ -116,20 +116,20 @@ struct Spec041RailReorderPreviewTests {
                          recordingStatus: nil, recordingIndicatorBottomOffset: 0)
             stack.layoutSubtreeIfNeeded()
         }
-        // Aller en tête puis en fin, en incluant une carte nommée vide et une stage cachée.
+        // Aller en tête puis en fin des occupées, avec une carte vide et une stage cachée.
         for toFront in [true, false] {
             render(scope)
             let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
             #expect(cards.map(\.stageID.rawValue) == ["1", "work", "reserve"])
             let originalFrames = cards.map(\.frame)
             if renderer == "icons-only" { #expect(cards[0].frame.height != cards[1].frame.height) }
-            let source = toFront ? cards[2] : cards[0]
-            let target = toFront ? cards[0] : cards[2]
+            let source = toFront ? cards[1] : cards[0]
+            let target = toFront ? cards[0] : cards[1]
             let targetRect = stack.convert(target.previewDisplayFrames().first ?? target.bounds, from: target)
             let local = CGPoint(x: 50, y: targetRect.midY + (toFront ? 8 : -8))
             let point = panel.convertPoint(toScreen: stack.convert(local, to: nil))
             let position = try #require(panel.stageReorderPosition(at: point, sourceStageID: source.stageID))
-            #expect(position == (toFront ? 1 : 4))
+            #expect(position == (toFront ? 1 : 3))
             panel.showStageReorderPreview(at: point, sourceStageID: source.stageID)
             let overlay = try #require(stack.subviews.compactMap { $0 as? RailStageReorderPreviewView }.first)
             stack.layoutSubtreeIfNeeded()
@@ -178,9 +178,9 @@ struct Spec041RailReorderPreviewTests {
             func screenPoint(_ dy: CGFloat) -> CGPoint {
                 panel.convertPoint(toScreen: stack.convert(CGPoint(x: 50, y: target.midY + dy), to: nil))
             }
-            panel.showStageReorderPreview(at: screenPoint(2), sourceStageID: cards[2].stageID)
-            #expect(panel.stageReorderPosition(at: screenPoint(-2), sourceStageID: cards[2].stageID)
-                    == (strength == 0 ? 3 : 1))
+            panel.showStageReorderPreview(at: screenPoint(2), sourceStageID: cards[1].stageID)
+            #expect(panel.stageReorderPosition(at: screenPoint(-2), sourceStageID: cards[1].stageID)
+                    == (strength == 0 ? 2 : 1))
         }
         render(scope)
         let point = CGPoint(x: panel.frame.midX, y: panel.frame.midY)

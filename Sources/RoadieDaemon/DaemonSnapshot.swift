@@ -2160,7 +2160,8 @@ public extension SnapshotService {
     }
 
     func focus(_ window: WindowSnapshot) -> Bool {
-        invalidateSharedSnapshot()
+        // Un focus seul conserve les cadres ; ne pas perdre le clic qui suit le focus-souris.
+        processState.invalidatePublished(preservingGesture: true)
         return frameWriter.focus(window)
     }
 
@@ -2544,8 +2545,12 @@ final class SnapshotProcessState: @unchecked Sendable {
         }
     }
 
-    func invalidatePublished() {
-        lock.withLock { revision &+= 1; published.removeAll() }
+    func invalidatePublished(preservingGesture: Bool = false) {
+        lock.withLock {
+            revision &+= 1
+            published.removeAll()
+            if !preservingGesture { gestureSnapshot = nil }
+        }
     }
 
     /// Garde la preuve de masquage tant que l'identité et la frame observées sont les mêmes.
@@ -2623,6 +2628,7 @@ final class SnapshotProcessState: @unchecked Sendable {
             guard destroyed.insert(id).inserted else { return }
             revision &+= 1
             published.removeAll()
+            gestureSnapshot = nil
             destroyedEvidence[id] = DestroyedWindowEvidence(
                 observedAt: date,
                 scheduledRetries: 0,

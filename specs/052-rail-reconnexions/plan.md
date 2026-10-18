@@ -16,3 +16,15 @@ preuve du scanner. Tester bornes invalides et option réservée à gitleaks-hist
 Tests Swift ciblés puis suite complète avec deux tâches, compilation et installation
 signées, vérification santé. Preuves visuelles si bureau accessible, sinon limite
 documentée ; aucun benchmark de performance sous charge.
+
+Complément de revue : limiter les seuils de réordonnancement aux cartes de même
+catégorie que la source (occupées ou vides). La priorité reste ainsi respectée,
+et les rangs persistants restent croissants dans chaque catégorie. Reproduire le
+cas [vide, A, B] affiché [A, B, vide], puis déplacer A après B. Vérifier aussi
+deux vides et l'aperçu concordant avec le dépôt.
+
+Constats complémentaires : aucun relevé pour un glisser sans cible gérée. Effacer
+l'ancrage quand la géométrie devient incertaine, tout en le conservant pour un
+simple focus de fenêtre qui ne modifie pas ses cadres. Protéger la case vide active
+à l'arrivée du parking. Borner la zone de défilement à la hauteur utilisable entre
+la barre des menus et le Dock. Tests de reproduction avant correction.

@@ -557,7 +557,8 @@ public struct DisplayParkingService: Sendable {
         if !existing.contains(where: { $0.element.id == preferred }) {
             return preferred
         }
-        if existing.contains(where: { $0.element.id == preferred && canReuseMaterializationSlot($0.element, for: stage) }) {
+        if preferred != scope.activeStageID,
+           existing.contains(where: { $0.element.id == preferred && canReuseMaterializationSlot($0.element, for: stage) }) {
             return preferred
         }
 
@@ -584,8 +585,10 @@ public struct DisplayParkingService: Sendable {
                let candidate = scope.stages[$0].origin
                return candidate?.logicalDisplayID == origin.logicalDisplayID
                    && candidate?.desktopID == origin.desktopID && candidate?.stageID == origin.stageID
-           }) { return sameOrigin }
-        return compatible.count == 1 ? compatible.first : nil
+           }) { return scope.stages[sameOrigin].id != scope.activeStageID ? sameOrigin : nil }
+        guard compatible.count == 1, let index = compatible.first,
+              scope.stages[index].id != scope.activeStageID else { return nil }
+        return index
     }
 
     private func firstSelectableStage(in scope: PersistentStageScope) -> PersistentStage? {

@@ -205,7 +205,7 @@ public final class UserInputActivity: @unchecked Sendable {
             gesture = current
             return current
         }
-        if let first { lock.withLock { dragStartHandler }?(first) }
+        if let first, first.windowID != nil { lock.withLock { dragStartHandler }?(first) }
     }
 
     /// Relâchement d'un bouton. Celui du bouton gauche ferme la session ; une session sans cible

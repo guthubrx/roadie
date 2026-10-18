@@ -64,8 +64,9 @@ Redémarrage vérifié, PID 69262, cinq contrôles santé OK. CoreGraphics confi
 un panneau de rail de 150 × 1 125 points sur l'écran de 1 125 points de haut.
 Après installation, les quatre stages occupées et leurs dix membres sont conservés.
 Les 302 empreintes Sources/Tests sont inchangées depuis la suite verte.
-Une revue indépendante a été proposée, sans accord reçu à ce stade ; aucune revue
-externe n'est revendiquée. Contrôles et relecture réalisés par le responsable.
+Une revue indépendante a ensuite été autorisée et réalisée en lecture seule.
+Le réviseur n'avait ni shell, ni diff, ni accès à l'écran. Ses constats ont été
+vérifiés par le responsable avec le diff et des tests de reproduction.
 Preuves visuelles incomplètes : screencapture échoue avec « could not create image
 from display ». Aucun diaporama fabriqué. Le rebranchement physique de l'écran
 externe n'est pas réalisable à distance ; les cycles sont vérifiés en tests.
@@ -73,3 +74,50 @@ externe n'est pas réalisable à distance ; les cycles sont vérifiés en tests.
 Correction 640eaca1 intégrée et poussée sur main. Branche de session supprimée,
 compilation et recette d'installation temporaire retirées. Worktree de cette
 conversation conservé détaché. Sauvegardes et diagnostics conservés hors Git.
+
+## Complément de revue
+
+Le test ajouté reproduit l'impossibilité de déplacer A après B lorsque l'ordre
+persistant est [vide, A, B], affiché [A, B, vide] : avant correction, l'aperçu et
+le dépôt gardent A en tête. Les seuils ne prennent maintenant que les cartes du
+même groupe que la source. Les rangs persistants y sont croissants ; les stages
+occupées restent prioritaires. Les cas à deux stages vides, les hauteurs variables,
+les douze combinaisons de rendu/alignement et l'aimantation sont vérifiés.
+
+Autres constats traités :
+
+- Un glisser sans cible gérée ne déclenche plus le callback d'acquisition. Le test
+  échouait avec un appel avant correction ; il exige maintenant zéro appel.
+- Une invalidation de géométrie ou une destruction abandonne l'ancrage. Les deux
+  tests échouaient avant correction. Un simple focus de fenêtre conserve ses
+  cadres : cette exception évite de perdre le clic suivant le focus-souris. Le test
+  vérifie également la mise à jour des cadres après écriture.
+- Une case vide active n'est pas réutilisée, y compris après 61 secondes. Le test
+  échouait avant correction. L'exclusion conserve l'ambiguïté des homonymes ; elle
+  ne transforme pas deux candidats en un candidat artificiellement unique.
+- La zone de défilement respecte la hauteur utilisable entre menus et Dock,
+  tandis que le panneau garde la hauteur totale de l'écran. La vérification de
+  géométrie est automatisée ; l'essai visuel avec un Dock ouvert reste non vérifié.
+
+Les arbres vides sont nettoyés par la réconciliation existante. La CLI reorder
+garde son rang persistant explicite ; le dépôt du rail effectue la conversion.
+Le défilement automatique pendant un glisser n'est pas ajouté. Les relevés AX
+bornés du maintainer pendant l'observation d'un geste restent distincts du relevé
+supprimé au clic simple.
+
+Complexité : ciblage du réordonnancement et choix de case restent linéaires dans
+les stages ; filtrage du callback et invalidation sont constants. Aucun nouvel
+import de production, dépendance ou couche. Aucun gain de latence mesuré annoncé.
+
+Les 91 tests ciblés puis les 1 754 tests dans 209 suites de la suite complète
+réussissent. Les 302 empreintes Sources/Tests sont conservées avant compilation.
+Le potentiel de simplification est nul dans les lignes de production modifiées :
+chaque garde protège un cas reproduit ou la zone utilisable. Les changements
+réutilisent les services existants et leur coût de maintenance reste local.
+
+Complément compilé, installé et relancé : UUID
+DFB9822B-301D-38BE-85FB-5586254D4370 identique entre build et application.
+Signature stricte vérifiée, certificat inchangé ; empreinte de configuration
+et 302 empreintes Sources/Tests inchangées. PID 25248, cinq contrôles santé OK.
+Le script temporaire d'installation limité à deux tâches a été retiré.
+Les preuves visuelles restent incomplètes pour la raison décrite plus haut.
