@@ -86,12 +86,14 @@ UUID 60B2AD40-0F27-3EB6-BA6D-08570FEF5290, PID 65772, quatre contrôles santé O
 Configuration et certificat conservés. Parcours réel assisté : gestes reconnus et taille
 conservée, confirmation utilisateur. Preuves visuelles incomplètes : bureau inaccessible.
 Reçu : specs/045-capture-redimensionnement/validation.md.
-Current SpecKit feature: `045-capture-redimensionnement`.
+Session 046 en cours : écran actif par défaut pour les nouvelles fenêtres, texte
+des paramètres et documentation alignés, choix explicites conservés.
+Current SpecKit feature: `046-placement-ecran-actif`.
 
 Contexte :
-- `specs/045-capture-redimensionnement/spec.md`
-- `specs/045-capture-redimensionnement/plan.md`
-- `specs/045-capture-redimensionnement/tasks.md`
+- `specs/046-placement-ecran-actif/spec.md`
+- `specs/046-placement-ecran-actif/plan.md`
+- `specs/046-placement-ecran-actif/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
