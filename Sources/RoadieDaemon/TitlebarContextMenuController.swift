@@ -154,13 +154,18 @@ public final class TitlebarContextMenuController {
     private var monitors: [Any] = []
     private var menuTargets: [TitlebarMenuActionTarget] = []
     private var lastIgnoredAt: [String: Date] = [:]
+    private let readPreference: (_ domain: String, _ key: String) -> Any?
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
         actions: WindowContextActions = WindowContextActions(),
         configLoader: @escaping () -> RoadieConfig = { ConfigReloadService.shared.currentConfig() },
-        events: EventLog = EventLog()
+        events: EventLog = EventLog(),
+        readPreference: @escaping (_ domain: String, _ key: String) -> Any? = { domain, key in
+            CFPreferencesCopyAppValue(key as CFString, domain as CFString)
+        }
     ) {
+        self.readPreference = readPreference
         self.snapshotService = snapshotService
         self.actions = actions
         self.configLoader = configLoader
@@ -180,6 +185,16 @@ public final class TitlebarContextMenuController {
             debug("local-monitor=installed")
         } else {
             debug("local-monitor=failed")
+        }
+        // SPEC-050 : un clic simple ne coûte qu'une comparaison ; seul un double-clic lit l'état.
+        if let doubleClick = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown], handler: { [weak self] event in
+            guard event.clickCount == 2 else { return }
+            let point = RoadieScreenCoordinate.mouseEventPoint(event)
+            DispatchQueue.main.async {
+                _ = self?.handleDoubleClick(at: point, clickCount: 2)
+            }
+        }) {
+            monitors.append(doubleClick)
         }
         if let global = NSEvent.addGlobalMonitorForEvents(matching: [.rightMouseDown], handler: { [weak self] event in
             let point = RoadieScreenCoordinate.mouseEventPoint(event)
@@ -201,6 +216,35 @@ public final class TitlebarContextMenuController {
         monitors.removeAll()
         menuTargets.removeAll()
         lastIgnoredAt.removeAll()
+    }
+
+    /// Vrai si Roadie doit traiter ce clic : double-clic exact, réglage actif, et macOS sans action
+    /// sur ce double-clic (sinon les deux agiraient). O(1).
+    nonisolated static func handlesDoubleClick(clickCount: Int, enabled: Bool, macOSAction: MacOSDoubleClickAction) -> Bool {
+        clickCount == 2 && enabled && macOSAction == .none
+    }
+
+    /// Double-clic sur la barre de titre d'une fenêtre gérée : maximisation Roadie (SPEC-050).
+    /// Même zone et mêmes filtres que le menu par clic droit, même si ce menu est désactivé.
+    @discardableResult
+    public func handleDoubleClick(at point: CGPoint, clickCount: Int) -> Bool {
+        let config = configLoader().experimental.titlebarContextMenu
+        guard clickCount == 2, config.doubleClickMaximize,
+              Self.handlesDoubleClick(clickCount: clickCount, enabled: true,
+                                      macOSAction: MacOSWindowSetting.doubleClickAction(read: readPreference))
+        else { return false }
+        var settings = TitlebarContextMenuSettings(config: config)
+        settings.enabled = true
+        let snapshot = snapshotService.sharedSnapshot()
+        let hit = Self.hitTest(point: Self.appKitPointToAX(point), snapshot: snapshot, settings: settings)
+        guard hit.isEligible, let windowID = hit.windowID else { return false }
+        let result = WindowCommandService(service: snapshotService).toggleMaximize(windowID: windowID)
+        events.append(RoadieEvent(
+            type: "titlebar_context_menu.action",
+            scope: hit.scope,
+            details: ["action": "double_click_maximize", "windowID": String(windowID.rawValue), "message": result.message]
+        ))
+        return true
     }
 
     @discardableResult

@@ -60,6 +60,13 @@ public struct DaemonHealReport: Equatable, Codable, Sendable {
 
 /// Réglages macOS qui déplacent ou redimensionnent les fenêtres à la place de Roadie (SPEC-049).
 /// Lecture seule : Roadie ne modifie jamais ces réglages.
+/// Action de macOS au double-clic sur une barre de titre (SPEC-050).
+public enum MacOSDoubleClickAction: Equatable, Sendable {
+    case zoom
+    case minimize
+    case none
+}
+
 public struct MacOSWindowSetting: Equatable, Sendable {
     public var domain: String
     public var key: String
@@ -91,6 +98,23 @@ public struct MacOSWindowSetting: Equatable, Sendable {
             location: "Réglages Système > Bureau et Dock > Cliquer sur le fond d'écran pour afficher le bureau"
         ),
     ]
+
+    /// Domaine des préférences globales de macOS.
+    public static let globalDomain = kCFPreferencesAnyApplication as String
+
+    /// « Double-cliquer sur la barre de titre d'une fenêtre pour » (Bureau et Dock). Clé absente :
+    /// ancienne préférence de réduction, sinon agrandissement, défaut de macOS. O(1).
+    public static func doubleClickAction(read: (_ domain: String, _ key: String) -> Any?) -> MacOSDoubleClickAction {
+        if let value = read(globalDomain, "AppleActionOnDoubleClick") as? String {
+            switch value {
+            case "None": return .none
+            case "Minimize": return .minimize
+            default: return .zoom
+            }
+        }
+        let minimize = (read(globalDomain, "AppleMiniaturizeOnDoubleClick") as? NSNumber)?.boolValue ?? false
+        return minimize ? .minimize : .zoom
+    }
 
     /// Vrai si le réglage est actif. `value` : valeur lue, nil si la clé est absente. O(1).
     public func isEnabled(value: Any?, osMajorVersion: Int) -> Bool {
@@ -150,7 +174,10 @@ public struct DaemonHealthService {
             name: "state-audit",
             message: "failed=\(audit.failed)"
         ))
-        checks.append(Self.macOSWindowSettingsCheck(read: readPreference, osMajorVersion: osMajorVersion))
+        checks.append(Self.macOSWindowSettingsCheck(
+            read: readPreference, osMajorVersion: osMajorVersion,
+            roadieDoubleClickMaximize: service.effectiveConfig.experimental.titlebarContextMenu.doubleClickMaximize
+        ))
         return DaemonHealthReport(checks: checks)
     }
 
@@ -158,10 +185,19 @@ public struct DaemonHealthService {
     /// O(r), r = nombre de réglages vérifiés.
     public static func macOSWindowSettingsCheck(
         read: (_ domain: String, _ key: String) -> Any?,
-        osMajorVersion: Int
+        osMajorVersion: Int,
+        roadieDoubleClickMaximize: Bool = false
     ) -> DaemonHealthCheck {
-        let active = MacOSWindowSetting.all.filter {
+        var active = MacOSWindowSetting.all.filter {
             $0.isEnabled(value: read($0.domain, $0.key), osMajorVersion: osMajorVersion)
+        }
+        // SPEC-050 : le double-clic Roadie n'agit que si macOS ne fait rien de ce double-clic.
+        if roadieDoubleClickMaximize, MacOSWindowSetting.doubleClickAction(read: read) != .none {
+            active.append(MacOSWindowSetting(
+                domain: MacOSWindowSetting.globalDomain, key: "AppleActionOnDoubleClick", enabledByDefaultSince: nil,
+                label: "action de macOS au double-clic sur la barre de titre, à régler sur « Ne rien faire »",
+                location: "Réglages Système > Bureau et Dock > Double-cliquer sur la barre de titre d'une fenêtre pour"
+            ))
         }
         guard !active.isEmpty else {
             return DaemonHealthCheck(level: .ok, name: "macos-window-settings", message: "aucun réglage macOS en conflit")

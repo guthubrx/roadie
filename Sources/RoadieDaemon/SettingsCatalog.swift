@@ -506,6 +506,10 @@ extension SettingsCatalog {
                   "Distance entre l'indicateur et le bas du rail.", .double(0...400), .double(50)),
             entry(.avance, menu, "enabled", "Activer le menu de la barre de titre",
                   "Ouvre un menu d'actions par clic droit sur la barre de titre d'une fenêtre.", .bool, .bool(false)),
+            entry(.avance, menu, "double_click_maximize", "Double-clic sur la barre de titre",
+                  "Affiche la fenêtre seule, en gardant le rail libre, puis rend la disposition au double-clic suivant. "
+                  + "N'agit que si macOS ne fait rien de ce double-clic (Bureau et Dock > « Ne rien faire »).",
+                  .bool, .bool(true)),
             entry(.avance, menu, "height", "Hauteur de la zone (points)",
                   "Hauteur de la barre de titre qui réagit au clic droit.", .double(12...96), .double(36)),
             entry(.avance, menu, "leading_exclusion", "Zone exclue à gauche (points)",

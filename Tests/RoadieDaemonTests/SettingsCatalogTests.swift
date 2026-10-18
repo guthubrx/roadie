@@ -17,10 +17,11 @@ struct SettingsCatalogTests {
     }
 
     @Test
-    func catalogHas181SimpleSettings() {
-        #expect(simple.count == 181)
+    func catalogHas182SimpleSettings() {
+        // SPEC-050 : + double_click_maximize.
+        #expect(simple.count == 182)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 101)
+        #expect(simple.count - railSimple.count == 102)
     }
 
     @Test
@@ -158,7 +159,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 181)
+        #expect(expected.count == 182)
     }
 
     // MARK: - Défauts

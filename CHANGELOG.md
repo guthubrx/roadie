@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Double-clic sur la barre de titre d'une fenêtre gérée : maximisation Roadie, puis retour
+  à la disposition. Actif seulement si macOS ne fait rien de ce double-clic ; la santé signale
+  le réglage à changer.
 - `roadie daemon health` et `roadie query health` signalent les réglages macOS qui
   déplacent les fenêtres à la place de Roadie (Stage Manager, juxtaposition native,
   clic sur le fond d'écran), avec leur emplacement dans Réglages Système.

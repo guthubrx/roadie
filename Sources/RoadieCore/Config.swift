@@ -1081,6 +1081,9 @@ public struct TitlebarContextMenuConfig: Equatable, Codable, Sendable {
     public var includeStageDestinations: Bool
     public var includeDesktopDestinations: Bool
     public var includeDisplayDestinations: Bool
+    /// Double-clic sur la barre de titre : maximisation Roadie (SPEC-050). Actif seulement si
+    /// l'action macOS de ce double-clic vaut « Ne rien faire ». Indépendant du menu par clic droit.
+    public var doubleClickMaximize: Bool
 
     public init(
         enabled: Bool = false,
@@ -1091,8 +1094,10 @@ public struct TitlebarContextMenuConfig: Equatable, Codable, Sendable {
         tileCandidatesOnly: Bool = true,
         includeStageDestinations: Bool = true,
         includeDesktopDestinations: Bool = true,
-        includeDisplayDestinations: Bool = true
+        includeDisplayDestinations: Bool = true,
+        doubleClickMaximize: Bool = true
     ) {
+        self.doubleClickMaximize = doubleClickMaximize
         self.enabled = enabled
         self.height = height
         self.leadingExclusion = leadingExclusion
@@ -1114,6 +1119,7 @@ public struct TitlebarContextMenuConfig: Equatable, Codable, Sendable {
         case includeStageDestinations = "include_stage_destinations"
         case includeDesktopDestinations = "include_desktop_destinations"
         case includeDisplayDestinations = "include_display_destinations"
+        case doubleClickMaximize = "double_click_maximize"
     }
 
     public init(from decoder: Decoder) throws {
@@ -1127,7 +1133,8 @@ public struct TitlebarContextMenuConfig: Equatable, Codable, Sendable {
             tileCandidatesOnly: try c.decodeIfPresent(Bool.self, forKey: .tileCandidatesOnly) ?? true,
             includeStageDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeStageDestinations) ?? true,
             includeDesktopDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeDesktopDestinations) ?? true,
-            includeDisplayDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeDisplayDestinations) ?? true
+            includeDisplayDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeDisplayDestinations) ?? true,
+            doubleClickMaximize: try c.decodeIfPresent(Bool.self, forKey: .doubleClickMaximize) ?? true
         )
     }
 }
@@ -1361,7 +1368,7 @@ private enum ConfigValidationRules {
             "window_placement": ["new_apps_target", "new_window_side"],
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
             "experimental": [],
-            "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations"],
+            "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
             "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
