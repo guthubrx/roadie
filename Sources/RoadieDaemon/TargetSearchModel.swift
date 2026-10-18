@@ -11,6 +11,18 @@ public struct TargetSearchModel: Equatable, Sendable {
     /// Triées par rang ; à rang égal, par ordre d'arrivée.
     public private(set) var targets: [RoadieTarget] = []
     private var ranks: [Int] = []
+    // Même ordre que targets ; cache borné à maxTargets, sans ambiguïté d'identifiants répétés.
+    private var searchTexts: [SearchText] = []
+    private struct SearchText: Equatable, Sendable {
+        let match: String
+        let title: String
+        let children: String
+        init(_ target: RoadieTarget) {
+            match = TargetSearchModel.compact(target.matchText + " " + (target.searchText ?? ""))
+            title = TargetSearchModel.compact(target.title)
+            children = TargetSearchModel.compact(target.searchText ?? "")
+        }
+    }
     private let labelPool: [String]
     /// Étiquettes d'une lettre (A, S, D…) : données aux résultats quand il y en a au plus autant.
     private let shortLabels: [String]
@@ -48,24 +60,29 @@ public struct TargetSearchModel: Equatable, Sendable {
         // Fusion de deux suites triées ; à rang égal, la cible déjà présente reste devant.
         var mergedTargets: [RoadieTarget] = []
         var mergedRanks: [Int] = []
+        var mergedTexts: [SearchText] = []
         mergedTargets.reserveCapacity(targets.count + incoming.count)
         var old = 0
         for item in incoming {
             while old < targets.count, ranks[old] <= item.rank {
                 mergedTargets.append(targets[old])
                 mergedRanks.append(ranks[old])
+                mergedTexts.append(searchTexts[old])
                 old += 1
             }
             mergedTargets.append(item.target)
             mergedRanks.append(item.rank)
+            mergedTexts.append(SearchText(item.target))
         }
         mergedTargets.append(contentsOf: targets[old...])
         mergedRanks.append(contentsOf: ranks[old...])
+        mergedTexts.append(contentsOf: searchTexts[old...])
+        searchTexts = mergedTexts
         targets = mergedTargets
         ranks = mergedRanks
 
         let highlightedID = highlighted?.id
-        matches = shortened(Self.matches(targets, query: query))
+        matches = shortened(Self.matches(targets, texts: searchTexts, query: query))
         highlightedIndex = matches.firstIndex { $0.id == highlightedID } ?? (query.isEmpty || matches.isEmpty ? nil : 0)
     }
 
@@ -195,11 +212,19 @@ public struct TargetSearchModel: Equatable, Sendable {
 
     /// Complexité : O(n) par frappe, n cibles de la session (≤ max_targets + cibles Roadie).
     public static func matches(_ targets: [RoadieTarget], query: String) -> [RoadieTarget] {
+        matches(targets, texts: targets.map(SearchText.init), query: query)
+    }
+
+    private static func matches(_ targets: [RoadieTarget], texts: [SearchText], query: String) -> [RoadieTarget] {
         let needle = compact(query)
         guard !needle.isEmpty, needle != "*", needle != ";" else { return targets }
-        let found = targets.filter { compact($0.matchText + " " + ($0.searchText ?? "")).contains(needle) }
-        let leading = found.filter { startsWith($0, needle) }
-        return leading + found.filter { !startsWith($0, needle) }
+        var leading: [RoadieTarget] = []
+        var other: [RoadieTarget] = []
+        for (target, text) in zip(targets, texts) where text.match.contains(needle) {
+            if text.title.hasPrefix(needle) || text.children.hasPrefix(needle) { leading.append(target) }
+            else { other.append(target) }
+        }
+        return leading + other
     }
 
     /// Casse, accents et espaces ignorés (« watchlater » trouve « Watch Later »).
@@ -207,15 +232,10 @@ public struct TargetSearchModel: Equatable, Sendable {
         TargetHintService.normalized(value).replacingOccurrences(of: " ", with: "")
     }
 
-    /// Titre, ou texte des enfants d'une cible web dont le titre n'est que son rôle.
-    private static func startsWith(_ target: RoadieTarget, _ needle: String) -> Bool {
-        compact(target.title).hasPrefix(needle) || compact(target.searchText ?? "").hasPrefix(needle)
-    }
-
     private mutating func refresh() {
         labelBuffer = ""
         pendingReturnAt = nil
-        matches = shortened(Self.matches(targets, query: query))
+        matches = shortened(Self.matches(targets, texts: searchTexts, query: query))
         // Barre vide : aucune étiquette affichée, donc rien à valider.
         highlightedIndex = query.isEmpty || matches.isEmpty ? nil : 0
     }

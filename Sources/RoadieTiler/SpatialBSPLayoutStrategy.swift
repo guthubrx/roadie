@@ -16,7 +16,7 @@ public struct SpatialBSPLayoutStrategy: LayoutStrategy {
 
     // O(n) quand toutes les fenêtres ont une feuille (cas normal) ; avant PERF-002, O(n²) :
     // un `contains` récursif par fenêtre. O(n²) au pire avec des insertions de secours
-    // (`inserting` est O(n²), voir BSPTree) - n = fenêtres du stage, borné.
+    // (`inserting` est O(n), voir BSPTree) - n = fenêtres du stage, borné.
     public func plan(_ request: LayoutRequest) -> LayoutPlan {
         let windows = request.windowIDs
         guard !windows.isEmpty else { return LayoutPlan(placements: [:]) }

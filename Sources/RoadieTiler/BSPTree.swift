@@ -36,7 +36,7 @@ public enum BSPEdge: String, Equatable, Sendable {
 /// projection puis reportent orientation et ratio sur l'arbre complet par cette identité.
 ///
 /// Complexité (Article XVIII) : `place`, `windowIDs`, `contains`, `removing`, `projected` et
-/// `balanced` sont O(n) sur le nombre de feuilles. `inserting`, `togglingSplit`, `settingSplit`
+/// `balanced` et `inserting` sont O(n) sur le nombre de feuilles. `togglingSplit`, `settingSplit`
 /// et `adjustingFence` sont O(n²) au pire (un `contains` par niveau pendant la descente),
 /// `correctingForMinimumSize` O(d·n + n·log L) (d = profondeur, L = étendue de l'écran en points).
 /// n = fenêtres d'un stage, BORNÉ par
@@ -168,7 +168,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     /// dans `container` (split auto de yabai, `view.c:148`, SPEC-013 EF-004) : une feuille large
     /// est coupée en deux colonnes, une feuille haute en deux rangées. Ratio 0,5. `absent` désigne
     /// les feuilles gardées mais non affichées (A9) : le rectangle est mesuré sur la projection.
-    // O(n²) au pire - n = feuilles (voir l'en-tête du type).
+    // O(n) — projection, placement et remplacement en parcours indépendants.
     public func inserting(
         _ window: WindowID,
         at anchor: WindowID?,
@@ -194,55 +194,38 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         side: BSPInsertionSide,
         containerIsWide: Bool
     ) -> BSPTree {
-        switch self {
-        case .empty:
-            return .leaf(window)
-        case .leaf(let id):
-            // Une feuille n'est atteinte qu'avec son propre focus, nil, ou un focus absent de
-            // l'arbre (feuille racine) : ce dernier cas se traite comme nil, sinon la fenêtre
-            // serait perdue (ex. focus = la nouvelle fenêtre elle-même).
-            let orientation: BSPOrientation = containerIsWide ? .vertical : .horizontal
-            switch side {
-            case .right:
-                return .split(orientation: orientation, ratio: 0.5, first: .leaf(id), second: .leaf(window))
-            case .left:
-                return .split(orientation: orientation, ratio: 0.5, first: .leaf(window), second: .leaf(id))
-            }
-        case .split(let orientation, let ratio, let first, let second):
-            if let focus, first.contains(focus) {
-                return .split(orientation: orientation, ratio: ratio,
-                              first: first.inserting(window, nextTo: focus, side: side, containerIsWide: containerIsWide),
-                              second: second)
-            }
-            if let focus, second.contains(focus) {
-                return .split(orientation: orientation, ratio: ratio,
-                              first: first,
-                              second: second.inserting(window, nextTo: focus, side: side, containerIsWide: containerIsWide))
-            }
-            // Pas de focus précis : insérer sur la première feuille (descente à gauche).
-            return .split(orientation: orientation, ratio: ratio,
-                          first: first.inserting(window, nextTo: nil, side: side, containerIsWide: containerIsWide),
-                          second: second)
+        let replacement: (BSPTree) -> BSPTree = { leaf in
+            guard !leaf.isEmpty else { return .leaf(window) }
+            return .split(orientation: containerIsWide ? .vertical : .horizontal, ratio: 0.5,
+                          first: side == .right ? leaf : .leaf(window),
+                          second: side == .right ? .leaf(window) : leaf)
         }
+        // Une recherche complète au plus, puis une descente gauche si la cible est absente.
+        if let focus, let changed = replacingLeaf(focus, transform: replacement) { return changed }
+        return replacingLeaf(nil, transform: replacement) ?? self
     }
 
-    /// Retire `window`. Le frère du nœud supprimé remonte à la place du parent.
+    /// Retire la première occurrence ; remonte son frère sans revisiter les sous-arbres. O(n).
     public func removing(_ window: WindowID) -> BSPTree {
+        replacingLeaf(window) { _ in .empty } ?? self
+    }
+
+    /// nil cible la première branche gauche (y compris vide), comme l'insertion historique.
+    /// nil en résultat signifie « cible absente », distinct d'une suppression vers `.empty`.
+    private func replacingLeaf(_ target: WindowID?, transform: (BSPTree) -> BSPTree) -> BSPTree? {
         switch self {
         case .empty:
-            return .empty
+            return target == nil ? transform(self) : nil
         case .leaf(let id):
-            return id == window ? .empty : self
+            return target == nil || id == target ? transform(self) : nil
         case .split(let orientation, let ratio, let first, let second):
-            if first.contains(window) {
-                let newFirst = first.removing(window)
-                return newFirst.isEmpty ? second : .split(orientation: orientation, ratio: ratio, first: newFirst, second: second)
+            if let changed = first.replacingLeaf(target, transform: transform) {
+                return changed.isEmpty ? second : .split(orientation: orientation, ratio: ratio, first: changed, second: second)
             }
-            if second.contains(window) {
-                let newSecond = second.removing(window)
-                return newSecond.isEmpty ? first : .split(orientation: orientation, ratio: ratio, first: first, second: newSecond)
+            if let changed = second.replacingLeaf(target, transform: transform) {
+                return changed.isEmpty ? first : .split(orientation: orientation, ratio: ratio, first: first, second: changed)
             }
-            return self
+            return nil
         }
     }
 

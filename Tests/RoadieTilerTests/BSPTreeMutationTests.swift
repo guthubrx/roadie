@@ -38,4 +38,19 @@ struct BSPTreeMutationTests {
         let tree = BSPTree.leaf(win(1))
         #expect(tree.swapping(win(1), win(9)) == tree)
     }
+    @Test
+    func skewedInsertionsAndRemovalsPreserveEveryUnchangedSplit() {
+        var tree = BSPTree.leaf(win(1))
+        for id in 2...80 {
+            tree = tree.inserting(win(id), nextTo: win(id - 1), side: .right, containerIsWide: id % 2 == 0)
+        }
+        let replacement = tree.inserting(win(81), nextTo: win(80), side: .left, containerIsWide: false)
+        #expect(replacement.windowIDs == (1...79).map(win) + [win(81), win(80)])
+        #expect(replacement.removing(win(81)) == tree)
+        #expect(tree.removing(win(999)) == tree)
+        #expect(tree.inserting(win(90), nextTo: win(999), side: .right, containerIsWide: true)
+            == tree.inserting(win(90), nextTo: win(1), side: .right, containerIsWide: true))
+        #expect(tree.inserting(win(90), nextTo: nil, side: .left, containerIsWide: false).removing(win(90)) == tree)
+    }
+
 }

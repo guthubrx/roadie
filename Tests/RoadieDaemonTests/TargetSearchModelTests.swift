@@ -299,4 +299,19 @@ struct TargetSearchModelTests {
         #expect(model.query == "a")
         #expect(!model.isCommandMode)
     }
+    @Test
+    func preparedTextTracksRankedBatchesAndRepeatedIdentifiers() {
+        var model = TargetSearchModel(targets: [target("same", "Écoute plus tard"), target("B", "À écouter")])
+        model.replaceQuery("ecoute")
+        model.append([target("same", "Écoute maintenant"), target("C", "Autre")], rank: { _ in -1 })
+        for query in ["écoute", "plustard", "autre", "", "*", ";", "aecouter", "introuvable"] {
+            model.replaceQuery(query)
+            #expect(model.matches.map(\.title) == TargetSearchModel.matches(model.targets, query: query).map(\.title))
+        }
+        model.replaceQuery("ecoute")
+        model.completeHighlighted()
+        #expect(model.query == "Écoute maintenant")
+        #expect(model.highlighted?.title == "Écoute maintenant")
+    }
+
 }
