@@ -14,6 +14,7 @@ import ScreenCaptureKit
 final class RailThumbnailStore {
     /// Incrémenté à chaque nouvelle vignette : le rail l'inclut dans sa signature pour savoir qu'il doit redessiner.
     private(set) var version = 0
+    private var revisions: [WindowID: Int] = [:]
 
     private var images: [WindowID: NSImage] = [:]
     private var fallbacks: [WindowID: NSImage] = [:]
@@ -48,11 +49,17 @@ final class RailThumbnailStore {
     }
 
     func prune(keeping ids: Set<WindowID>) {
+        revisions = revisions.filter { ids.contains($0.key) }
         images = images.filter { ids.contains($0.key) }
         fallbacks = fallbacks.filter { ids.contains($0.key) }
         signatures = signatures.filter { ids.contains($0.key) }
         capturedAt = capturedAt.filter { ids.contains($0.key) }
         attemptedAt = attemptedAt.filter { ids.contains($0.key) }
+    }
+
+    /// Une capture n'invalide que les écrans qui représentent cette fenêtre. O(m).
+    func revisionSignature(for ids: [WindowID]) -> String {
+        ids.map { "\($0.rawValue):\(revisions[$0, default: 0])" }.joined(separator: ",")
     }
 
     func cachedImage(for windowID: WindowID) -> NSImage? {
@@ -119,6 +126,7 @@ final class RailThumbnailStore {
             images[id] = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width / 2, height: cgImage.height / 2))
             capturedAt[id] = Date()
             version += 1
+            revisions[id] = version
         }
     }
 

@@ -27,7 +27,8 @@ public final class RailController {
     private var managedWindowFrames: [DisplayID: [CGRect]] = [:]
     private var rebuildTask: Task<Void, Never>?
     private var pendingRebuild: (reason: String, requestedAt: Date?)?
-    private var lastRenderSignature: String?
+    private var lastRenderSignatures: [DisplayID: String] = [:]
+    private var contentCache = RailDisplayContentCache()
     private var lastRenderedSettings: RailSettings?
     private var lastConfigRefreshPath: String?
     private var lastConfigRefreshStamp: [Int64]?
@@ -119,7 +120,8 @@ public final class RailController {
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
         screenFrames.removeAll()
-        lastRenderSignature = nil
+        lastRenderSignatures.removeAll()
+        contentCache = RailDisplayContentCache()
         lastRenderedSettings = nil
         lastConfigRefreshPath = nil
         lastConfigRefreshStamp = nil
@@ -924,14 +926,12 @@ public final class RailController {
 
         // Contenu visible de chaque ecran : sert a la signature, aux captures de vignettes et au rendu.
         var contents: [DisplayID: RailDisplayContent] = [:]
-        var signatureParts = [
-            "hidden=\(hiddenDisplayIDs.map(\.rawValue).sorted().joined(separator: ","))",
-            "protected=\(protectedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","))",
+        var displaySignatures: [DisplayID: String] = [:]
+        let sharedSignature = [
             "recording=\(recordingStatus?.name ?? "-"):\(recordingIndicatorBottomOffset)",
             "pinned=\(runtimeState.isPinned)",
             "labelUntil=\(runtimeState.stageLabelsVisibleUntil.map { String($0) } ?? "-")",
-            "thumbnails=\(thumbnails.version)",
-        ]
+        ].joined(separator: "|")
         var visibleMembers: [PersistentStageMember] = []
         var representedWindowIDs: Set<WindowID> = []
         for displayID in screensByDisplayID.keys.sorted(by: { $0.rawValue < $1.rawValue }) {
@@ -939,13 +939,14 @@ public final class RailController {
             let desktopID = state.currentDesktopID(for: displayID)
             let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
-            let content = RailDisplayContent(
+            let content = contentCache.content(
                 scope: scope,
                 presentationStates: Self.railWindowPresentationStates(in: scope, snapshot: snapshot),
-                liveWindowIDs: liveWindowIDs
+                liveWindowIDs: liveWindowIDs, now: startedAt
             )
             contents[displayID] = content
-            signatureParts.append("display=\(displayID.rawValue)|\(screen.frame)|\(screen.visibleFrame)|\(screen.localizedName)|\(content.signature)")
+            let memberIDs = content.stages.flatMap(\.members).map(\.windowID)
+            displaySignatures[displayID] = "\(sharedSignature)|hidden=\(hiddenDisplayIDs.contains(displayID))|\(screen.frame)|\(screen.visibleFrame)|\(screen.localizedName)|\(content.signature)|thumbnails=\(thumbnails.revisionSignature(for: memberIDs))"
             if !hiddenDisplayIDs.contains(displayID) {
                 visibleMembers.append(contentsOf: content.stages.flatMap(\.members))
             }
@@ -964,13 +965,15 @@ public final class RailController {
             lastInteractiveRailRefreshAt = Date()
         }
 
-        let signature = signatureParts.joined(separator: "\n")
-        guard signature != lastRenderSignature || settings != lastRenderedSettings else { return }
-        lastRenderSignature = signature
+        let changedDisplays = Self.changedDisplayIDs(previous: lastRenderSignatures, current: displaySignatures,
+                                                     settingsChanged: settings != lastRenderedSettings)
+        guard !changedDisplays.isEmpty else { return }
+        lastRenderSignatures = displaySignatures
         lastRenderedSettings = settings
+        contentCache.prune(keeping: Set(screensByDisplayID.keys))
 
         var renderedStages = 0
-        for (displayID, screen) in screensByDisplayID {
+        for (displayID, screen) in screensByDisplayID where changedDisplays.contains(displayID) {
             screenFrames[displayID] = screen.frame
             guard let content = contents[displayID] else { continue }
             if hiddenDisplayIDs.contains(displayID) {
@@ -1021,6 +1024,12 @@ public final class RailController {
             }
             events.append(RoadieEvent(type: "rail_refresh", details: details))
         }
+    }
+
+    nonisolated static func changedDisplayIDs(previous: [DisplayID: String], current: [DisplayID: String],
+                                             settingsChanged: Bool) -> Set<DisplayID> {
+        let ids = Set(previous.keys).union(current.keys)
+        return settingsChanged ? ids : Set(ids.filter { previous[$0] != current[$0] })
     }
 
     private static func formatMs(_ value: Double) -> String {
@@ -1323,8 +1332,7 @@ struct RailDisplayContent {
     let signature: String
 
     // Complexite : O(m) - m = membres du scope.
-    init(scope: PersistentStageScope, presentationStates: [WindowID: WindowPresentationState], liveWindowIDs: Set<WindowID>) {
-        let now = Date()
+    init(scope: PersistentStageScope, presentationStates: [WindowID: WindowPresentationState], liveWindowIDs: Set<WindowID>, now: Date = Date()) {
         self.scope = scope
         self.presentationStates = presentationStates
         let order = StagePresentationOrder(scope: scope, liveWindowIDs: liveWindowIDs, now: now)
@@ -1340,6 +1348,35 @@ struct RailDisplayContent {
         parts.append("empty=\(emptyStageIDs.map(\.rawValue).joined(separator: ","))")
         signature = parts.joined(separator: ";")
     }
+}
+
+/// Une entrée par écran. La visibilité est recontrôlée même quand aucun fichier ne change :
+/// l'expiration des 15 secondes de grâce ne doit jamais rester en cache.
+struct RailDisplayContentCache {
+    private struct Entry {
+        let represented: Set<WindowID>
+        let content: RailDisplayContent
+    }
+    private var entries: [DisplayID: Entry] = [:]
+    private(set) var builds = 0
+
+    mutating func content(scope: PersistentStageScope, presentationStates: [WindowID: WindowPresentationState],
+                          liveWindowIDs: Set<WindowID>, now: Date) -> RailDisplayContent {
+        let represented = Set(scope.stages.flatMap(\.members).filter {
+            RailController.isRailRepresentedMember($0, liveWindowIDs: liveWindowIDs, now: now)
+        }.map(\.windowID))
+        if let entry = entries[scope.displayID], entry.content.scope == scope,
+           entry.content.presentationStates == presentationStates, entry.represented == represented {
+            return entry.content
+        }
+        let content = RailDisplayContent(scope: scope, presentationStates: presentationStates,
+                                         liveWindowIDs: liveWindowIDs, now: now)
+        entries[scope.displayID] = Entry(represented: represented, content: content)
+        builds += 1
+        return content
+    }
+
+    mutating func prune(keeping ids: Set<DisplayID>) { entries = entries.filter { ids.contains($0.key) } }
 }
 
 enum RailAction {

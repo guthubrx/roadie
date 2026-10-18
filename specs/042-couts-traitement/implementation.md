@@ -20,3 +20,9 @@
 - 47 tests dans cinq suites réussis : lecteurs concurrents, aucun scan sur le fil principal, une seule lecture d’inventaire, invalidation et mutation d’état pendant le relevé, producteur partagé, bordure et présence hors Space.
 - Relecture : un seul traitement en vol par contrôleur, annulation au stop du rail, geste et déplacement de souris recontrôlés après attente. Pas de nouveau verrou couvrant les appels AX.
 - Limite explicite : le tiler et les commandes restent synchrones (ADR 013). Une acquisition de lecteur déjà démarrée peut coïncider avec un producteur ; son résultat devenu ancien est écarté.
+
+## T005 — Préparation et invalidation du rail
+- Cache du contenu par écran ; comparaison des entrées et contrôle de la visibilité à chaque cycle, y compris expiration des membres absents.
+- Révisions de miniatures par fenêtre et signatures de rendu par écran. Les panneaux inchangés restent en place. Les réglages globaux invalident tous les écrans.
+- 16 tests dans quatre suites réussis : réutilisation du contenu, expiration à 15 secondes, renommage, nettoyage, écran unique changé et retrait d’écran.
+- Relecture : budgets de captures et protections DRM conservés. Pas d’arrêt des contrôles de fraîcheur ; les comparaisons linéaires et l’entretien des captures restent nécessaires.
