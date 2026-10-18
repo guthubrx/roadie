@@ -34,3 +34,7 @@ Compilation Release réussie et installation vérifiée. UUID du binaire compil�
 Sources/Tests : 293 empreintes vérifiées après compilation, puis deux fichiers de tests seuls complétés après revue. Traces hors Git : /Users/moi/.roadies/diagnostics/2026-10-18-session045/, dont trace-reelle.json pour les événements initiaux, positions-apres.jsonl et evenements-apres.json pour le contrôle après correction. Le premier fichier brut de positions avant correction a été réutilisé par erreur par un relevé suivant ; les événements initiaux filtrés et les constats consignés avant correction restent disponibles.
 
 Preuves visuelles incomplètes : bureau inaccessible, aucun diaporama ni clic capturé dans une image. Le parcours réel a été observé par géométrie CoreGraphics et journaux, puis confirmé par l'utilisateur.
+
+Correction f0c39696 fusionnée et poussée sur main. Branche de session supprimée,
+fichiers de compilation et recette temporaire retirés. Le worktree lié à cette
+conversation reste disponible, détaché ; les diagnostics restent hors Git.

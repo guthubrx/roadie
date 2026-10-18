@@ -9,4 +9,6 @@ Reproduction avant/après ; 1 693 tests / 199 suites réussis après revue et aj
 
 Contrôle réel assisté : gestes identifiés dans les journaux, tailles conservées ; confirmation utilisateur « La nouvelle taille reste ». Preuves visuelles incomplètes : bureau inaccessible. Détails et limites de conservation des traces : specs/045-capture-redimensionnement/validation.md.
 
-Intégration et nettoyage Git à consigner après livraison.
+Correction f0c39696 intégrée et poussée sur main. Branche de travail supprimée,
+fichiers de compilation et recette temporaire d'installation retirés. Worktree de
+la conversation conservé détaché de main ; diagnostics conservés hors Git.
