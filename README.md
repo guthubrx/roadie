@@ -33,7 +33,7 @@ and Stage Manager's window groups.
 
 | Your goal | Feature |
 |---|---|
-| Arrange windows | Automatic tiling, multiple layouts and adjustable proportions |
+| Arrange windows | Automatic tiling, multiple layouts and divider handles in persistent tree layouts |
 | Switch projects | Named stages, previews and workspace switching from the rail |
 | Use multiple displays | Independent desktops and layouts, window and stage transfers |
 | Keep a window within reach | Pins, bookmarks and window groups |

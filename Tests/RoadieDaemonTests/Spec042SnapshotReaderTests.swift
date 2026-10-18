@@ -37,10 +37,11 @@ private final class ReaderProvider042: SystemSnapshotProviding, Sendable {
 
 @Suite @MainActor
 struct Spec042SnapshotReaderTests {
-    private func service(_ provider: ReaderProvider042) -> SnapshotService {
+    private func service(_ provider: ReaderProvider042,
+                         clock: @escaping @Sendable () -> Date = { Date(timeIntervalSince1970: 1_000) }) -> SnapshotService {
         SnapshotService(provider: provider, config: RoadieConfig(),
                         stageStore: StageStore(path: tempPath("reader042")),
-                        persistStateChanges: false)
+                        persistStateChanges: false, clock: clock)
     }
 
     @Test func readersReuseOneAcquisitionOutsideMainAndItsInventory() async throws {
@@ -90,5 +91,18 @@ struct Spec042SnapshotReaderTests {
         let produced = service.producerSnapshot(cycle: 0.5)
         #expect(await service.readerSnapshot() == produced)
         #expect(provider.state.withLock { $0.scans } == 1)
+    }
+
+    @Test func expiredPublicationRequiresAnotherAcquisition() async {
+        let provider = ReaderProvider042()
+        let now = OSAllocatedUnfairLock(initialState: Date(timeIntervalSince1970: 1_000))
+        let service = service(provider, clock: { now.withLock { $0 } })
+        #expect(await service.readerSnapshot() != nil)
+        now.withLock { $0.addTimeInterval(0.149) }
+        #expect(await service.readerSnapshot() != nil)
+        #expect(provider.state.withLock { $0.scans } == 1)
+        now.withLock { $0.addTimeInterval(0.002) }
+        #expect(await service.readerSnapshot() != nil)
+        #expect(provider.state.withLock { $0.scans } == 2)
     }
 }

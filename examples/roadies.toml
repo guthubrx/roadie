@@ -12,6 +12,9 @@
 #     spatialBsp = arbre persistant façon yabai (alias : mutableBsp, yabai).
 [tiling]
 default_strategy = "spatialBsp"
+# EN: Drag the gaps in persistent tree layouts; native window-edge resizing remains available.
+# FR: Tirer les séparations de l'arbre persistant ; les bords natifs restent utilisables.
+resize_handles = true
 gaps_outer = 8
 gaps_inner = 4
 master_ratio = 0.6

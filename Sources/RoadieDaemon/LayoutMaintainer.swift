@@ -120,7 +120,14 @@ public final class LayoutMaintainer {
     private var writeCounts: [UInt32: (generation: UInt64, count: Int)] = [:]
     private var externalReverts: [UInt32: UInt64] = [:]
     private var correctedGenerations: [UInt32: UInt64] = [:]
-    private var treeMinimums: [WindowID: CGSize] = [:]
+    private struct TreeMinimum {
+        var size: CGSize
+        let pid: pid_t
+        let bundleID: String
+        let scope: StageScope
+        let mode: WindowManagementMode
+    }
+    private var treeMinimums: [WindowID: TreeMinimum] = [:]
     private var reportedEchoWrites: [UInt32: Date] = [:]
     /// Lecture échouée d'un refus en attente : prochaine tentative (T218).
     private var refusalReadRetryAt: [UInt32: Date] = [:]
@@ -699,7 +706,8 @@ public final class LayoutMaintainer {
             due.append(("guard_poll", (guardState.lastPollAt ?? guardState.openedAt).addingTimeInterval(LayoutTolerance.spaceGuardPoll), true))
         }
         for id in lastTreeWindowIDs {
-            guard let entry = writtenFrames.entry(for: id), entry.hasRefusal else { continue }
+            guard let entry = writtenFrames.entry(for: id), entry.hasRefusal,
+                  entry.generation == generations.current else { continue }
             if let confirmedAt = entry.refusalConfirmedAt {
                 if correctedGenerations[id] != generations.current { due.append(("refusal_correct", confirmedAt, true)) }
             } else if now.timeIntervalSince(entry.writtenAt) < LayoutTolerance.echoWindow {
@@ -788,8 +796,12 @@ public final class LayoutMaintainer {
     private func currentGeneration(cause: String, snapshot: DaemonSnapshot) -> UInt64 {
         let signature = snapshot.displays.compactMap { display -> String? in
             guard let scope = snapshot.state.activeScope(on: display.id) else { return nil }
-            let ids = snapshot.windows.compactMap { $0.scope == scope && $0.window.isTileCandidate ? String($0.window.id.rawValue) : nil }
-            return "\(scope.description):\(ids.sorted().joined(separator: ","))"
+            let ids = snapshot.windows.compactMap { entry -> String? in
+                guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
+                return "\(entry.window.id.rawValue):\(entry.window.pid):\(entry.window.bundleID)"
+            }
+            let mode = snapshot.state.stage(scope: scope)?.mode.rawValue ?? ""
+            return "\(scope.description):\(mode):\(ids.sorted().joined(separator: ","))"
         }.sorted().joined(separator: "|")
         let internalCause = cause == "safety" || cause.hasPrefix("deadline")
             || cause.contains("Moved") || cause.contains("Resized")
@@ -1291,6 +1303,15 @@ public final class LayoutMaintainer {
     ) -> (commands: [ApplyCommand], targets: [WindowID: CGRect]) {
         guard !scopes.isEmpty else { return ([], [:]) }
         let entriesByID = Dictionary(snapshot.windows.map { ($0.window.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // Un identifiant CG réutilisé, un autre stage ou un autre mode ne prouvent pas
+        // le minimum appris. Les contraintes des voisines encore valables restent actives.
+        treeMinimums = treeMinimums.filter { id, minimum in
+            guard let entry = entriesByID[id] else { return false }
+            return entry.window.pid == minimum.pid && entry.window.bundleID == minimum.bundleID
+                && entry.scope == minimum.scope
+                && snapshot.state.stage(scope: minimum.scope)?.mode == minimum.mode
+                && entry.window.furniture?.isNativeFullscreen != true
+        }
         var snappedWindowID: WindowID?
         if let gesture, let raw = gesture.windowID,
            let entry = entriesByID[WindowID(rawValue: raw)],
@@ -1298,7 +1319,9 @@ public final class LayoutMaintainer {
            applyGesture(gesture, to: entry, scope: scope, snapshot: snapshot) {
             snappedWindowID = entry.window.id
         }
-        confirmPendingRefusals(in: snapshot, scopes: scopes, now: now)
+        confirmPendingRefusals(in: snapshot, scopes: scopes, generation: generation, now: now)
+        // Une lecture lente ne doit pas réappliquer le plan précédant une nouvelle commande.
+        guard generation == generations.current else { return ([], [:]) }
         correctConfirmedRefusals(in: snapshot, scopes: scopes, generation: generation)
         let otherScopes = Set(snapshot.displays.compactMap { snapshot.state.activeScope(on: $0.id) }).subtracting(scopes)
         let planned = plannedCommands(from: snapshot, excluding: otherScopes, generation: generation).commands
@@ -1339,7 +1362,7 @@ public final class LayoutMaintainer {
         // Écho à 2 points : il ne prouve pas la première application explicite. Une seule
         // reprise conserve le budget normal et ne réarme pas une troisième tentative.
         if exact && retry { return command }
-        guard sameTarget, let entry else { return command }
+        guard sameTarget, let entry, entry.generation == generation else { return command }
         if let readBack = entry.readBack, entry.hasRefusal, Self.matches(readBack, observed) {
             // Écho de la relecture d'un refus : il attend sa seconde observation (A14).
             reportEcho(command, entry: entry)
@@ -1448,6 +1471,13 @@ public final class LayoutMaintainer {
         let tolerance = LayoutTolerance.frameMatch
         let sizeChanged = abs(current.width - start.width) > tolerance || abs(current.height - start.height) > tolerance
         guard sizeChanged else { return !Self.matches(current, start) }
+        if var minimum = treeMinimums[entry.window.id] {
+            // Une taille réellement obtenue par un nouveau geste réfute un ancien minimum
+            // plus grand. Ne modifier que les axes dont cette observation prouve la baisse.
+            minimum.size.width = max(LayoutTolerance.minimumTileSide, min(minimum.size.width, current.width))
+            minimum.size.height = max(LayoutTolerance.minimumTileSide, min(minimum.size.height, current.height))
+            treeMinimums[entry.window.id] = minimum
+        }
         guard let tree = store.state().bspTree(for: scope),
               let geometry = treeGeometry(of: scope, in: snapshot)
         else { return true }
@@ -1455,10 +1485,11 @@ public final class LayoutMaintainer {
             (BSPEdge.left, current.minX - start.minX), (.right, current.maxX - start.maxX),
             (.up, current.minY - start.minY), (.down, current.maxY - start.maxY)
         ].compactMap { abs($0.1) > tolerance ? $0.0 : nil }
+        let knownMinimums = treeMinimums.mapValues(\.size)
         let adjusted = edges.reduce(tree) { tree, edge in
             tree.adjustingFence(
                 of: entry.window.id, edge: edge, to: current, in: geometry.container,
-                innerGap: geometry.innerGap, excluding: geometry.absent, knownMinimums: treeMinimums
+                innerGap: geometry.innerGap, excluding: geometry.absent, knownMinimums: knownMinimums
             )
         }
         guard adjusted != tree else { return true }
@@ -1498,21 +1529,26 @@ public final class LayoutMaintainer {
     /// à `refusalConfirmDelay` après l'écriture. Une lecture échouée ou non concluante ne confirme
     /// rien : elle est retentée `spaceGuardPoll` plus tard, tant que dure `echoWindow` (T218,
     /// audit REL-002). O(r) - r refus en attente.
-    private func confirmPendingRefusals(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, now: Date) {
+    private func confirmPendingRefusals(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, generation: UInt64, now: Date) {
         let pending = Set(writtenFrames.pendingRefusals())
         guard !pending.isEmpty else { return }
         for entry in snapshot.windows {
             let id = entry.window.id.rawValue
             guard pending.contains(id), let scope = entry.scope, scopes.contains(scope),
                   let written = writtenFrames.entry(for: id),
+                  written.generation == generation,
                   written.writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay) <= now,
+                  now.timeIntervalSince(written.writtenAt) < LayoutTolerance.echoWindow,
                   (refusalReadRetryAt[id] ?? now) <= now
             else { continue }
             guard let observed = readFrame(entry.window) else {
                 refusalReadRetryAt[id] = now.addingTimeInterval(LayoutTolerance.spaceGuardPoll)
                 continue
             }
-            writtenFrames.confirmRefusal(windowID: id, observed: observed, at: now)
+            // La lecture AX peut rendre la main après une nouvelle écriture. Sa réponse
+            // ne peut confirmer que la demande présente au début de cette lecture.
+            guard generation == generations.current, writtenFrames.entry(for: id) == written else { continue }
+            writtenFrames.confirmRefusal(windowID: id, observed: observed, at: now, generation: generation)
             // Lecture qui ne tranche pas (ni demandée ni relue) : retentée plus tard, pas en boucle.
             let stillPending = writtenFrames.entry(for: id).map { $0.hasRefusal && $0.refusalConfirmedAt == nil } ?? false
             refusalReadRetryAt[id] = stillPending ? now.addingTimeInterval(LayoutTolerance.spaceGuardPoll) : nil
@@ -1526,18 +1562,23 @@ public final class LayoutMaintainer {
         for entry in snapshot.windows {
             let id = entry.window.id.rawValue
             guard let scope = entry.scope, scopes.contains(scope),
+                  let mode = snapshot.state.stage(scope: scope)?.mode,
                   let written = writtenFrames.entry(for: id),
+                  written.generation == generation,
                   written.refusalConfirmedAt != nil, let readBack = written.readBack,
                   correctedGenerations[id] != generation
             else { continue }
             correctedGenerations[id] = generation
             let minimum = Self.minimumSize(requested: Rect(written.requested), actual: Rect(readBack))
-            treeMinimums[entry.window.id] = Self.largest(treeMinimums[entry.window.id] ?? .zero, minimum)
+            treeMinimums[entry.window.id] = TreeMinimum(
+                size: Self.largest(treeMinimums[entry.window.id]?.size ?? .zero, minimum),
+                pid: entry.window.pid, bundleID: entry.window.bundleID, scope: scope, mode: mode
+            )
             // Sans arbre lisible, rien à corriger : la frame obtenue est acceptée.
             var reason = "minimum_size_infeasible"
             if let tree = store.state().bspTree(for: scope),
                let geometry = treeGeometry(of: scope, in: snapshot) {
-                var knownMinimums = treeMinimums.filter { $0.key != entry.window.id }
+                var knownMinimums = treeMinimums.filter { $0.key != entry.window.id }.mapValues(\.size)
                 // Le côté minimal supposé évite de créer un nouveau refus chez une voisine
                 // dont l'application n'a pas encore révélé sa contrainte (T228).
                 for neighbour in tree.windowIDs where neighbour != entry.window.id && knownMinimums[neighbour] == nil {
@@ -1854,10 +1895,23 @@ public final class LayoutMaintainer {
         pendingStability = pending
     }
 
+    /// Contraintes confirmées du tiler, partagées avec les prises explicites. O(w).
+    /// Une autre identité, un autre mode ou un autre scope ne transporte aucun minimum.
+    public func dividerMinimums(for scope: StageScope, in snapshot: DaemonSnapshot) -> [WindowID: CGSize] {
+        var result: [WindowID: CGSize] = [:]
+        for entry in snapshot.windows where entry.scope == scope {
+            guard let minimum = treeMinimums[entry.window.id],
+                  minimum.pid == entry.window.pid, minimum.bundleID == entry.window.bundleID,
+                  minimum.scope == scope, snapshot.state.stage(scope: scope)?.mode == minimum.mode,
+                  entry.window.furniture?.isNativeFullscreen != true else { continue }
+            result[entry.window.id] = minimum.size
+        }
+        return result
+    }
+
     /// Résultat d'une commande appliquée sur un arbre (T219, A15, A20), publié par
-    /// `SnapshotService.applyTreeScope` : ses fenêtres sont suivies (refus à confirmer ou à
-    /// corriger), sa génération est gardée par la passe interne suivante, et la stabilité est lue
-    /// 100 ms après la fin de son écriture. Aucun placement ici. O(k) - k fenêtres écrites.
+    /// `SnapshotService.applyTreeScope` : suivi des refus et de la génération, puis contrôle
+    /// de stabilité 100 ms après l'écriture. Aucun placement ici. O(k) — fenêtres écrites.
     public func noteTreeScopeApplied(_ application: TreeScopeApplication) {
         lastTreeWindowIDs.formUnion(application.windowIDs.map(\.rawValue))
         commandGeneration = application.generation

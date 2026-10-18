@@ -28,6 +28,23 @@ Cas d'usage :
 - operations multi-ecran avec chaque ecran dans un mode different;
 - pause temporaire du tiling sur une stage en `float`.
 
+### Redimensionnement par les séparations
+
+En mode `spatialBsp`, tire une poignée dans l'espace entre deux groupes de fenêtres
+pour modifier leur proportion. Les autres séparations gardent leur position relative.
+Le résultat est enregistré dans l'arbre. Le redimensionnement natif par les bords
+des fenêtres reste disponible.
+
+Le réglage **Tuilage > Poignées de redimensionnement** masque ou affiche ces prises
+sans retuiler les fenêtres (`tiling.resize_handles`, activé par défaut). Les poignées
+n'apparaissent que dans un espace libre entre fenêtres, sur une stage active compatible.
+Sans espace entre les fenêtres, utilise leurs bords ou la commande `resize`.
+Un changement de stage ou d'écran interrompt le geste sans appliquer sa cible en attente.
+
+Les retours macOS de placements récents sont reconnus même lorsqu'ils arrivent dans
+le désordre. Les refus de taille et les minimums appris restent liés à leur génération
+et au contexte de la fenêtre, pour préserver les gestes plus récents.
+
 ## Runtime modulaire
 
 Roadie peut tourner comme daemon monolithique classique ou comme ensemble de

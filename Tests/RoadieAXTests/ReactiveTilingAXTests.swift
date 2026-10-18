@@ -465,7 +465,7 @@ struct WrittenFrameRegistryTests {
     }
 
     @Test
-    func echoComparesOnlyTheLastWrite() {
+    func expiredHistoryLeavesOnlyTheLastWriteAsAnEcho() {
         let registry = WrittenFrameRegistry()
         registry.record(windowID: 1, requested: requested, readBack: requested, generation: 1, at: start)
         let moved = requested.offsetBy(dx: 400, dy: 0)
@@ -535,7 +535,7 @@ struct AXWindowEventObserverDispatchTests {
         let now = Date()
         registry.record(windowID: 7, requested: frame, readBack: frame, generation: 1, at: now.addingTimeInterval(-5))
         var received: [AXWindowEvent] = []
-        let observer = AXWindowEventObserver(writtenFrames: registry) { received.append($0) }
+        let observer = AXWindowEventObserver(writtenFrames: registry, mouseButtonsPressed: { false }) { received.append($0) }
 
         let moved = AXWindowEvent(name: kAXWindowMovedNotification as String, pid: 3, windowID: 7)
         let resized = AXWindowEvent(name: kAXWindowResizedNotification as String, pid: 3, windowID: 7)
@@ -559,7 +559,7 @@ struct AXWindowEventObserverDispatchTests {
         let now = Date()
         registry.record(windowID: 8, requested: requested, readBack: clamped, generation: 1, at: now)
         var received: [AXWindowEvent] = []
-        let observer = AXWindowEventObserver(writtenFrames: registry) { received.append($0) }
+        let observer = AXWindowEventObserver(writtenFrames: registry, mouseButtonsPressed: { false }) { received.append($0) }
 
         let resized = AXWindowEvent(name: kAXWindowResizedNotification as String, pid: 3, windowID: 8)
         observer.dispatch(resized, observedFrame: clamped, now: now.addingTimeInterval(0.05))

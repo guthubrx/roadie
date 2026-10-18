@@ -1286,10 +1286,15 @@ extension SnapshotService {
         _ scope: StageScope,
         cause: String,
         generation: UInt64,
-        episodeID: String? = nil
+        episodeID: String? = nil,
+        using preparedSnapshot: DaemonSnapshot? = nil,
+        onApplied: ((ApplyResult) -> Void)? = nil
     ) -> MaintenanceTick {
         let startedAt = clock()
-        let (snapshot, scanned) = sharedSnapshotCountingScan(followFocus: true)
+        // Un glisser de séparation réutilise son inventaire figé : aucun relevé AX à chaque mouvement.
+        // Le coordinateur vérifie le scope et l'arbre persistés avant chaque mutation.
+        let (snapshot, scanned) = preparedSnapshot.map { ($0, false) }
+            ?? sharedSnapshotCountingScan(followFocus: true)
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
@@ -1302,6 +1307,7 @@ extension SnapshotService {
         processState.noteTreeScopeApplied(scope, at: startedAt)
         let plan = treeApplyPlan(for: scope, in: snapshot, mode: stage.mode, generation: generation)
         let result = apply(plan, generation: generation)
+        onApplied?(result)
         let writesByWindow = result.items.reduce(into: [UInt32: Int]()) { $0[$1.windowID.rawValue, default: 0] += 1 }
         events.append(RoadieEvent(type: "layout_apply", scope: scope, details: [
             "cause": commandCause,
@@ -1322,6 +1328,7 @@ extension SnapshotService {
         ))
         return MaintenanceTick(commands: plan.commands.count, applied: result.applied, clamped: result.clamped, failed: result.failed)
     }
+
 }
 
 public struct ApplyResult: Equatable, Codable, Sendable {
@@ -2340,7 +2347,9 @@ private extension CGRect {
     var area: CGFloat {
         max(0, width) * max(0, height)
     }
+}
 
+extension CGRect {
     /// Tolérance unique de comparaison de frames (R9, FR-010) : `frameMatch` sur chaque composante.
     func matchesFrame(_ other: CGRect, tolerance: CGFloat = LayoutTolerance.frameMatch) -> Bool {
         return abs(minX - other.minX) <= tolerance

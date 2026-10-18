@@ -20,6 +20,7 @@ if let first = args.first, roadieReaderCommands.contains(first) {
 let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
+var dividerResizeRuntime: DividerResizeRuntime?
 var focusFollowsMouseController: FocusFollowsMouseController?
 var titlebarContextMenuController: TitlebarContextMenuController?
 var targetModeRuntimeController: TargetModeRuntimeController?
@@ -336,6 +337,14 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     UserInputActivity.shared.startMonitoring()
 
     let maintainer = LayoutMaintainer()
+    // Les poignées appartiennent au processus écrivain, y compris en mode modulaire.
+    let dividers = DividerResizeRuntime(service: service, minimums: { scope, snapshot in
+        maintainer.dividerMinimums(for: scope, in: snapshot)
+    })
+    dividerResizeRuntime = dividers
+    dividers.start()
+    ShutdownRegistry.register { dividers.stop() }
+
     var reportedAccessibilityDenied = false
     let scheduler = TickScheduler(
         tick: { cause in
@@ -413,6 +422,7 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     // Session de geste (A4) : la fenêtre gérée sous le curseur au clic, d'après le snapshot partagé.
     UserInputActivity.shared.observeGestures(
         target: { point in
+            guard dividerResizeRuntime?.containsHandle(at: point) != true else { return nil }
             let snapshot = service.sharedSnapshot()
             let target = FocusFollowsMousePicker.gestureTargetWindow(at: point, in: snapshot)
             let front = FocusFollowsMousePicker.frontWindow(at: point, in: snapshot)

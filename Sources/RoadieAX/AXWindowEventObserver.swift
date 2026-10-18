@@ -34,6 +34,7 @@ public final class AXWindowEventObserver {
     /// pour l'ancienne callback, dont le daemon ne sait pas filtrer l'echo.
     private let notifications: [String]
     private let writtenFrames: WrittenFrameRegistry
+    private let mouseButtonsPressed: () -> Bool
     private var observers: [pid_t: AXObserver] = [:]
     /// Notifications deja enregistrees (ou refusees definitivement) par application.
     private var registered: [pid_t: Set<String>] = [:]
@@ -82,6 +83,7 @@ public final class AXWindowEventObserver {
         self.callback = { onWindowEvent($0.name) }
         self.notifications = Self.trackedNotifications
         self.writtenFrames = .shared
+        self.mouseButtonsPressed = { NSEvent.pressedMouseButtons != 0 }
     }
 
     /// Callback complete, avec deplacement et redimensionnement ; l'echo est absorbe.
@@ -89,10 +91,15 @@ public final class AXWindowEventObserver {
         self.init(writtenFrames: .shared, onEvent: onEvent)
     }
 
-    init(writtenFrames: WrittenFrameRegistry, onEvent: @escaping EventCallback) {
+    init(
+        writtenFrames: WrittenFrameRegistry,
+        mouseButtonsPressed: @escaping () -> Bool = { NSEvent.pressedMouseButtons != 0 },
+        onEvent: @escaping EventCallback
+    ) {
         self.callback = onEvent
         self.notifications = Self.trackedNotifications + Self.frameNotifications.sorted()
         self.writtenFrames = writtenFrames
+        self.mouseButtonsPressed = mouseButtonsPressed
     }
 
     /// Demarre l'observation. A appeler depuis la main thread (les notifications AppKit
@@ -152,9 +159,6 @@ public final class AXWindowEventObserver {
             AXAttributeCache.shared.invalidate(pid: pid)
             AXWindowIndexCache.shared.invalidate(pid: pid)
         }
-        if isDestroyed, let windowID {
-            writtenFrames.forget(windowID: windowID)
-        }
         let event = AXWindowEvent(name: name, pid: pid, windowID: windowID)
         let observed = Self.frameNotifications.contains(name) && windowID != nil
             && !AXUnresponsiveApps.shared.isQuarantined(pid)
@@ -164,11 +168,16 @@ public final class AXWindowEventObserver {
 
     /// Transmet l'evenement, sauf un deplacement ou redimensionnement classe echo par le
     /// registre : il ne planifie aucune passe (A1). Avant d'etre absorbe, un echo de la relecture
-    /// confirme le refus de taille en attente (A14). O(1).
+    /// confirme le refus de taille en attente (A14), sauf ambiguïté entre générations.
+    /// Pendant un appui souris, le maintainer garde la priorité du geste et sa géométrie :
+    /// transmettre la notification ne crée ici aucune intention ni génération. O(1).
     func dispatch(_ event: AXWindowEvent, observedFrame: CGRect?, now: Date) {
+        if event.name == kAXUIElementDestroyedNotification as String, let windowID = event.windowID {
+            writtenFrames.forget(windowID: windowID)
+        }
         if Self.frameNotifications.contains(event.name), let windowID = event.windowID, let observedFrame,
-           writtenFrames.classify(windowID: windowID, observed: observedFrame, now: now) == .echo {
-            writtenFrames.confirmRefusal(windowID: windowID, observed: observedFrame, at: now)
+           !mouseButtonsPressed(),
+           writtenFrames.consumeEcho(windowID: windowID, observed: observedFrame, now: now) {
             return
         }
         callback(event)

@@ -128,6 +128,8 @@ public struct InterfaceConfig: Equatable, Codable, Sendable {
 public struct TilingConfig: Equatable, Codable, Sendable {
     public var defaultStrategy: WindowManagementMode
     public var splitPolicy: String
+    /// Poignées dans les séparations des stages utilisant l'arbre persistant.
+    public var resizeHandles: Bool
     public var gapsOuter: Double
     public var gapsOuterTop: Double?
     public var gapsOuterRight: Double?
@@ -150,6 +152,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     public init(
         defaultStrategy: WindowManagementMode = .bsp,
         splitPolicy: String = "largest_dim",
+        resizeHandles: Bool = true,
         gapsOuter: Double = 8,
         gapsOuterTop: Double? = nil,
         gapsOuterRight: Double? = nil,
@@ -165,6 +168,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     ) {
         self.defaultStrategy = defaultStrategy
         self.splitPolicy = splitPolicy
+        self.resizeHandles = resizeHandles
         self.gapsOuter = gapsOuter
         self.gapsOuterTop = gapsOuterTop
         self.gapsOuterRight = gapsOuterRight
@@ -182,6 +186,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case defaultStrategy = "default_strategy"
         case splitPolicy = "split_policy"
+        case resizeHandles = "resize_handles"
         case gapsOuter = "gaps_outer"
         case gapsOuterTop = "gaps_outer_top"
         case gapsOuterRight = "gaps_outer_right"
@@ -209,6 +214,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         }
         self.defaultStrategy = strategy
         self.splitPolicy = try c.decodeIfPresent(String.self, forKey: .splitPolicy) ?? "largest_dim"
+        self.resizeHandles = try c.decodeIfPresent(Bool.self, forKey: .resizeHandles) ?? true
         self.gapsOuter = try c.decodeFlexibleDouble(forKey: .gapsOuter) ?? 8
         self.gapsOuterTop = try c.decodeFlexibleDouble(forKey: .gapsOuterTop)
         self.gapsOuterRight = try c.decodeFlexibleDouble(forKey: .gapsOuterRight)
@@ -1332,7 +1338,7 @@ private enum ConfigValidationRules {
             "": [],
             "fx": [],
             "interface": ["settings_text_font_size", "settings_help_font_size", "settings_title_font_size"],
-            "tiling": gapKeys.union(["default_strategy", "split_policy", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter"]),
+            "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter"]),
             "tiling.display_overrides": gapKeys.union(["display_id", "display_name"]),
             "desktops": ["enabled", "count", "back_and_forth", "mode"],
             "stage_manager": ["enabled", "hide_strategy", "default_stage", "workspaces"],

@@ -7,12 +7,18 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Poignées dans les séparations de l'arbre persistant pour ajuster les proportions
+  à la souris, activables dans Tuilage sans changer la disposition.
 - Aperçu du réordonnancement dans le rail : la stage déplacée apparaît en transparence
   à sa future place, et les cartes voisines montrent l’ordre qui sera appliqué au dépôt.
   Une aimantation réglable dans les paramètres stabilise la destination.
 
 ### Corrections
 
+- Conservation des gestes récents face aux anciens refus de taille ; minimums appris
+  liés au processus, à la stage et au mode de la fenêtre.
+- Reconnaissance des notifications de placement arrivées en retard, avec un historique
+  borné et priorité aux gestes de souris.
 - Acquisition des relevés du rail, des bordures et du focus souris en arrière-plan,
   avec regroupement des demandes et rejet des données invalidées.
 - Réduction du travail répété dans le rail, la recherche, les arbres de tuilage

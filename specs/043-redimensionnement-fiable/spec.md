@@ -1,7 +1,7 @@
 # Session 043 — Redimensionnement fiable
 
 Statut : validée par l’utilisateur le 2026-10-18 (« fais les 3 P1 à l’aide de sous agents T3 »).
-Branche : session-043-redimensionnement-fiable. Tests : à déterminer.
+Branche : session-043-redimensionnement-fiable. Tests : 1 685 tests Swift dans 199 suites et 26 tests de scripts réussis. Revue indépendante finale favorable ; parcours réel sur le bureau non vérifié.
 
 ## Objectif
 Livrer les trois P1 du comparatif : poignées de séparation explicites, historique court des cadres attendus, refus de taille et gestes concurrents fiables. Préserver les gestes natifs, les budgets de placement, le plein écran natif, les groupes et le multi-écran.

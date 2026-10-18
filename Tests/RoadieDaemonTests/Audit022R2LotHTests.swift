@@ -34,7 +34,9 @@ struct Audit022R2LotHTests {
             powerWindow(1, x: 100), powerWindow(2, x: 500), powerWindow(3, x: 820, width: 150)
         ])
         let store = StageStore(path: tempPath("border-group-label"))
-        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        // Ce test porte sur le rendu, pas sur le temps passé dans la file MainActor.
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider),
+                                      stageStore: store, clock: { Date(timeIntervalSince1970: 1_000) })
         _ = service.snapshot()
         var config = RoadieConfig()
         config.fx.borders.enabled = bordersEnabled

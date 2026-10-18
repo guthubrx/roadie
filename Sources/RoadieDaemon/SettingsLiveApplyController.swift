@@ -72,7 +72,10 @@ public final class SettingsLiveApplyController {
         let config = configService.currentConfig()
         guard configService.state.lastValidation != .failed else { return }
         let rail = RailGeometry(settings: RailSettings.load(path: activePath))
-        let geometryChanged = config.tiling != previousConfig.tiling || rail != previousRail
+        // L'interrupteur des poignées change la présentation, pas la géométrie des fenêtres.
+        var geometryTiling = config.tiling
+        geometryTiling.resizeHandles = previousConfig.tiling.resizeHandles
+        let geometryChanged = geometryTiling != previousConfig.tiling || rail != previousRail
         let layoutChanged = geometryChanged
             || config.desktops != previousConfig.desktops
             || config.stageManager != previousConfig.stageManager

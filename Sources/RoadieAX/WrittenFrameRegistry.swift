@@ -33,17 +33,25 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
     public static let shared = WrittenFrameRegistry()
 
     private static let echoWindow: TimeInterval = LayoutTolerance.echoWindow
+    private static let historyWindow: TimeInterval = 1.5
+    private static let historyLimit = 32
 
     public enum Classification: Equatable { case echo, appResponse, external }
 
     private let lock = NSLock()
     private var entries: [UInt32: WrittenFrame] = [:]
+    private struct RecentFrame {
+        var frame: CGRect
+        var recordedAt: Date
+        var generation: UInt64
+    }
+    private var history: [UInt32: [RecentFrame]] = [:]
 
     public init() {}
 
     /// Enregistre une écriture. Une nouvelle génération repart à une écriture et efface la frame
     /// acceptée ; la même génération incrémente le compteur. Chaque écriture attend sa propre
-    /// confirmation de refus. O(1).
+    /// confirmation de refus. L'historique reste séparé du budget. O(1), borne de 32 cadres.
     public func record(
         windowID: UInt32, requested: CGRect, readBack: CGRect?, generation: UInt64, at date: Date,
         axResultCodes: [String: Int32]? = nil, nativeFullscreenReading: Bool? = nil
@@ -59,12 +67,17 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
                 entry.writesInGeneration = previous.writesInGeneration + 1
             }
             entries[windowID] = entry
+            remember(windowID: windowID, frames: [requested, readBack].compactMap { $0 }, generation: generation, at: date)
         }
     }
 
     /// Accepte une frame pour la génération courante de la fenêtre. Sans écriture connue : sans effet. O(1).
-    public func accept(windowID: UInt32, frame: CGRect) {
-        lock.withLock { entries[windowID]?.accepted = frame }
+    public func accept(windowID: UInt32, frame: CGRect, at date: Date = Date()) {
+        lock.withLock {
+            guard let entry = entries[windowID] else { return }
+            entries[windowID]?.accepted = frame
+            remember(windowID: windowID, frames: [frame], generation: entry.generation, at: date)
+        }
     }
 
     public func entry(for windowID: UInt32) -> WrittenFrame? {
@@ -81,27 +94,37 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
     }
 
     public func forget(windowID: UInt32) {
-        lock.withLock { entries[windowID] = nil }
+        lock.withLock {
+            entries[windowID] = nil
+            history[windowID] = nil
+        }
     }
 
     /// Seconde observation réelle (notification AX ou relecture AX fraîche, jamais le snapshot
     /// republié) d'une fenêtre dont le refus est en attente (A14). Si elle reproduit la frame
     /// relue, le refus est confirmé ; si elle rejoint la frame demandée, le refus disparaît.
+    /// Fournir `generation` si la lecture a démarré avant un possible changement d'écriture.
+    /// Les notifications AX passent par `consumeEcho`, qui écarte les anciens échos ambigus.
     /// Retourne vrai si le refus vient d'être confirmé. O(1).
     @discardableResult
-    public func confirmRefusal(windowID: UInt32, observed: CGRect, at date: Date) -> Bool {
+    public func confirmRefusal(windowID: UInt32, observed: CGRect, at date: Date, generation: UInt64? = nil) -> Bool {
         lock.withLock {
-            guard let entry = entries[windowID], entry.hasRefusal, entry.refusalConfirmedAt == nil,
-                  let readBack = entry.readBack
-            else { return false }
-            if Self.matches(observed, entry.requested) {
-                entries[windowID]?.readBack = observed
-                return false
-            }
-            guard Self.matches(observed, readBack) else { return false }
-            entries[windowID]?.refusalConfirmedAt = date
-            return true
+            guard generation == nil || entries[windowID]?.generation == generation else { return false }
+            return confirmRefusalLocked(windowID: windowID, observed: observed, at: date)
         }
+    }
+
+    private func confirmRefusalLocked(windowID: UInt32, observed: CGRect, at date: Date) -> Bool {
+        guard let entry = entries[windowID], entry.hasRefusal, entry.refusalConfirmedAt == nil,
+              let readBack = entry.readBack, date >= entry.writtenAt
+        else { return false }
+        if Self.matches(observed, entry.requested) {
+            entries[windowID]?.readBack = observed
+            return false
+        }
+        guard Self.matches(observed, readBack) else { return false }
+        entries[windowID]?.refusalConfirmedAt = date
+        return true
     }
 
     /// Fenêtres dont le refus écrit attend sa seconde observation, triées. O(n log n).
@@ -112,14 +135,61 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
     }
 
     /// Classe une frame observée (A4, étapes 2 à 4 ; la session de geste est tenue ailleurs) :
-    /// - écho : proche de la frame demandée, relue ou acceptée de la dernière écriture ;
+    /// - écho : dernière écriture (compatibilité), ou cadre historique de moins de 1,5 s ;
     /// - réponse de l'application : différente, moins de `echoWindow` après l'écriture ;
     /// - changement externe : sinon, ou sans écriture connue. O(1).
     public func classify(windowID: UInt32, observed: CGRect, now: Date) -> Classification {
-        guard let entry = entry(for: windowID) else { return .external }
+        lock.withLock {
+            pruneHistory(windowID: windowID, now: now)
+            return classifyLocked(windowID: windowID, observed: observed, now: now)
+        }
+    }
+
+    /// Absorbe un écho AX et confirme seulement une relecture attribuable à l'écriture courante.
+    /// Le même verrou protège classement et confirmation contre une écriture concurrente.
+    /// Un cadre ambigu entre générations attend une vraie relecture AX via `confirmRefusal`.
+    /// O(1), au plus 32 cadres parcourus. Ne pas appeler pendant un appui souris.
+    @discardableResult
+    public func consumeEcho(windowID: UInt32, observed: CGRect, now: Date) -> Bool {
+        lock.withLock {
+            pruneHistory(windowID: windowID, now: now)
+            guard classifyLocked(windowID: windowID, observed: observed, now: now) == .echo else { return false }
+            if let entry = entries[windowID],
+               !(history[windowID] ?? []).contains(where: {
+                   $0.generation != entry.generation && Self.matches($0.frame, observed)
+               }) {
+                _ = confirmRefusalLocked(windowID: windowID, observed: observed, at: now)
+            }
+            return true
+        }
+    }
+
+    private func classifyLocked(windowID: UInt32, observed: CGRect, now: Date) -> Classification {
+        guard let entry = entries[windowID] else { return .external }
         let known = [entry.requested, entry.readBack, entry.accepted].compactMap { $0 }
-        if known.contains(where: { Self.matches($0, observed) }) { return .echo }
+        if known.contains(where: { Self.matches($0, observed) })
+            || (history[windowID] ?? []).contains(where: { Self.matches($0.frame, observed) }) { return .echo }
         return now.timeIntervalSince(entry.writtenAt) < Self.echoWindow ? .appResponse : .external
+    }
+
+    /// Appelées sous verrou. Les observations d'échos ne renouvellent jamais leur échéance.
+    private func pruneHistory(windowID: UInt32, now: Date) {
+        guard var recent = history[windowID] else { return }
+        recent.removeAll {
+            let age = now.timeIntervalSince($0.recordedAt)
+            return age < 0 || age >= Self.historyWindow
+        }
+        history[windowID] = recent.isEmpty ? nil : recent
+    }
+
+    private func remember(windowID: UInt32, frames: [CGRect], generation: UInt64, at date: Date) {
+        pruneHistory(windowID: windowID, now: date)
+        var recent = history[windowID] ?? []
+        for frame in frames {
+            recent.append(RecentFrame(frame: frame, recordedAt: date, generation: generation))
+        }
+        if recent.count > Self.historyLimit { recent.removeFirst(recent.count - Self.historyLimit) }
+        history[windowID] = recent
     }
 
     /// Égalité de deux frames à `LayoutTolerance.frameMatch` près sur chaque composante.

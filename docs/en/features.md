@@ -28,6 +28,21 @@ Use cases:
 - multi-display operations with different modes per display/stage;
 - temporary tiling pause on a `float` stage.
 
+### Resizing with dividers
+
+In `spatialBsp`, drag a handle in the gap between two window groups to adjust their
+proportions. Other dividers keep their relative positions. The result is saved in
+the tree. Native resizing with window edges remains available.
+
+**Tiling > Resize handles** shows or hides the handles without retiling windows
+(`tiling.resize_handles`, enabled by default). Handles only appear in a free gap
+on an active, compatible stage. With no gap, use window edges or `resize`.
+Changing stages or displays interrupts the gesture and discards its pending target.
+
+Recent placement notifications are recognized even when macOS delivers them out
+of order. Size refusals and learned minimums stay tied to their generation and
+window context, so they do not overwrite newer gestures.
+
 ## Modular Runtime
 
 Roadie can run as a classic monolithic daemon or as a set of separate runtime

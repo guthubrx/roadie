@@ -34,7 +34,7 @@ et les groupes de fenêtres de Stage Manager.
 
 | Besoin | Fonction |
 |---|---|
-| Organiser les fenêtres | Tuilage automatique, plusieurs dispositions et ajustement des proportions |
+| Organiser les fenêtres | Tuilage automatique, plusieurs dispositions et poignées de séparation en arbre persistant |
 | Passer d'un projet à l'autre | Stages nommés, aperçus et changement d'espace depuis le rail |
 | Travailler sur plusieurs écrans | Bureaux et dispositions indépendants, transfert des fenêtres et des stages |
 | Garder une fenêtre accessible | Épinglages, signets et groupes de fenêtres |
