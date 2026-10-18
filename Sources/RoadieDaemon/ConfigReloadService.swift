@@ -1,4 +1,5 @@
 import Foundation
+import os
 import RoadieCore
 
 public enum ConfigReloadValidation: String, Codable, Sendable, Equatable {
@@ -237,8 +238,19 @@ public final class ConfigReloadService: @unchecked Sendable {
     /// Date de modification et taille du fichier principal et du fichier de règles générées
     /// (tous deux lus par `RoadieConfigLoader.load`). `-1` pour un fichier absent.
     static func stamp(for path: String) -> [Int64] {
-        fileModificationStamp(path) + fileModificationStamp(RoadieConfigLoader.generatedRulesPath(for: path))
+        fileModificationStamp(path) + fileModificationStamp(generatedRulesPath(for: path))
     }
+
+    /// Chemin des règles générées, calculé une fois par chemin de configuration (SPEC-051 A-04) :
+    /// la lecture de la config, appelée plusieurs fois par passe, ne reconstruit plus d'URL. O(1).
+    static func generatedRulesPath(for path: String) -> String {
+        if let known = generatedPaths.withLock({ $0[path] }) { return known }
+        let computed = RoadieConfigLoader.generatedRulesPath(for: path)
+        generatedPaths.withLock { $0[path] = computed }
+        return computed
+    }
+
+    private static let generatedPaths = OSAllocatedUnfairLock(initialState: [String: String]())
 
     /// À appeler sous `lock` : met à jour l'état et renvoie les événements à journaliser.
     private func recordFailure(path: String, message: String) -> [RoadieEvent] {

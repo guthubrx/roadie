@@ -600,6 +600,11 @@ struct AXApplicationWindows {
     func element(id: CGWindowID) -> AXUIElement? {
         byID[id]
     }
+
+    /// Vrai si l'index connaît toutes ces fenêtres (SPEC-051 A-02). O(k).
+    func covers(_ ids: Set<CGWindowID>) -> Bool {
+        ids.allSatisfy { byID[$0] != nil }
+    }
 }
 
 /// Élément AX de chaque fenêtre d'une application, par CGWindowID (SPEC-021, cibles de toutes les
@@ -740,6 +745,8 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         let currentPID = ProcessInfo.processInfo.processIdentifier
         // Fenetres AX par application pour ce snapshot (nil memorise = application illisible).
         var appWindows: [pid_t: AXApplicationWindows?] = [:]
+        // SPEC-051 A-03 : une requête LaunchServices par application, pas par fenêtre CG.
+        var bundleByPID: [pid_t: String] = [:]
         // O(n) : préparer toutes les cibles CG avant l'unique énumération AX par PID.
         // Sur-ensemble conservateur des candidats : aucune fenêtre attachée nécessaire oubliée.
         var requiredWindowIDs: [pid_t: Set<CGWindowID>] = [:]
@@ -778,8 +785,13 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 return nil
             }
             let title = info[kCGWindowName as String] as? String ?? ""
-            let app = NSRunningApplication(processIdentifier: pid)
-            let bundleID = app?.bundleIdentifier ?? ""
+            let bundleID: String
+            if let known = bundleByPID[pid] {
+                bundleID = known
+            } else {
+                bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
+                bundleByPID[pid] = bundleID
+            }
 
             // isTileCandidate ne reflete plus que les criteres CG bruts. La policy
             // (AX subrole, regles user, exclusions bundle) est appliquee cote daemon.
@@ -811,6 +823,12 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         return result
     }
 
+    /// Index réutilisable : connu et couvrant toutes les fenêtres demandées (non vides). O(k).
+    static func reusableIndex(_ cached: AXApplicationWindows?, required: Set<CGWindowID>?) -> AXApplicationWindows? {
+        guard let cached, let required, !required.isEmpty, cached.covers(required) else { return nil }
+        return cached
+    }
+
     /// Attributs AX d'une fenetre : partie stable depuis le cache, etat relu a chaque appel.
     /// Application mise de cote ou illisible pendant la lecture : dernier etat connu.
     /// Retourne nil si AX n'a jamais pu repondre (app sandboxee, autorisations manquantes).
@@ -829,7 +847,11 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         if let memo = appWindows[pid] {
             index = memo
         } else {
-            index = AXApplicationWindows(pid: pid, requiredWindowIDs: requiredWindowIDs)
+            // SPEC-051 A-02 : l'index du relevé précédent sert s'il connaît toutes les fenêtres
+            // visibles ; une fenêtre nouvelle force une énumération. L'écrivain l'invalide déjà sur
+            // création, destruction ou élément devenu invalide.
+            index = Self.reusableIndex(AXWindowIndexCache.shared.windows(for: pid), required: requiredWindowIDs)
+                ?? AXApplicationWindows(pid: pid, requiredWindowIDs: requiredWindowIDs)
             appWindows.updateValue(index, forKey: pid)
         }
         let lastKnown = cache.lastKnown(for: id)

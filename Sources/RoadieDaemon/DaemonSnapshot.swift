@@ -401,8 +401,20 @@ public struct SnapshotService: Sendable {
         let result: Reconciliation
         if persistStateChanges {
             intentStore.prune(keepingDisplayIDs: liveDisplayIDs)
-            result = stageStore.mutate { persistedStages in
-                reconcile(&persistedStages, input: input)
+            // SPEC-051 B-01 : réconcilier d'abord une copie, sans verrou. Sans changement, aucune
+            // transaction exclusive sur stages.json. Sinon, la transaction réutilise ce résultat si le
+            // fichier n'a pas bougé entre-temps : la réconciliation (et ses événements) ne tourne qu'une fois.
+            let original = stageStore.state()
+            var candidate = original
+            let precheck = reconcile(&candidate, input: input)
+            if candidate == original {
+                result = precheck
+            } else {
+                result = stageStore.mutate { persistedStages in
+                    guard persistedStages == original else { return reconcile(&persistedStages, input: input) }
+                    persistedStages = candidate
+                    return precheck
+                }
             }
             // Les events de reconciliation decrivent une mutation de l'etat persiste. En mode
             // lecteur (persistStateChanges=false, SPEC-011 atomique), plusieurs process appellent

@@ -123,11 +123,15 @@ final class RailPanel: NSPanel {
     private var displayID: DisplayID?
     private var runtimeStore: RailRuntimeStateStore?
     var onVisibleWidthChanged: ((DisplayID) -> Void)?
+    /// Dépliage du rail replié (SPEC-051 C-06) : ses vignettes reprennent.
+    var onRevealed: ((DisplayID) -> Void)?
     private var screenFrame = CGRect.zero
     private var expandedFrame = CGRect.zero
     private var collapsedFrame = CGRect.zero
     private var interactionFrame = CGRect.zero
     private var isCollapsed = false
+    /// Rail replié (masquage automatique) : ses vignettes ne sont pas capturées (SPEC-051 C-06).
+    var isRailCollapsed: Bool { isCollapsed }
     private var lastPersistedVisibleWidth: Double?
     private var hideAfter: Date?
     private var recordingIndicatorView: RecordingIndicatorView?
@@ -232,6 +236,7 @@ final class RailPanel: NSPanel {
         isCollapsed = collapsed
         hideAfter = nil
         applyAutoHideFrame(animated: animated)
+        if !collapsed, let displayID { onRevealed?(displayID) }
     }
 
     private func applyAutoHideFrame(animated: Bool) {

@@ -199,10 +199,13 @@ public struct WindowCommandService {
         }
         var tick: MaintenanceTick?
         if changed {
+            // SPEC-051 D-03 : les fenêtres n'ont pas bougé depuis le relevé d'entrée et l'arbre
+            // muté est relu depuis stages.json : aucun second relevé AX.
             tick = service.applyTreeScope(
                 scope,
                 cause: "window.\(verb.rawValue).\(direction.rawValue)",
-                generation: generation
+                generation: generation,
+                using: snapshot
             )
         }
         _ = focusWindow(active.window)

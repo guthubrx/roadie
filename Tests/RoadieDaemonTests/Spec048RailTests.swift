@@ -57,6 +57,28 @@ struct Spec048RailTests {
         #expect(zip(before, after).allSatisfy { $0 === $1 })
     }
 
+    /// SPEC-051 C-06 : un rail replié ne capture pas ; son dépliage relance le rafraîchissement.
+    @Test func collapsedRailReportsItsRevealOnce() throws {
+        let screen = try #require(NSScreen.screens.first)
+        var config = RailVisualConfig.load(settings: RailSettings.load(raw: ""))
+        config.autoHide = true
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("rail051-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let panel = RailPanel()
+        var reveals: [DisplayID] = []
+        panel.onRevealed = { reveals.append($0) }
+        panel.position(on: screen, displayID: DisplayID(rawValue: "test051"), config: config,
+                       runtimeStore: RailRuntimeStateStore(path: directory.appendingPathComponent("runtime.json").path))
+        #expect(panel.isRailCollapsed)
+
+        #expect(panel.revealIfCollapsed())
+
+        #expect(!panel.isRailCollapsed)
+        #expect(reveals == [DisplayID(rawValue: "test051")])
+        #expect(!panel.revealIfCollapsed())
+        #expect(reveals.count == 1)
+    }
+
     @Test func cardRedrawsOnlyWhenAnImageChanges() {
         let config = RailVisualConfig.load(settings: RailSettings.load(raw: ""))
         let stage = PersistentStage(id: StageID(rawValue: "a"), name: "a", members: [member(1)])

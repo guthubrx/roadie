@@ -25,8 +25,17 @@ public final class FocusFollowsMouseController {
 
     public func start() {
         UserInputActivity.shared.startMonitoring()
+        schedule(interval: Self.timerInterval(enabled: configLoader().focus.focusFollowsMouse))
+    }
+
+    /// Option désactivée : un réveil par seconde suffit pour voir un rechargement à chaud (SPEC-051 A-05).
+    nonisolated static func timerInterval(enabled: Bool) -> TimeInterval {
+        enabled ? 0.1 : 1
+    }
+
+    private func schedule(interval: TimeInterval) {
         timer?.invalidate()
-        let newTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        let newTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.tick() }
         }
         timer = newTimer
@@ -35,9 +44,10 @@ public final class FocusFollowsMouseController {
 
     private func tick() async {
         guard !isReading else { return }
-        guard configLoader().focus.focusFollowsMouse,
-              let mousePoint = CGEvent(source: nil)?.location
-        else { return }
+        let enabled = configLoader().focus.focusFollowsMouse
+        let interval = Self.timerInterval(enabled: enabled)
+        if timer?.timeInterval != interval { schedule(interval: interval) }
+        guard enabled, let mousePoint = CGEvent(source: nil)?.location else { return }
 
         // FR-011 : agir seulement après un mouvement réel, jamais pendant un clic ou un drag.
         let previousPoint = lastMousePoint

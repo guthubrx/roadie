@@ -561,6 +561,13 @@ final class WindowDragReorderController {
         dragActivity.release()
     }
 
+    /// Clic sans bande de titre gérée possible (SPEC-051 C-05) : même effet qu'un clic sans
+    /// source de glisser, sans construire de contexte ni de relevé.
+    func handleMouseDownOutsideTitleBands() {
+        preview.hide()
+        pending = nil
+    }
+
     func handleMouseDown(at point: CGPoint) {
         preview.hide()
         let context = preview.makeContext()

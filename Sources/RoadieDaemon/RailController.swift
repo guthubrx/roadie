@@ -398,7 +398,23 @@ public final class RailController {
             rebuildPanels()
             return
         }
+        // SPEC-051 C-05 : sans bande de titre gérée sous le clic, aucun relevé ni contexte de glisser.
+        let frames = managedWindowFrames.values.flatMap { $0 }
+        guard Self.clickMayStartWindowDrag(atAXPoint: Self.nsToAX(screenPoint), frames: frames) else {
+            windowDragController.handleMouseDownOutsideTitleBands()
+            return
+        }
         windowDragController.handleMouseDown(at: screenPoint)
+    }
+
+    /// Pré-filtre du glisser de fenêtre : le point tombe dans la bande de titre (44 points, comme
+    /// `DropPreviewController.dragSourceWindow`) d'une fenêtre gérée du dernier cycle, avec une
+    /// marge de 4 points pour un cadre qui vient de bouger. O(w).
+    nonisolated static func clickMayStartWindowDrag(atAXPoint point: CGPoint, frames: [CGRect]) -> Bool {
+        frames.contains { frame in
+            CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: min(44, frame.height))
+                .insetBy(dx: -4, dy: -4).contains(point)
+        }
     }
 
     private func handleRightMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) -> Bool {
@@ -989,7 +1005,8 @@ public final class RailController {
             let memberIDs = content.stages.flatMap(\.members).map(\.windowID)
             displaySignatures[displayID] = "\(sharedSignature)|hidden=\(hiddenDisplayIDs.contains(displayID))|\(screen.frame)|\(screen.visibleFrame)|\(screen.localizedName)|\(content.signature)"
             thumbnailSignatures[displayID] = thumbnails.revisionSignature(for: memberIDs)
-            if !hiddenDisplayIDs.contains(displayID) {
+            // SPEC-051 C-06 : un rail replié ne montre aucune vignette ; elles reprennent au dépliage.
+            if !hiddenDisplayIDs.contains(displayID), panels[displayID]?.isRailCollapsed != true {
                 visibleMembers.append(contentsOf: content.stages.flatMap(\.members))
             }
             representedWindowIDs.formUnion(content.stages.flatMap(\.members).map(\.windowID))
@@ -1038,6 +1055,7 @@ public final class RailController {
             panel.onVisibleWidthChanged = { [weak self] displayID in
                 self?.relayoutAfterRailWidthChange(on: displayID)
             }
+            panel.onRevealed = { [weak self] _ in self?.rebuildPanels(reason: "reveal") }
             panel.position(on: screen, displayID: displayID, config: config, runtimeStore: railRuntimeStateStore)
             renderedStages += content.stages.count
             panel.render(

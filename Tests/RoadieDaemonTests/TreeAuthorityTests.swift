@@ -541,6 +541,35 @@ struct TreeAuthorityTests {
         #expect(provider.windowsCalls == 1)
     }
 
+    /// SPEC-051 D-03 : une commande en arbre réutilise son relevé d'entrée pour appliquer l'arbre.
+    @Test
+    func treeMoveCommandScansOnlyOnce() {
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(a.id), second: .leaf(b.id))
+        let provider = TreeProvider(display: display, windows: [a, b], focusedID: a.id)
+        let stageStore = store(members: [a, b], tree: tree)
+        let service = service(provider: provider, store: stageStore)
+
+        let result = WindowCommandService(service: service, stageStore: stageStore,
+                                          events: EventLog(path: tempPath("spec051-tree-move-events"))).move(.right)
+
+        #expect(result.changed)
+        #expect(provider.windowsCalls == 1)
+    }
+
+    @Test
+    func treeResizeCommandScansOnlyOnce() {
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(a.id), second: .leaf(b.id))
+        let provider = TreeProvider(display: display, windows: [a, b], focusedID: a.id)
+        let stageStore = store(members: [a, b], tree: tree)
+        let service = service(provider: provider, store: stageStore)
+
+        let result = WindowCommandService(service: service, stageStore: stageStore,
+                                          events: EventLog(path: tempPath("spec051-tree-resize-events"))).resize(.right)
+
+        #expect(result.changed)
+        #expect(provider.windowsCalls == 1)
+    }
+
     /// T219 : le résultat de l'application est publié au maintainer après l'écriture.
     @Test
     func applyTreeScopePublishesItsApplication() throws {
