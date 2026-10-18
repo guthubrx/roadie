@@ -50,13 +50,13 @@ arrêt AX après délai dépassé et échecs de masquage détaillés.
 1 612 tests / 188 suites et 26 tests de scripts réussis. Revue traitée.
 UUID EAC639A1-B54B-339F-98AD-950C4D5F0F3E, PID 46802, quatre contrôles santé OK.
 Preuves visuelles indisponibles ; limites : specs/040-reactivite-rappel/validation/validation.md.
-Current SpecKit feature: `040-reactivite-rappel`.
+Current SpecKit feature: `041-apercu-reordonnancement`.
 
 Contexte :
-- `specs/040-reactivite-rappel/spec.md`
-- `specs/040-reactivite-rappel/plan.md`
-- `specs/040-reactivite-rappel/research.md`
-- `specs/040-reactivite-rappel/tasks.md`
+- `specs/041-apercu-reordonnancement/spec.md`
+- `specs/041-apercu-reordonnancement/plan.md`
+- `specs/041-apercu-reordonnancement/research.md`
+- `specs/041-apercu-reordonnancement/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
