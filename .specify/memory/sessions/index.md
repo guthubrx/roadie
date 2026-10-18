@@ -18,3 +18,6 @@
 | 031 | Implémentée, installée et redémarrée | `session-031-libelles-temporaires` | `specs/031-libelles-temporaires` | Numéro et nom temporaires ; double Alt gauche grille, droite libellés ; 1 540 tests, repères vides temporaires, captures et santé OK |
 
 | 039 | Implémentée, installée et redémarrée | `session-039-anomalies-journee` | `specs/039-anomalies-journee` | Cinq mécanismes corrigés ; 1 603 tests, quatre contrôles santé OK, traces archivées ; revue externe et preuve visuelle indisponibles |
+
+| 029 | Intégrée ; documents récupérés le 18 octobre | `session-029-resize-rail` (fusionnée) | `specs/029-resize-rail` | Code livré dans 037, complété dans 039 ; anciens badges remplacés dans 031–033 ; réserve sur le geste natif conservée |
+| 035 | Intégrée ; documents récupérés le 18 octobre | `session-035-audit-global` (fusionnée) | `specs/035-audit-global` | Corrections et tests livrés dans 037 ; coût des observations corrigé par lot ; rapports bruts archivés |

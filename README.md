@@ -61,6 +61,10 @@ another display.
 Pins keep a window visible as you change stages. Bookmarks let you return to a
 chosen window. Your stages and settings are saved between sessions.
 
+When a display reconnects, its stages return to their places. A stage explicitly
+moved to another display stays there. Named stages remain accessible when empty;
+destination menus follow the rail order.
+
 ### One bar to search and act
 
 Open the **search and command bar** with your chosen shortcut. Type a few letters

@@ -12,6 +12,10 @@ jour et les limites connues ; les README décrivent la version courante.
   du geste même lorsque son traitement est retardé.
 - Réduction des lectures répétées des fenêtres et de leurs panneaux attachés.
 - Diagnostic `daemon health` exécuté avec les permissions du service Roadie.
+- Ordre cohérent entre le rail, les menus de destination et les commandes par position.
+- Retour des stages à leur place après reconnexion d'un écran, en conservant les
+  modifications et les déplacements explicites effectués entre-temps.
+- Reprises bornées après un refus de restauration ou de masquage d'une fenêtre.
 - Recherche des libellés de contrôles natifs portés par leurs enfants, notamment
   les dossiers Outlook, avec moins de lectures inutiles des éléments hors fenêtre.
 - Fermeture de la barre de recherche et de commandes au clic extérieur, sans

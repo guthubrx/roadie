@@ -65,6 +65,10 @@ Les épinglages gardent une fenêtre visible pendant les changements de stage.
 Les signets permettent de retrouver une fenêtre choisie. Tes stages et tes
 réglages sont conservés entre les sessions.
 
+Quand un écran est reconnecté, ses stages retrouvent leur place. Un stage déplacé
+explicitement vers un autre écran y reste. Les stages nommés restent accessibles
+même lorsqu'ils sont vides ; les menus de destination suivent l'ordre du rail.
+
 ### Une barre pour chercher et agir
 
 Ouvre la **barre de recherche et de commandes** avec le raccourci de ton choix.
