@@ -22,7 +22,7 @@ roadie performance thresholds --json
 
 Utilisation typique :
 
-- `daemon health` : verifier que le daemon et l'etat sont coherents.
+- `daemon health` : verifier que le daemon et l'etat sont coherents. Le contrôle `macos-window-settings` signale en avertissement les réglages macOS qui déplacent les fenêtres à la place de Roadie : Stage Manager, juxtaposition en glissant une fenêtre vers un bord de l'écran ou vers la barre des menus, clic sur le fond d'écran pour afficher le bureau. Le message indique où les désactiver dans Réglages Système. Roadie ne modifie jamais ces réglages.
 - `doctor` : rapport complet sur le daemon (en marche ou non), les permissions Accessibilité et Enregistrement d'écran, et la validité de la configuration. Il lit `~/.roadies/daemon-status.json`, que le daemon met à jour régulièrement.
 - `--version` : affiche la version. `roadied --version` fait de même pour le binaire du daemon.
 - `state audit` : detecter doublons, references obsoletes ou scopes casses.

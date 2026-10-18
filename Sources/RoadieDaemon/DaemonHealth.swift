@@ -58,6 +58,49 @@ public struct DaemonHealReport: Equatable, Codable, Sendable {
     }
 }
 
+/// Réglages macOS qui déplacent ou redimensionnent les fenêtres à la place de Roadie (SPEC-049).
+/// Lecture seule : Roadie ne modifie jamais ces réglages.
+public struct MacOSWindowSetting: Equatable, Sendable {
+    public var domain: String
+    public var key: String
+    /// Version majeure de macOS à partir de laquelle une clé absente vaut « activé ».
+    public var enabledByDefaultSince: Int?
+    public var label: String
+    public var location: String
+
+    /// Réglages vérifiés par `roadie query health`. Une clé absente prend le défaut de macOS.
+    public static let all: [MacOSWindowSetting] = [
+        MacOSWindowSetting(
+            domain: "com.apple.WindowManager", key: "GloballyEnabled", enabledByDefaultSince: nil,
+            label: "Stage Manager",
+            location: "Réglages Système > Bureau et Dock > Stage Manager"
+        ),
+        MacOSWindowSetting(
+            domain: "com.apple.WindowManager", key: "EnableTilingByEdgeDrag", enabledByDefaultSince: 15,
+            label: "juxtaposition en glissant une fenêtre vers un bord de l'écran",
+            location: "Réglages Système > Bureau et Dock > Fenêtres"
+        ),
+        MacOSWindowSetting(
+            domain: "com.apple.WindowManager", key: "EnableTopTilingByEdgeDrag", enabledByDefaultSince: 15,
+            label: "remplissage de l'écran en glissant une fenêtre vers la barre des menus",
+            location: "Réglages Système > Bureau et Dock > Fenêtres"
+        ),
+        MacOSWindowSetting(
+            domain: "com.apple.WindowManager", key: "EnableStandardClickToShowDesktop", enabledByDefaultSince: 14,
+            label: "clic sur le fond d'écran pour afficher le bureau (« Toujours »)",
+            location: "Réglages Système > Bureau et Dock > Cliquer sur le fond d'écran pour afficher le bureau"
+        ),
+    ]
+
+    /// Vrai si le réglage est actif. `value` : valeur lue, nil si la clé est absente. O(1).
+    public func isEnabled(value: Any?, osMajorVersion: Int) -> Bool {
+        if let number = value as? NSNumber { return number.boolValue }
+        if let flag = value as? Bool { return flag }
+        guard let since = enabledByDefaultSince else { return false }
+        return osMajorVersion >= since
+    }
+}
+
 public struct DaemonHealthService {
     private let service: SnapshotService
     private let stageStore: StageStore
@@ -65,6 +108,8 @@ public struct DaemonHealthService {
     private let pidFilePath: String
     private let statusPath: String
     private let componentRegistry: () -> [(component: String, pid: Int32, startedAt: Date)]
+    private let readPreference: (_ domain: String, _ key: String) -> Any?
+    private let osMajorVersion: Int
 
     public init(
         service: SnapshotService = SnapshotService(),
@@ -72,8 +117,14 @@ public struct DaemonHealthService {
         events: EventLog = EventLog(),
         pidFilePath: String = "\(NSHomeDirectory())/.roadies/roadied.pid",
         statusPath: String = DaemonStatus.defaultPath,
-        componentRegistry: @escaping () -> [(component: String, pid: Int32, startedAt: Date)] = ComponentLockFile.registry
+        componentRegistry: @escaping () -> [(component: String, pid: Int32, startedAt: Date)] = ComponentLockFile.registry,
+        readPreference: @escaping (_ domain: String, _ key: String) -> Any? = { domain, key in
+            CFPreferencesCopyAppValue(key as CFString, domain as CFString)
+        },
+        osMajorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
     ) {
+        self.readPreference = readPreference
+        self.osMajorVersion = osMajorVersion
         self.service = service
         self.stageStore = stageStore
         self.events = events
@@ -99,7 +150,28 @@ public struct DaemonHealthService {
             name: "state-audit",
             message: "failed=\(audit.failed)"
         ))
+        checks.append(Self.macOSWindowSettingsCheck(read: readPreference, osMajorVersion: osMajorVersion))
         return DaemonHealthReport(checks: checks)
+    }
+
+    /// Réglages macOS qui déplacent les fenêtres (SPEC-049) : `warn` si l'un est actif, jamais `fail`.
+    /// O(r), r = nombre de réglages vérifiés.
+    public static func macOSWindowSettingsCheck(
+        read: (_ domain: String, _ key: String) -> Any?,
+        osMajorVersion: Int
+    ) -> DaemonHealthCheck {
+        let active = MacOSWindowSetting.all.filter {
+            $0.isEnabled(value: read($0.domain, $0.key), osMajorVersion: osMajorVersion)
+        }
+        guard !active.isEmpty else {
+            return DaemonHealthCheck(level: .ok, name: "macos-window-settings", message: "aucun réglage macOS en conflit")
+        }
+        let details = active.map { "\($0.label) (\($0.location))" }.joined(separator: " ; ")
+        return DaemonHealthCheck(
+            level: .warn,
+            name: "macos-window-settings",
+            message: "réglages macOS qui déplacent les fenêtres à la place de Roadie, à désactiver : \(details)"
+        )
     }
 
     public func heal() -> DaemonHealReport {
