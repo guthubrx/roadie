@@ -78,7 +78,7 @@ final class StageCardView: NSControl {
 
     let stageID: StageID
     private let stage: PersistentStage
-    private let displayLabel: String
+    private var displayLabel: String
     private let isActive: Bool
     private let accent: NSColor
     private let config: RailVisualConfig
@@ -135,6 +135,12 @@ final class StageCardView: NSControl {
         StageCardView(stage: stage, displayLabel: StagePresentationOrder.name(stage, position: position),
                       isActive: isActive, accent: accent, config: config,
                       presentationStates: presentationStates, thumbnails: thumbnails, position: position)
+    }
+
+    /// Seule la légende varie pendant le geste ; miniatures, styles et contraintes sont réutilisés.
+    func setReorderPreviewPosition(_ position: Int) {
+        displayLabel = "\(position) — \(StagePresentationOrder.name(stage, position: position))"
+        needsDisplay = true
     }
 
     static func width(for config: RailVisualConfig) -> CGFloat {

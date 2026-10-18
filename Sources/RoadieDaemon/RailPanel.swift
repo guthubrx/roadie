@@ -133,6 +133,8 @@ final class RailPanel: NSPanel {
     private var recordingIndicatorView: RecordingIndicatorView?
     private var reorderMagnetism: CGFloat = 50
     private var reorderPreview: RailStageReorderPreviewView?
+    private var reorderGeometry: ReorderGeometry?
+    private var reorderCopies: [StageID: StageCardView] = [:]
     private var reorderOriginals: [(card: StageCardView, opacity: Float)] = []
 
     override var canBecomeKey: Bool { true }
@@ -393,19 +395,21 @@ final class RailPanel: NSPanel {
     }
 
     func stageReorderPosition(at screenPoint: CGPoint, sourceStageID: StageID) -> Int? {
-        guard acceptsRailInteraction(at: screenPoint), orderedStageIDs.contains(sourceStageID) else { return nil }
-        let point = stack.convert(convertPoint(fromScreen: screenPoint), from: nil)
-        let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
-        guard cards.contains(where: { $0.stageID == sourceStageID }) else { return nil }
-        let targets = cards.filter { $0.stageID != sourceStageID }.map { card in
-            let preview = card.previewDisplayFrames().first ?? card.bounds
-            return (stageID: card.stageID, midY: stack.convert(preview, from: card).midY)
+        guard acceptsRailInteraction(at: screenPoint) else { return nil }
+        if reorderGeometry?.sourceStageID != sourceStageID {
+            hideStageReorderPreview()
+            guard orderedStageIDs.contains(sourceStageID) else { return nil }
+            let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
+            guard cards.contains(where: { $0.stageID == sourceStageID }) else { return nil }
+            let targets = cards.filter { $0.stageID != sourceStageID }.map { card in
+                let preview = card.previewDisplayFrames().first ?? card.bounds
+                return (stageID: card.stageID, midY: stack.convert(preview, from: card).midY)
+            }
+            reorderGeometry = ReorderGeometry(targets: targets, orderedStageIDs: orderedStageIDs,
+                                              sourceStageID: sourceStageID, magnetism: reorderMagnetism)
         }
-        return Self.persistentReorderPosition(
-            pointY: point.y, targets: targets, orderedStageIDs: orderedStageIDs, sourceStageID: sourceStageID,
-            previousPosition: reorderPreview?.sourceStageID == sourceStageID ? reorderPreview?.position : nil,
-            magnetism: reorderMagnetism
-        )
+        let point = stack.convert(convertPoint(fromScreen: screenPoint), from: nil)
+        return reorderGeometry?.position(at: point.y, previous: reorderPreview?.position)
     }
 
     func showStageReorderPreview(at screenPoint: CGPoint, sourceStageID: StageID) {
@@ -413,70 +417,93 @@ final class RailPanel: NSPanel {
             hideStageReorderPreview()
             return
         }
-        if reorderPreview?.sourceStageID == sourceStageID, reorderPreview?.position == position { return }
-        hideStageReorderPreview()
-        let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
-        guard let first = cards.first else { return }
-        let byID = Dictionary(uniqueKeysWithValues: cards.map { ($0.stageID, $0) })
+        if reorderPreview?.position == position { return }
+        let overlay: RailStageReorderPreviewView
+        if let existing = reorderPreview {
+            overlay = existing
+            overlay.position = position
+        } else {
+            let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
+            overlay = RailStageReorderPreviewView(frame: stack.bounds, sourceStageID: sourceStageID, position: position)
+            reorderOriginals = cards.map { ($0, $0.layer?.opacity ?? 1) }
+            for (index, original) in cards.enumerated() {
+                let copy = original.reorderPreview(position: index + 1)
+                copy.translatesAutoresizingMaskIntoConstraints = true
+                copy.frame = original.frame
+                copy.alphaValue = original.stageID == sourceStageID ? 0.5 : 1
+                reorderCopies[original.stageID] = copy
+                overlay.addSubview(copy)
+                // Conserve géométrie et hit-tests des originaux.
+                original.layer?.opacity = 0
+            }
+            stack.addSubview(overlay)
+            reorderPreview = overlay
+        }
+        guard let first = reorderOriginals.first?.card else { return }
         var futureOrder = orderedStageIDs.filter { $0 != sourceStageID }
         futureOrder.insert(sourceStageID, at: min(max(0, position - 1), futureOrder.count))
-        let overlay = RailStageReorderPreviewView(frame: stack.bounds, sourceStageID: sourceStageID, position: position)
         var top = first.frame.maxY
-        for (index, original) in futureOrder.compactMap({ byID[$0] }).enumerated() {
-            let copy = original.reorderPreview(position: index + 1)
-            copy.translatesAutoresizingMaskIntoConstraints = true
-            copy.frame = CGRect(x: original.frame.minX, y: top - original.frame.height,
-                                width: original.frame.width, height: original.frame.height)
-            copy.alphaValue = original.stageID == sourceStageID ? 0.5 : 1
-            overlay.addSubview(copy)
+        for (index, copy) in futureOrder.compactMap({ reorderCopies[$0] }).enumerated() {
+            copy.setReorderPreviewPosition(index + 1)
+            copy.setFrameOrigin(CGPoint(x: copy.frame.minX, y: top - copy.frame.height))
             top = copy.frame.minY - stack.spacing
+            // L'ordre des sous-vues suit aussi l'ordre projeté, sans recréer les cartes.
+            overlay.addSubview(copy, positioned: .above, relativeTo: nil)
         }
-        // L'opacité de la couche conserve les hit-tests et la géométrie NSStackView.
-        // isHidden ou alphaValue modifieraient la disposition ou les cibles de souris.
-        reorderOriginals = cards.map { ($0, $0.layer?.opacity ?? 1) }
-        cards.forEach { $0.layer?.opacity = 0 }
-        stack.addSubview(overlay)
-        reorderPreview = overlay
     }
 
     func hideStageReorderPreview() {
         reorderPreview?.removeFromSuperview()
         reorderPreview = nil
+        reorderGeometry = nil
+        reorderCopies.removeAll()
         reorderOriginals.forEach { $0.card.layer?.opacity = $0.opacity }
         reorderOriginals.removeAll()
     }
 
-    /// Rang (base 1) attendu par `PersistentStageScope.reorderStage`, calculé dans l'ordre complet des stages
-    /// après retrait de la source. Les cibles sont les cartes affichées hors source, de haut en bas ; le point
-    /// se place avant la première carte dont il dépasse le milieu (y AppKit croissant vers le haut), sinon
-    /// après la dernière. Les stages vides, absentes du rail, gardent leur place (REL-039).
-    // Complexité : O(n + c) - n = stages du scope, c = cartes affichées.
-    static func persistentReorderPosition(
-        pointY: CGFloat,
-        targets: [(stageID: StageID, midY: CGFloat)],
-        orderedStageIDs: [StageID],
-        sourceStageID: StageID,
-        previousPosition: Int? = nil,
-        magnetism: CGFloat = 0
-    ) -> Int? {
-        guard let last = targets.last else { return nil }
-        let remaining = orderedStageIDs.filter { $0 != sourceStageID }
-        let ranks = Dictionary(uniqueKeysWithValues: remaining.enumerated().map { ($0.element, $0.offset + 1) })
-        let positions = targets.map { ranks[$0.stageID] } + [ranks[last.stageID].map { $0 + 1 }]
-        let proposedIndex = targets.firstIndex { pointY >= $0.midY } ?? targets.count
-        guard let proposed = positions[proposedIndex] else { return nil }
-        guard magnetism > 0, let previousPosition,
-              let previousIndex = positions.firstIndex(where: { $0 == previousPosition }),
-              previousIndex != proposedIndex else { return proposed }
-        // Tolérance bornée pour garder toutes les destinations accessibles, même avec de petites cartes.
-        let gaps = zip(targets, targets.dropFirst()).map { abs($0.midY - $1.midY) }.filter { $0 > 0 }
-        let tolerance = min(48, (gaps.min() ?? 96) / 3) * min(100, magnetism) / 100
-        if proposedIndex > previousIndex {
-            if pointY > targets[previousIndex].midY - tolerance { return previousPosition }
-        } else {
-            if pointY < targets[previousIndex - 1].midY + tolerance { return previousPosition }
+    /// Géométrie fixe du geste : rangs et tolérance préparés une fois, O(n + c).
+    /// Chaque mouvement compare les c seuils en mémoire, sans recréer de tableaux.
+    private struct ReorderGeometry {
+        let sourceStageID: StageID
+        let thresholds: [CGFloat]
+        let positions: [Int?]
+        let indexByPosition: [Int: Int]
+        let tolerance: CGFloat
+
+        init(targets: [(stageID: StageID, midY: CGFloat)], orderedStageIDs: [StageID],
+             sourceStageID: StageID, magnetism: CGFloat) {
+            self.sourceStageID = sourceStageID
+            thresholds = targets.map(\.midY)
+            let remaining = orderedStageIDs.filter { $0 != sourceStageID }
+            let ranks = Dictionary(uniqueKeysWithValues: remaining.enumerated().map { ($0.element, $0.offset + 1) })
+            positions = targets.map { ranks[$0.stageID] } + [targets.last.flatMap { ranks[$0.stageID].map { $0 + 1 } }]
+            indexByPosition = Dictionary(positions.enumerated().compactMap { index, position in
+                position.map { ($0, index) }
+            }, uniquingKeysWith: { first, _ in first })
+            let gaps = zip(thresholds, thresholds.dropFirst()).map { abs($0 - $1) }.filter { $0 > 0 }
+            tolerance = min(48, (gaps.min() ?? 96) / 3) * min(100, max(0, magnetism)) / 100
         }
-        return proposed
+
+        func position(at y: CGFloat, previous: Int?) -> Int? {
+            guard !thresholds.isEmpty else { return nil }
+            let proposedIndex = thresholds.firstIndex { y >= $0 } ?? thresholds.count
+            guard let proposed = positions[proposedIndex] else { return nil }
+            guard tolerance > 0, let previous, let previousIndex = indexByPosition[previous],
+                  previousIndex != proposedIndex else { return proposed }
+            if proposedIndex > previousIndex {
+                if y > thresholds[previousIndex] - tolerance { return previous }
+            } else if y < thresholds[previousIndex - 1] + tolerance { return previous }
+            return proposed
+        }
+    }
+
+    /// Rang persistant, stages vides comprises. API pure également utilisée par les tests.
+    static func persistentReorderPosition(
+        pointY: CGFloat, targets: [(stageID: StageID, midY: CGFloat)], orderedStageIDs: [StageID],
+        sourceStageID: StageID, previousPosition: Int? = nil, magnetism: CGFloat = 0
+    ) -> Int? {
+        ReorderGeometry(targets: targets, orderedStageIDs: orderedStageIDs, sourceStageID: sourceStageID,
+                        magnetism: magnetism).position(at: pointY, previous: previousPosition)
     }
 
     /// Cible d'un depot de fenetre : une carte, sinon la zone vide du rail (stage vide ou prochaine stage libre).
@@ -583,7 +610,7 @@ final class RailPanel: NSPanel {
 @MainActor
 final class RailStageReorderPreviewView: NSView {
     let sourceStageID: StageID
-    let position: Int
+    var position: Int
 
     init(frame: CGRect, sourceStageID: StageID, position: Int) {
         self.sourceStageID = sourceStageID

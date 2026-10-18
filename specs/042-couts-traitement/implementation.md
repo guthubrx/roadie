@@ -26,3 +26,9 @@
 - Révisions de miniatures par fenêtre et signatures de rendu par écran. Les panneaux inchangés restent en place. Les réglages globaux invalident tous les écrans.
 - 16 tests dans quatre suites réussis : réutilisation du contenu, expiration à 15 secondes, renommage, nettoyage, écran unique changé et retrait d’écran.
 - Relecture : budgets de captures et protections DRM conservés. Pas d’arrêt des contrôles de fraîcheur ; les comparaisons linéaires et l’entretien des captures restent nécessaires.
+
+## T006 — Réordonnancement
+- Seuils, rangs et tolérance préparés au début du geste. Les mouvements comparent les seuils sans reconstruire les tableaux.
+- Copies conservées pendant tout le geste ; seules leur position et leur légende changent. Les originaux restent les cibles des clics.
+- 19 tests dans trois suites réussis, dont les 12 combinaisons de modes et d’alignements. Les identités des copies sont identiques après changement de destination. Le retour du test franchit la zone d’hystérésis, comme un geste réel.
+- Relecture : sortie, dépôt et rendu effacent le cache du geste ; noms personnalisés, stages cachées, opacité et ordre conservés. Aucune lecture AX ni nouvelle capture ajoutée.

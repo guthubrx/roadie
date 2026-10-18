@@ -144,6 +144,17 @@ struct Spec041RailReorderPreviewTests {
             panel.showStageReorderPreview(at: jitterPoint, sourceStageID: source.stageID)
             #expect(panel.stageReorderPosition(at: jitterPoint, sourceStageID: source.stageID) == position)
             #expect(overlay.superview === stack)
+            // Une autre destination puis le retour ne doivent créer aucune nouvelle copie.
+            let identities = Set(projected.map(ObjectIdentifier.init))
+            let middleRect = stack.convert(cards[1].previewDisplayFrames().first ?? cards[1].bounds, from: cards[1])
+            let otherPoint = panel.convertPoint(toScreen: stack.convert(CGPoint(x: 50, y: middleRect.midY), to: nil))
+            panel.showStageReorderPreview(at: otherPoint, sourceStageID: source.stageID)
+            #expect(Set(overlay.subviews.compactMap { $0 as? StageCardView }.map(ObjectIdentifier.init)) == identities)
+            let returnPoint = panel.convertPoint(toScreen: stack.convert(
+                CGPoint(x: 50, y: targetRect.midY + (toFront ? 48 : -48)), to: nil))
+            panel.showStageReorderPreview(at: returnPoint, sourceStageID: source.stageID)
+            #expect(overlay.position == position)
+            #expect(overlay.subviews.compactMap { $0 as? StageCardView }.map(\.frame) == frames)
             projected.forEach { $0.needsDisplay = false }
             panel.refreshStageLabels()
             #expect(projected.allSatisfy { $0.needsDisplay })
