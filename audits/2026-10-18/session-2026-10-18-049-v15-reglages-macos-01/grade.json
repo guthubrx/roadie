@@ -1,0 +1,32 @@
+{
+  "protocol": "15.0.0",
+  "grade": "N/A",
+  "score": 99,
+  "date": "2026-10-18",
+  "spec": "specs/049-reglages-macos/spec.md",
+  "scope": "Revue différentielle session 049 réglages macOS qui gênent le tuilage (commit 3dd5563b, base 38f69a6a), readonly",
+  "decision": "inconclusive",
+  "release_blocked": true,
+  "coverage_percent": 100.0,
+  "controls_verified": 14,
+  "controls_applicable": 14,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 1,
+    "info": 0,
+    "total": 1,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [
+    "outil non exécuté : gitleaks-history",
+    "sous-contrôle d'axe non vérifié : axes.tests.04",
+    "sous-contrôle d'axe non vérifié : axes.quality.03"
+  ],
+  "source_drift": [],
+  "input_sha256": "77cc2c141cd21286378bfcdfd6299ceeee4514bf27688a3806b74f71919b40c4",
+  "manifest_sha256": "238a1a5fc599093b1ad86267b73f61e19b05a6850265172ead157b8923b34f20",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

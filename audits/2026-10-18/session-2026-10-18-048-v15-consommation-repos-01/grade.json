@@ -1,0 +1,33 @@
+{
+  "protocol": "15.0.0",
+  "grade": "N/A",
+  "score": 100,
+  "date": "2026-10-18",
+  "spec": "specs/048-consommation-repos/spec.md",
+  "scope": "Revue différentielle session 048 consommation au repos (commit ab9b28e9, base d32105c8), readonly",
+  "decision": "inconclusive",
+  "release_blocked": true,
+  "coverage_percent": 100.0,
+  "controls_verified": 14,
+  "controls_applicable": 14,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [
+    "outil non exécuté : gitleaks-history",
+    "sous-contrôle d'axe non vérifié : axes.tests.04",
+    "sous-contrôle d'axe non vérifié : axes.performance.04",
+    "sous-contrôle d'axe non vérifié : axes.quality.03"
+  ],
+  "source_drift": [],
+  "input_sha256": "44cf228e6e23fa4c22138631cca823a067eb62912a0c3c05723db14ef0e70061",
+  "manifest_sha256": "81a10888f0d67fbb3243ae639dcb3aa74f480b0c008cd0c10209550adbb6497a",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

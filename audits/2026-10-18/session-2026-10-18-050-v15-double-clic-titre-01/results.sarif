@@ -1,0 +1,94 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Audit Code V15",
+          "version": "15.0.0"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "spec050.default-health-conflict",
+          "level": "note",
+          "message": {
+            "text": "Défauts contradictoires entre 049 et 050 : santé en avertissement chez l'utilisateur: double_click_maximize vaut true par défaut et la config de l'utilisateur ne le fixe pas ; macOS agrandit au double-clic (clé d'action absente, réduction héritée à 0). La santé rend donc warn et la fonction n'agit jamais ; le critère 049 « santé ok chez l'utilisateur » n'est plus atteignable sans changer un réglage macOS, sans que les specs le disent."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "4c91bdf3a0b7b81a6c5c"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-050/Sources/RoadieDaemon/DaemonHealth.swift"
+                },
+                "region": {
+                  "startLine": 179
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "spec050.doc-comment",
+          "level": "note",
+          "message": {
+            "text": "Commentaire de documentation de MacOSWindowSetting rattaché à MacOSDoubleClickAction: L'énumération est insérée entre le commentaire /// de MacOSWindowSetting et sa déclaration : les trois lignes documentent l'énumération et MacOSWindowSetting n'est plus documenté."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "0f57bba89ea0a017b092"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-050/Sources/RoadieDaemon/DaemonHealth.swift"
+                },
+                "region": {
+                  "startLine": 61
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "spec050.success-criteria",
+          "level": "note",
+          "message": {
+            "text": "Validation non consignée : suite, installation et santé (T005 ouverte): T005 n'est pas cochée et aucun validation.md n'existe ; seule la revue 1 est consignée."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "57b5860d55aa89c35bda"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-050/specs/050-double-clic-titre/tasks.md"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

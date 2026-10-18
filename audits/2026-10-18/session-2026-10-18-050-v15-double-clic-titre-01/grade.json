@@ -1,0 +1,33 @@
+{
+  "protocol": "15.0.0",
+  "grade": "N/A",
+  "score": 97,
+  "date": "2026-10-18",
+  "spec": "specs/050-double-clic-titre/spec.md",
+  "scope": "Revue différentielle session 050 double-clic sur la barre de titre (commit 8c207d67, base 3dd5563b), readonly",
+  "decision": "inconclusive",
+  "release_blocked": true,
+  "coverage_percent": 100.0,
+  "controls_verified": 14,
+  "controls_applicable": 14,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 3,
+    "info": 0,
+    "total": 3,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [
+    "outil non exécuté : gitleaks-history",
+    "sous-contrôle d'axe non vérifié : axes.tests.04",
+    "sous-contrôle d'axe non vérifié : axes.performance.04",
+    "sous-contrôle d'axe non vérifié : axes.quality.03"
+  ],
+  "source_drift": [],
+  "input_sha256": "471f69899a9ada0b2ca21c3bbe3021f6d6e47ecdba57f2934d3705772aa9664f",
+  "manifest_sha256": "610413fb3020c3f427bfe7a8b19f2c5e0b738cdad78d812baa3b1d3edbbf82c6",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

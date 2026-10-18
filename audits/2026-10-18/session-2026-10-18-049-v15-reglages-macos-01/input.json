@@ -1,0 +1,889 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "Semgrep : 163 règles figées sur les 10 fichiers sélectionnés, 0 résultat. Une seule règle Swift : l'analyse manuelle porte le contrôle.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181124817830Z/run.json",
+          "sha256": "1c8b7aac91101b76f0031377c317744f2ed2488e618b4dd24be958b77cbc34d7"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "49b446219f4ec6d5c757bf9da3d340250a3682a770ea75da17bc0efc0a0e213f"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "Adaptateur gitleaks : ~7,75 Mo analysés, aucune fuite ; audits/ exclu par la configuration figée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181124192591Z/run.json",
+          "sha256": "1b26f62a4acd0cdad39efc594078b1c632b1003425b98a7c4f22f62a6dff3299"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "49b446219f4ec6d5c757bf9da3d340250a3682a770ea75da17bc0efc0a0e213f"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pass",
+      "rationale": "Décision utilisateur du 18/10/2026 (option A) : l'historique complet dépasse le plafond de 300 s ; plage analysée v0.4.0 (5ab0ab95)..3dd5563b, 71 commits, ~3,04 Mo, aucune fuite (gitleaks 8.30.1, --redact). Exécuté en --tool custom : le runner refuse --command avec --tool gitleaks-history. Limite connue : historique antérieur à v0.4.0 non analysé dans cette session.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181123789883Z/run.json",
+          "sha256": "45808cec5e7374af9446069e2ff59a940260ab1e11bda4628fa3057302451f06"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "49b446219f4ec6d5c757bf9da3d340250a3682a770ea75da17bc0efc0a0e213f"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "pass",
+      "rationale": "OSV-Scanner (adaptateur) : Package.resolved, 1 paquet, aucun avis ; manifestes inchangés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181127797472Z/run.json",
+          "sha256": "80ae50583d322d19aa3e58f7b34fbeb237a61089448a70680e1cdb4948f74493"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "49b446219f4ec6d5c757bf9da3d340250a3682a770ea75da17bc0efc0a0e213f"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "pass",
+      "rationale": "Lecture seule de préférences locales ; aucune écriture de réglage (recherche vide), aucun réseau, aucune frontière de confiance modifiée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "87c035b1d7cf87ab0133643f39ba3a6a688fd8f147c686e60b6d6763398467f2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes.md",
+          "sha256": "90f1acfd0b67147b3118828f023366cdc828dcd60beb5d242fbd802042f426aa"
+        }
+      ]
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "pass",
+      "rationale": "Contrôle warn/ok, jamais fail ; valeur explicite prioritaire ; défaut par version ; aucun consommateur de warn. F1 : validation absente.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "87c035b1d7cf87ab0133643f39ba3a6a688fd8f147c686e60b6d6763398467f2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "8fcae76e1c66b76b4301dad136caa047b7fa7b6da3c2b1cb6c593155310215ad"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonHealth.swift",
+          "sha256": "2d09f058a786ca99568b24e93928b21e0ac6d94dab66cbcb65a9813ba6d5bc2d",
+          "line": 96
+        }
+      ]
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "pass",
+      "rationale": "Fonction pure du lecteur injecté et de la version ; aucun état partagé ajouté.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ]
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "pass",
+      "rationale": "O(r), r = 4 réglages, annoté ; quatre lectures CFPreferences par appel de santé.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonHealth.swift",
+          "sha256": "2d09f058a786ca99568b24e93928b21e0ac6d94dab66cbcb65a9813ba6d5bc2d",
+          "line": 157
+        }
+      ]
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pass",
+      "rationale": "swift build --build-tests puis swift test : 1 736 tests / 206 suites verts, dont 5 tests Spec049 ; tests instables connus réussis.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181013450756Z/run.json",
+          "sha256": "0064d3ee09e135c5ed8aa3182f7df3a87ac56e0477d0ea61d5b013d026f1e1e7"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181057504048Z/run.json",
+          "sha256": "89b625b7be4496bae9f8856bc26c43187a69523adaba24b9d0dff9505bd9d557"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ]
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pass",
+      "rationale": "Injection par l'initialiseur avec défauts ; aucune dépendance ni cycle ajoutés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ]
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "pass",
+      "rationale": "Checklist exécutée : ~1 ligne inatteignable (cas Bool après NSNumber) ; aucune dépendance ni changement hors périmètre.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ]
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "pass",
+      "rationale": "Changement petit et explicable, limites écrites, docs FR/EN ; aucune validation ni revue consignée (F1) ; audit non indépendant.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ]
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "pass",
+      "rationale": "Contrôle visible dans daemon health --json ; aucun journal ni ressource ajoutés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ]
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "pass",
+      "rationale": "R1 à R5 implémentées ; critère « santé installée ok » non vérifié (F1), préférences réelles à 0 observées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/spec-matrice.md",
+          "sha256": "51d5c038ecf5476cd9f58927df01a36a412d94af715f551b4b27bdd016ff1666"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181128556802Z/run.json",
+          "sha256": "c36571b548cb1fc425efcc4cace06ed9911d23155b322bd3038fc2cbf5951c9a"
+        },
+        {
+          "kind": "source",
+          "path": "specs/049-reglages-macos/spec.md",
+          "sha256": "644bbe0ff9220f1559035b83932852fc05e9be4ec9a399cdd9bb7d307ddfecfb"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "spec049.success-criteria",
+      "file": "specs/049-reglages-macos/tasks.md",
+      "symbol": "T004",
+      "instance": "installed-health-not-validated",
+      "line": 6,
+      "category": "documentation",
+      "title": "Critère de réussite non vérifié : aucune validation consignée",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "La spec exige que roadie query health installé renvoie ok chez l'utilisateur ; T004 est ouverte et le commit ne contient ni validation.md, ni revue, ni résultat d'installation. Les préférences réelles (toutes à 0) laissent attendre ok, sans exécution du binaire.",
+      "remediation": "Exécuter la suite, installer, consigner roadie query health dans validation.md et cocher T004, ou réduire le critère.",
+      "variants": {
+        "status": "done",
+        "rationale": "Validations des autres specs du commit vérifiées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "90f1acfd0b67147b3118828f023366cdc828dcd60beb5d242fbd802042f426aa"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "8fcae76e1c66b76b4301dad136caa047b7fa7b6da3c2b1cb6c593155310215ad"
+        },
+        {
+          "kind": "source",
+          "path": "specs/049-reglages-macos/tasks.md",
+          "sha256": "c5b828b637b9a96e83e34903f5d02a032090f050af7dfdfdcb1a5658025aa218",
+          "line": 6
+        },
+        {
+          "kind": "source",
+          "path": "specs/049-reglages-macos/spec.md",
+          "sha256": "644bbe0ff9220f1559035b83932852fc05e9be4ec9a399cdd9bb7d307ddfecfb",
+          "line": 27
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181128556802Z/run.json",
+          "sha256": "c36571b548cb1fc425efcc4cace06ed9911d23155b322bd3038fc2cbf5951c9a"
+        }
+      ]
+    }
+  ],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Semgrep exécuté, une seule règle Swift ; entrée = préférences locales relues à la main. Niveau 3 : règles Swift ciblées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181124817830Z/run.json",
+          "sha256": "1c8b7aac91101b76f0031377c317744f2ed2488e618b4dd24be958b77cbc34d7"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Semgrep exécuté, une seule règle Swift ; entrée = préférences locales relues à la main. Niveau 3 : règles Swift ciblées."
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Adaptateur gitleaks : 7,75 Mo sans fuite. Niveau 4 : contrôle en CI.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181124192591Z/run.json",
+          "sha256": "1b26f62a4acd0cdad39efc594078b1c632b1003425b98a7c4f22f62a6dff3299"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "49b446219f4ec6d5c757bf9da3d340250a3682a770ea75da17bc0efc0a0e213f"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Adaptateur gitleaks : 7,75 Mo sans fuite. Niveau 4 : contrôle en CI."
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Historique v0.4.0..3dd5563b (71 commits) sans fuite, option A ; historique antérieur non analysé. Niveau 3 : historique complet.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181123789883Z/run.json",
+          "sha256": "45808cec5e7374af9446069e2ff59a940260ab1e11bda4628fa3057302451f06"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "49b446219f4ec6d5c757bf9da3d340250a3682a770ea75da17bc0efc0a0e213f"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Historique v0.4.0..3dd5563b (71 commits) sans fuite, option A ; historique antérieur non analysé. Niveau 3 : historique complet."
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "not_applicable",
+      "rationale": "Aucun mécanisme d'authentification ni de séparation des droits dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "OSV : aucun avis ; dépendances inchangées. Niveau 4 : suivi continu.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181127797472Z/run.json",
+          "sha256": "80ae50583d322d19aa3e58f7b34fbeb237a61089448a70680e1cdb4948f74493"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "49b446219f4ec6d5c757bf9da3d340250a3682a770ea75da17bc0efc0a0e213f"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "OSV : aucun avis ; dépendances inchangées. Niveau 4 : suivi continu."
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucune fonction LLM dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel LLM externe dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucune entrée transmise à un modèle dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Le diff ne touche ni sauvegardes ni rotation.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Contrôle sans état ni traitement interruptible : rien à reprendre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Aucune bascule dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Aucune restauration après sinistre dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Compilation Swift 6 sans erreur ni avertissement dans le diff. Niveau 4 : Thread Sanitizer.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181013450756Z/run.json",
+          "sha256": "0064d3ee09e135c5ed8aa3182f7df3a87ac56e0477d0ea61d5b013d026f1e1e7"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "49b446219f4ec6d5c757bf9da3d340250a3682a770ea75da17bc0efc0a0e213f"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Compilation Swift 6 sans erreur ni avertissement dans le diff. Niveau 4 : Thread Sanitizer."
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Pas de linter dans le projet. Niveau 3 : linter configuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181013450756Z/run.json",
+          "sha256": "0064d3ee09e135c5ed8aa3182f7df3a87ac56e0477d0ea61d5b013d026f1e1e7"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "49b446219f4ec6d5c757bf9da3d340250a3682a770ea75da17bc0efc0a0e213f"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Pas de linter dans le projet. Niveau 3 : linter configuré."
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Cas absents, explicites, ok, warn et jamais fail testés avec préférences injectées. Niveau 4 : valeurs non booléennes et lecteur réel.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181057504048Z/run.json",
+          "sha256": "89b625b7be4496bae9f8856bc26c43187a69523adaba24b9d0dff9505bd9d557"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Cas absents, explicites, ok, warn et jamais fail testés avec préférences injectées. Niveau 4 : valeurs non booléennes et lecteur réel."
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "unknown",
+      "rationale": "Binaire installé non exécuté (installation interdite) ; seules les préférences réelles ont été lues.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Pas de test de bout en bout de daemon health avec le nouveau contrôle. Niveau 3 : test du routeur CLI.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Pas de test de bout en bout de daemon health avec le nouveau contrôle. Niveau 3 : test du routeur CLI."
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "not_applicable",
+      "rationale": "Aucune file ni admission de demandes dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Aucune allocation durable ; liste fixe de quatre réglages. Niveau 4 : mesure.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Aucune allocation durable ; liste fixe de quatre réglages. Niveau 4 : mesure."
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Lectures CFPreferences synchrones et locales, sans attente réseau. Niveau 4 : délai mesuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Lectures CFPreferences synchrones et locales, sans attente réseau. Niveau 4 : délai mesuré."
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "not_applicable",
+      "rationale": "Aucune exigence de latence ou de charge pour ce contrôle de diagnostic.",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Point d'entrée O(r), r = 4, annoté. Niveau 4 : non nécessaire au-delà.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Point d'entrée O(r), r = 4, annoté. Niveau 4 : non nécessaire au-delà."
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Parcours borné par la liste fixe. Niveau 4 : borne testée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Parcours borné par la liste fixe. Niveau 4 : borne testée."
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Quatre lectures de préférences par appel, sans écriture. Niveau 4 : mesure.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Quatre lectures de préférences par appel, sans écriture. Niveau 4 : mesure."
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Message clair avec chemin dans Réglages Système, en français seulement. Niveau 3 : libellés localisés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "8fcae76e1c66b76b4301dad136caa047b7fa7b6da3c2b1cb6c593155310215ad"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonHealth.swift",
+          "sha256": "2d09f058a786ca99568b24e93928b21e0ac6d94dab66cbcb65a9813ba6d5bc2d",
+          "line": 168
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Message clair avec chemin dans Réglages Système, en français seulement. Niveau 3 : libellés localisés."
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Valeur illisible ou d'un autre type : défaut de la version, sans erreur. Niveau 4 : test dédié.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Valeur illisible ou d'un autre type : défaut de la version, sans erreur. Niveau 4 : test dédié."
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "unknown",
+      "rationale": "Sortie texte de roadie query health non observée sur le binaire installé.",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Contrôle ajouté dans DaemonHealthService existant, lecteur injecté. Niveau 4 : règle vérifiée par outil.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Contrôle ajouté dans DaemonHealthService existant, lecteur injecté. Niveau 4 : règle vérifiée par outil."
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Aucun cycle d'après la lecture ; pas d'outil de graphe Swift. Niveau 3 : graphe vérifié.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Aucun cycle d'après la lecture ; pas d'outil de graphe Swift. Niveau 3 : graphe vérifié."
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Dépendances résolues à la construction (lecteur, version). Niveau 4 : test de composition.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Dépendances résolues à la construction (lecteur, version). Niveau 4 : test de composition."
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Défauts de l'initialiseur sans effet sur les cinq appelants existants. Niveau 4 : test par appelant.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "87c035b1d7cf87ab0133643f39ba3a6a688fd8f147c686e60b6d6763398467f2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Défauts de l'initialiseur sans effet sur les cinq appelants existants. Niveau 4 : test par appelant."
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Défauts macOS et réglages écartés expliqués dans research.md. Niveau 4 : source Apple.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "specs/049-reglages-macos/research.md",
+          "sha256": "c4b75891458a9af17fc65c430446e2cafd36a0a56699af18c7897669dc4bafdb"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Défauts macOS et réglages écartés expliqués dans research.md. Niveau 4 : source Apple."
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Un fichier source, une fonction, docs et CHANGELOG. Niveau 4 : réversibilité testée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Un fichier source, une fonction, docs et CHANGELOG. Niveau 4 : réversibilité testée."
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Aucune revue ni validation consignée pour la 049 (T004 ouverte) ; cet audit n'est pas indépendant. Niveau 2 : revue externe consignée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "8fcae76e1c66b76b4301dad136caa047b7fa7b6da3c2b1cb6c593155310215ad"
+        }
+      ],
+      "level": 1,
+      "rating_rationale": "Aucune revue ni validation consignée pour la 049 (T004 ouverte) ; cet audit n'est pas indépendant. Niveau 2 : revue externe consignée."
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Aucune dépendance ajoutée. Niveau 4 : inventaire mesuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Aucune dépendance ajoutée. Niveau 4 : inventaire mesuré."
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Coût négligeable, appel seulement sur demande de santé. Niveau 4 : mesure.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Coût négligeable, appel seulement sur demande de santé. Niveau 4 : mesure."
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Environ 1 ligne inatteignable. Niveau 4 : outil de code mort.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "4c0124281103086116869e2755cb8bd3b7063637d2df23f2570f4b3e868435ac"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Environ 1 ligne inatteignable. Niveau 4 : outil de code mort."
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Préférences lues telles quelles ; préférences réelles cohérentes avec research.md. Niveau 4 : vérification sur plusieurs versions de macOS.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181128556802Z/run.json",
+          "sha256": "c36571b548cb1fc425efcc4cace06ed9911d23155b322bd3038fc2cbf5951c9a"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "87c035b1d7cf87ab0133643f39ba3a6a688fd8f147c686e60b6d6763398467f2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Préférences lues telles quelles ; préférences réelles cohérentes avec research.md. Niveau 4 : vérification sur plusieurs versions de macOS."
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "not_applicable",
+      "rationale": "Aucune donnée versionnée ni écriture idempotente dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Défauts macOS d'une clé absente déduits de Réglages Système, non documentés par Apple. Niveau 3 : référence vérifiable.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "specs/049-reglages-macos/research.md",
+          "sha256": "c4b75891458a9af17fc65c430446e2cafd36a0a56699af18c7897669dc4bafdb"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Défauts macOS d'une clé absente déduits de Réglages Système, non documentés par Apple. Niveau 3 : référence vérifiable."
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Constat relié au critère, aux tâches et à l'observation runtime. Niveau 4 : validation exécutée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "8fcae76e1c66b76b4301dad136caa047b7fa7b6da3c2b1cb6c593155310215ad"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes.md",
+          "sha256": "90f1acfd0b67147b3118828f023366cdc828dcd60beb5d242fbd802042f426aa"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Constat relié au critère, aux tâches et à l'observation runtime. Niveau 4 : validation exécutée."
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Cinq exigences vérifiées ; critère d'installation non vérifié. Niveau 3 : validation consignée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/spec-matrice.md",
+          "sha256": "51d5c038ecf5476cd9f58927df01a36a412d94af715f551b4b27bdd016ff1666"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Cinq exigences vérifiées ; critère d'installation non vérifié. Niveau 3 : validation consignée."
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : ~1 ligne suppressible à comportement constant (cas `value as? Bool` inatteignable après `as? NSNumber` pour une valeur CFPreferences) ; méthode : relecture ligne à ligne du diff source, tests exclus ; aucune dépendance, abstraction ou état dérivé superflu.",
+  "responsibility": "Vertus LLM et responsabilité future : charge cognitive faible (un contrôle pur, injecté, documenté) ; volume justifié ; défauts macOS et limites écrits ; aucune revue ni validation consignée (F1) ; message en français seulement ; cet audit n'est pas indépendant."
+}

@@ -76,3 +76,12 @@ même mécanisme, même réfutation ; hors périmètre de la 048.
 
 Échantillons de pile bruts : `~/.roadies/diagnostics/2026-10-18-session048/`, empreintes dans
 `mesures/echantillons.sha256`.
+
+## Audit V15 sur le commit figé (option A)
+
+Session : `audits/2026-10-18/session-2026-10-18-048-v15-consommation-repos-01/` (readonly, worktree
+figé sur ab9b28e9). Analyse ciblée de l'historique v0.4.0..ab9b28e9 (décision utilisateur du
+18 octobre, option A) : aucune fuite. Décision calculée : **inconclusive**, `release_blocked = true`,
+car l'exécuteur V15 refuse des arguments pour `gitleaks-history` et compte ce contrôle comme non
+exécuté. Aucun constat actif ; constats MEDIUM de la première session réfutés. 14 contrôles vérifiés.
+Intégration faite au titre de l'option A (analyse ciblée sans fuite), gate formellement non passée.

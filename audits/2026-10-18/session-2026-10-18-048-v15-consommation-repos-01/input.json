@@ -1,0 +1,1065 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "Semgrep : 163 règles figées sur les 24 fichiers sélectionnés, 0 résultat, 0 erreur. Une seule règle Swift : couverture statique Swift quasi nulle ; l'analyse manuelle des entrées est dans notes/axes.md.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175929318683Z/run.json",
+          "sha256": "3c4f422b9f7a5ec75024f6eeb3bf375cfd3177232c2f7da22277a4c4364c5c4f"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "b4192d5f54f875d5d66ce0b585485e2c81dabf24266f7f59f0fed882667450ee"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "Adaptateur gitleaks : ~7,72 Mo analysés (worktree /tmp, l'exclusion .worktrees/ ne masque plus la racine), aucune fuite ; audits/ exclu par la configuration figée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175918180487Z/run.json",
+          "sha256": "600bb14a9378a44c205f743cddcb9a9a6c94610b48cd7a411c39616143ecdd85"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "b4192d5f54f875d5d66ce0b585485e2c81dabf24266f7f59f0fed882667450ee"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pass",
+      "rationale": "Décision utilisateur du 18/10/2026 (option A) : l'historique complet dépasse le plafond de 300 s ; plage analysée v0.4.0 (5ab0ab95)..ab9b28e9, 69 commits, ~3,01 Mo, aucune fuite (gitleaks 8.30.1, --redact, configuration par défaut). Exécuté en --tool custom : le runner refuse --command avec --tool gitleaks-history. Limite connue : historique antérieur à v0.4.0 non analysé dans cette session.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175910740477Z/run.json",
+          "sha256": "3fd96acbb73c3f9c1dde0a3105eea9b424956c359d2d6414a7671687f011eebd"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175857457093Z/run.json",
+          "sha256": "5bc94d16e83a4400d057f60221a6dce2abf6da3565cc17c3933d209c69d339d7"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "b4192d5f54f875d5d66ce0b585485e2c81dabf24266f7f59f0fed882667450ee"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "pass",
+      "rationale": "OSV-Scanner (adaptateur) : Package.resolved, 1 paquet (TOMLKit), aucun avis ; manifestes inchangés depuis la base.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175932814586Z/run.json",
+          "sha256": "b8d0a25d7aa352d0c1c6860c53a3374f7c09a3a9344e06b6e612ae2ac29460a7"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "b4192d5f54f875d5d66ce0b585485e2c81dabf24266f7f59f0fed882667450ee"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "pass",
+      "rationale": "Aucune authentification, autorisation ni frontière de confiance modifiée : fichiers d'état locaux, permission Screen Recording vérifiée avant capture (inchangé), script de mesure sans shell.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "b25ea736c55a18f6a2f24472534a0c867e212a7785afa68ea035abb41853bc0b"
+        }
+      ]
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "pass",
+      "rationale": "Invariants 1-7 vérifiés dans les appelants et fonctions appelées ; corrections F1/F3 présentes ; F2/F4 (relecture de fichiers d'état) réfutés par le cache par signature de JSONPersistence.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "b25ea736c55a18f6a2f24472534a0c867e212a7785afa68ea035abb41853bc0b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+          "sha256": "fde5b073a7067a328a3377c6ba75e7ad91b0c6a033629428c87a57f6b55135c6",
+          "line": 215
+        }
+      ]
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "pass",
+      "rationale": "Génération et plafond sous NSLock ; lecteurs, ordonnanceur et magasin de vignettes sur MainActor ; génération lue au départ du relevé (l. 351 et 253) ; un seul lot de capture.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "sha256": "0ca842e183d669d88388b7e8e5635e7121c6f4815006e3acb736faa52e051f7f",
+          "line": 351
+        }
+      ]
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "pass",
+      "rationale": "Fonctions ajoutées O(1), O(k+n), O(w), O(c x m), bornées et annotées ; aucune boucle imbriquée ni N+1 ; lectures d'état périodiques réduites à fstat.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        }
+      ]
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pass",
+      "rationale": "swift build --build-tests puis swift test : 1 721 tests / 203 suites verts, dont Spec048* et le test du cache A7 ; les deux tests instables connus ont réussi. Manques listés dans notes/axes.md.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175716804629Z/run.json",
+          "sha256": "c34651cf8325a8135ded7fe7e6ec5527b79c04f149fb6d464bd70b90015d640c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175828587883Z/run.json",
+          "sha256": "ba502125d778f7096b793dce4b393f37d473a100ad3ac5130d73b0a8b3897ee3"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ]
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pass",
+      "rationale": "Aucune dépendance de module ajoutée ; câblage dans la racine de composition (main.swift:425) ; pas de cycle (lecture des imports ; pas d'outil de graphe Swift).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/roadied/main.swift",
+          "sha256": "50eeaba595653e13b17b0c32ec1a2220645a4c6afc9d968d08fc545105a6a306",
+          "line": 425
+        }
+      ]
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "pass",
+      "rationale": "Checklist exécutée : ~2 lignes suppressibles, aucune dépendance, abstraction prématurée ni changement hors périmètre.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ]
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "pass",
+      "rationale": "Règle unique documentée (ADR 015), invariants explicables, volume justifié par mesure ; la réfutation des constats antérieurs est tracée ; audit non indépendant.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        },
+        {
+          "kind": "source",
+          "path": "docs/decisions/015-releves-lecteurs-au-repos.md",
+          "sha256": "e0f1e8b43bb515d738973bda04163bf54f2ab76bfd182fb1d69e020636b8fb1a"
+        }
+      ]
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "pass",
+      "rationale": "Aucun journal sensible ajouté, réessais bornés (5 s), aucune file sans borne. Recommandation INFO : compteur des réutilisations silencieuses et des énumérations SCK.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ]
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "pass",
+      "rationale": "R1 à R5 vérifiées une à une : toutes implémentées (R3 confirmée après réfutation de F2) ; limites de vérification visuelle notées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/spec-matrice.md",
+          "sha256": "b041987da3ac1171cb2271a93ad6ca056e527b707ea42d7b07b9d71fcdc86bee"
+        },
+        {
+          "kind": "source",
+          "path": "specs/048-consommation-repos/spec.md",
+          "sha256": "3d6c41b7fa836e4f2999485661fe3ce1082b030cfc66d7861f1c45dc3e09da79"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "spec048.r3-file-reread",
+      "file": "Sources/RoadieDaemon/RailController.swift",
+      "symbol": "RailController.renderPanels",
+      "instance": "unchanged-state-files-reread-per-tick",
+      "line": 932,
+      "category": "performance",
+      "title": "R3 : la minuterie du rail relirait stages.json et rail.json chaque seconde",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "refuted",
+      "rationale": "Constat de la session fix antérieure. store.state() et railRuntimeStateStore.load() passent par JSONPersistence.read, qui garde la valeur décodée par chemin et la revalide par fstat (mtime, taille, inode) : un fichier inchangé n'est ni lu ni décodé.",
+      "remediation": "Aucune correction de code. Garder la mention de réfutation dans validation.md.",
+      "requirements": [
+        "R3"
+      ],
+      "counter_audit": {
+        "reviewer": "Claude Opus, auditeur de cette session (même agent)",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Chemin suivi jusqu'à readSigned : retour .unchanged sans lecture des octets ; test A7 qui compte les décodages, vert dans le run de tests.",
+        "evidence": [
+          {
+            "kind": "source",
+            "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+            "sha256": "fde5b073a7067a328a3377c6ba75e7ad91b0c6a033629428c87a57f6b55135c6",
+            "line": 223
+          },
+          {
+            "kind": "source",
+            "path": "Sources/RoadieDaemon/StageStore.swift",
+            "sha256": "d65bf8a7033067c28fa0ed2604bc62761f6063a91672d3bea0ff0d152a86f92d",
+            "line": 177
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/StatePersistenceTests.swift",
+            "sha256": "7b06660c20de5db05faef1d8691dd0b71e62474ee7da461bc6a0ad040323c3f6",
+            "line": 66
+          },
+          {
+            "kind": "artifact",
+            "path": "runs/20261018T175828587883Z/run.json",
+            "sha256": "ba502125d778f7096b793dce4b393f37d473a100ad3ac5130d73b0a8b3897ee3"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Lecteurs périodiques des fichiers d'état recherchés (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "98998d558f5439e055e73ece56298cf9fa2254bd5004aaab164964fde57d2c1c"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/RailController.swift",
+          "sha256": "4dbbc975245806ddbf7839004ac079a97318384872f2c3c96e17ee38eac27751",
+          "line": 932
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+          "sha256": "fde5b073a7067a328a3377c6ba75e7ad91b0c6a033629428c87a57f6b55135c6",
+          "line": 215
+        }
+      ]
+    },
+    {
+      "rule_id": "spec048.r3-file-reread",
+      "file": "Sources/RoadieDaemon/DividerResizeRuntime.swift",
+      "symbol": "DividerResizeCoordinator.update",
+      "instance": "stage-state-reread-every-150ms",
+      "line": 167,
+      "category": "performance",
+      "title": "Variante : les poignées décoderaient stages.json toutes les 150 ms",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "refuted",
+      "rationale": "Variante de la session antérieure. effectiveStageStore.state() passe par le même JSONPersistence.read : fstat par tick, aucun décodage si le fichier est inchangé.",
+      "remediation": "Aucune correction de code.",
+      "counter_audit": {
+        "reviewer": "Claude Opus, auditeur de cette session (même agent)",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même chemin StageStore.state() -> JSONPersistence.read que F2 ; validation.md parvient à la même conclusion.",
+        "evidence": [
+          {
+            "kind": "source",
+            "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+            "sha256": "fde5b073a7067a328a3377c6ba75e7ad91b0c6a033629428c87a57f6b55135c6",
+            "line": 215
+          },
+          {
+            "kind": "source",
+            "path": "specs/048-consommation-repos/validation.md",
+            "sha256": "fab5a4599fa8f348412c0c954631213c62a7f0ed6788b3212a44d9ae318335b8",
+            "line": 71
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche commune avec F2.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "98998d558f5439e055e73ece56298cf9fa2254bd5004aaab164964fde57d2c1c"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DividerResizeRuntime.swift",
+          "sha256": "793e8714eac64fff88773a4ea141fb75a0abe10fa6e8219f53845c14edbd440a",
+          "line": 167
+        }
+      ]
+    }
+  ],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Semgrep exécuté mais une seule règle Swift ; entrées locales relues à la main. Niveau 3 : règles Swift ciblées ou CodeQL.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175929318683Z/run.json",
+          "sha256": "3c4f422b9f7a5ec75024f6eeb3bf375cfd3177232c2f7da22277a4c4364c5c4f"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Semgrep exécuté mais une seule règle Swift ; entrées locales relues à la main. Niveau 3 : règles Swift ciblées ou CodeQL."
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Adaptateur gitleaks : 7,72 Mo de sources analysés sans fuite, exclusions figées connues. Niveau 4 : contrôle en CI sur chaque commit.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175918180487Z/run.json",
+          "sha256": "600bb14a9378a44c205f743cddcb9a9a6c94610b48cd7a411c39616143ecdd85"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "b4192d5f54f875d5d66ce0b585485e2c81dabf24266f7f59f0fed882667450ee"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Adaptateur gitleaks : 7,72 Mo de sources analysés sans fuite, exclusions figées connues. Niveau 4 : contrôle en CI sur chaque commit."
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Historique v0.4.0..ab9b28e9 (69 commits) sans fuite, décision utilisateur option A ; historique antérieur à v0.4.0 non analysé. Niveau 3 : historique complet sous budget.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175910740477Z/run.json",
+          "sha256": "3fd96acbb73c3f9c1dde0a3105eea9b424956c359d2d6414a7671687f011eebd"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "b4192d5f54f875d5d66ce0b585485e2c81dabf24266f7f59f0fed882667450ee"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Historique v0.4.0..ab9b28e9 (69 commits) sans fuite, décision utilisateur option A ; historique antérieur à v0.4.0 non analysé. Niveau 3 : historique complet sous budget."
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "not_applicable",
+      "rationale": "Aucun mécanisme d'authentification ni de séparation des droits dans le diff ; la permission Screen Recording est inchangée.",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Adaptateur OSV exécuté sur Package.resolved : 1 paquet, aucun avis ; dépendances inchangées. Niveau 4 : suivi continu des avis.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175932814586Z/run.json",
+          "sha256": "b8d0a25d7aa352d0c1c6860c53a3374f7c09a3a9344e06b6e612ae2ac29460a7"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "b4192d5f54f875d5d66ce0b585485e2c81dabf24266f7f59f0fed882667450ee"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Adaptateur OSV exécuté sur Package.resolved : 1 paquet, aucun avis ; dépendances inchangées. Niveau 4 : suivi continu des avis."
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucune fonction LLM dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel LLM externe dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucune entrée transmise à un modèle dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Le diff ne touche ni sauvegardes ni rotation.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pass",
+      "rationale": "Reprises lues : capture nil retire le cache, absence réessayée après 5 s, arrêt du rail remet le statut à relire. Non testé à l'exécution. Niveau 3 : tests des échecs de capture et du redémarrage.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Reprises lues : capture nil retire le cache, absence réessayée après 5 s, arrêt du rail remet le statut à relire. Non testé à l'exécution. Niveau 3 : tests des échecs de capture et du redémarrage."
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Aucune bascule ni redondance dans le périmètre ; le mode modulaire garde la règle des 150 ms, ce n'est pas une bascule.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Aucune restauration après sinistre dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Compilation Swift 6 des sources et tests sans erreur ; aucun avertissement dans les fichiers du diff. Niveau 4 : Thread Sanitizer.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175716804629Z/run.json",
+          "sha256": "c34651cf8325a8135ded7fe7e6ec5527b79c04f149fb6d464bd70b90015d640c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "b4192d5f54f875d5d66ce0b585485e2c81dabf24266f7f59f0fed882667450ee"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Compilation Swift 6 des sources et tests sans erreur ; aucun avertissement dans les fichiers du diff. Niveau 4 : Thread Sanitizer."
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Pas de linter dans le projet ; seuls les avertissements du compilateur, tous hors diff. Niveau 3 : linter configuré et exécuté.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175716804629Z/run.json",
+          "sha256": "c34651cf8325a8135ded7fe7e6ec5527b79c04f149fb6d464bd70b90015d640c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "b4192d5f54f875d5d66ce0b585485e2c81dabf24266f7f59f0fed882667450ee"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Pas de linter dans le projet ; seuls les avertissements du compilateur, tous hors diff. Niveau 3 : linter configuré et exécuté."
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Tests ciblés sur le vrai service, l'ordonnanceur et les vues ; manquent l'événement pendant l'acquisition, les échecs de capture et le redémarrage du rail. Niveau 3 : ces trois tests.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175828587883Z/run.json",
+          "sha256": "ba502125d778f7096b793dce4b393f37d473a100ad3ac5130d73b0a8b3897ee3"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Tests ciblés sur le vrai service, l'ordonnanceur et les vues ; manquent l'événement pendant l'acquisition, les échecs de capture et le redémarrage du rail. Niveau 3 : ces trois tests."
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "unknown",
+      "rationale": "Runtime livré non qualifié par cet audit : installation et santé seulement rapportées par validation.md ; redémarrage et installation interdits.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "RailPanel et StageCardView réels testés ; pas de test du routage renderPanels -> refreshThumbnails. Niveau 3 : test d'intégration du rail.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175828587883Z/run.json",
+          "sha256": "ba502125d778f7096b793dce4b393f37d473a100ad3ac5130d73b0a8b3897ee3"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "RailPanel et StageCardView réels testés ; pas de test du routage renderPanels -> refreshThumbnails. Niveau 3 : test d'intégration du rail."
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Un seul lot de capture, budgets et quarantaines inchangés, aucune file ajoutée. Pas de test de charge. Niveau 3 : mesure sous rafale.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Un seul lot de capture, budgets et quarantaines inchangés, aucune file ajoutée. Pas de test de charge. Niveau 3 : mesure sous rafale."
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Cache SCWindow borné par prune ; baisse RSS rapportée par les mesures de session, non rejouées. Niveau 3 : mesure rejouée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        },
+        {
+          "kind": "source",
+          "path": "specs/048-consommation-repos/mesures/apres.json",
+          "sha256": "8f69e3425375b95c704f55277422d432dc1aa08714f09ca7be4895e6158b5ebe"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Cache SCWindow borné par prune ; baisse RSS rapportée par les mesures de session, non rejouées. Niveau 3 : mesure rejouée."
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "inFlight libéré par defer, absence bornée à 5 s, plafond borné par le filet ; chemins non testés. Niveau 3 : tests d'annulation et de délai.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/RailThumbnailStore.swift",
+          "sha256": "b8617799172e039d95f857526458316d03df03881785fe410f5c8a800fd52669"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "inFlight libéré par defer, absence bornée à 5 s, plafond borné par le filet ; chemins non testés. Niveau 3 : tests d'annulation et de délai."
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "unknown",
+      "rationale": "Mesures avant/après de la session relues dans les fichiers figés, non rejouées (redémarrage et mesure de repos hors autorisation).",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Points d'entrée ajoutés O(1) ou O(k) analysés et annotés. Niveau 4 : mesure à n élevé.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Points d'entrée ajoutés O(1) ou O(k) analysés et annotés. Niveau 4 : mesure à n élevé."
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Parcours bornés : k <= budget, cache réduit par prune, cartes x membres d'un écran. Niveau 4 : borne vérifiée par test.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Parcours bornés : k <= budget, cache réduit par prune, cartes x membres d'un écran. Niveau 4 : borne vérifiée par test."
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Relevés AX, énumérations SCK et lecture de recording.json réduits ; stages.json et rail.json revalidés par fstat sans décodage (F2/F4 réfutés). Niveau 4 : compteur runtime.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+          "sha256": "fde5b073a7067a328a3377c6ba75e7ad91b0c6a033629428c87a57f6b55135c6",
+          "line": 215
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Relevés AX, énumérations SCK et lecture de recording.json réduits ; stages.json et rail.json revalidés par fstat sans décodage (F2/F4 réfutés). Niveau 4 : compteur runtime."
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "not_applicable",
+      "rationale": "Le diff ne modifie aucun refus ni message utilisateur ; l'absence de permission est journalisée une fois, inchangé.",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Échec d'énumération : abandon du lot ; capture nil : retrait du cache ; capture vide : ignorée. Lu, non testé. Niveau 3 : tests des trois cas.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Échec d'énumération : abandon du lot ; capture nil : retrait du cache ; capture vide : ignorée. Lu, non testé. Niveau 3 : tests des trois cas."
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "unknown",
+      "rationale": "Parcours visibles (bordure, vignettes, indicateur) non observés : pas d'accès au bureau.",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "État partagé dans SnapshotProcessState existant, câblage dans main.swift, aucune dépendance nouvelle. Niveau 4 : règle d'architecture vérifiée par outil.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "État partagé dans SnapshotProcessState existant, câblage dans main.swift, aucune dépendance nouvelle. Niveau 4 : règle d'architecture vérifiée par outil."
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Aucun cycle introduit d'après la lecture des imports et appels ; aucun outil de graphe Swift. Niveau 3 : graphe des modules vérifié.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Aucun cycle introduit d'après la lecture des imports et appels ; aucun outil de graphe Swift. Niveau 3 : graphe des modules vérifié."
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Réutilisation activée une fois au démarrage par la racine de composition, seulement avec les événements en direct. Niveau 4 : test de composition.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/roadied/main.swift",
+          "sha256": "50eeaba595653e13b17b0c32ec1a2220645a4c6afc9d968d08fc545105a6a306",
+          "line": 425
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Réutilisation activée une fois au démarrage par la racine de composition, seulement avec les événements en direct. Niveau 4 : test de composition."
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Rappel onObservationChange injecté avec défaut sans effet : une composition sans rappel garderait des relevés jusqu'à 2 s ; documenté (ADR 015), non testé. Niveau 3 : test de câblage.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Rappel onObservationChange injecté avec défaut sans effet : une composition sans rappel garderait des relevés jusqu'à 2 s ; documenté (ADR 015), non testé. Niveau 3 : test de câblage."
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "ADR 015 nomme invariants, conditions et conséquences négatives ; amende 009 et 013. Niveau 4 : invariant « génération lue au départ » couvert par test.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "docs/decisions/015-releves-lecteurs-au-repos.md",
+          "sha256": "e0f1e8b43bb515d738973bda04163bf54f2ab76bfd182fb1d69e020636b8fb1a"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "ADR 015 nomme invariants, conditions et conséquences négatives ; amende 009 et 013. Niveau 4 : invariant « génération lue au départ » couvert par test."
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Quatre mécanismes ciblés, aucun fichier hors périmètre, réversibles séparément. Niveau 4 : réversibilité démontrée par test.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Quatre mécanismes ciblés, aucun fichier hors périmètre, réversibles séparément. Niveau 4 : réversibilité démontrée par test."
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Revues par un autre modèle documentées ; la session antérieure a confirmé à tort F2/F4, corrigé dans validation.md ; cet audit n'est pas indépendant. Niveau 3 : contre-revue indépendante.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "specs/048-consommation-repos/validation.md",
+          "sha256": "fab5a4599fa8f348412c0c954631213c62a7f0ed6788b3212a44d9ae318335b8"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Revues par un autre modèle documentées ; la session antérieure a confirmé à tort F2/F4, corrigé dans validation.md ; cet audit n'est pas indépendant. Niveau 3 : contre-revue indépendante."
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Aucune dépendance ajoutée ni nouveau fichier source. Niveau 4 : inventaire des dépendances mesuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Aucune dépendance ajoutée ni nouveau fichier source. Niveau 4 : inventaire des dépendances mesuré."
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Coût de repos réduit par construction ; lectures d'état réduites à fstat. Niveau 4 : mesure rejouée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Coût de repos réduit par construction ; lectures d'état réduites à fstat. Niveau 4 : mesure rejouée."
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Environ 2 lignes suppressibles, aucun code mort ajouté. Niveau 4 : outil de code mort Swift.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Environ 2 lignes suppressibles, aucun code mort ajouté. Niveau 4 : outil de code mort Swift."
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Données lues fidèles à 2 s près pour les changements sans notification (accepté par ADR 015) ; rendu réel non observé. Niveau 3 : observation runtime.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "b25ea736c55a18f6a2f24472534a0c867e212a7785afa68ea035abb41853bc0b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Données lues fidèles à 2 s près pour les changements sans notification (accepté par ADR 015) ; rendu réel non observé. Niveau 3 : observation runtime."
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Génération monotone, empreintes d'état et de config comparées, republication qui conserve la génération. Niveau 4 : test de propriété.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "b25ea736c55a18f6a2f24472534a0c867e212a7785afa68ea035abb41853bc0b"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "sha256": "0ca842e183d669d88388b7e8e5635e7121c6f4815006e3acb736faa52e051f7f",
+          "line": 2515
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Génération monotone, empreintes d'état et de config comparées, republication qui conserve la génération. Niveau 4 : test de propriété."
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Règle des 150 ms des commandes conservée et testée ; amendement d'ADR tracé. Niveau 4 : vérification runtime.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T175828587883Z/run.json",
+          "sha256": "ba502125d778f7096b793dce4b393f37d473a100ad3ac5130d73b0a8b3897ee3"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/spec-matrice.md",
+          "sha256": "b041987da3ac1171cb2271a93ad6ca056e527b707ea42d7b07b9d71fcdc86bee"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Règle des 150 ms des commandes conservée et testée ; amendement d'ADR tracé. Niveau 4 : vérification runtime."
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Constats reliés à cause, sources et tests ; la session versée ne peut pas être revalidée depuis Git (runs/ et configs/ ignorés). Niveau 3 : preuves versionnées ou archivées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes.md",
+          "sha256": "98998d558f5439e055e73ece56298cf9fa2254bd5004aaab164964fde57d2c1c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8490e84840960254f226a79d584e478cf70aef17489d1e23060e45955753623e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Constats reliés à cause, sources et tests ; la session versée ne peut pas être revalidée depuis Git (runs/ et configs/ ignorés). Niveau 3 : preuves versionnées ou archivées."
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Cinq exigences vérifiées une à une, toutes implémentées. Niveau 4 : chaque exigence couverte par un test nommé.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/spec-matrice.md",
+          "sha256": "b041987da3ac1171cb2271a93ad6ca056e527b707ea42d7b07b9d71fcdc86bee"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Cinq exigences vérifiées une à une, toutes implémentées. Niveau 4 : chaque exigence couverte par un test nommé."
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : ~2 lignes suppressibles à comportement constant (retour Bool et @discardableResult de StageCardView.updateThumbnails, utilisés par un seul test) ; méthode : relecture ligne à ligne du diff source, tests exclus ; aucune dépendance, abstraction ou état dérivé superflu.",
+  "responsibility": "Vertus LLM et responsabilité future : charge cognitive réduite (règle unique de l'ADR 015, invariants explicables) ; volume justifié par une mesure avant/après ; abstractions avec usage réel ; la session antérieure avait confirmé à tort deux constats (F2/F4) faute d'avoir suivi JSONPersistence.read, réfutation tracée ; preuves d'audit versées non revalidables depuis Git ; cet audit n'est pas indépendant."
+}

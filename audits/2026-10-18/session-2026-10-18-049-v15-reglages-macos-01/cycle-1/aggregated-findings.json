@@ -1,0 +1,70 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": true,
+    "decision": "inconclusive"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 1,
+    "info": 0,
+    "total": 1,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "spec049.success-criteria",
+      "file": "specs/049-reglages-macos/tasks.md",
+      "symbol": "T004",
+      "instance": "installed-health-not-validated",
+      "line": 6,
+      "category": "documentation",
+      "title": "Critère de réussite non vérifié : aucune validation consignée",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "La spec exige que roadie query health installé renvoie ok chez l'utilisateur ; T004 est ouverte et le commit ne contient ni validation.md, ni revue, ni résultat d'installation. Les préférences réelles (toutes à 0) laissent attendre ok, sans exécution du binaire.",
+      "remediation": "Exécuter la suite, installer, consigner roadie query health dans validation.md et cocher T004, ou réduire le critère.",
+      "variants": {
+        "status": "done",
+        "rationale": "Validations des autres specs du commit vérifiées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "90f1acfd0b67147b3118828f023366cdc828dcd60beb5d242fbd802042f426aa"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "8fcae76e1c66b76b4301dad136caa047b7fa7b6da3c2b1cb6c593155310215ad"
+        },
+        {
+          "kind": "source",
+          "path": "specs/049-reglages-macos/tasks.md",
+          "sha256": "c5b828b637b9a96e83e34903f5d02a032090f050af7dfdfdcb1a5658025aa218",
+          "line": 6
+        },
+        {
+          "kind": "source",
+          "path": "specs/049-reglages-macos/spec.md",
+          "sha256": "644bbe0ff9220f1559035b83932852fc05e9be4ec9a399cdd9bb7d307ddfecfb",
+          "line": 27
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181128556802Z/run.json",
+          "sha256": "c36571b548cb1fc425efcc4cace06ed9911d23155b322bd3038fc2cbf5951c9a"
+        }
+      ],
+      "fingerprint": "4b2a4e5ffc40eec8d8a4"
+    }
+  ],
+  "suppressed": []
+}

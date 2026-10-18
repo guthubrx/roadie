@@ -1,0 +1,94 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Audit Code V15",
+          "version": "15.0.0"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "spec051.click-full-snapshot",
+          "level": "warning",
+          "message": {
+            "text": "R5 contredite en mode run : la session de geste fait un relevé complet à chaque clic gauche: Chaque leftMouseDown appelle la cible de geste du tiler, qui lit sharedSnapshot() (règle des 150 ms, sans réutilisation silencieuse) : au repos, un relevé AX complet a lieu sur le fil principal avant tout test de barre de titre, plus une ligne events.jsonl. Le rail et la session de geste partagent la même publication : le pré-filtre C-05 ne retire aucun relevé par clic dans le mode par défaut."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "355e359e3f314c2619f0"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-051/Sources/roadied/main.swift"
+                },
+                "region": {
+                  "startLine": 429
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "spec051.click-full-snapshot",
+          "level": "note",
+          "message": {
+            "text": "Variante : le menu de barre de titre relève à chaque clic droit quand il est activé: handleRightMouseDown appelle snapshotService.snapshot(), qui relève toujours, avant le test de barre de titre. Option expérimentale désactivée par défaut ; antérieur à la 051."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "d883fcfafcd382d1e3cc"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-051/Sources/RoadieDaemon/TitlebarContextMenuController.swift"
+                },
+                "region": {
+                  "startLine": 212
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "spec051.success-criteria",
+          "level": "note",
+          "message": {
+            "text": "Critère de réussite non rempli : aucune mesure avant/après publiée: La spec exige une mesure au repos avec mesure-repos.py et des résultats publiés ; T007 n'est pas cochée et le commit ne contient aucun fichier mesures/. Sans mesure, les gains restent des hypothèses (constitution XXII)."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "d9e859065f43542d8c9e"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-051/specs/051-constats-high/tasks.md"
+                },
+                "region": {
+                  "startLine": 9
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

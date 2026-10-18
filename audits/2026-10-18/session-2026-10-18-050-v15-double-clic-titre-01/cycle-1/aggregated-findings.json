@@ -1,0 +1,229 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": true,
+    "decision": "inconclusive"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 3,
+    "info": 0,
+    "total": 3,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "spec050.double-click-gesture",
+      "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "symbol": "TitlebarContextMenuController.handleDoubleClick",
+      "instance": "maximize-adopted-as-manual-resize",
+      "line": 257,
+      "category": "correctness",
+      "title": "Hypothèse : la maximisation pendant le second appui serait adoptée comme redimensionnement manuel de l'arbre",
+      "severity": "MEDIUM",
+      "confidence": "medium",
+      "status": "refuted",
+      "rationale": "Le second appui ouvre une session de geste ; la maximisation est écrite avant la passe de relâchement ; applyGesture pourrait déplacer les frontières de l'arbre. La reproduction isolée montre l'arbre inchangé.",
+      "remediation": "Aucune correction ; ajouter au dépôt un test de bout en bout équivalent à la reproduction.",
+      "counter_audit": {
+        "reviewer": "Claude Opus, auditeur de cette session (même agent)",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Reproduction isolée : session de geste vérifiée sur la fenêtre 1 (cadre tuilé), maximisation pendant l'appui, passe drag au relâchement : arbre inchangé, aucun layout_manual_gesture, retour à 500 points. Témoin sans geste identique.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "repro/Repro050DoubleClickGestureTests.swift",
+            "sha256": "75b625cd5577b880bf58b73c1a3f997a234727916d20cf83eb64f2e1fdb5564b"
+          },
+          {
+            "kind": "artifact",
+            "path": "runs/20261018T181907817940Z/run.json",
+            "sha256": "54676d3d3c3e8db651ca590f571b69d957e9eb95821edad9b300945aa88174ca"
+          },
+          {
+            "kind": "artifact",
+            "path": "runs/20261018T181919915545Z/run.json",
+            "sha256": "d4aae6aa5db4471baebc1fc868ae49fca4dc830ec30362abc883069890a78efe"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Autres actions pendant une session de geste recensées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "35ace299e757b904ecc59fe2482bcea6e79d67e1cd7812dca10f531c73acc845"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "sha256": "f0658820444e98d30de447d6434cb560ca4a358385d2aacb9a50d6241a36e0cc",
+          "line": 257
+        },
+        {
+          "kind": "artifact",
+          "path": "repro/Repro050DoubleClickGestureTests.swift",
+          "sha256": "75b625cd5577b880bf58b73c1a3f997a234727916d20cf83eb64f2e1fdb5564b"
+        }
+      ],
+      "fingerprint": "6671b5cc9da3050e2dc1"
+    },
+    {
+      "rule_id": "spec050.default-health-conflict",
+      "file": "Sources/RoadieDaemon/DaemonHealth.swift",
+      "symbol": "DaemonHealthService.run",
+      "instance": "double-click-default-warns-on-macos-default",
+      "line": 179,
+      "category": "specification",
+      "title": "Défauts contradictoires entre 049 et 050 : santé en avertissement chez l'utilisateur",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "double_click_maximize vaut true par défaut et la config de l'utilisateur ne le fixe pas ; macOS agrandit au double-clic (clé d'action absente, réduction héritée à 0). La santé rend donc warn et la fonction n'agit jamais ; le critère 049 « santé ok chez l'utilisateur » n'est plus atteignable sans changer un réglage macOS, sans que les specs le disent.",
+      "remediation": "Choisir et écrire le comportement : défaut false, ou défaut true assumé avec mise à jour du critère 049 et du CHANGELOG.",
+      "requirements": [
+        "R2",
+        "R5"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Autres options ajoutées qui alimentent un diagnostic recherchées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "35ace299e757b904ecc59fe2482bcea6e79d67e1cd7812dca10f531c73acc845"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonHealth.swift",
+          "sha256": "f92476eff338e5928726fc25aec5a6be6073a919c63d57aa08c0454c847687b7",
+          "line": 179
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieCore/Config.swift",
+          "sha256": "8b828999dd6d536e4998314db30103249e4b91b3342c529315555dc65881642f",
+          "line": 1137
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181439624967Z/run.json",
+          "sha256": "1a2ba5ae17cbc632c6c7ea382dd8c747de0dc2d9ca72dc7789d5aa1de5094c47"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181439810239Z/run.json",
+          "sha256": "8a1b2c0c4d1b6dd3a26350ee1bc49ff2937839fdb8f004c68700db184450c464"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181452406416Z/run.json",
+          "sha256": "fde0a7bc752b594b599ac006d6248181767fb1b1af31b33583f8fa1688711e8a"
+        }
+      ],
+      "fingerprint": "4c91bdf3a0b7b81a6c5c"
+    },
+    {
+      "rule_id": "spec050.doc-comment",
+      "file": "Sources/RoadieDaemon/DaemonHealth.swift",
+      "symbol": "MacOSDoubleClickAction",
+      "instance": "setting-doc-attached-to-enum",
+      "line": 61,
+      "category": "documentation",
+      "title": "Commentaire de documentation de MacOSWindowSetting rattaché à MacOSDoubleClickAction",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "L'énumération est insérée entre le commentaire /// de MacOSWindowSetting et sa déclaration : les trois lignes documentent l'énumération et MacOSWindowSetting n'est plus documenté.",
+      "remediation": "Déplacer les deux premières lignes du commentaire au-dessus de public struct MacOSWindowSetting.",
+      "variants": {
+        "status": "done",
+        "rationale": "Hunks ajoutés des quatre fichiers sources relus.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "35ace299e757b904ecc59fe2482bcea6e79d67e1cd7812dca10f531c73acc845"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonHealth.swift",
+          "sha256": "f92476eff338e5928726fc25aec5a6be6073a919c63d57aa08c0454c847687b7",
+          "line": 61
+        }
+      ],
+      "fingerprint": "0f57bba89ea0a017b092"
+    },
+    {
+      "rule_id": "spec050.success-criteria",
+      "file": "specs/050-double-clic-titre/tasks.md",
+      "symbol": "T005",
+      "instance": "validation-not-recorded",
+      "line": 7,
+      "category": "documentation",
+      "title": "Validation non consignée : suite, installation et santé (T005 ouverte)",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "T005 n'est pas cochée et aucun validation.md n'existe ; seule la revue 1 est consignée.",
+      "remediation": "Consigner suite, installation, santé et essai réel du double-clic dans validation.md.",
+      "variants": {
+        "status": "done",
+        "rationale": "Validations des autres specs vérifiées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "35ace299e757b904ecc59fe2482bcea6e79d67e1cd7812dca10f531c73acc845"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "source",
+          "path": "specs/050-double-clic-titre/tasks.md",
+          "sha256": "8f3e05faa3d53768ceb4d5c2b0535b2fa9df4560b4d6c4db0f47df1b2a2c93f5",
+          "line": 7
+        }
+      ],
+      "fingerprint": "57b5860d55aa89c35bda"
+    }
+  ],
+  "suppressed": []
+}

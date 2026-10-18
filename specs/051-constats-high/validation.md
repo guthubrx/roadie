@@ -23,6 +23,16 @@ Claude Haiku 5.5 via Bridget (Codex non routable). APPROVE_WITH_CHANGES.
 | A-05 : 1 s avant la première réaction après activation à chaud | Par construction | Limite | Documenté |
 | Preuves visuelles | Aucun changement d'affichage voulu | - | Non produites ; bureau non capturé |
 
+## Audit V15
+
+Session : `audits/2026-10-18/session-2026-10-18-051-v15-constats-high-01/` (readonly, worktree
+figé sur 38f69a6a). Décision calculée : **inconclusive**, `release_blocked = true`. Cause unique :
+l'exécuteur refuse des arguments pour l'analyse de l'historique ; l'analyse ciblée v0.4.0..38f69a6a
+(option A, décision utilisateur du 18 octobre) a tourné comme contrôle personnalisé, sans fuite,
+mais le moteur compte `gitleaks-history` comme non exécuté. 14 contrôles vérifiés.
+Constats : MEDIUM R5 (session de geste A-11 hors périmètre, R5 réécrite) ; LOW menu clic droit
+(C-09, hors périmètre) ; LOW mesure non publiée (faite après intégration).
+
 ## D-02
 
 Laissé en l'état par décision de l'utilisateur du 18 octobre. Recommandation dans `research.md`.

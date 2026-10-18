@@ -1,0 +1,42 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Audit Code V15",
+          "version": "15.0.0"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "spec049.success-criteria",
+          "level": "note",
+          "message": {
+            "text": "Critère de réussite non vérifié : aucune validation consignée: La spec exige que roadie query health installé renvoie ok chez l'utilisateur ; T004 est ouverte et le commit ne contient ni validation.md, ni revue, ni résultat d'installation. Les préférences réelles (toutes à 0) laissent attendre ok, sans exécution du binaire."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "4b2a4e5ffc40eec8d8a4"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-049/specs/049-reglages-macos/tasks.md"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

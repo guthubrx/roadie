@@ -1,0 +1,1111 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "Semgrep : 163 règles figées sur les 14 fichiers sélectionnés, 0 résultat. Une seule règle Swift : l'analyse manuelle porte le contrôle.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181435857327Z/run.json",
+          "sha256": "c546dd87db4793ad4e4593be30971204b443a32dc4b3bf7257ab3685dbea5a56"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d17d24f4474ba7a1dd27333445b9d2a6dc4f6871090b3aa92d33d9365df96645"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "Adaptateur gitleaks : ~7,77 Mo analysés, aucune fuite ; audits/ exclu par la configuration figée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181435213558Z/run.json",
+          "sha256": "9da345358b22227cdd9cd4703cdfea6e235880554b35aba02a799850b068059b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d17d24f4474ba7a1dd27333445b9d2a6dc4f6871090b3aa92d33d9365df96645"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pass",
+      "rationale": "Décision utilisateur du 18/10/2026 (option A) : l'historique complet dépasse le plafond de 300 s ; plage analysée v0.4.0 (5ab0ab95)..8c207d67, 73 commits, ~3,06 Mo, aucune fuite (gitleaks 8.30.1, --redact). Exécuté en --tool custom : le runner refuse --command avec --tool gitleaks-history. Limite connue : historique antérieur à v0.4.0 non analysé dans cette session.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181434803820Z/run.json",
+          "sha256": "d3685e50ac784b013f8f7721f7c553fafd8dc369b1eb389765997b039a1d1eb5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d17d24f4474ba7a1dd27333445b9d2a6dc4f6871090b3aa92d33d9365df96645"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "pass",
+      "rationale": "OSV-Scanner (adaptateur) : Package.resolved, 1 paquet, aucun avis ; manifestes inchangés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181438819967Z/run.json",
+          "sha256": "28fa2e7a291969d47c1c1d2b5891be7d8a7a8821735affaac0bf57f4be24f448"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d17d24f4474ba7a1dd27333445b9d2a6dc4f6871090b3aa92d33d9365df96645"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "pass",
+      "rationale": "Lecture seule des préférences ; requête AX de rôle bornée à 0,5 s ; action limitée à toggle maximize sur une fenêtre gérée et tuilée ; aucune frontière de confiance modifiée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "2029d6844f388073704fc2e28fa4cb0369664dee549cbbad0ea9553336a5f038"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ]
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "pass",
+      "rationale": "Garde à quatre conditions et exclusions vérifiées ; interaction avec la session de geste réfutée par reproduction isolée (H1) ; F1 (défauts 049/050) et F2 (commentaire) ouverts.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "2029d6844f388073704fc2e28fa4cb0369664dee549cbbad0ea9553336a5f038"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "artifact",
+          "path": "repro/Repro050DoubleClickGestureTests.swift",
+          "sha256": "75b625cd5577b880bf58b73c1a3f997a234727916d20cf83eb64f2e1fdb5564b"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181919915545Z/run.json",
+          "sha256": "d4aae6aa5db4471baebc1fc868ae49fca4dc830ec30362abc883069890a78efe"
+        }
+      ]
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "pass",
+      "rationale": "Moniteur -> file principale, sérialisé avec la passe du tiler ; ordonnancement double-clic + geste reproduit dans un harnais, arbre inchangé.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181919915545Z/run.json",
+          "sha256": "d4aae6aa5db4471baebc1fc868ae49fca4dc830ec30362abc883069890a78efe"
+        }
+      ]
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "pass",
+      "rationale": "Clic simple O(1) ; double-clic actif : un relevé + hitTest O(w) + une requête AX, conforme à R4 ; santé O(r).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "sha256": "f0658820444e98d30de447d6434cb560ca4a358385d2aacb9a50d6241a36e0cc",
+          "line": 195
+        }
+      ]
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pass",
+      "rationale": "swift build --build-tests puis swift test : 1 742 tests / 207 suites verts, dont 6 Spec050 ; tests instables connus réussis ; reproduction isolée verte (2 tests).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181307730317Z/run.json",
+          "sha256": "46cc80e10804f3614e783d99226e7800a34794f76fa2aa3f01e3164d0deb91b9"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181353173059Z/run.json",
+          "sha256": "a5623771eb268d25756de227b75b409800896d72269591c264f58d1c0787a3c4"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181919915545Z/run.json",
+          "sha256": "d4aae6aa5db4471baebc1fc868ae49fca4dc830ec30362abc883069890a78efe"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ]
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pass",
+      "rationale": "Injections avec défauts, réglage dans la config existante, aucune dépendance ni cycle ajoutés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ]
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "pass",
+      "rationale": "Checklist exécutée : aucune ligne supprimable identifiée, aucune dépendance, aucun changement hors périmètre.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ]
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "pass",
+      "rationale": "Contrainte macOS expliquée, revue 1 traitée ; défaut qui change la santé 049 non écrit (F1), commentaire déplacé (F2), validation non consignée (F3) ; audit non indépendant.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        }
+      ]
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "pass",
+      "rationale": "Événement titlebar_context_menu.action par double-clic traité ; aucune file ni retry ; délai AX borné.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ]
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "pass",
+      "rationale": "R1 à R6 vérifiées : implémentées ; R5 contredit le critère 049 chez l'utilisateur (F1) ; T005 non consignée (F3).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/spec-matrice.md",
+          "sha256": "33936a15606f4f6cf85f6bbcae128ae74894d9460c4f3998c48c43b249c0a7df"
+        },
+        {
+          "kind": "source",
+          "path": "specs/050-double-clic-titre/spec.md",
+          "sha256": "859dff44ca7f4c759a4e992fa882fe25d03700bfe5a4aaf20f76b8b6ead7f6c6"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "spec050.double-click-gesture",
+      "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "symbol": "TitlebarContextMenuController.handleDoubleClick",
+      "instance": "maximize-adopted-as-manual-resize",
+      "line": 257,
+      "category": "correctness",
+      "title": "Hypothèse : la maximisation pendant le second appui serait adoptée comme redimensionnement manuel de l'arbre",
+      "severity": "MEDIUM",
+      "confidence": "medium",
+      "status": "refuted",
+      "rationale": "Le second appui ouvre une session de geste ; la maximisation est écrite avant la passe de relâchement ; applyGesture pourrait déplacer les frontières de l'arbre. La reproduction isolée montre l'arbre inchangé.",
+      "remediation": "Aucune correction ; ajouter au dépôt un test de bout en bout équivalent à la reproduction.",
+      "counter_audit": {
+        "reviewer": "Claude Opus, auditeur de cette session (même agent)",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Reproduction isolée : session de geste vérifiée sur la fenêtre 1 (cadre tuilé), maximisation pendant l'appui, passe drag au relâchement : arbre inchangé, aucun layout_manual_gesture, retour à 500 points. Témoin sans geste identique.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "repro/Repro050DoubleClickGestureTests.swift",
+            "sha256": "75b625cd5577b880bf58b73c1a3f997a234727916d20cf83eb64f2e1fdb5564b"
+          },
+          {
+            "kind": "artifact",
+            "path": "runs/20261018T181907817940Z/run.json",
+            "sha256": "54676d3d3c3e8db651ca590f571b69d957e9eb95821edad9b300945aa88174ca"
+          },
+          {
+            "kind": "artifact",
+            "path": "runs/20261018T181919915545Z/run.json",
+            "sha256": "d4aae6aa5db4471baebc1fc868ae49fca4dc830ec30362abc883069890a78efe"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Autres actions pendant une session de geste recensées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "35ace299e757b904ecc59fe2482bcea6e79d67e1cd7812dca10f531c73acc845"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "sha256": "f0658820444e98d30de447d6434cb560ca4a358385d2aacb9a50d6241a36e0cc",
+          "line": 257
+        },
+        {
+          "kind": "artifact",
+          "path": "repro/Repro050DoubleClickGestureTests.swift",
+          "sha256": "75b625cd5577b880bf58b73c1a3f997a234727916d20cf83eb64f2e1fdb5564b"
+        }
+      ]
+    },
+    {
+      "rule_id": "spec050.default-health-conflict",
+      "file": "Sources/RoadieDaemon/DaemonHealth.swift",
+      "symbol": "DaemonHealthService.run",
+      "instance": "double-click-default-warns-on-macos-default",
+      "line": 179,
+      "category": "specification",
+      "title": "Défauts contradictoires entre 049 et 050 : santé en avertissement chez l'utilisateur",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "double_click_maximize vaut true par défaut et la config de l'utilisateur ne le fixe pas ; macOS agrandit au double-clic (clé d'action absente, réduction héritée à 0). La santé rend donc warn et la fonction n'agit jamais ; le critère 049 « santé ok chez l'utilisateur » n'est plus atteignable sans changer un réglage macOS, sans que les specs le disent.",
+      "remediation": "Choisir et écrire le comportement : défaut false, ou défaut true assumé avec mise à jour du critère 049 et du CHANGELOG.",
+      "requirements": [
+        "R2",
+        "R5"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Autres options ajoutées qui alimentent un diagnostic recherchées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "35ace299e757b904ecc59fe2482bcea6e79d67e1cd7812dca10f531c73acc845"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonHealth.swift",
+          "sha256": "f92476eff338e5928726fc25aec5a6be6073a919c63d57aa08c0454c847687b7",
+          "line": 179
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieCore/Config.swift",
+          "sha256": "8b828999dd6d536e4998314db30103249e4b91b3342c529315555dc65881642f",
+          "line": 1137
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181439624967Z/run.json",
+          "sha256": "1a2ba5ae17cbc632c6c7ea382dd8c747de0dc2d9ca72dc7789d5aa1de5094c47"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181439810239Z/run.json",
+          "sha256": "8a1b2c0c4d1b6dd3a26350ee1bc49ff2937839fdb8f004c68700db184450c464"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181452406416Z/run.json",
+          "sha256": "fde0a7bc752b594b599ac006d6248181767fb1b1af31b33583f8fa1688711e8a"
+        }
+      ]
+    },
+    {
+      "rule_id": "spec050.doc-comment",
+      "file": "Sources/RoadieDaemon/DaemonHealth.swift",
+      "symbol": "MacOSDoubleClickAction",
+      "instance": "setting-doc-attached-to-enum",
+      "line": 61,
+      "category": "documentation",
+      "title": "Commentaire de documentation de MacOSWindowSetting rattaché à MacOSDoubleClickAction",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "L'énumération est insérée entre le commentaire /// de MacOSWindowSetting et sa déclaration : les trois lignes documentent l'énumération et MacOSWindowSetting n'est plus documenté.",
+      "remediation": "Déplacer les deux premières lignes du commentaire au-dessus de public struct MacOSWindowSetting.",
+      "variants": {
+        "status": "done",
+        "rationale": "Hunks ajoutés des quatre fichiers sources relus.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "35ace299e757b904ecc59fe2482bcea6e79d67e1cd7812dca10f531c73acc845"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonHealth.swift",
+          "sha256": "f92476eff338e5928726fc25aec5a6be6073a919c63d57aa08c0454c847687b7",
+          "line": 61
+        }
+      ]
+    },
+    {
+      "rule_id": "spec050.success-criteria",
+      "file": "specs/050-double-clic-titre/tasks.md",
+      "symbol": "T005",
+      "instance": "validation-not-recorded",
+      "line": 7,
+      "category": "documentation",
+      "title": "Validation non consignée : suite, installation et santé (T005 ouverte)",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "T005 n'est pas cochée et aucun validation.md n'existe ; seule la revue 1 est consignée.",
+      "remediation": "Consigner suite, installation, santé et essai réel du double-clic dans validation.md.",
+      "variants": {
+        "status": "done",
+        "rationale": "Validations des autres specs vérifiées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "35ace299e757b904ecc59fe2482bcea6e79d67e1cd7812dca10f531c73acc845"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "source",
+          "path": "specs/050-double-clic-titre/tasks.md",
+          "sha256": "8f3e05faa3d53768ceb4d5c2b0535b2fa9df4560b4d6c4db0f47df1b2a2c93f5",
+          "line": 7
+        }
+      ]
+    }
+  ],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Semgrep exécuté, une seule règle Swift ; entrées (préférences, rôle AX) relues à la main. Niveau 3 : règles Swift ciblées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181435857327Z/run.json",
+          "sha256": "c546dd87db4793ad4e4593be30971204b443a32dc4b3bf7257ab3685dbea5a56"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Semgrep exécuté, une seule règle Swift ; entrées (préférences, rôle AX) relues à la main. Niveau 3 : règles Swift ciblées."
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Adaptateur gitleaks : 7,77 Mo sans fuite. Niveau 4 : contrôle en CI.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181435213558Z/run.json",
+          "sha256": "9da345358b22227cdd9cd4703cdfea6e235880554b35aba02a799850b068059b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d17d24f4474ba7a1dd27333445b9d2a6dc4f6871090b3aa92d33d9365df96645"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Adaptateur gitleaks : 7,77 Mo sans fuite. Niveau 4 : contrôle en CI."
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Historique v0.4.0..8c207d67 (73 commits) sans fuite, option A ; historique antérieur non analysé. Niveau 3 : historique complet.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181434803820Z/run.json",
+          "sha256": "d3685e50ac784b013f8f7721f7c553fafd8dc369b1eb389765997b039a1d1eb5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d17d24f4474ba7a1dd27333445b9d2a6dc4f6871090b3aa92d33d9365df96645"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Historique v0.4.0..8c207d67 (73 commits) sans fuite, option A ; historique antérieur non analysé. Niveau 3 : historique complet."
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "not_applicable",
+      "rationale": "Aucun mécanisme d'authentification ni de séparation des droits dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "OSV : aucun avis ; dépendances inchangées. Niveau 4 : suivi continu.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181438819967Z/run.json",
+          "sha256": "28fa2e7a291969d47c1c1d2b5891be7d8a7a8821735affaac0bf57f4be24f448"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d17d24f4474ba7a1dd27333445b9d2a6dc4f6871090b3aa92d33d9365df96645"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "OSV : aucun avis ; dépendances inchangées. Niveau 4 : suivi continu."
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucune fonction LLM dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel LLM externe dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucune entrée transmise à un modèle dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Le diff ne touche ni sauvegardes ni rotation.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pass",
+      "rationale": "Double-clic perdu ou refusé : aucune action, aucun état à reprendre ; retour par second double-clic testé dans la reproduction. Niveau 3 : test de bout en bout.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181919915545Z/run.json",
+          "sha256": "d4aae6aa5db4471baebc1fc868ae49fca4dc830ec30362abc883069890a78efe"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Double-clic perdu ou refusé : aucune action, aucun état à reprendre ; retour par second double-clic testé dans la reproduction. Niveau 3 : test de bout en bout."
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Aucune bascule dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Aucune restauration après sinistre dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Compilation Swift 6 sans erreur ni avertissement dans le diff. Niveau 4 : Thread Sanitizer.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181307730317Z/run.json",
+          "sha256": "46cc80e10804f3614e783d99226e7800a34794f76fa2aa3f01e3164d0deb91b9"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d17d24f4474ba7a1dd27333445b9d2a6dc4f6871090b3aa92d33d9365df96645"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Compilation Swift 6 sans erreur ni avertissement dans le diff. Niveau 4 : Thread Sanitizer."
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Pas de linter dans le projet. Niveau 3 : linter configuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181307730317Z/run.json",
+          "sha256": "46cc80e10804f3614e783d99226e7800a34794f76fa2aa3f01e3164d0deb91b9"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d17d24f4474ba7a1dd27333445b9d2a6dc4f6871090b3aa92d33d9365df96645"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Pas de linter dans le projet. Niveau 3 : linter configuré."
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Fonctions pures, décodage et santé testés ; handleDoubleClick non testé de bout en bout ; interaction avec le geste couverte seulement par la reproduction d'audit. Niveau 3 : test de bout en bout dans le dépôt.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181353173059Z/run.json",
+          "sha256": "a5623771eb268d25756de227b75b409800896d72269591c264f58d1c0787a3c4"
+        },
+        {
+          "kind": "artifact",
+          "path": "repro/Repro050DoubleClickGestureTests.swift",
+          "sha256": "75b625cd5577b880bf58b73c1a3f997a234727916d20cf83eb64f2e1fdb5564b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Fonctions pures, décodage et santé testés ; handleDoubleClick non testé de bout en bout ; interaction avec le geste couverte seulement par la reproduction d'audit. Niveau 3 : test de bout en bout dans le dépôt."
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "unknown",
+      "rationale": "Binaire installé non exécuté ; double-clic réel non essayé (pas d'accès au bureau).",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Aucun test d'intégration du contrôleur avec ses injections. Niveau 3 : test avec readPreference et elementRoleAt injectés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Aucun test d'intégration du contrôleur avec ses injections. Niveau 3 : test avec readPreference et elementRoleAt injectés."
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "not_applicable",
+      "rationale": "Aucune file ni admission de demandes dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Aucune allocation durable ajoutée. Niveau 4 : mesure.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Aucune allocation durable ajoutée. Niveau 4 : mesure."
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Requête AX bornée à 0,5 s par le délai global posé par le relevé précédent. Niveau 4 : délai mesuré sur application suspendue.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "2029d6844f388073704fc2e28fa4cb0369664dee549cbbad0ea9553336a5f038"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "sha256": "08a2e49b43c26eace8880c03814727197468cc73cc367d2725fa5a8402377872",
+          "line": 248
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Requête AX bornée à 0,5 s par le délai global posé par le relevé précédent. Niveau 4 : délai mesuré sur application suspendue."
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "unknown",
+      "rationale": "Latence d'un double-clic non mesurée.",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Clic simple O(1), double-clic O(w) avec un relevé, annotés. Niveau 4 : mesure.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Clic simple O(1), double-clic O(w) avec un relevé, annotés. Niveau 4 : mesure."
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Parcours bornés par les fenêtres du relevé et la liste fixe des rôles. Niveau 4 : borne testée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Parcours bornés par les fenêtres du relevé et la liste fixe des rôles. Niveau 4 : borne testée."
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Relevé complet avant le test de barre de titre à chaque double-clic actif, partout sur l'écran ; conforme à R4, pré-filtre possible. Niveau 3 : pré-filtre mesuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Relevé complet avant le test de barre de titre à chaque double-clic actif, partout sur l'écran ; conforme à R4, pré-filtre possible. Niveau 3 : pré-filtre mesuré."
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Message de santé clair, en français seulement ; aucun retour quand le double-clic est ignoré (voulu). Niveau 3 : libellés localisés.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonHealth.swift",
+          "sha256": "f92476eff338e5928726fc25aec5a6be6073a919c63d57aa08c0454c847687b7",
+          "line": 194
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Message de santé clair, en français seulement ; aucun retour quand le double-clic est ignoré (voulu). Niveau 3 : libellés localisés."
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Résultat de toggleMaximize journalisé avec son message ; refus sans effet de bord. Niveau 4 : test des refus.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Résultat de toggleMaximize journalisé avec son message ; refus sans effet de bord. Niveau 4 : test des refus."
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "unknown",
+      "rationale": "Parcours réel du double-clic non observé (pas d'accès au bureau).",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Réutilise hitTest, toggleMaximize et le contrôle de santé existants. Niveau 4 : règle vérifiée par outil.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Réutilise hitTest, toggleMaximize et le contrôle de santé existants. Niveau 4 : règle vérifiée par outil."
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Aucun cycle d'après la lecture ; pas d'outil de graphe Swift. Niveau 3 : graphe vérifié.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Aucun cycle d'après la lecture ; pas d'outil de graphe Swift. Niveau 3 : graphe vérifié."
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Injections résolues à la construction ; composant démarré par défaut. Niveau 4 : test de composition.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "2029d6844f388073704fc2e28fa4cb0369664dee549cbbad0ea9553336a5f038"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Injections résolues à la construction ; composant démarré par défaut. Niveau 4 : test de composition."
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "La santé dépend du réglage d'un autre composant via effectiveConfig : warn même avec --no-titlebar-menu. Niveau 3 : état réel du composant.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "2029d6844f388073704fc2e28fa4cb0369664dee549cbbad0ea9553336a5f038"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "La santé dépend du réglage d'un autre composant via effectiveConfig : warn même avec --no-titlebar-menu. Niveau 3 : état réel du composant."
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Contrainte (moniteur sans consommation) et choix « Ne rien faire » expliqués dans research.md. Niveau 4 : essai réel consigné.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "specs/050-double-clic-titre/research.md",
+          "sha256": "1f4701c50c3f2946665f614e592bdfddd47547a219f395f63d79a41399e2f384"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Contrainte (moniteur sans consommation) et choix « Ne rien faire » expliqués dans research.md. Niveau 4 : essai réel consigné."
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Changement ciblé, réversible par réglage. Niveau 4 : réversibilité testée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Changement ciblé, réversible par réglage. Niveau 4 : réversibilité testée."
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Revue 1 consignée et traitée ; validation finale non consignée ; cet audit n'est pas indépendant.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "specs/050-double-clic-titre/tasks.md",
+          "sha256": "8f3e05faa3d53768ceb4d5c2b0535b2fa9df4560b4d6c4db0f47df1b2a2c93f5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Revue 1 consignée et traitée ; validation finale non consignée ; cet audit n'est pas indépendant."
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Aucune dépendance ajoutée. Niveau 4 : inventaire mesuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Aucune dépendance ajoutée. Niveau 4 : inventaire mesuré."
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Coût nul pour un clic simple. Niveau 4 : mesure.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Coût nul pour un clic simple. Niveau 4 : mesure."
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Aucun code mort identifié. Niveau 4 : outil de code mort.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "8604d2fcefc43f49fec86bf2891e8ae2782e215116ca3a51e8a89b0fe0014bca"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Aucun code mort identifié. Niveau 4 : outil de code mort."
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Action macOS lue avec repli sur la préférence héritée ; préférences réelles cohérentes avec research.md. Niveau 4 : essai réel.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181439624967Z/run.json",
+          "sha256": "1a2ba5ae17cbc632c6c7ea382dd8c747de0dc2d9ca72dc7789d5aa1de5094c47"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181439810239Z/run.json",
+          "sha256": "8a1b2c0c4d1b6dd3a26350ee1bc49ff2937839fdb8f004c68700db184450c464"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "2029d6844f388073704fc2e28fa4cb0369664dee549cbbad0ea9553336a5f038"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Action macOS lue avec repli sur la préférence héritée ; préférences réelles cohérentes avec research.md. Niveau 4 : essai réel."
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Second double-clic rend la disposition (toggle) ; arbre inchangé dans la reproduction. Niveau 4 : essai réel.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181919915545Z/run.json",
+          "sha256": "d4aae6aa5db4471baebc1fc868ae49fca4dc830ec30362abc883069890a78efe"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Second double-clic rend la disposition (toggle) ; arbre inchangé dans la reproduction. Niveau 4 : essai réel."
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Défaut true + macOS par défaut : fonction inactive et santé warn chez l'utilisateur, contre le critère 049 (F1). Niveau 3 : défauts cohérents.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261018T181452406416Z/run.json",
+          "sha256": "fde0a7bc752b594b599ac006d6248181767fb1b1af31b33583f8fa1688711e8a"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Défaut true + macOS par défaut : fonction inactive et santé warn chez l'utilisateur, contre le critère 049 (F1). Niveau 3 : défauts cohérents."
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Constats reliés aux sources, aux observations runtime et à la reproduction. Niveau 4 : reproduction dans le dépôt.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "6d5b9acac4ddc92c96b12e5c174d740bae57d5b5adac79c69ca266f2547c57e2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes.md",
+          "sha256": "35ace299e757b904ecc59fe2482bcea6e79d67e1cd7812dca10f531c73acc845"
+        },
+        {
+          "kind": "artifact",
+          "path": "repro/Repro050DoubleClickGestureTests.swift",
+          "sha256": "75b625cd5577b880bf58b73c1a3f997a234727916d20cf83eb64f2e1fdb5564b"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Constats reliés aux sources, aux observations runtime et à la reproduction. Niveau 4 : reproduction dans le dépôt."
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Six exigences vérifiées ; T005 non consignée. Niveau 3 : validation consignée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/spec-matrice.md",
+          "sha256": "33936a15606f4f6cf85f6bbcae128ae74894d9460c4f3998c48c43b249c0a7df"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Six exigences vérifiées ; T005 non consignée. Niveau 3 : validation consignée."
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : ~0 ligne suppressible à comportement constant après examen ligne à ligne du diff source (tests exclus) ; le MacOSWindowSetting construit à la volée pour le conflit réutilise le format du message ; aucune dépendance, abstraction ou état dérivé superflu.",
+  "responsibility": "Vertus LLM et responsabilité future : charge cognitive modérée (contrainte macOS expliquée, garde explicite, réutilisation de l'existant) ; volume justifié ; défaut true qui change la santé de la 049 sans le dire (F1) ; commentaire déplacé (F2) ; validation non consignée (F3) ; interaction avec le geste vérifiée seulement par la reproduction d'audit ; cet audit n'est pas indépendant."
+}

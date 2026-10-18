@@ -1,0 +1,158 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": true,
+    "decision": "inconclusive"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "spec048.r3-file-reread",
+      "file": "Sources/RoadieDaemon/RailController.swift",
+      "symbol": "RailController.renderPanels",
+      "instance": "unchanged-state-files-reread-per-tick",
+      "line": 932,
+      "category": "performance",
+      "title": "R3 : la minuterie du rail relirait stages.json et rail.json chaque seconde",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "refuted",
+      "rationale": "Constat de la session fix antérieure. store.state() et railRuntimeStateStore.load() passent par JSONPersistence.read, qui garde la valeur décodée par chemin et la revalide par fstat (mtime, taille, inode) : un fichier inchangé n'est ni lu ni décodé.",
+      "remediation": "Aucune correction de code. Garder la mention de réfutation dans validation.md.",
+      "requirements": [
+        "R3"
+      ],
+      "counter_audit": {
+        "reviewer": "Claude Opus, auditeur de cette session (même agent)",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Chemin suivi jusqu'à readSigned : retour .unchanged sans lecture des octets ; test A7 qui compte les décodages, vert dans le run de tests.",
+        "evidence": [
+          {
+            "kind": "source",
+            "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+            "sha256": "fde5b073a7067a328a3377c6ba75e7ad91b0c6a033629428c87a57f6b55135c6",
+            "line": 223
+          },
+          {
+            "kind": "source",
+            "path": "Sources/RoadieDaemon/StageStore.swift",
+            "sha256": "d65bf8a7033067c28fa0ed2604bc62761f6063a91672d3bea0ff0d152a86f92d",
+            "line": 177
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/StatePersistenceTests.swift",
+            "sha256": "7b06660c20de5db05faef1d8691dd0b71e62474ee7da461bc6a0ad040323c3f6",
+            "line": 66
+          },
+          {
+            "kind": "artifact",
+            "path": "runs/20261018T175828587883Z/run.json",
+            "sha256": "ba502125d778f7096b793dce4b393f37d473a100ad3ac5130d73b0a8b3897ee3"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Lecteurs périodiques des fichiers d'état recherchés (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "98998d558f5439e055e73ece56298cf9fa2254bd5004aaab164964fde57d2c1c"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/RailController.swift",
+          "sha256": "4dbbc975245806ddbf7839004ac079a97318384872f2c3c96e17ee38eac27751",
+          "line": 932
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+          "sha256": "fde5b073a7067a328a3377c6ba75e7ad91b0c6a033629428c87a57f6b55135c6",
+          "line": 215
+        }
+      ],
+      "fingerprint": "62220d6c2a827922c88d"
+    },
+    {
+      "rule_id": "spec048.r3-file-reread",
+      "file": "Sources/RoadieDaemon/DividerResizeRuntime.swift",
+      "symbol": "DividerResizeCoordinator.update",
+      "instance": "stage-state-reread-every-150ms",
+      "line": 167,
+      "category": "performance",
+      "title": "Variante : les poignées décoderaient stages.json toutes les 150 ms",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "refuted",
+      "rationale": "Variante de la session antérieure. effectiveStageStore.state() passe par le même JSONPersistence.read : fstat par tick, aucun décodage si le fichier est inchangé.",
+      "remediation": "Aucune correction de code.",
+      "counter_audit": {
+        "reviewer": "Claude Opus, auditeur de cette session (même agent)",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même chemin StageStore.state() -> JSONPersistence.read que F2 ; validation.md parvient à la même conclusion.",
+        "evidence": [
+          {
+            "kind": "source",
+            "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+            "sha256": "fde5b073a7067a328a3377c6ba75e7ad91b0c6a033629428c87a57f6b55135c6",
+            "line": 215
+          },
+          {
+            "kind": "source",
+            "path": "specs/048-consommation-repos/validation.md",
+            "sha256": "fab5a4599fa8f348412c0c954631213c62a7f0ed6788b3212a44d9ae318335b8",
+            "line": 71
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche commune avec F2.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "98998d558f5439e055e73ece56298cf9fa2254bd5004aaab164964fde57d2c1c"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "241a8612c44d4a66c44eba89a3466b7bad9f7beb6dcd6b4777cb9b4c46f6adc3"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DividerResizeRuntime.swift",
+          "sha256": "793e8714eac64fff88773a4ea141fb75a0abe10fa6e8219f53845c14edbd440a",
+          "line": 167
+        }
+      ],
+      "fingerprint": "8d3b5fedd4b3ec996f1a"
+    }
+  ],
+  "suppressed": []
+}

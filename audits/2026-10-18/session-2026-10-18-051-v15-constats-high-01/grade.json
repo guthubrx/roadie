@@ -1,0 +1,33 @@
+{
+  "protocol": "15.0.0",
+  "grade": "N/A",
+  "score": 95,
+  "date": "2026-10-18",
+  "spec": "specs/051-constats-high/spec.md",
+  "scope": "Revue différentielle session 051 constats HIGH de l'audit performance (commit 38f69a6a, base ab9b28e9), readonly",
+  "decision": "inconclusive",
+  "release_blocked": true,
+  "coverage_percent": 100.0,
+  "controls_verified": 14,
+  "controls_applicable": 14,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 1,
+    "low": 2,
+    "info": 0,
+    "total": 3,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [
+    "outil non exécuté : gitleaks-history",
+    "sous-contrôle d'axe non vérifié : axes.tests.04",
+    "sous-contrôle d'axe non vérifié : axes.performance.04",
+    "sous-contrôle d'axe non vérifié : axes.quality.03"
+  ],
+  "source_drift": [],
+  "input_sha256": "2674c34978d9bb06b079b2c01f646ea8e4c7a38d9a07d96c976e0f2ea7830cd8",
+  "manifest_sha256": "30e74123754d6da6366ff446e24d07b3bd5467f3ec2d0c817f95ee74359ca40c",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

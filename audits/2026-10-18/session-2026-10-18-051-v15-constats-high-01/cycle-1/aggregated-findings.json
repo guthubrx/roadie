@@ -1,0 +1,158 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": true,
+    "decision": "inconclusive"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 1,
+    "low": 2,
+    "info": 0,
+    "total": 3,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "spec051.click-full-snapshot",
+      "file": "Sources/roadied/main.swift",
+      "symbol": "startTilerComponent.gestureTarget",
+      "instance": "shared-snapshot-per-left-click",
+      "line": 429,
+      "category": "performance",
+      "title": "R5 contredite en mode run : la session de geste fait un relevé complet à chaque clic gauche",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Chaque leftMouseDown appelle la cible de geste du tiler, qui lit sharedSnapshot() (règle des 150 ms, sans réutilisation silencieuse) : au repos, un relevé AX complet a lieu sur le fil principal avant tout test de barre de titre, plus une ligne events.jsonl. Le rail et la session de geste partagent la même publication : le pré-filtre C-05 ne retire aucun relevé par clic dans le mode par défaut.",
+      "remediation": "Décision de conception : cible de geste via readerSnapshot (génération d'observation) ou pré-filtre sur les cadres gérés, puis mesure ; sinon réécrire R5 et validation.md.",
+      "requirements": [
+        "R5"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Moniteurs de clic recensés et lus (motifs, sites, verdicts).",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "9128bcca30f3e298821fd5e1b282e61316d72de40416ee9df0286cbec2608ed2"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4d1d68a857e41228a02175b0907b269a2eb51edb1d99674ce0a5113cf22ed26a"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/roadied/main.swift",
+          "sha256": "50eeaba595653e13b17b0c32ec1a2220645a4c6afc9d968d08fc545105a6a306",
+          "line": 429
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+          "sha256": "8488d68043f17d403bad63454e76d0aa18c42738bfbd7eda07d69e2ad146681b",
+          "line": 189
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "sha256": "80b94f44c36074261b83caf5a15fc07f1a0fa02e3e8bb03bfeebac6702c313c1",
+          "line": 221
+        }
+      ],
+      "fingerprint": "355e359e3f314c2619f0"
+    },
+    {
+      "rule_id": "spec051.click-full-snapshot",
+      "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "symbol": "TitlebarContextMenuController.handleRightMouseDown",
+      "instance": "snapshot-before-titlebar-hit-test",
+      "line": 212,
+      "category": "performance",
+      "title": "Variante : le menu de barre de titre relève à chaque clic droit quand il est activé",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "handleRightMouseDown appelle snapshotService.snapshot(), qui relève toujours, avant le test de barre de titre. Option expérimentale désactivée par défaut ; antérieur à la 051.",
+      "remediation": "Tester la bande de titre sur un relevé partagé et relever seulement si le point est éligible.",
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche commune avec F1.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "9128bcca30f3e298821fd5e1b282e61316d72de40416ee9df0286cbec2608ed2"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4d1d68a857e41228a02175b0907b269a2eb51edb1d99674ce0a5113cf22ed26a"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "sha256": "39cd3baa3ea75c47db9c8e398db8eaad23e481ec22c65b74de6f591cc7d9a3f5",
+          "line": 212
+        }
+      ],
+      "fingerprint": "d883fcfafcd382d1e3cc"
+    },
+    {
+      "rule_id": "spec051.success-criteria",
+      "file": "specs/051-constats-high/tasks.md",
+      "symbol": "T007",
+      "instance": "rest-measurement-missing",
+      "line": 9,
+      "category": "documentation",
+      "title": "Critère de réussite non rempli : aucune mesure avant/après publiée",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "La spec exige une mesure au repos avec mesure-repos.py et des résultats publiés ; T007 n'est pas cochée et le commit ne contient aucun fichier mesures/. Sans mesure, les gains restent des hypothèses (constitution XXII).",
+      "remediation": "Mesurer au repos dans les conditions de la 048 et publier avant/après, ou retirer le critère de la spec.",
+      "variants": {
+        "status": "done",
+        "rationale": "Autres specs du commit vérifiées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "9128bcca30f3e298821fd5e1b282e61316d72de40416ee9df0286cbec2608ed2"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4d1d68a857e41228a02175b0907b269a2eb51edb1d99674ce0a5113cf22ed26a"
+        },
+        {
+          "kind": "source",
+          "path": "specs/051-constats-high/tasks.md",
+          "sha256": "8bf6060fe4e507417da136e6bb6dd184a04b88fbe86e0a95da340d0f32c7ce33",
+          "line": 9
+        },
+        {
+          "kind": "source",
+          "path": "specs/051-constats-high/spec.md",
+          "sha256": "9ad186566aa031b5293218da826a84eb6f5cdbef1ea80e1d6ad774c20024a0a0",
+          "line": 38
+        }
+      ],
+      "fingerprint": "d9e859065f43542d8c9e"
+    }
+  ],
+  "suppressed": []
+}
