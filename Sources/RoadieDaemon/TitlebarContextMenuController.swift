@@ -155,6 +155,8 @@ public final class TitlebarContextMenuController {
     private var menuTargets: [TitlebarMenuActionTarget] = []
     private var lastIgnoredAt: [String: Date] = [:]
     private let readPreference: (_ domain: String, _ key: String) -> Any?
+    /// Rôle AX de l'élément sous un point en coordonnées AX (SPEC-050), injectable pour les tests.
+    private let elementRoleAt: (CGPoint) -> String?
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
@@ -163,9 +165,11 @@ public final class TitlebarContextMenuController {
         events: EventLog = EventLog(),
         readPreference: @escaping (_ domain: String, _ key: String) -> Any? = { domain, key in
             CFPreferencesCopyAppValue(key as CFString, domain as CFString)
-        }
+        },
+        elementRoleAt: @escaping (CGPoint) -> String? = TitlebarContextMenuController.liveElementRole
     ) {
         self.readPreference = readPreference
+        self.elementRoleAt = elementRoleAt
         self.snapshotService = snapshotService
         self.actions = actions
         self.configLoader = configLoader
@@ -224,20 +228,46 @@ public final class TitlebarContextMenuController {
         clickCount == 2 && enabled && macOSAction == .none
     }
 
+    /// Rôles AX qui gardent leur propre double-clic (sélection d'un mot, bouton, onglet, lien,
+    /// contenu web) : la maximisation ne doit pas les remplacer.
+    nonisolated static let interactiveRoles: Set<String> = [
+        "AXTextField", "AXTextArea", "AXComboBox", "AXButton", "AXPopUpButton", "AXMenuButton",
+        "AXRadioButton", "AXCheckBox", "AXTabGroup", "AXRadioGroup", "AXLink", "AXWebArea",
+        "AXSlider", "AXIncrementor", "AXDisclosureTriangle",
+    ]
+
+    /// Cible valide : fenêtre tuilée (une fenêtre flottante garde sa taille, SPEC-047) et
+    /// élément sous le pointeur non interactif. O(1).
+    nonisolated static func isDoubleClickTarget(pinned: Bool, role: String?) -> Bool {
+        !pinned && !(role.map(interactiveRoles.contains) ?? false)
+    }
+
+    nonisolated public static func liveElementRole(at point: CGPoint) -> String? {
+        var element: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y),
+                                               &element) == .success, let element else { return nil }
+        var role: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success else { return nil }
+        return role as? String
+    }
+
     /// Double-clic sur la barre de titre d'une fenêtre gérée : maximisation Roadie (SPEC-050).
     /// Même zone et mêmes filtres que le menu par clic droit, même si ce menu est désactivé.
     @discardableResult
     public func handleDoubleClick(at point: CGPoint, clickCount: Int) -> Bool {
         let config = configLoader().experimental.titlebarContextMenu
-        guard clickCount == 2, config.doubleClickMaximize,
-              Self.handlesDoubleClick(clickCount: clickCount, enabled: true,
+        guard Self.handlesDoubleClick(clickCount: clickCount, enabled: config.doubleClickMaximize,
                                       macOSAction: MacOSWindowSetting.doubleClickAction(read: readPreference))
         else { return false }
         var settings = TitlebarContextMenuSettings(config: config)
         settings.enabled = true
-        let snapshot = snapshotService.sharedSnapshot()
-        let hit = Self.hitTest(point: Self.appKitPointToAX(point), snapshot: snapshot, settings: settings)
-        guard hit.isEligible, let windowID = hit.windowID else { return false }
+        let snapshot = snapshotService.snapshot()
+        let axPoint = Self.appKitPointToAX(point)
+        let hit = Self.hitTest(point: axPoint, snapshot: snapshot, settings: settings)
+        guard hit.isEligible, let windowID = hit.windowID,
+              Self.isDoubleClickTarget(pinned: snapshot.windows.first { $0.window.id == windowID }?.pin != nil,
+                                       role: elementRoleAt(axPoint))
+        else { return false }
         let result = WindowCommandService(service: snapshotService).toggleMaximize(windowID: windowID)
         events.append(RoadieEvent(
             type: "titlebar_context_menu.action",

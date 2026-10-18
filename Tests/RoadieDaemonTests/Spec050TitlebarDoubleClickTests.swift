@@ -31,6 +31,16 @@ struct Spec050TitlebarDoubleClickTests {
         #expect(!TitlebarContextMenuController.handlesDoubleClick(clickCount: 2, enabled: true, macOSAction: .zoom))
     }
 
+    @Test func interactiveElementsAndFloatingWindowsKeepTheirDoubleClick() {
+        #expect(TitlebarContextMenuController.isDoubleClickTarget(pinned: false, role: "AXWindow"))
+        #expect(TitlebarContextMenuController.isDoubleClickTarget(pinned: false, role: "AXToolbar"))
+        #expect(TitlebarContextMenuController.isDoubleClickTarget(pinned: false, role: nil))
+        for role in ["AXTextField", "AXButton", "AXRadioButton", "AXTabGroup", "AXWebArea", "AXLink"] {
+            #expect(!TitlebarContextMenuController.isDoubleClickTarget(pinned: false, role: role))
+        }
+        #expect(!TitlebarContextMenuController.isDoubleClickTarget(pinned: true, role: "AXWindow"))
+    }
+
     @Test func settingDefaultsToEnabledAndDecodes() throws {
         #expect(TitlebarContextMenuConfig().doubleClickMaximize)
         let path = tempPath("spec050-config.toml")
