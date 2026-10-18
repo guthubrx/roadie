@@ -240,7 +240,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "move|warp|resize left|right|up|down"),
         CLICommandSpec(usage: "mode bsp|spatialBsp|masterStack|float"),
         CLICommandSpec(usage: "toggle maximize|fullscreen|native-fullscreen"),
-        CLICommandSpec(usage: "toggle floating", implemented: false),
+        CLICommandSpec(usage: "toggle floating"),
         CLICommandSpec(usage: "window display N"),
         CLICommandSpec(usage: "window desktop N [--follow]"),
         CLICommandSpec(usage: "window swap left|right|up|down"),
@@ -339,8 +339,9 @@ public final class CLICommandRouter {
         // raccourci Karabiner ne voyait aucune fenêtre (« no active tiled window »).
         case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark":
             return true
+        // `floating` lit la fenêtre active : il faut l'Accessibilité du daemon (SPEC-047).
         case "toggle":
-            return args.dropFirst().first == "maximize"
+            return ["maximize", "floating"].contains(args.dropFirst().first ?? "")
         case "restore":
             return args.dropFirst().first == "unhide-all"
         case "state":
@@ -729,8 +730,12 @@ public final class CLICommandRouter {
             case "native-fullscreen":
                 result = windowCommands.toggleNativeFullscreen()
             case "floating":
-                out("roadie: \(args.joined(separator: " ")) is not implemented in this build")
-                return 1
+                let actions = WindowContextActions(
+                    snapshotService: service,
+                    stageStore: service.effectiveStageStore,
+                    eventLog: service.effectiveEvents
+                )
+                return finish(actions.toggleFloating(windowID: nil))
             default:
                 return usageError()
             }

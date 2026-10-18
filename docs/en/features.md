@@ -239,6 +239,7 @@ An invalid value falls back to `focused_display`.
 
 Available actions:
 
+- float the window in its stage, outside tiling;
 - pin the window across all stages on the current desktop;
 - pin the window across all Roadie desktops on the same display;
 - remove a window pin;
@@ -258,6 +259,22 @@ Window pins do not copy a window into multiple stages. The window keeps one
 home context, but Roadie does not hide it while the pinned desktop or display is
 active. A pinned window is excluded from automatic layout to avoid moving other
 windows unexpectedly.
+
+### Floating Window
+
+`roadie toggle floating` floats the active window in its stage. It leaves tiling:
+the other windows take its space, and you place it by hand. It stays attached to
+its stage: hidden when you switch stage, back in the same place when you return.
+Run the command again to put it back into tiling.
+
+The title bar "Fenêtre" menu also offers "Flotter dans cette stage" (float in this
+stage) and "Revenir au tuilage" (return to tiling). On a window already pinned to a
+desktop, the command removes the pin and returns the window to tiling. No shortcut
+is set by default: bind the command to a key in BetterTouchTool or Karabiner.
+
+The state survives a Roadie restart. An earlier Roadie version still reads the
+state file: it treats a floating window as a pin on this desktop, visible on all
+of its stages.
 
 ## Roadie Desktops
 
@@ -633,6 +650,7 @@ roadie warp right
 roadie resize right
 roadie layout zoom-parent
 roadie layout toggle-split
+roadie toggle floating
 ```
 
 Use cases:
@@ -641,7 +659,8 @@ Use cases:
 - force a local layout restructuring;
 - insert the active window on a chosen side with `warp`;
 - locally flip two neighboring windows in `spatialBsp` with `toggle-split`;
-- temporarily enlarge a window without losing context.
+- temporarily enlarge a window without losing context;
+- take a window out of tiling in its stage, then put it back.
 
 In `spatialBsp`, `layout insert` and `layout join-with` are rejected; use `warp`. `layout width` is rejected; use `resize`. `layout flatten` balances the existing tree. In other modes, legacy commands remain available where supported.
 

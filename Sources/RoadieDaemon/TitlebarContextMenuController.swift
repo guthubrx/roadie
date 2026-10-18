@@ -93,6 +93,7 @@ public enum WindowContextActionKind: String, Equatable, Codable, Sendable {
     case desktop
     case desktopStage = "desktop_stage"
     case display
+    case floatStage = "float_stage"
     case pinDesktop = "pin_desktop"
     case pinAllDesktops = "pin_all_desktops"
     case unpin
@@ -381,23 +382,33 @@ public final class TitlebarContextMenuController {
         )
         submenu.addItem(.separator())
         if let pin {
-            let stateItem = NSMenuItem(
-                title: pin.pinScope == .desktop ? "Pin actuel : ce desktop" : "Pin actuel : tous les desktops",
-                action: nil,
-                keyEquivalent: ""
-            )
+            let stateTitle: String
+            switch pin.pinScope {
+            case .stage: stateTitle = "État actuel : flottante dans cette stage"
+            case .desktop: stateTitle = "Pin actuel : ce desktop"
+            case .allDesktops: stateTitle = "Pin actuel : tous les desktops"
+            }
+            let stateItem = NSMenuItem(title: stateTitle, action: nil, keyEquivalent: "")
             stateItem.isEnabled = false
             submenu.addItem(stateItem)
             submenu.addItem(.separator())
+            let choices: [(String, WindowContextActionKind, WindowPinScope)] = [
+                ("Flotter dans cette stage", .floatStage, .stage),
+                ("Pin sur ce desktop", .pinDesktop, .desktop),
+                ("Pin sur tous les desktops", .pinAllDesktops, .allDesktops)
+            ]
+            for (title, kind, scope) in choices where scope != pin.pinScope {
+                addActionItem(title: title, kind: kind, windowID: windowID, sourceScope: sourceScope, to: submenu)
+            }
             addActionItem(
-                title: pin.pinScope == .desktop ? "Pin sur tous les desktops" : "Pin sur ce desktop",
-                kind: pin.pinScope == .desktop ? .pinAllDesktops : .pinDesktop,
+                title: pin.pinScope == .stage ? "Revenir au tuilage" : "Retirer le pin",
+                kind: .unpin,
                 windowID: windowID,
                 sourceScope: sourceScope,
                 to: submenu
             )
-            addActionItem(title: "Retirer le pin", kind: .unpin, windowID: windowID, sourceScope: sourceScope, to: submenu)
         } else {
+            addActionItem(title: "Flotter dans cette stage", kind: .floatStage, windowID: windowID, sourceScope: sourceScope, to: submenu)
             addActionItem(title: "Pin sur ce desktop", kind: .pinDesktop, windowID: windowID, sourceScope: sourceScope, to: submenu)
             addActionItem(title: "Pin sur tous les desktops", kind: .pinAllDesktops, windowID: windowID, sourceScope: sourceScope, to: submenu)
         }

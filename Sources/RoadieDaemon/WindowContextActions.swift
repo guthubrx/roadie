@@ -84,6 +84,8 @@ public struct WindowContextActions {
         case .removeAffinityApp:
             let result = affinityService.removeAppAffinity(window: entry.window, scope: scope)
             return WindowContextActionResult(message: result.message, changed: result.changed)
+        case .floatStage:
+            return setPin(window: entry.window, sourceScope: scope, pinScope: .stage, snapshot: snapshot)
         case .pinDesktop:
             return setPin(window: entry.window, sourceScope: scope, pinScope: .desktop, snapshot: snapshot)
         case .pinAllDesktops:
@@ -148,6 +150,26 @@ public struct WindowContextActions {
         }
     }
 
+    /// `roadie toggle floating` (SPEC-047) : une fenêtre épinglée, quelle que soit sa portée,
+    /// revient au tuilage ; sinon elle flotte dans sa stage. Sans fenêtre désignée, vise la
+    /// fenêtre active. Complexité : O(w + p), w fenêtres du relevé, p épinglages.
+    public func toggleFloating(windowID: WindowID?) -> WindowContextActionResult {
+        let snapshot = snapshotService.snapshot()
+        guard let targetID = windowID ?? snapshot.focusedWindowID,
+              let entry = snapshot.windows.first(where: { $0.window.id == targetID }),
+              let scope = entry.scope
+        else {
+            return WindowContextActionResult(message: "toggle floating: no managed window", changed: false, outcome: .noOp)
+        }
+        if entry.pin != nil {
+            return removePin(window: entry.window, sourceScope: scope, snapshot: snapshot)
+        }
+        guard entry.window.isTileCandidate else {
+            return WindowContextActionResult(message: "toggle floating: window is not tiled", changed: false, outcome: .noOp)
+        }
+        return setPin(window: entry.window, sourceScope: scope, pinScope: .stage, snapshot: snapshot)
+    }
+
     private func saveAffinity(
         kind: WindowRuleAffinityKind,
         window: WindowSnapshot,
@@ -184,7 +206,12 @@ public struct WindowContextActions {
             details: mutation.pin.eventDetails
         ))
 
-        let scopeLabel = pinScope == .desktop ? "ce desktop" : "tous les desktops"
+        let scopeLabel: String
+        switch pinScope {
+        case .stage: scopeLabel = "cette stage (flottante)"
+        case .desktop: scopeLabel = "ce desktop"
+        case .allDesktops: scopeLabel = "tous les desktops"
+        }
         return WindowContextActionResult(message: "pin \(scopeLabel): window=\(window.id.rawValue)", changed: true)
     }
 

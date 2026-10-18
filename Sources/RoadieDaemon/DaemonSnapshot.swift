@@ -177,6 +177,10 @@ public struct SnapshotService: Sendable {
         stageStore
     }
 
+    public var effectiveEvents: EventLog {
+        events
+    }
+
     /// Présence utilisée par le rail, sans ajouter de fenêtre au relevé de placement.
     public func railWindowIDs(in snapshot: DaemonSnapshot, state: PersistentStageState? = nil) -> Set<WindowID> {
         Self.existingManagedWindowIDs(

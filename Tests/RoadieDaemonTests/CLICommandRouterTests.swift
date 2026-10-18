@@ -48,6 +48,8 @@ struct CLICommandRouterTests {
         #expect(response.stdout.contains("maximize"))
         #expect(response.stderr.isEmpty)
         #expect(CLICommandRouter.isDaemonRouted(["toggle", "maximize"]))
+        #expect(CLICommandRouter.isDaemonRouted(["toggle", "floating"]))
+        #expect(!CLICommandRouter.isDaemonRouted(["toggle", "floating", "--help"]))
         #expect(!CLICommandRouter.isDaemonRouted(["toggle", "maximize", "--help"]))
     }
 
@@ -55,7 +57,8 @@ struct CLICommandRouterTests {
     func helpIsGeneratedFromCommandTable() {
         let full = router().run(["--help"]).stdout
         #expect(!full.contains("wrap"))
-        #expect(full.contains("roadie toggle floating  (not implemented)"))
+        #expect(full.contains("roadie toggle floating"))
+        #expect(!full.contains("roadie toggle floating  (not implemented)"))
         #expect(full.contains("roadie restore snapshot|status|apply|unhide-all"))
 
         let stage = router().run(["help", "stage"])
@@ -71,7 +74,6 @@ struct CLICommandRouterTests {
     @Test
     func unimplementedCommandsExitOne() {
         #expect(router().run(["window", "close"]).exitCode == 1)
-        #expect(router().run(["toggle", "floating"]).exitCode == 1)
     }
 
     @Test

@@ -94,12 +94,18 @@ sur l'écran de la fenêtre si aucun écran actif n'est connu. Docs FR/EN align�
 Complément d'aide : effet possible sur la réactivité expliqué, sans gain garanti.
 Configuration et certificat conservés. Preuves visuelles incomplètes : bureau
 inaccessible. Reçu : specs/046-placement-ecran-actif/validation.md.
-Current SpecKit feature: `046-placement-ecran-actif`.
+Session 047 implémentée et installée : `roadie toggle floating` fait flotter la fenêtre
+active dans sa stage, puis la remet au tuilage (épinglage de portée stage, lisible par
+les versions antérieures). Menu « Fenêtre » aligné, commande routée vers le daemon.
+1 707 tests / 200 suites réussis ; revue traitée. UUID 7DE5FFC6-67B3-3CD2-A7B3-3C4CB9A1694E,
+PID 64518, quatre contrôles santé OK. Aller-retour réel vérifié sur Firefox.
+Reçu : specs/047-fenetre-flottante/validation.md.
+Current SpecKit feature: `047-fenetre-flottante`.
 
 Contexte :
-- `specs/046-placement-ecran-actif/spec.md`
-- `specs/046-placement-ecran-actif/plan.md`
-- `specs/046-placement-ecran-actif/tasks.md`
+- `specs/047-fenetre-flottante/spec.md`
+- `specs/047-fenetre-flottante/plan.md`
+- `specs/047-fenetre-flottante/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

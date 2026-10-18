@@ -244,6 +244,7 @@ en minuscules et sans espace ajouté. Une valeur invalide reprend le défaut `fo
 
 Actions disponibles :
 
+- faire flotter la fenetre dans sa stage, hors du tuilage;
 - pinner la fenetre sur toutes les stages du desktop courant;
 - pinner la fenetre sur tous les desktops Roadie du meme ecran;
 - retirer un pin de fenetre;
@@ -263,6 +264,22 @@ Les pins de fenetres ne creent pas de copie dans les stages. La fenetre garde
 un contexte d'origine unique, mais Roadie ne la cache pas tant que le desktop ou
 l'ecran cible du pin est actif. Une fenetre pinnee est sortie du layout
 automatique pour eviter les deplacements parasites des autres fenetres.
+
+### Fenêtre flottante
+
+`roadie toggle floating` fait flotter la fenêtre active dans sa stage. Elle sort
+du tuilage : les autres fenêtres reprennent sa place, et vous la placez à la main.
+Elle reste rattachée à sa stage : masquée quand vous changez de stage, au même
+endroit au retour. Relancez la commande pour la remettre dans le tuilage.
+
+Le menu « Fenêtre » de la barre de titre propose aussi « Flotter dans cette stage »
+et « Revenir au tuilage ». Sur une fenêtre déjà pinnée sur un desktop, la commande
+retire le pin et rend la fenêtre au tuilage. Aucun raccourci n'est posé par défaut :
+associez la commande à une touche dans BetterTouchTool ou Karabiner.
+
+L'état survit au redémarrage de Roadie. Une version antérieure de Roadie lit
+encore le fichier d'état : elle traite une fenêtre flottante comme un pin sur ce
+desktop, visible sur toutes ses stages.
 
 ## Desktops Roadie
 
@@ -648,6 +665,7 @@ roadie warp right
 roadie resize right
 roadie layout zoom-parent
 roadie layout toggle-split
+roadie toggle floating
 ```
 
 Cas d'usage :
@@ -656,7 +674,8 @@ Cas d'usage :
 - forcer une restructuration locale du layout;
 - insérer la fenêtre active du côté voulu avec `warp`;
 - inverser localement deux fenetres voisines en `spatialBsp` avec `toggle-split`;
-- agrandir temporairement une fenetre sans perdre le contexte.
+- agrandir temporairement une fenetre sans perdre le contexte;
+- sortir une fenetre du tuilage dans sa stage, puis l'y remettre.
 
 Dans `spatialBsp`, `layout insert` et `layout join-with` sont refusés : utilise `warp`. `layout width` est refusé : utilise `resize`. `layout flatten` équilibre l’arbre existant. Les anciennes commandes restent disponibles dans les autres modes compatibles.
 

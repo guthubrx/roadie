@@ -46,7 +46,10 @@ roadie window reset
 roadie toggle maximize
 roadie toggle fullscreen
 roadie toggle native-fullscreen
+roadie toggle floating
 ```
+
+`roadie toggle floating` fait flotter la fenêtre active dans sa stage, hors du tuilage. Relance la commande pour la remettre dans le tuilage. Voir « Fenêtre flottante » dans le guide des fonctionnalités.
 
 `roadie toggle maximize` agrandit la fenêtre active en gardant la bande du navrail visible libre. Relance la commande pour restaurer la disposition. Les voisines de la même stage sont cachées pendant la maximisation. Activer une autre fenêtre de cette stage restaure directement la disposition. Changer de stage conserve le zoom sauvegardé. Avec le masquage automatique, le rail masqué laisse toute la zone utile, comme le plein écran Roadie. Quand il revient au survol ou avec `roadie rail pin`, la fenêtre se redimensionne pour lui laisser la place, sans quitter la maximisation. Le menu de titre propose aussi « Fenêtre → Maximiser / restaurer (garder le navrail) » lorsqu'il est activé.
 

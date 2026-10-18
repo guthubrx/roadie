@@ -950,6 +950,8 @@ public struct CommandFocusProtection: Equatable, Codable, Sendable {
 }
 
 public enum WindowPinScope: String, Codable, Sendable {
+    /// Fenêtre flottante : hors de l'arbre, visible seulement dans sa stage (SPEC-047).
+    case stage
     case desktop
     case allDesktops = "all_desktops"
 }
@@ -988,6 +990,44 @@ public struct PersistentWindowPin: Equatable, Codable, Sendable {
         self.missingSince = missingSince
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case windowID, homeScope, pinScope, bundleID, title, lastFrame, createdAt, updatedAt, missingSince
+        case floatingInStage
+    }
+
+    /// Compatibilité de retour arrière (SPEC-047) : la portée `stage` s'écrit `desktop` plus
+    /// `floatingInStage = true`. Une version antérieure ignore la clé inconnue et lit un pin de
+    /// desktop, au lieu de rejeter tout `stages.json` sur une valeur d'énumération inconnue.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        windowID = try c.decode(WindowID.self, forKey: .windowID)
+        homeScope = try c.decode(StageScope.self, forKey: .homeScope)
+        let decodedScope = try c.decode(WindowPinScope.self, forKey: .pinScope)
+        pinScope = try c.decodeIfPresent(Bool.self, forKey: .floatingInStage) == true ? .stage : decodedScope
+        bundleID = try c.decode(String.self, forKey: .bundleID)
+        title = try c.decode(String.self, forKey: .title)
+        lastFrame = try c.decode(Rect.self, forKey: .lastFrame)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        missingSince = try c.decodeIfPresent(Date.self, forKey: .missingSince)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(windowID, forKey: .windowID)
+        try c.encode(homeScope, forKey: .homeScope)
+        try c.encode(pinScope == .stage ? WindowPinScope.desktop : pinScope, forKey: .pinScope)
+        if pinScope == .stage {
+            try c.encode(true, forKey: .floatingInStage)
+        }
+        try c.encode(bundleID, forKey: .bundleID)
+        try c.encode(title, forKey: .title)
+        try c.encode(lastFrame, forKey: .lastFrame)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(missingSince, forKey: .missingSince)
+    }
+
     public func visibility(in activeScope: StageScope?) -> PinVisibilityDecision {
         guard let activeScope,
               activeScope.displayID == homeScope.displayID
@@ -1012,6 +1052,14 @@ public struct PersistentWindowPin: Equatable, Codable, Sendable {
         }
 
         switch pinScope {
+        case .stage:
+            return PinVisibilityDecision(
+                windowID: windowID,
+                shouldBeVisible: false,
+                effectiveScope: nil,
+                homeScope: homeScope,
+                reason: .outOfScope
+            )
         case .desktop:
             return PinVisibilityDecision(
                 windowID: windowID,

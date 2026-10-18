@@ -7,6 +7,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- `roadie toggle floating` fait flotter la fenêtre active dans sa stage, hors du
+  tuilage, puis l'y remet. Aussi dans le menu « Fenêtre » de la barre de titre.
 - Poignées dans les séparations de l'arbre persistant pour ajuster les proportions
   à la souris, activables dans Tuilage sans changer la disposition.
 - Aperçu du réordonnancement dans le rail : la stage déplacée apparaît en transparence
