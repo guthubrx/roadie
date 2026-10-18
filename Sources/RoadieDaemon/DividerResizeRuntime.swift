@@ -7,6 +7,7 @@ import RoadieTiler
 @MainActor
 public final class DividerResizeRuntime {
     private let service: SnapshotService
+    private let inputActivity: UserInputActivity
     private let coordinator: DividerResizeCoordinator
     private lazy var controller = SplitResizeController(
         onBegin: { [weak self] handle, point in self?.begin(handle, at: point) ?? false },
@@ -18,13 +19,14 @@ public final class DividerResizeRuntime {
     private var refreshing = false
     private var started = false
     private var lifecycle: UInt64 = 0
-    private var visibleHandles: [SplitResizeHandle] = []
 
     public init(
         service: SnapshotService = SnapshotService(),
+        inputActivity: UserInputActivity = .shared,
         minimums: @escaping (StageScope, DaemonSnapshot) -> [WindowID: CGSize] = { _, _ in [:] }
     ) {
         self.service = service
+        self.inputActivity = inputActivity
         coordinator = DividerResizeCoordinator(service: service, minimums: minimums)
     }
 
@@ -41,6 +43,8 @@ public final class DividerResizeRuntime {
 
     private func begin(_ handle: SplitResizeHandle, at point: CGPoint) -> Bool {
         guard coordinator.begin(handle, at: point) else { return false }
+        // L'acceptation réelle prime sur une simple présence géométrique sous le curseur.
+        inputActivity.claimExplicitResize()
         // Ce minuteur ne tourne que pendant un geste : une seule cible en attente, au plus 20 applications/s.
         placementTimer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -68,12 +72,6 @@ public final class DividerResizeRuntime {
         placementTimer = nil
         controller.stop()
         coordinator.end(cancelled: true)
-        visibleHandles.removeAll()
-    }
-
-    /// O(h). Une prise explicite ne doit pas démarrer aussi une session native sur sa voisine.
-    public func containsHandle(at point: CGPoint) -> Bool {
-        visibleHandles.contains { $0.divider.hitRect.contains(point) }
     }
 
     private func refresh() async {
@@ -81,7 +79,6 @@ public final class DividerResizeRuntime {
         guard service.effectiveConfig.tiling.resizeHandles else {
             controller.stop()
             coordinator.end(cancelled: true)
-            visibleHandles.removeAll()
             return
         }
         refreshing = true
@@ -89,7 +86,6 @@ public final class DividerResizeRuntime {
         defer { refreshing = false }
         guard let snapshot = await service.readerSnapshot(followFocus: false), started, version == lifecycle else { return }
         let handles = coordinator.update(snapshot: snapshot)
-        visibleHandles = handles
         if controller.isDragging, !coordinator.isDragging { controller.cancel() }
         controller.update(handles: handles)
     }
@@ -192,10 +188,7 @@ final class DividerResizeCoordinator {
                 guard window.isOnScreen else { return nil }
                 // JankyBorders expose un rectangle CG plein autour d'un contenu transparent.
                 // Exception étroite : une vraie fenêtre ou une application AX illisible reste protégée.
-                let borderDecoration = window.appName == "borders" && window.bundleID.isEmpty
-                    && window.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    && window.role == nil && window.subrole == nil && window.furniture == nil
-                return borderDecoration ? nil : window.frame.cgRect
+                return window.isKnownBorderDecoration ? nil : window.frame.cgRect
             }
             let dividers = tree.dividers(in: geometry.container, innerGap: geometry.innerGap, excluding: geometry.absent)
             handles += dividers.filter { divider in

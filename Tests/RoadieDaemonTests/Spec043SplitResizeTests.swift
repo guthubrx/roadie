@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 import RoadieCore
 import RoadieTiler
@@ -6,6 +7,46 @@ import RoadieTiler
 
 @Suite @MainActor
 struct Spec043SplitResizeTests {
+    @Test(arguments: [true, false])
+    func onlyAcceptedExplicitGripClaimsNativeGesture(accepted: Bool) throws {
+        let handle = try handle()
+        let input = UserInputActivity()
+        var releases: [Bool] = []
+        input.observeGestures(target: { _ in (2, CGRect(x: 505, y: -600, width: 495, height: 600)) },
+                              onRelease: { releases.append($0) })
+        let controller = SplitResizeController(presentationEnabled: false, onBegin: { _, _ in
+            guard accepted else { return false }
+            input.claimExplicitResize()
+            return true
+        }, onUpdate: { _, _ in }, onEnd: { _, _ in })
+        controller.update(handles: [handle])
+        input.mouseDown(at: handle.divider.position)
+        #expect(input.currentGesture?.windowID == 2)
+        #expect(controller.begin(handle: handle, at: handle.divider.position) == accepted)
+        input.mouseDragged()
+        input.mouseUp(leftButton: true)
+        controller.end()
+        let native = input.takeGesture()
+        if accepted { #expect(native == nil) }
+        else { #expect(native?.windowID == 2); #expect(native?.didDrag == true) }
+        #expect(releases == [!accepted])
+    }
+
+    @Test
+    func explicitResizeSupersedesOlderUnconsumedNativeGesture() {
+        let input = UserInputActivity()
+        input.observeGestures(target: { _ in (2, CGRect(x: 0, y: 0, width: 500, height: 500)) }, onRelease: { _ in })
+        input.mouseDown(at: .zero)
+        input.mouseDragged()
+        input.mouseUp(leftButton: true)
+        input.mouseDown(at: .zero)
+        input.claimExplicitResize()
+        #expect(input.currentGesture == nil)
+        #expect(input.takeGesture() == nil)
+        input.mouseUp(leftButton: true)
+        #expect(input.takeGesture() == nil)
+    }
+
     private func handle(display: String = "one", stage: String = "1", ratio: Double = 0.5, orientation: BSPOrientation = .vertical) throws -> SplitResizeHandle {
         let tree = BSPTree.split(orientation: orientation, ratio: ratio,
                                  first: .leaf(WindowID(rawValue: 1)), second: .leaf(WindowID(rawValue: 2)))

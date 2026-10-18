@@ -95,6 +95,105 @@ private final class Divider043Fixture {
 
 @Suite @MainActor
 struct Spec043DividerIntegrationTests {
+    @Test
+    func waitingNativeObservationDoesNotRevertTheFollowingExplicitResize() throws {
+        let f = try Divider043Fixture(four: true)
+        defer { f.clean() }
+        let input = UserInputActivity()
+        var now = Date()
+        var pressed = false
+        let maintainer = LayoutMaintainer(service: f.service,
+            events: EventLog(path: f.directory.appendingPathComponent("native-events.jsonl").path),
+            dragActivity: WindowDragActivity(path: f.directory.appendingPathComponent("drag.json").path),
+            commandActivity: LayoutCommandActivity(path: f.directory.appendingPathComponent("command.json").path),
+            mouseButtonsPressed: { pressed }, writtenFrames: f.registry, generations: f.generations,
+            takeGesture: input.takeGesture, spaceProbe: { _ in true },
+            readFrame: { window in f.provider.entries.first { $0.id == window.id }?.frame.cgRect },
+            configService: ConfigReloadService(activeConfig: f.config, activePath: f.directory.appendingPathComponent("config.toml").path),
+            now: { now })
+        _ = maintainer.tick(cause: "command:startup")
+        now.addTimeInterval(5)
+        let initial = try #require(f.provider.entries.first { $0.id == WindowID(rawValue: 2) })
+        input.observeGestures(target: { _ in (2, initial.frame.cgRect) }, onRelease: { _ in })
+        input.mouseDown(at: .zero, now: now)
+        input.mouseDragged()
+        input.mouseUp(leftButton: true, now: now)
+        _ = maintainer.tick(cause: "drag")
+        #expect(maintainer.nextDeadline(now: now) != nil)
+        let grip = try f.grip()
+        pressed = true
+        #expect(f.coordinator.begin(grip, at: grip.divider.position))
+        input.claimExplicitResize()
+        f.coordinator.queue(grip, at: CGPoint(x: 700, y: 400))
+        f.coordinator.flush()
+        let expected = f.provider.entries.map(\.frame)
+        let written = f.writer.requests
+        now.addTimeInterval(0.05)
+        _ = maintainer.tick(cause: "safety")
+        #expect(f.writer.requests == written)
+        #expect(f.coordinator.isDragging)
+        f.coordinator.end(cancelled: false)
+        pressed = false
+        for _ in 0..<6 {
+            now.addTimeInterval(0.1)
+            _ = maintainer.tick(cause: "safety")
+            #expect(f.provider.entries.map(\.frame) == expected)
+        }
+        let persisted = try #require(f.store.state().bspTree(for: f.scope))
+        let frames = persisted.place(in: f.provider.screen.visibleFrame.cgRect, innerGap: 10)
+        #expect(f.provider.entries.allSatisfy { frames[$0.id] == $0.frame.cgRect })
+    }
+
+    @Test
+    func nativeEdgeInDividerZoneSurvivesBorderDecorationsAndRelease() throws {
+        let f = try Divider043Fixture(four: true)
+        defer { f.clean() }
+        let tiles = f.provider.entries
+        f.provider.entries = tiles.enumerated().flatMap { index, tile -> [WindowSnapshot] in
+            let border = WindowSnapshot(id: WindowID(rawValue: UInt32(100 + index)), pid: 7233,
+                appName: "borders", bundleID: "", title: "",
+                frame: Rect(tile.frame.cgRect.insetBy(dx: -12, dy: -12)),
+                isOnScreen: true, isTileCandidate: false)
+            return [border, tile]
+        }
+        let input = UserInputActivity()
+        var now = Date()
+        let maintainer = LayoutMaintainer(service: f.service,
+            events: EventLog(path: f.directory.appendingPathComponent("native-events.jsonl").path),
+            dragActivity: WindowDragActivity(path: f.directory.appendingPathComponent("drag.json").path),
+            commandActivity: LayoutCommandActivity(path: f.directory.appendingPathComponent("command.json").path),
+            mouseButtonsPressed: { false }, writtenFrames: f.registry, generations: f.generations,
+            takeGesture: input.takeGesture, spaceProbe: { _ in true },
+            readFrame: { window in f.provider.entries.first { $0.id == window.id }?.frame.cgRect },
+            configService: ConfigReloadService(activeConfig: f.config, activePath: f.directory.appendingPathComponent("config.toml").path),
+            now: { now })
+        _ = maintainer.tick(cause: "command:startup")
+        now.addTimeInterval(5)
+        input.observeGestures(target: { point in
+            FocusFollowsMousePicker.gestureTargetWindow(at: point, in: f.service.sharedSnapshot())
+                .map { ($0.window.id.rawValue, $0.window.frame.cgRect) }
+        }, onRelease: { _ in })
+        // Le bord natif peut recevoir ce clic, même si une poignée géométrique est prévue ici.
+        let point = CGPoint(x: 200, y: 403.5)
+        #expect(f.coordinator.update(snapshot: f.snapshot).contains { $0.divider.hitRect.contains(point) })
+        input.mouseDown(at: point, now: now)
+        #expect(input.currentGesture?.windowID == 2)
+        input.mouseDragged()
+        let index = try #require(f.provider.entries.firstIndex { $0.id == WindowID(rawValue: 2) })
+        let userFrame = Rect(x: 0, y: 425, width: 495, height: 375)
+        f.provider.entries[index].frame = userFrame
+        input.mouseUp(leftButton: true, now: now)
+        _ = maintainer.tick(cause: "drag")
+        #expect(f.provider.entries[index].frame == userFrame)
+        for _ in 0..<4 {
+            now.addTimeInterval(0.5)
+            _ = maintainer.tick(cause: "safety")
+        }
+        #expect(f.provider.entries[index].frame == userFrame)
+        let persisted = try #require(f.store.state().bspTree(for: f.scope))
+        #expect(persisted.place(in: f.provider.screen.visibleFrame.cgRect, innerGap: 10)[WindowID(rawValue: 2)] == userFrame.cgRect)
+    }
+
     /// Comparaison logicielle : vrais coordinateurs et persistance, fournisseur/écrivain simulés.
     /// La présentation initiale, les délais des événements et les appels AX réels sont exclus.
     private func compareResize(four: Bool, explicit: Bool) throws -> (Double, Int, Int) {

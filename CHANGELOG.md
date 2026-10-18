@@ -15,6 +15,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Conservation des gestes sur les bords proches d'une poignée ou d'une bordure
+  décorative ; seule une poignée ayant reçu le clic remplace le geste natif.
 - Affichage des poignées conservé avec les bordures JankyBorders, avec un repère
   plus lisible et un interrupteur immédiat dans Tuilage.
 - Conservation des gestes récents face aux anciens refus de taille ; minimums appris

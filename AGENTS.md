@@ -79,7 +79,13 @@ UUID DEA0CA0C-6175-35D6-8A08-68473D919EC1, PID 54197, quatre contrôles santé O
 macOS confirme un panneau de poignée pour les deux fenêtres de l'écran externe.
 Signature/configuration conservées. Geste réel et capture non vérifiés : bureau
 inaccessible. Reçu : specs/044-poignees-visibles/validation/validation.md.
-Session 045 en cours : capture réelle des bords malgré la zone géométrique des poignées et les décorations.
+Session 045 implémentée et installée : capture des bords conservée malgré la zone géométrique
+des poignées et les décorations ; seule une poignée acceptée reprend le geste.
+1 693 tests / 199 suites réussis ; revue traitée et enchaînement natif/poignée vérifié.
+UUID 60B2AD40-0F27-3EB6-BA6D-08570FEF5290, PID 65772, quatre contrôles santé OK.
+Configuration et certificat conservés. Parcours réel assisté : gestes reconnus et taille
+conservée, confirmation utilisateur. Preuves visuelles incomplètes : bureau inaccessible.
+Reçu : specs/045-capture-redimensionnement/validation.md.
 Current SpecKit feature: `045-capture-redimensionnement`.
 
 Contexte :

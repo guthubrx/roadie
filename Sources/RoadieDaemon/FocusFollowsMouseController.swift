@@ -204,6 +204,17 @@ public final class UserInputActivity: @unchecked Sendable {
     /// Session en cours (bouton gauche enfoncé). nil hors geste.
     public var currentGesture: GestureSession? { lock.withLock { gesture } }
 
+    /// Une poignée a réellement accepté le clic : elle remplace les interprétations natives
+    /// courante et antérieure en attente. Le blocage physique des boutons reste indépendant. O(1).
+    @MainActor
+    public func claimExplicitResize() {
+        lock.withLock {
+            gesture = nil
+            finishedGesture = nil
+            physicalReleaseObservedAt = nil
+        }
+    }
+
     /// L'état physique peut précéder mouseUp : attendre son callback 300 ms au plus après
     /// relâchement observé, puis conserver le geste récupéré pour la passe qui consulte la garde.
     /// Un bouton encore appuyé reste bloquant, sans durée maximale de glissement. O(1).
@@ -277,11 +288,12 @@ public enum FocusFollowsMousePicker {
     /// inactive) masque celles de derrière : aucune cible.
     /// O(n), uniquement pour les gestes : le focus au mouvement garde son test strict.
     public static func gestureTargetWindow(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        let frontIndex = snapshot.windows.firstIndex {
+        let windows = snapshot.windows.filter { !$0.window.isKnownBorderDecoration }
+        let frontIndex = windows.firstIndex {
             $0.window.isOnScreen && $0.window.frame.cgRect.contains(point)
         }
-        if let frontIndex, isEligible(snapshot.windows[frontIndex], in: snapshot) {
-            return snapshot.windows[frontIndex]
+        if let frontIndex, isEligible(windows[frontIndex], in: snapshot) {
+            return windows[frontIndex]
         }
         func distance(_ entry: ScopedWindowSnapshot) -> CGFloat {
             let frame = entry.window.frame.cgRect
@@ -291,7 +303,7 @@ public enum FocusFollowsMousePicker {
         }
         // Un intérieur inéligible bloque seulement les poignées situées derrière lui en Z.
         // Le cadre décoratif d'une fenêtre située devant ne masque pas sa propre poignée.
-        return snapshot.windows.prefix(frontIndex ?? snapshot.windows.count).filter { entry in
+        return windows.prefix(frontIndex ?? windows.count).filter { entry in
             isEligible(entry, in: snapshot)
                 && entry.window.frame.cgRect.insetBy(dx: -8, dy: -8).contains(point)
         }.min { lhs, rhs in

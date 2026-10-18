@@ -422,7 +422,6 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     // Session de geste (A4) : la fenêtre gérée sous le curseur au clic, d'après le snapshot partagé.
     UserInputActivity.shared.observeGestures(
         target: { point in
-            guard dividerResizeRuntime?.containsHandle(at: point) != true else { return nil }
             let snapshot = service.sharedSnapshot()
             let target = FocusFollowsMousePicker.gestureTargetWindow(at: point, in: snapshot)
             let front = FocusFollowsMousePicker.frontWindow(at: point, in: snapshot)

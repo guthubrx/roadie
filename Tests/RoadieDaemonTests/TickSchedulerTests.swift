@@ -212,7 +212,7 @@ struct TickSchedulerTests {
         let registry = WrittenFrameRegistry()
         let frame = CGRect(x: 0, y: 0, width: 500, height: 400)
         registry.record(windowID: 7, requested: frame, readBack: frame, generation: 1, at: harness.timer.clock.now)
-        let observer = AXWindowEventObserver(writtenFrames: registry) { event in
+        let observer = AXWindowEventObserver(writtenFrames: registry, mouseButtonsPressed: { false }) { event in
             harness.scheduler.request(cause: event.name, delay: .externalChange)
         }
         observer.dispatch(
