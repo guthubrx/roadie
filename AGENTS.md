@@ -79,13 +79,13 @@ UUID DEA0CA0C-6175-35D6-8A08-68473D919EC1, PID 54197, quatre contrôles santé O
 macOS confirme un panneau de poignée pour les deux fenêtres de l'écran externe.
 Signature/configuration conservées. Geste réel et capture non vérifiés : bureau
 inaccessible. Reçu : specs/044-poignees-visibles/validation/validation.md.
-Current SpecKit feature: `044-poignees-visibles`.
+Session 045 en cours : capture réelle des bords malgré la zone géométrique des poignées et les décorations.
+Current SpecKit feature: `045-capture-redimensionnement`.
 
 Contexte :
-- `specs/044-poignees-visibles/spec.md`
-- `specs/044-poignees-visibles/plan.md`
-- `specs/044-poignees-visibles/research.md`
-- `specs/044-poignees-visibles/tasks.md`
+- `specs/045-capture-redimensionnement/spec.md`
+- `specs/045-capture-redimensionnement/plan.md`
+- `specs/045-capture-redimensionnement/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
