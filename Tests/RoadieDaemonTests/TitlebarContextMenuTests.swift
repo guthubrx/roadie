@@ -252,7 +252,7 @@ struct TitlebarContextMenuTests {
         #expect(destinations.contains { $0.kind == .stage && $0.id == "1" && $0.isCurrent })
         #expect(destinations.contains { $0.kind == .stage && $0.id == "3" && !$0.isCurrent })
         #expect(destinations.contains(WindowDestination(kind: .stage, id: "4", label: "Prochaine stage vide", isCurrent: false)))
-        #expect(destinations.contains { $0.kind == .stage && $0.id == "2" && $0.label == "3 · Work" })
+        #expect(destinations.contains { $0.kind == .stage && $0.id == "2" && $0.label == "2 · Work" })
         #expect(!destinations.contains { $0.kind == .stage && $0.id == "4" && $0.label != "Prochaine stage vide" })
     }
 

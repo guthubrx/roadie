@@ -141,10 +141,11 @@ Use cases:
 
 ## Nav Rail
 
-The nav rail shows stages with windows first, followed by named empty stages.
-Scroll the rail when the cards exceed the display height. Destination menus and
-the reorder preview follow the same order. Dragging reorders stages within their
-group: occupied or empty. Anonymous empty stages remain available
+The nav rail keeps your chosen stage order, even when stages gain or lose windows.
+Scroll the rail when the cards exceed the display height. Drop a window onto a
+card to join that stage. Drop in free space to create a stage at the top, between
+cards, or at the bottom; the preview marks the chosen location. Destination menus
+and previews follow the same order. Anonymous empty stages remain available
 through the next-empty-stage action.
 
 Window thumbnails can also expose their presentation state. A `maximized`

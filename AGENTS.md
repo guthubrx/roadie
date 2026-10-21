@@ -118,8 +118,13 @@ PID 25248, cinq contrôles santé OK. Quatre stages occupées et dix membres con
 V15 : historique borné explicite, 63 tests courants/39 isolés, commit 744f30b dans
 00.Generic. Preuves visuelles incomplètes : bureau inaccessible. Reçu :
 specs/052-rail-reconnexions/validation.md.
-Session 053 en cours : corriger les destinations de dépôt des fenêtres dans le rail,
-sur le même écran et entre écrans. Diagnostic et tests avant installation.
+Session 053 implémentée et installée : ordre choisi conservé, création d'une stage
+en haut, entre deux cartes ou en bas à l'emplacement du dépôt. Ancre stable résolue
+dans la transaction, cartes figées pendant le geste, conflits refusés sans mutation.
+Repère « Nouvelle stage », aucun repli sur le rail source. 1 758 tests / 210 suites,
+revue indépendante traitée. UUID 458CF5AB-3B7E-3F5A-9B09-656E7B0FF331, PID 81466,
+cinq contrôles santé OK. Configuration/certificat conservés. Bureau inaccessible ;
+essai utilisateur proposé. Reçu : specs/053-depot-rail/validation.md.
 Current SpecKit feature: `053-depot-rail`.
 
 Contexte :

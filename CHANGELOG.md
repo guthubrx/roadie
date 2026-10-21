@@ -38,9 +38,10 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
-- Le rail garde les stages occupées en tête et permet de faire défiler les cartes
-  dans la zone utile de l'écran. Le réordonnancement fonctionne dans chaque groupe,
-  avec un aperçu et des destinations cohérents.
+- Le rail conserve l'ordre choisi et reste défilable dans la zone utile de l'écran.
+  Un dépôt en haut, entre deux stages ou en bas crée une stage à cet endroit,
+  sur le même écran ou un autre. Le repère de destination et les cartes restent
+  stables pendant le geste ; le tri automatique occupées/vides est retiré.
 - Le rapatriement des stages réutilise un emplacement vide compatible et unique,
   sans remplacer la stage active, écraser une stage occupée ou fusionner des homonymes ambigus.
 - Un clic simple ne déclenche plus le relevé des fenêtres du geste natif : il part

@@ -32,7 +32,21 @@ public enum StageDisplayMoveStatus: String, Equatable, Sendable {
     case partialFailure
 }
 
+/// Emplacement explicite du dépôt, indépendant des changements de rang pendant le geste.
+public enum StageInsertion: Equatable, Sendable {
+    case before(StageID)
+    case end
+
+    var eventDescription: String {
+        switch self {
+        case .before(let id): return "before:\(id.rawValue)"
+        case .end: return "end"
+        }
+    }
+}
+
 public struct StageCommandService {
+    private enum AssignmentConflict: Error { case destinationChanged }
     private let service: SnapshotService
     private let store: StageStore
     private let events: EventLog
@@ -111,6 +125,7 @@ public struct StageCommandService {
         to rawStageID: String,
         displayID: DisplayID,
         insertionIndex: Int? = nil,
+        stageInsertion: StageInsertion? = nil,
         focusAssignedWindow: Bool = true
     ) -> StageCommandResult {
         assign(
@@ -118,6 +133,7 @@ public struct StageCommandService {
             to: rawStageID,
             displayID: displayID,
             insertionIndex: insertionIndex,
+            stageInsertion: stageInsertion,
             focusAssignedWindow: focusAssignedWindow,
             eventType: "stage_assign_window",
             commandReason: "stage.assign_window"
@@ -129,6 +145,7 @@ public struct StageCommandService {
         to rawStageID: String,
         displayID: DisplayID,
         insertionIndex: Int? = nil,
+        stageInsertion: StageInsertion? = nil,
         focusAssignedWindow: Bool,
         eventType: String,
         commandReason: String
@@ -167,6 +184,25 @@ public struct StageCommandService {
         let assigned: (scope: PersistentStageScope, pin: PersistentWindowPin?)
         do {
             assigned = try store.mutateChecked { state -> (PersistentStageScope, PersistentWindowPin?) in
+                // Résolution sous le même verrou que l'affectation. O(s), s stages du scope.
+                let destination = activeScope(displayID: displayID, in: &state)
+                let stagePosition: Int?
+                if let stageInsertion {
+                    if let slot = destination.stages.first(where: { $0.id == stageID }) {
+                        guard slot.members.isEmpty, !StagePresentationOrder.isNamed(slot), slot.parkingState != .parked else {
+                            throw AssignmentConflict.destinationChanged
+                        }
+                    }
+                    let remaining = destination.stages.filter { $0.id != stageID }
+                    switch stageInsertion {
+                    case .end: stagePosition = remaining.count + 1
+                    case .before(let nextID):
+                        guard let index = remaining.firstIndex(where: { $0.id == nextID }) else {
+                            throw AssignmentConflict.destinationChanged
+                        }
+                        stagePosition = index + 1
+                    }
+                } else { stagePosition = nil }
                 for scopeIndex in state.scopes.indices {
                     state.scopes[scopeIndex].remove(windowID: windowID)
                 }
@@ -183,6 +219,7 @@ public struct StageCommandService {
                     focusWindow: focusAssignedWindow,
                     defaultMode: config.tiling.defaultStrategy
                 )
+                if let stagePosition { _ = scope.reorderStage(stageID, to: stagePosition) }
                 state.update(scope)
                 // Stage cible à arbre : la fenêtre entre dans l'arbre au rang demandé (après `update`,
                 // qui remplace le scope entier).
@@ -215,6 +252,8 @@ public struct StageCommandService {
                 }
                 return (scope, pin)
             }
+        } catch AssignmentConflict.destinationChanged {
+            return StageCommandResult(message: "stage assign: destination changed, retry drop", changed: false, outcome: .failed)
         } catch {
             return .persistenceFailure("stage assign \(stageID.rawValue)", error)
         }

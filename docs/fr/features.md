@@ -146,10 +146,11 @@ Cas d'usage :
 
 ## Navrail
 
-Le rail affiche d'abord les stages contenant des fenêtres, puis les stages vides
-nommées. Fais défiler le rail lorsque les cartes dépassent la hauteur de l'écran.
-Les menus de destination et l'aperçu du réordonnancement suivent le même ordre.
-Le glisser réordonne les stages au sein de leur groupe : occupées ou vides.
+Le rail conserve l'ordre choisi pour les stages, même lorsqu'elles reçoivent ou
+perdent une fenêtre. Fais défiler le rail lorsque les cartes dépassent l'écran.
+Dépose une fenêtre sur une carte pour rejoindre cette stage. Dans un espace libre,
+le repère « Nouvelle stage » indique sa création en haut, entre deux cartes ou en
+bas, à l'endroit choisi. Les menus et les aperçus suivent le même ordre.
 Les stages vides sans nom restent accessibles par « Prochaine stage vide ».
 
 Les vignettes de fenetres peuvent aussi exposer leur etat de presentation. Une

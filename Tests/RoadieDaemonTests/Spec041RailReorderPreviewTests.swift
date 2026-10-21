@@ -180,7 +180,7 @@ struct Spec041RailReorderPreviewTests {
             }
             panel.showStageReorderPreview(at: screenPoint(2), sourceStageID: cards[1].stageID)
             #expect(panel.stageReorderPosition(at: screenPoint(-2), sourceStageID: cards[1].stageID)
-                    == (strength == 0 ? 2 : 1))
+                    == (strength == 0 ? 3 : 1))
         }
         render(scope)
         let point = CGPoint(x: panel.frame.midX, y: panel.frame.midY)

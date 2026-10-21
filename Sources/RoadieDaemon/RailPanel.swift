@@ -138,6 +138,7 @@ final class RailPanel: NSPanel {
     private var recordingIndicatorView: RecordingIndicatorView?
     private var reorderMagnetism: CGFloat = 50
     private var reorderPreview: RailStageReorderPreviewView?
+    private var windowDropPreview: RailWindowDropPreviewView?
     private var reorderGeometry: ReorderGeometry?
     private var reorderCopies: [StageID: StageCardView] = [:]
     private var reorderOriginals: [(card: StageCardView, opacity: Float)] = []
@@ -300,6 +301,7 @@ final class RailPanel: NSPanel {
         recordingIndicatorBottomOffset: CGFloat
     ) {
         hideStageReorderPreview()
+        hideWindowDropPreview()
         let scope = content.scope
         reorderMagnetism = config.reorderMagnetism
         recordingIndicatorView?.removeFromSuperview()
@@ -436,11 +438,8 @@ final class RailPanel: NSPanel {
             hideStageReorderPreview()
             guard orderedStageIDs.contains(sourceStageID) else { return nil }
             let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
-            guard let source = cards.first(where: { $0.stageID == sourceStageID }) else { return nil }
-            // La priorité occupées/vides reste fixe ; les rangs sont croissants dans chaque groupe.
-            let targets = cards.filter {
-                $0.stageID != sourceStageID && $0.members.isEmpty == source.members.isEmpty
-            }.map { card in
+            guard cards.contains(where: { $0.stageID == sourceStageID }) else { return nil }
+            let targets = cards.filter { $0.stageID != sourceStageID }.map { card in
                 let preview = card.previewDisplayFrames().first ?? card.bounds
                 return (stageID: card.stageID, midY: stack.convert(preview, from: card).midY)
             }
@@ -481,8 +480,7 @@ final class RailPanel: NSPanel {
         guard let first = reorderOriginals.first?.card else { return }
         var futureOrder = orderedStageIDs.filter { $0 != sourceStageID }
         futureOrder.insert(sourceStageID, at: min(max(0, position - 1), futureOrder.count))
-        let copies = futureOrder.compactMap { reorderCopies[$0] }
-        let presented = copies.filter { !$0.members.isEmpty } + copies.filter { $0.members.isEmpty }
+        let presented = futureOrder.compactMap { reorderCopies[$0] }
         var top = first.frame.maxY
         for (index, copy) in presented.enumerated() {
             copy.setReorderPreviewPosition(index + 1)
@@ -547,7 +545,7 @@ final class RailPanel: NSPanel {
                         magnetism: magnetism).position(at: pointY, previous: previousPosition)
     }
 
-    /// Cible d'un depot de fenetre : une carte, sinon la zone vide du rail (stage vide ou prochaine stage libre).
+    /// Carte visée, sinon insertion d'une stage à cet interstice. O(s), sans acquisition.
     /// Le depot sur le vide ne depend pas de `empty_click_hide_active`, qui regle seulement le clic (SPEC-016 FR-030).
     func windowDropTarget(at screenPoint: CGPoint) -> RailWindowDropTarget? {
         if let (card, localPoint) = stageCard(at: screenPoint) {
@@ -558,7 +556,44 @@ final class RailPanel: NSPanel {
         }
         guard isSafeEmptyClick(at: screenPoint) else { return nil }
         let stageID = emptyStageIDs.first ?? nextGeneratedStageID()
-        return RailWindowDropTarget(stageID: stageID, insertionIndex: 0)
+        let point = stack.convert(convertPoint(fromScreen: screenPoint), from: nil)
+        let next = stack.arrangedSubviews.compactMap { $0 as? StageCardView }.first { point.y > $0.frame.midY }
+        let insertion = next.map { StageInsertion.before($0.stageID) } ?? .end
+        return RailWindowDropTarget(stageID: stageID, insertionIndex: 0, stageInsertion: insertion)
+    }
+
+    /// Indique la même destination que le dépôt, sans déplacer les cartes ni intercepter la souris. O(s).
+    @discardableResult
+    func showWindowDropPreview(at screenPoint: CGPoint) -> RailWindowDropTarget? {
+        guard let target = windowDropTarget(at: screenPoint) else {
+            hideWindowDropPreview()
+            return nil
+        }
+        let rect: CGRect
+        if target.stageInsertion == nil, let (card, _) = stageCard(at: screenPoint) {
+            rect = stack.convert(card.bounds, from: card).insetBy(dx: 2, dy: 2)
+        } else {
+            let cards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
+            let point = stack.convert(convertPoint(fromScreen: screenPoint), from: nil)
+            let next = cards.first { point.y > $0.frame.midY }
+            let center = next.map { $0.frame.maxY + stack.spacing / 2 }
+                ?? cards.last.map { $0.frame.minY - stack.spacing / 2 } ?? point.y
+            let visible = stack.visibleRect
+            let y = min(max(center - 12, visible.minY), max(visible.minY, visible.maxY - 24))
+            rect = CGRect(x: horizontalInset, y: y, width: max(1, stack.bounds.width - 24), height: 24)
+        }
+        let preview = windowDropPreview ?? RailWindowDropPreviewView(frame: rect)
+        preview.frame = rect
+        preview.isNewStage = target.stageInsertion != nil
+        preview.needsDisplay = true
+        if preview.superview == nil { stack.addSubview(preview) }
+        windowDropPreview = preview
+        return target
+    }
+
+    func hideWindowDropPreview() {
+        windowDropPreview?.removeFromSuperview()
+        windowDropPreview = nil
     }
 
     func emptyStageID(at screenPoint: CGPoint) -> StageID? {
@@ -645,6 +680,30 @@ final class RailPanel: NSPanel {
 
     private static func stageDisplayLabel(_ stage: PersistentStage, position: Int) -> String {
         StagePresentationOrder.name(stage, position: position)
+    }
+}
+
+@MainActor
+final class RailWindowDropPreviewView: NSView {
+    var isNewStage = false
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 7, yRadius: 7)
+        (isNewStage ? NSColor.windowBackgroundColor.withAlphaComponent(0.92) : NSColor.labelColor.withAlphaComponent(0.10)).setFill()
+        path.fill()
+        NSColor.labelColor.withAlphaComponent(0.45).setStroke()
+        path.lineWidth = 0.75
+        path.stroke()
+        if isNewStage {
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor.labelColor
+            ]
+            let title = "Nouvelle stage"
+            let size = title.size(withAttributes: attributes)
+            title.draw(at: CGPoint(x: max(4, (bounds.width - size.width) / 2), y: (bounds.height - size.height) / 2),
+                       withAttributes: attributes)
+        }
     }
 }
 

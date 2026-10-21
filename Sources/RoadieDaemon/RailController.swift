@@ -54,6 +54,9 @@ public final class RailController {
     private var clickMonitors: [Any] = []
     private var pendingDrag: PendingRailDrag?
     private var pendingStageReorder: PendingStageReorder?
+    private var defersPanelRebuild: Bool {
+        pendingDrag != nil || pendingStageReorder != nil || windowDragController.hasActiveDrag
+    }
     private var dragReleasedSince: Date?
     private var dragGhost: RailDragGhostWindow?
     private let dropPreview = DropPreviewController()
@@ -286,7 +289,7 @@ public final class RailController {
     /// relachement et ne doit pas etre perdu.
     private func resetStaleRailDrags() {
         let pressed = NSEvent.pressedMouseButtons
-        let leftStale = pendingDrag != nil && pressed & 1 == 0
+        let leftStale = (pendingDrag != nil || windowDragController.hasActiveDrag) && pressed & 1 == 0
         let rightStale = pendingStageReorder != nil && pressed & 2 == 0
         guard leftStale || rightStale else {
             dragReleasedSince = nil
@@ -297,7 +300,9 @@ public final class RailController {
         guard Date().timeIntervalSince(since) > 0.4 else { return }
         if leftStale {
             pendingDrag = nil
+            windowDragController.cancelPendingDrag()
             dropPreview.endDrag()
+            panels.values.forEach { $0.hideWindowDropPreview() }
         }
         if rightStale {
             pendingStageReorder = nil
@@ -310,7 +315,9 @@ public final class RailController {
     private func cancelRailDrags() {
         pendingDrag = nil
         pendingStageReorder = nil
+        windowDragController.cancelPendingDrag()
         panels.values.forEach { $0.hideStageReorderPreview() }
+        panels.values.forEach { $0.hideWindowDropPreview() }
         dragGhost?.hide()
         dropPreview.endDrag()
     }
@@ -707,7 +714,7 @@ public final class RailController {
             fflush(stdout)
             events.append(RoadieEvent(type: "rail_window_summon", details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]))
             _ = commandService.summon(windowID: windowID, displayID: displayID)
-        case .moveWindow(let windowID, let stageID, let insertionIndex, let focusAssignedWindow):
+        case .moveWindow(let windowID, let stageID, let insertionIndex, let focusAssignedWindow, let stageInsertion):
             let insertionDescription = insertionIndex.map { " index \($0)" } ?? ""
             print("rail move window \(windowID.rawValue) -> stage \(stageID.rawValue)\(insertionDescription)")
             fflush(stdout)
@@ -720,6 +727,7 @@ public final class RailController {
             if let insertionIndex {
                 details["insertionIndex"] = String(insertionIndex)
             }
+            if let stageInsertion { details["stageInsertion"] = stageInsertion.eventDescription }
             events.append(RoadieEvent(
                 type: "rail_window_move",
                 details: details
@@ -729,6 +737,7 @@ public final class RailController {
                 to: stageID.rawValue,
                 displayID: displayID,
                 insertionIndex: insertionIndex,
+                stageInsertion: stageInsertion,
                 focusAssignedWindow: focusAssignedWindow
             )
         case .moveWindowToDesktop(let windowID, let desktopID):
@@ -801,6 +810,8 @@ public final class RailController {
     private func handleMouseDragged(to screenPoint: CGPoint) {
         guard var drag = pendingDrag else {
             windowDragController.handleMouseDragged(to: screenPoint)
+            if windowDragController.activeDraggedWindowIDForDrop() != nil,
+               showWindowDropPreviews(at: screenPoint) { dropPreview.hide() }
             return
         }
         if hypot(screenPoint.x - drag.startPoint.x, screenPoint.y - drag.startPoint.y) > 6 {
@@ -822,10 +833,23 @@ public final class RailController {
             }
             drag.didDrag = true
             pendingDrag = drag
+            _ = showWindowDropPreviews(at: screenPoint)
         }
     }
 
+    private func showWindowDropPreviews(at point: CGPoint) -> Bool {
+        var shown = false
+        for panel in panels.values where panel.isVisible {
+            if panel.showWindowDropPreview(at: point) != nil { shown = true }
+        }
+        return shown
+    }
+
     private func handleMouseUp(at screenPoint: CGPoint) {
+        defer {
+            panels.values.forEach { $0.hideWindowDropPreview() }
+            rebuildPanels()
+        }
         guard let drag = pendingDrag else {
             if handleWindowDropOnRail(at: screenPoint) {
                 return
@@ -843,8 +867,8 @@ public final class RailController {
             return
         }
 
-        let targetDisplayID = displayID(at: screenPoint) ?? drag.displayID
-        guard let panel = panels[targetDisplayID] ?? panels[drag.displayID] else { return }
+        guard let targetDisplayID = displayID(at: screenPoint),
+              let panel = panels[targetDisplayID] else { return }
         guard let target = panel.windowDropTarget(at: screenPoint) else {
             guard displayID(at: screenPoint) != nil else { return }
             print("rail drag summon window \(drag.windowID.rawValue)")
@@ -865,7 +889,7 @@ public final class RailController {
         ) else { return }
         print("rail drag window \(drag.windowID.rawValue) -> stage \(target.stageID.rawValue) index \(target.insertionIndex)")
         fflush(stdout)
-        perform(.moveWindow(drag.windowID, target.stageID, target.insertionIndex, false), displayID: targetDisplayID)
+        applyRailWindowDrop(drag.windowID, target: target, displayID: targetDisplayID, at: screenPoint)
         rebuildPanels()
     }
 
@@ -882,11 +906,24 @@ public final class RailController {
             _ = UserInputActivity.shared.takeGesture()
             print("rail external drag window \(windowID.rawValue) -> stage \(target.stageID.rawValue) index \(target.insertionIndex)")
             fflush(stdout)
-            perform(.moveWindow(windowID, target.stageID, target.insertionIndex, false), displayID: displayID)
+            applyRailWindowDrop(windowID, target: target, displayID: displayID, at: screenPoint)
             rebuildPanels()
             return true
         }
         return false
+    }
+
+    private func applyRailWindowDrop(_ windowID: WindowID, target: RailWindowDropTarget,
+                                     displayID: DisplayID, at point: CGPoint) {
+        events.append(RoadieEvent(type: "rail_window_drop", details: [
+            "windowID": String(windowID.rawValue), "displayID": displayID.rawValue,
+            "stageID": target.stageID.rawValue, "x": String(Double(point.x)), "y": String(Double(point.y)),
+            "coordinateSpace": "screen_ns",
+            "kind": target.stageInsertion == nil ? "existing_stage" : "new_stage",
+            "stageInsertion": target.stageInsertion?.eventDescription ?? "existing"
+        ]))
+        perform(.moveWindow(windowID, target.stageID, target.insertionIndex, false,
+                            stageInsertion: target.stageInsertion), displayID: displayID)
     }
 
     /// Cycle de rafraichissement du rail. Le snapshot partage est lu a chaque appel (le timer tourne chaque seconde),
@@ -894,7 +931,7 @@ public final class RailController {
     /// stages, membres, etats de presentation, ecrans masques, configuration, vignettes.
     // Complexite : O(d * (s + n)) - d = ecrans, s = stages, n = fenetres du snapshot.
     private func rebuildPanels(reason: String = "direct", requestedAt: Date? = nil, railSignature: String? = nil) {
-        guard pendingStageReorder == nil else { return }
+        guard !defersPanelRebuild else { return }
         pendingRebuild = (reason, requestedAt)
         guard rebuildTask == nil else { return }
         let service = snapshotService
@@ -937,7 +974,7 @@ public final class RailController {
 
     private func renderPanels(snapshot: DaemonSnapshot, reason: String, requestedAt: Date?) {
         // Les cartes restent fixes entre l'appui et le dépôt ; le cycle suivant applique les nouveautés.
-        guard pendingStageReorder == nil else { return }
+        guard !defersPanelRebuild else { return }
         let startedAt = Date()
         let latencyMs = requestedAt.map { startedAt.timeIntervalSince($0) * 1000 }
         let configPath = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
@@ -1455,7 +1492,7 @@ enum RailAction {
     case switchStage(StageID)
     case focusNativeFullscreen(WindowID, String, StageID)
     case summonWindow(WindowID)
-    case moveWindow(WindowID, StageID, Int?, Bool)
+    case moveWindow(WindowID, StageID, Int?, Bool, stageInsertion: StageInsertion? = nil)
     case moveWindowToDesktop(WindowID, DesktopID)
     case moveWindowToDisplay(WindowID, DisplayID)
     case placeWindow(DropPreviewCandidate)
@@ -1467,6 +1504,7 @@ enum RailAction {
 struct RailWindowDropTarget {
     var stageID: StageID
     var insertionIndex: Int
+    var stageInsertion: StageInsertion? = nil
 }
 
 @MainActor

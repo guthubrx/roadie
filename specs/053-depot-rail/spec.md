@@ -11,8 +11,9 @@ pas à l'emplacement visé dans le rail ; le même défaut est signalé sur un �
   que ceux montrés par l'aperçu. Le défilement conserve des coordonnées correctes.
 - Le dépôt sur une stage existante conserve ses autres fenêtres et leur ordre.
 - La position d'une nouvelle stage est persistée dans la transaction d'affectation.
-- Le tri qui fait remonter les cartes nouvellement occupées doit être arbitré
-  avec l'utilisateur, car il déplace une destination après un dépôt correct.
+- L'ordre reste celui choisi par l'utilisateur. Aucun tri automatique ne déplace
+  une carte lorsqu'elle reçoit ou perd une fenêtre. L'utilisateur confirme que
+  tous les interstices, le haut et le bas sont des emplacements explicites.
 
 ## Hors périmètre
 

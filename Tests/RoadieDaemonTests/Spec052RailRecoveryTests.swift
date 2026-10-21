@@ -14,13 +14,13 @@ struct Spec052RailRecoveryTests {
     }
 
     @Test
-    func occupiedStagesComeFirstWithTheSameRanksInDestinations() {
+    func persistedStageOrderKeepsTheSameRanksInDestinations() {
         let empty = PersistentStage(id: StageID(rawValue: "empty"), name: "Reserved")
         let full = PersistentStage(id: StageID(rawValue: "full"), name: "Work", members: [member(1)])
         let scope = PersistentStageScope(displayID: DisplayID(rawValue: "fixture"), stages: [empty, full])
         let order = StagePresentationOrder(scope: scope, liveWindowIDs: [WindowID(rawValue: 1)])
-        #expect(order.visibleStageIDs == [full.id, empty.id])
-        #expect(order.stageID(at: 1) == full.id)
+        #expect(order.visibleStageIDs == [empty.id, full.id])
+        #expect(order.stageID(at: 1) == empty.id)
         #expect(scope.stages.map(\.id) == [empty.id, full.id])
     }
 
@@ -56,7 +56,7 @@ struct Spec052RailRecoveryTests {
     }
 
     @Test
-    func occupiedAndEmptyStagesCanEachBeReorderedDespiteInterleavedPersistentRanks() throws {
+    func occupiedAndEmptyStagesCanBeReorderedInThePersistedOrder() throws {
         let screen = try #require(NSScreen.screens.first)
         var config = RailVisualConfig.load(settings: RailSettings.load(raw: ""))
         config.headerPosition = .hidden
@@ -74,8 +74,8 @@ struct Spec052RailRecoveryTests {
         panel.position(on: screen, displayID: scope.displayID, config: config,
                        runtimeStore: RailRuntimeStateStore(path: directory.appendingPathComponent("runtime.json").path))
         for (sourceID, targetID, expected) in [
-            (fullA.id, fullB.id, [fullB.id, fullA.id, emptyA.id, emptyB.id]),
-            (emptyA.id, emptyB.id, [fullA.id, fullB.id, emptyB.id, emptyA.id])
+            (fullA.id, fullB.id, [emptyA.id, emptyB.id, fullB.id, fullA.id]),
+            (emptyA.id, emptyB.id, [fullA.id, emptyB.id, emptyA.id, fullB.id])
         ] {
             panel.render(content: RailDisplayContent(scope: scope, presentationStates: [:], liveWindowIDs: live),
                          displayName: "Test", config: config, thumbnails: RailThumbnailStore(),
