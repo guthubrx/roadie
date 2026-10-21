@@ -5,7 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 dist_dir="$repo_root/dist"
 app_name="Roadie"
-app_version="${ROADIE_VERSION:-0.5.0}"
+app_version="${ROADIE_VERSION:-0.6.0}"
 app_bundle="$dist_dir/$app_name.app"
 dmg_path="$dist_dir/$app_name.dmg"
 
@@ -45,5 +45,10 @@ create-dmg \
   --hide-extension "$app_name.app" \
   "$dmg_path" \
   "$dist_dir"
+
+(
+  cd "$dist_dir"
+  shasum -a 256 "$app_name.dmg" > "$app_name.dmg.sha256"
+)
 
 echo "$dmg_path"

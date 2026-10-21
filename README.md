@@ -12,8 +12,8 @@ English | [Français](README.fr.md)
 Roadie organizes your windows around your activities. Bring a project's apps
 together, find them in the side rail and switch workspaces on each display.
 
-**[Download Roadie 0.5.0](https://github.com/guthubrx/roadie/releases/tag/v0.5.0)** ·
-[What's new](docs/releases/v0.5.0.en.md) · [Installation guide](#manual-installation)
+**[Download Roadie 0.6.0](https://github.com/guthubrx/roadie/releases/tag/v0.6.0)** ·
+[What's new](docs/releases/v0.6.0.en.md) · [Installation guide](#manual-installation)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie workspaces across multiple displays" width="100%">
@@ -47,7 +47,8 @@ Roadie arranges windows and adjusts their space as you open or close them.
 Choose a balanced layout, a main window beside its neighbors, or free placement.
 
 Rearrange windows by dragging: drop in the center to swap positions, or on an
-edge to insert on that side. You can also adjust proportions from the keyboard.
+edge to insert on that side. You can also adjust proportions from the keyboard
+or drag divider handles between window groups. Control their visibility in Tiling settings.
 Maximization keeps the rail within reach and lets you return to the previous layout.
 
 [Explore layouts and gestures](docs/en/features.md)
@@ -56,13 +57,15 @@ Maximization keeps the rail within reach and lets you return to the previous lay
 
 The rail shows each display's stages with thumbnails or app icons. Switch
 stages, bring a window into the active workspace or move an entire stage to
-another display.
+another display. Keep your chosen order and preview stage positions as you
+rearrange them. [Arrange stages and drop windows](#nav-rail).
 
-Pins keep a window visible as you change stages. Bookmarks let you return to a
-chosen window. Your stages and settings are saved between sessions.
+Floating mode takes a window out of tiling within its stage. Pins keep a window
+visible as you change stages. Bookmarks let you return to a chosen window.
+Your stages and settings are saved between sessions.
 
 When a display reconnects, its stages return to their places. A stage explicitly
-moved to another display stays there. Named stages remain accessible when empty;
+moved to another display stays there. Named empty stages keep an outline and name;
 destination menus follow the rail order.
 
 ### One bar to search and act

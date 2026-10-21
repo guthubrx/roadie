@@ -5,82 +5,51 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+## 0.6.0 - 2026-10-21
+
 ### Nouveautés
 
-- Double-clic sur la barre de titre d'une fenêtre gérée : maximisation Roadie, puis retour
-  à la disposition (`double_click_maximize`, désactivé par défaut). N'agit que si macOS ne fait
-  rien de ce double-clic ; la santé signale le réglage macOS à changer.
-- `roadie daemon health` et `roadie query health` signalent les réglages macOS qui
-  déplacent les fenêtres à la place de Roadie (Stage Manager, juxtaposition native,
-  clic sur le fond d'écran), avec leur emplacement dans Réglages Système.
-- `roadie toggle floating` fait flotter la fenêtre active dans sa stage, hors du
-  tuilage, puis l'y remet. Aussi dans le menu « Fenêtre » de la barre de titre.
-- Poignées dans les séparations de l'arbre persistant pour ajuster les proportions
-  à la souris, activables dans Tuilage sans changer la disposition.
-- Aperçu du réordonnancement dans le rail : la stage déplacée apparaît en transparence
-  à sa future place, et les cartes voisines montrent l’ordre qui sera appliqué au dépôt.
-  Une aimantation réglable dans les paramètres stabilise la destination.
+- Poignées réglables entre les groupes du tuilage persistant pour ajuster les
+  proportions à la souris, en complément des bords natifs des fenêtres.
+- Aperçu des futures positions lors du réordonnancement des stages, avec
+  aimantation réglable dans les paramètres du rail.
+- Mode flottant pour une fenêtre de la stage courante, via le menu Fenêtre ou
+  `roadie toggle floating` ; la même action la remet au tuilage.
+- Diagnostic de santé des réglages macOS qui peuvent gêner le tuilage. La
+  maximisation Roadie par double-clic de titre est optionnelle, désactivée par défaut.
 
 ### Changements
 
-- Consommation au repos réduite : la bordure, le rail et les poignées réutilisent le
-  dernier relevé des fenêtres tant qu'aucun changement n'est signalé ; les vignettes du
-  rail ne réénumèrent plus toutes les fenêtres du système et se mettent à jour sans
-  recréer les cartes. Mesure du 18 octobre au repos : 11,45 % puis 2,34 % d'un cœur.
-- Relevé des fenêtres allégé (index des fenêtres par application réutilisé, une requête
-  par application) ; aucun verrou sur l'état sans changement ; un clic hors d'une barre de
-  titre ne déclenche plus de relevé ; pas de vignette pour un rail replié ; une commande
-  en arbre ne relève qu'une fois ; focus-souris désactivé : un réveil par seconde.
-- Sans préférence de placement enregistrée, les nouvelles fenêtres rejoignent
-  désormais le stage courant de l'écran actif, même si le pointeur est ailleurs.
-  Ce défaut remplace le placement de macOS. Les choix explicites restent conservés ;
-  le réglage et ses alternatives sont expliqués dans les paramètres.
+- Les nouvelles fenêtres rejoignent par défaut la stage de l'écran actif Roadie.
+  Cette valeur remplace le placement macOS lorsque la préférence est absente ou
+  invalide ; les choix explicites `mouse` et `macos` sont conservés.
+- Le rail conserve l'ordre choisi et défile dans la zone utilisable de l'écran.
+  Sur une carte, le dépôt ajoute la fenêtre à cette stage. En haut, entre deux
+  cartes ou en bas, il crée une stage à cet endroit, y compris entre écrans.
+- Les stages nommées vides gardent un contour, leur nom et la mention « Vide »
+  après le fondu des libellés. Les cartes restent fixes pendant les dépôts.
+- Réutilisation des relevés et des cartes : demandes regroupées hors du fil principal pour les
+  lecteurs visuels, vignettes mises à jour sans recréer les cartes, caches et
+  parcours de recherche et d'arbre de tuilage simplifiés.
 
 ### Corrections
 
-- Les stages nommées vides restent identifiables après un dépôt : contour, nom et
-  mention « Vide » persistent après le fondu des libellés, sans changer leur place.
+- Gestes de redimensionnement conservés malgré les lectures macOS lentes,
+  réponses retardées, refus de taille et bordures décoratives JankyBorders.
+- Ordre et destinations cohérents entre rail, menus et commandes par position ;
+  fermetures confirmées retirées du rail sans attendre la grâce d'absence temporaire.
+- Récupération des fenêtres au démarrage sans leur écran d'origine et retour des
+  stages à la reconnexion. Réutilisation des emplacements vides compatibles,
+  sans fusionner les homonymes ambigus ni remplacer la stage active.
+- Édition native macOS dans la barre de recherche et de commandes, sélection des
+  suggestions au clavier ou au clic, et fermeture au clic extérieur sans le bloquer.
+- Recherche des libellés natifs portés par les enfants, notamment les dossiers Outlook.
+- Rappel poursuivi sur les autres fenêtres si la cible préférée manque ; fenêtres
+  réduites restaurées avant le focus. Reprises de placement et restauration bornées.
 
-- Le rail conserve l'ordre choisi et reste défilable dans la zone utile de l'écran.
-  Un dépôt en haut, entre deux stages ou en bas crée une stage à cet endroit,
-  sur le même écran ou un autre. Le repère de destination et les cartes restent
-  stables pendant le geste ; le tri automatique occupées/vides est retiré.
-- Le rapatriement des stages réutilise un emplacement vide compatible et unique,
-  sans remplacer la stage active, écraser une stage occupée ou fusionner des homonymes ambigus.
-- Un clic simple ne déclenche plus le relevé des fenêtres du geste natif : il part
-  au premier mouvement de glisser avec une cible gérée. L'ancrage est abandonné
-  si sa géométrie devient incertaine.
-- Conservation des gestes sur les bords proches d'une poignée ou d'une bordure
-  décorative ; seule une poignée ayant reçu le clic remplace le geste natif.
-- Affichage des poignées conservé avec les bordures JankyBorders, avec un repère
-  plus lisible et un interrupteur immédiat dans Tuilage.
-- Conservation des gestes récents face aux anciens refus de taille ; minimums appris
-  liés au processus, à la stage et au mode de la fenêtre.
-- Reconnaissance des notifications de placement arrivées en retard, avec un historique
-  borné et priorité aux gestes de souris.
-- Acquisition des relevés du rail, des bordures et du focus souris en arrière-plan,
-  avec regroupement des demandes et rejet des données invalidées.
-- Réduction du travail répété dans le rail, la recherche, les arbres de tuilage
-  et les lectures macOS de secours, sans changer les réglages ni les dispositions.
-
-- Rafraîchissement de l'indicateur d'enregistrement limité aux changements de son propre fichier.
-- Rappel d'un stage poursuivi sur les autres fenêtres si la cible préférée est introuvable,
-  avec exclusion des fermetures confirmées et restauration des fenêtres réduites.
-- Identification des fenêtres dont le masquage ou la restauration échoue dans les journaux.
-
-- Conservation des redimensionnements lorsque la lecture des fenêtres macOS est lente.
-- Clics et glissements du rail, et menu de fenêtre, fondés sur la position enregistrée
-  du geste même lorsque son traitement est retardé.
-- Réduction des lectures répétées des fenêtres et de leurs panneaux attachés.
-- Diagnostic `daemon health` exécuté avec les permissions du service Roadie.
-- Ordre cohérent entre le rail, les menus de destination et les commandes par position.
-- Retour des stages à leur place après reconnexion d'un écran, en conservant les
-  modifications et les déplacements explicites effectués entre-temps.
-- Reprises bornées après un refus de restauration ou de masquage d'une fenêtre.
-- Recherche des libellés de contrôles natifs portés par leurs enfants, notamment
-  les dossiers Outlook, avec moins de lectures inutiles des éléments hors fenêtre.
-- Fermeture de la barre de recherche et de commandes au clic extérieur, sans
-  bloquer le clic dans l’application ni déclencher un Retour encore en attente.
+[Notes françaises](docs/releases/v0.6.0.md) ·
+[English release notes](docs/releases/v0.6.0.en.md) ·
+[Comparaison depuis 0.5.0](https://github.com/guthubrx/roadie/compare/v0.5.0...v0.6.0)
 
 ## 0.5.0 — 2026-10-14
 

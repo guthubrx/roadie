@@ -9,7 +9,7 @@ English guides for the current `main` sources. The [root README](../../README.md
 - [Configuration and rules](configuration-rules.md)
 - [Events and Query API](events-query.md)
 - [Use cases](use-cases.md)
-- [Release notes 0.5.0](../releases/v0.5.0.en.md)
+- [Release notes 0.6.0](../releases/v0.6.0.en.md)
 
 `roadie toggle maximize` enlarges the active window while keeping the visible nav rail strip clear. Run it again to restore the layout. Siblings in the same stage are hidden while maximized. Activating another window in that stage restores the layout directly. Switching stages preserves the saved zoom. With auto-hide enabled, a hidden rail frees the entire visible area, just like Roadie fullscreen. When the rail returns on hover or with `roadie rail pin`, the window resizes to make room without leaving maximized mode. The enabled title-bar menu also offers “Fenêtre → Maximiser / restaurer (garder le navrail)”.
 
@@ -22,7 +22,7 @@ Roadie combines automatic tiling, named stages, and Roadie virtual desktops. Eac
 - **Reactive tiling:** `spatialBsp` stores an authoritative binary tree. Events update its layout; temporary absences keep their stored places. `mutableBsp` and `yabai` are compatibility aliases. `bsp`, `masterStack`, and `float` remain available.
 - **Drag and drop:** same-stage center drops swap windows; edge drops insert them. Cross-display previews follow the pointer, including empty tiled stages. Application minimum sizes can limit the final proportions.
 - **Display recovery:** stages are parked when a screen disconnects. Reconnecting preserves useful visible positions and excludes stale window references from visible rail cards.
-- **Nav rail:** stage thumbnails or app icons, reordering, window transfers, and maximized/native-fullscreen presentation state.
+- **Nav rail:** your chosen order, a reorder preview and adjustable magnetism. Drop onto a card to join it or between cards to create a stage there. The list scrolls and named empty stages remain identifiable.
 - **Window tools:** focus border, focus follows mouse, optional title-bar actions, pins, bookmarks, and persistent groups.
 - **Reliable runtime:** local command socket, atomic state writes, shared snapshots, validated configuration reload, hidden-window recovery, and daemon health queries.
 - **Automation:** CLI, TOML rules, JSON queries, JSONL events, and read-only performance diagnostics.

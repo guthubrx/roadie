@@ -13,8 +13,8 @@ Roadie organise tes fenêtres autour de tes activités. Regroupe les application
 d'un projet, retrouve-les dans le rail latéral et passe d'un espace de travail à
 l'autre sur chaque écran.
 
-**[Télécharger Roadie 0.5.0](https://github.com/guthubrx/roadie/releases/tag/v0.5.0)** ·
-[Découvrir les nouveautés](docs/releases/v0.5.0.md) · [Guide d'installation](#installation-manuelle)
+**[Télécharger Roadie 0.6.0](https://github.com/guthubrx/roadie/releases/tag/v0.6.0)** ·
+[Découvrir les nouveautés](docs/releases/v0.6.0.md) · [Guide d'installation](#installation-manuelle)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">
@@ -50,8 +50,9 @@ ou un placement libre.
 
 Réorganise les fenêtres par glisser-déposer : un dépôt au centre échange les
 positions, un dépôt sur un bord insère la fenêtre de ce côté. Tu peux aussi
-modifier les proportions au clavier. La maximisation laisse le rail accessible
-et permet de revenir à la disposition précédente.
+modifier les proportions au clavier ou tirer les poignées entre les groupes de
+fenêtres. Leur affichage se règle dans Tuilage. La maximisation laisse le rail
+accessible et permet de revenir à la disposition précédente.
 
 [Explorer les dispositions et les gestes](docs/fr/features.md)
 
@@ -59,15 +60,18 @@ et permet de revenir à la disposition précédente.
 
 Le rail affiche les stages de chaque écran avec leurs vignettes ou leurs icônes.
 Passe à un autre stage, ramène une fenêtre dans l'espace actif ou déplace un
-stage entier vers un autre écran.
+stage entier vers un autre écran. Conserve ton ordre et prévisualise la place des
+stages pendant leur réorganisation. [Organiser les stages et déposer les fenêtres](#nav-rail).
 
-Les épinglages gardent une fenêtre visible pendant les changements de stage.
+Le mode flottant sort une fenêtre du tuilage dans sa stage. Les épinglages la
+gardent visible pendant les changements de stage.
 Les signets permettent de retrouver une fenêtre choisie. Tes stages et tes
 réglages sont conservés entre les sessions.
 
 Quand un écran est reconnecté, ses stages retrouvent leur place. Un stage déplacé
 explicitement vers un autre écran y reste. Les stages nommés restent accessibles
-même lorsqu'ils sont vides ; les menus de destination suivent l'ordre du rail.
+même lorsqu'ils sont vides, avec un contour et leur nom ; les menus de destination
+suivent l'ordre du rail.
 
 ### Une barre pour chercher et agir
 
