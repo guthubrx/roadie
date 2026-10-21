@@ -130,10 +130,13 @@ avec contour/nom/numéro et « Vide » permanents ; stages anonymes vides masqu�
 1 760 tests / 210 suites réussis, revue traitée. UUID
 DAF8ED16-F7D6-30AE-A800-A338ACEF5027, PID 27951, cinq contrôles santé OK.
 Configuration et signature conservées ; nouveau rendu réel non capturé, CUA inaccessible.
-Session 054 : version mineure 0.6.0 préparée avec README, notes FR/EN et changelog
+Session 054 : version mineure 0.6.0 publiée avec README, notes FR/EN et changelog
 regroupé. 1 760 tests / 210 suites et 26 scripts réussis ; revue traitée. DMG arm64
 vérifié et signé ad hoc. Installation locale 0.6.0, PID 95762, santé 5/5 ; certificat
 et configuration conservés. UUID F48FF668-E529-395C-ADD8-DA3D0CD1E2F0.
+Release https://github.com/guthubrx/roadie/releases/tag/v0.6.0 (Latest), DMG/SHA-256
+retéléchargés et identiques. Tag d78fe561 ; branche supprimée, builds/temporaires
+nettoyés, worktree de conversation actif conservé détaché.
 Reçu : specs/054-release-060/validation.md.
 Current SpecKit feature: `054-release-060`.
 

@@ -35,4 +35,4 @@
 | 052 | Clôturée, intégrée et installée | `session-052-rail-reconnexions` (fusionnée, supprimée) | `specs/052-rail-reconnexions` | Rail défilable, priorité aux stages occupées, parking réutilisé, A-11 et V15 borné ; revue traitée, 1 754 tests, santé OK |
 | 053 | Intégrée et installée ; dépôts confirmés, repère vide à confirmer | `session-053-depot-rail` (fusionnée, supprimée) | `specs/053-depot-rail` | Ordre fixe, dépôt haut/interstice/bas, ancre atomique ; 1 760 tests, revue traitée, santé OK ; carte vide toujours identifiable ; rendu réel à confirmer |
 
-| 054 | Publication en cours, installée | `session-054-release-060` | `specs/054-release-060` | 0.6.0, docs FR/EN, revue traitée ; 1 760 tests Swift + 26 scripts, DMG et santé 5/5 vérifiés |
+| 054 | Clôturée, publiée et installée | `session-054-release-060` (fusionnée, supprimée) | `specs/054-release-060` | 0.6.0 Latest, docs FR/EN, revue traitée ; 1 760 tests Swift + 26 scripts, téléchargement et santé 5/5 vérifiés, nettoyage terminé |

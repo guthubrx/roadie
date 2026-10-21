@@ -61,3 +61,21 @@ de l'environnement Python pour contourner cette erreur.
 Les contrôles techniques ne remplacent pas une nouvelle vérification visuelle
 des gestes. Les limites de capture des corrections précédentes sont conservées
 dans leurs reçus ; cette session n'ajoute aucun nouveau comportement d'interface.
+
+## Publication vérifiée et nettoyage
+
+Release publique publiée le 21 octobre 2026 à 08:43:30Z :
+https://github.com/guthubrx/roadie/releases/tag/v0.6.0
+Elle est marquée Latest, hors brouillon et hors préversion.
+Tag annoté v0.6.0 : commit d78fe5619f9ccd7e4ec7e703c6bde389e932449a,
+référence distante contrôlée. Notes FR publiées avec lien EN, sans doublon de titre.
+Deux pièces : Roadie.dmg (9 116 771 octets), Roadie.dmg.sha256 (77 octets).
+Retéléchargement GitHub : SHA-256 vérifié, comparaison des deux fichiers avec les
+originaux identique. Pas de PR créée ; intégration directe demandée sur main.
+
+Recettes temporaires, dossier de compilation, cache Python des tests, bundle
+intermédiaire et copie de téléchargement de contrôle supprimés. Le volume de
+vérification a été démonté. Une seule paire DMG/SHA-256 est conservée dans
+/Users/moi/Nextcloud/10.Scripts/39.roadie/dist/. Diagnostics et reçus conservés hors Git.
+Branche de release fusionnée et supprimée ; aucune autre branche locale que main.
+Le worktree lié à la conversation est conservé détaché, car il est actif.
