@@ -1,0 +1,21 @@
+# Session 053 - Dépôt fidèle dans le rail
+
+Correction demandée le 21 octobre 2026. Une fenêtre change d'écran mais n'arrive
+pas à l'emplacement visé dans le rail ; le même défaut est signalé sur un écran.
+
+## Résultat attendu
+
+- Une carte visée reçoit la fenêtre ; un interstice crée une stage à cet endroit.
+- Les cartes et leurs cibles restent fixes entre l'appui et le relâchement.
+- La fenêtre est affectée une seule fois, au même écran et à la même destination
+  que ceux montrés par l'aperçu. Le défilement conserve des coordonnées correctes.
+- Le dépôt sur une stage existante conserve ses autres fenêtres et leur ordre.
+- La position d'une nouvelle stage est persistée dans la transaction d'affectation.
+- Le tri qui fait remonter les cartes nouvellement occupées doit être arbitré
+  avec l'utilisateur, car il déplace une destination après un dépôt correct.
+
+## Hors périmètre
+
+Pas de changement du tuilage, du parking, des raccourcis ou du geste de resize.
+Pas de benchmark sur une machine chargée. Ne pas modifier les données utilisateur
+pour simuler un dépôt. Preuves visibles uniquement si le bureau est accessible.

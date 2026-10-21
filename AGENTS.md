@@ -118,12 +118,14 @@ PID 25248, cinq contrôles santé OK. Quatre stages occupées et dix membres con
 V15 : historique borné explicite, 63 tests courants/39 isolés, commit 744f30b dans
 00.Generic. Preuves visuelles incomplètes : bureau inaccessible. Reçu :
 specs/052-rail-reconnexions/validation.md.
-Current SpecKit feature: `052-rail-reconnexions`.
+Session 053 en cours : corriger les destinations de dépôt des fenêtres dans le rail,
+sur le même écran et entre écrans. Diagnostic et tests avant installation.
+Current SpecKit feature: `053-depot-rail`.
 
 Contexte :
-- `specs/052-rail-reconnexions/spec.md`
-- `specs/052-rail-reconnexions/plan.md`
-- `specs/052-rail-reconnexions/tasks.md`
+- `specs/053-depot-rail/spec.md`
+- `specs/053-depot-rail/plan.md`
+- `specs/053-depot-rail/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
