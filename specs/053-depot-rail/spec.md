@@ -20,3 +20,13 @@ pas à l'emplacement visé dans le rail ; le même défaut est signalé sur un �
 Pas de changement du tuilage, du parking, des raccourcis ou du geste de resize.
 Pas de benchmark sur une machine chargée. Ne pas modifier les données utilisateur
 pour simuler un dépôt. Preuves visibles uniquement si le bureau est accessible.
+
+## Retour du parcours réel
+
+L'utilisateur confirme plusieurs dépôts corrects puis fournit une capture avec un trou.
+La capture (06:29:19Z) suit le départ de X de la stage « Perso » (06:28:51Z) et
+précède son remplissage par Firefox (06:29:24Z). La carte nommée vide reste à sa place,
+mais `drawEmpty` devient transparent après expiration des libellés.
+Une stage vide représentée garde désormais un contour discret, son nom et la mention
+« Vide », indépendamment de la temporisation des libellés des stages occupées.
+Aucune suppression de stage nommée, aucun changement d'ordre ou de destination.

@@ -151,7 +151,9 @@ perdent une fenêtre. Fais défiler le rail lorsque les cartes dépassent l'écr
 Dépose une fenêtre sur une carte pour rejoindre cette stage. Dans un espace libre,
 le repère « Nouvelle stage » indique sa création en haut, entre deux cartes ou en
 bas, à l'endroit choisi. Les menus et les aperçus suivent le même ordre.
-Les stages vides sans nom restent accessibles par « Prochaine stage vide ».
+Les stages nommées vides gardent un contour discret, leur nom et la mention « Vide »,
+même lorsque les libellés temporaires sont masqués. Les stages vides sans nom
+restent accessibles par « Prochaine stage vide ».
 
 Les vignettes de fenetres peuvent aussi exposer leur etat de presentation. Une
 fenetre `maximized` reste dans sa stage normale et est marquee par une bordure a
@@ -192,7 +194,7 @@ visibility_seconds = 0 # 0 = toujours visible, sinon duree apres reveal
 fade_seconds = 0.35
 ```
 
-Quand `visibility_seconds` est superieur a `0`, les noms de stages sont caches
+Quand `visibility_seconds` est superieur a `0`, les noms des stages occupées sont caches
 par defaut. La commande `roadie rail labels show` les affiche pendant cette duree,
 puis ils disparaissent en fondu pendant `fade_seconds`.
 

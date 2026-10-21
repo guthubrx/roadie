@@ -13,6 +13,36 @@ struct Spec053RailDropTests {
     }
 
     @Test
+    func removingAMiddleCardLeavesNoHoleAfterRepeatedDrops() throws {
+        let screen = try #require(NSScreen.screens.first)
+        var config = RailVisualConfig.load(settings: RailSettings.load(raw: "[fx.rail]\nrenderer = \"parallax-45\""))
+        config.headerPosition = .hidden
+        config.stagesPosition = .center
+        config.slotHeight = 112
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("hole053-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let panel = RailPanel()
+        let display = DisplayID(rawValue: "hole053")
+        panel.position(on: screen, displayID: display, config: config,
+                       runtimeStore: RailRuntimeStateStore(path: directory.appendingPathComponent("runtime.json").path))
+        let stages = (1...9).map { PersistentStage(id: StageID(rawValue: String($0)), members: [member(UInt32($0))]) }
+        var scope = PersistentStageScope(displayID: display, stages: stages)
+        for count in [9, 8, 9, 7, 8] {
+            let removedIndices = 3..<(3 + stages.count - count)
+            scope.stages = stages.enumerated().filter { !removedIndices.contains($0.offset) }.map(\.element)
+            panel.render(content: RailDisplayContent(scope: scope, presentationStates: [:],
+                liveWindowIDs: Set(scope.stages.flatMap(\.members).map(\.windowID))), displayName: "Test",
+                config: config, thumbnails: RailThumbnailStore(), recordingStatus: nil, recordingIndicatorBottomOffset: 0)
+            let cards = panel.stack.arrangedSubviews.compactMap { $0 as? StageCardView }
+            #expect(cards.count == count)
+            for (above, below) in zip(cards, cards.dropFirst()) {
+                #expect(abs(above.frame.minY - below.frame.maxY - config.layoutSpacing) < 0.5)
+                #expect(above.layer?.opacity == 1)
+            }
+        }
+    }
+
+    @Test
     func fillingAnEmptyCardDoesNotMoveTheDestinations() {
         let empty = PersistentStage(id: StageID(rawValue: "reserved"), name: "Reserve")
         let occupied = PersistentStage(id: StageID(rawValue: "work"), name: "Work", members: [member(1)])
@@ -21,6 +51,34 @@ struct Spec053RailDropTests {
         scope.stages[0].members = [member(2)]
         let after = StagePresentationOrder(scope: scope, liveWindowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)]).visibleStageIDs
         #expect(after == before)
+    }
+
+    @Test(arguments: ["Perso", String(repeating: "Nom très long ", count: 20)])
+    func onlyNamedEmptyDestinationsRenderWithTheirNameWhenLabelsAreDisabled(name: String) throws {
+        let screen = try #require(NSScreen.screens.first)
+        var config = RailVisualConfig()
+        config.stageLabel.enabled = false
+        config.slotHeight = 112
+        let stage = PersistentStage(id: StageID(rawValue: "named"), name: name)
+        let anonymous = PersistentStage(id: StageID(rawValue: "3"), name: "Stage 3")
+        let scope = PersistentStageScope(displayID: DisplayID(rawValue: "empty053"), stages: [stage, anonymous])
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("empty053-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let panel = RailPanel()
+        panel.position(on: screen, displayID: scope.displayID, config: config,
+                       runtimeStore: RailRuntimeStateStore(path: directory.appendingPathComponent("runtime.json").path))
+        panel.render(content: RailDisplayContent(scope: scope, presentationStates: [:], liveWindowIDs: []),
+                     displayName: "Test", config: config, thumbnails: RailThumbnailStore(),
+                     recordingStatus: nil, recordingIndicatorBottomOffset: 0)
+        let cards = panel.stack.arrangedSubviews.compactMap { $0 as? StageCardView }
+        #expect(cards.map(\.stageID) == [stage.id])
+        let card = try #require(cards.first)
+        let withoutName = StageCardView(stage: PersistentStage(id: stage.id), displayLabel: "", isActive: false,
+                                       accent: .systemGreen, config: config, presentationStates: [:], thumbnails: [:])
+        #expect(try #require(card.snapshotImage()?.tiffRepresentation) != withoutName.snapshotImage()?.tiffRepresentation)
+        let point = panel.convertPoint(toScreen: card.convert(CGPoint(x: 40, y: card.bounds.midY), to: nil))
+        #expect(panel.windowDropTarget(at: point)?.stageID == stage.id)
+        #expect(panel.windowDropTarget(at: point)?.stageInsertion == nil)
     }
 
     @Test(arguments: ["parallax-45", "stacked-previews", "mosaic", "icons-only"])

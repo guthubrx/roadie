@@ -145,8 +145,9 @@ The nav rail keeps your chosen stage order, even when stages gain or lose window
 Scroll the rail when the cards exceed the display height. Drop a window onto a
 card to join that stage. Drop in free space to create a stage at the top, between
 cards, or at the bottom; the preview marks the chosen location. Destination menus
-and previews follow the same order. Anonymous empty stages remain available
-through the next-empty-stage action.
+and previews follow the same order. Named empty stages keep a subtle outline,
+their name and an empty-state label, even when temporary stage labels are hidden.
+Anonymous empty stages remain available through the next-empty-stage action.
 
 Window thumbnails can also expose their presentation state. A `maximized`
 window stays in its normal stage and is marked with a four-corner border. A
@@ -187,7 +188,7 @@ visibility_seconds = 0 # 0 = always visible, otherwise duration after reveal
 fade_seconds = 0.35
 ```
 
-When `visibility_seconds` is greater than `0`, stage names are hidden by default.
+When `visibility_seconds` is greater than `0`, occupied stage names are hidden by default.
 The `roadie rail labels show` command shows them for that duration, then fades
 them out over `fade_seconds`.
 

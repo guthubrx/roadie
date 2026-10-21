@@ -38,6 +38,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Les stages nommées vides restent identifiables après un dépôt : contour, nom et
+  mention « Vide » persistent après le fondu des libellés, sans changer leur place.
+
 - Le rail conserve l'ordre choisi et reste défilable dans la zone utile de l'écran.
   Un dépôt en haut, entre deux stages ou en bas crée une stage à cet endroit,
   sur le même écran ou un autre. Le repère de destination et les cartes restent

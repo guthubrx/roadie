@@ -125,6 +125,11 @@ Repère « Nouvelle stage », aucun repli sur le rail source. 1 758 tests / 210 
 revue indépendante traitée. UUID 458CF5AB-3B7E-3F5A-9B09-656E7B0FF331, PID 81466,
 cinq contrôles santé OK. Configuration/certificat conservés. Bureau inaccessible ;
 essai utilisateur proposé. Reçu : specs/053-depot-rail/validation.md.
+Complément 053 installé après essai utilisateur : stage nommée vide identifiable
+avec contour/nom/numéro et « Vide » permanents ; stages anonymes vides masquées.
+1 760 tests / 210 suites réussis, revue traitée. UUID
+DAF8ED16-F7D6-30AE-A800-A338ACEF5027, PID 27951, cinq contrôles santé OK.
+Configuration et signature conservées ; nouveau rendu réel non capturé, CUA inaccessible.
 Current SpecKit feature: `053-depot-rail`.
 
 Contexte :
@@ -132,6 +137,12 @@ Contexte :
 - `specs/053-depot-rail/plan.md`
 - `specs/053-depot-rail/tasks.md`
 <!-- SPECKIT END -->
+
+## Revues indépendantes
+
+Autorisation permanente donnée le 21 octobre 2026 : lancer les revues indépendantes
+sans nouvelle demande de confirmation. Le responsable traite leurs constats et
+poursuit les tests et la livraison autorisés.
 
 <!-- SPECKIT-USER START -->
 # Couche utilisateur SpecKit

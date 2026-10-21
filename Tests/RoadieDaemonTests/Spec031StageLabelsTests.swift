@@ -22,34 +22,38 @@ struct Spec031StageLabelsTests {
     }
 
     @Test(arguments: [RailRenderMode.stacked, .mosaic, .parallax, .icons])
-    func emptyStageMarkerIsOnlyVisibleWithLabels(mode: RailRenderMode) throws {
+    func emptyStageRemainsVisibleWhenLabelsExpireOrAreDisabled(mode: RailRenderMode) throws {
         var config = RailVisualConfig()
         config.mode = mode
         config.stageLabel.visibilitySeconds = 5
-        let stage = PersistentStage(id: StageID(rawValue: "1"), name: "Work")
-        func card() -> StageCardView {
-            StageCardView(stage: stage, displayLabel: "", isActive: false, accent: .systemBlue,
+        func card(name: String = "Work") -> StageCardView {
+            let stage = PersistentStage(id: StageID(rawValue: "1"), name: name)
+            return StageCardView(stage: stage, displayLabel: "", isActive: false, accent: .systemBlue,
                           config: config, presentationStates: [:], thumbnails: [:])
         }
-        #expect(try !hasVisiblePixels(card()))
+        #expect(try hasVisiblePixels(card()))
         config.stageLabel.visibleUntil = Date().addingTimeInterval(5).timeIntervalSince1970
         #expect(try hasVisiblePixels(card()))
         config.stageLabel.visibleUntil = Date().addingTimeInterval(-10).timeIntervalSince1970
-        #expect(try !hasVisiblePixels(card()))
+        #expect(try hasVisiblePixels(card()))
         config.stageLabel.enabled = false
         config.stageLabel.visibleUntil = Date().addingTimeInterval(5).timeIntervalSince1970
-        #expect(try !hasVisiblePixels(card()))
+        #expect(try hasVisiblePixels(card()))
+        #expect(try image(card()) != image(card(name: "Perso")))
     }
 
     @Test(arguments: [RailRenderMode.stacked, .mosaic, .parallax, .icons])
-    func positionAndNameAppearAndDisappearTogether(mode: RailRenderMode) throws {
+    func occupiedStagePositionAndNameAppearAndDisappearTogether(mode: RailRenderMode) throws {
         var config = RailVisualConfig()
         config.mode = mode
         config.stageLabel.visibilitySeconds = 5
         config.stageLabel.fontSize = 20
         config.stageLabel.opacity = 1
         config.stageLabel.zOrder = .above
-        let stage = PersistentStage(id: StageID(rawValue: "parked-old-9"), name: "Perso")
+        let stage = PersistentStage(id: StageID(rawValue: "parked-old-9"), name: "Perso", members: [
+            PersistentStageMember(windowID: WindowID(rawValue: 1), bundleID: "fixture", title: "Test",
+                                  frame: Rect(x: 0, y: 0, width: 100, height: 100)),
+        ])
         func card(_ label: String, position: Int? = nil) -> StageCardView {
             StageCardView(stage: stage, displayLabel: label, isActive: false, accent: .systemBlue,
                           config: config, presentationStates: [:], thumbnails: [:], position: position)

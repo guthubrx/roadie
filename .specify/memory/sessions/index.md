@@ -33,4 +33,4 @@
 | 049 | Clôturée, intégrée et installée | `session-049-reglages-macos` (fusionnée, supprimée) | `specs/049-reglages-macos` | Santé `macos-window-settings` ; ok en réel |
 | 050 | Clôturée, intégrée et installée | `session-050-double-clic-titre` (fusionnée, supprimée) | `specs/050-double-clic-titre` | Double-clic désactivé par défaut ; 1 744 tests |
 | 052 | Clôturée, intégrée et installée | `session-052-rail-reconnexions` (fusionnée, supprimée) | `specs/052-rail-reconnexions` | Rail défilable, priorité aux stages occupées, parking réutilisé, A-11 et V15 borné ; revue traitée, 1 754 tests, santé OK |
-| 053 | Intégrée et installée ; essai utilisateur proposé | `session-053-depot-rail` (fusionnée, supprimée) | `specs/053-depot-rail` | Ordre fixe, dépôt haut/interstice/bas, ancre atomique ; 1 758 tests, revue traitée, santé OK ; bureau inaccessible |
+| 053 | Intégrée et installée ; dépôts confirmés, repère vide à confirmer | `session-053-depot-rail` (fusionnée, supprimée) | `specs/053-depot-rail` | Ordre fixe, dépôt haut/interstice/bas, ancre atomique ; 1 760 tests, revue traitée, santé OK ; carte vide toujours identifiable ; rendu réel à confirmer |

@@ -22,3 +22,13 @@ cinq contrôles santé OK. Configuration, certificat et 303 empreintes de fichie
 Sources/Tests inchangés. Essai utilisateur des trois positions proposé.
 Correction cffaf5c6 fusionnée et poussée sur main. Branche et compilation retirées ;
 worktree de la conversation conservé détaché, diagnostics hors Git.
+
+## Complément après retour utilisateur
+
+Plusieurs dépôts fonctionnent ; un trou visuel correspond à « Perso » devenue vide.
+Le repère d'une stage vide ne disparaît plus avec les libellés : contour discret,
+nom/numéro et mention « Vide ». Stages anonymes vides toujours masquées.
+Rendu/clics testés sur carte courte ou longue, numéro futur du fantôme conservé.
+1 760 tests / 210 suites réussis, revue indépendante traitée, santé 5/5.
+UUID DAF8ED16-F7D6-30AE-A800-A338ACEF5027, PID 27951, signature/config inchangées.
+Capture utilisateur du symptôme disponible ; résultat réel non capturé, CUA indisponible.

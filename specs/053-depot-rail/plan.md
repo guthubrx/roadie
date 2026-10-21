@@ -31,3 +31,12 @@ de la garde. L'utilisateur confirme que son ordre prévaut : supprimer la partit
 occupées/vides de la projection et du fantôme, conserver la liste défilable.
 Conserver une complexité linéaire dans le nombre de cartes, sans relevé AX par
 mouvement. Aucun nouveau paquet ou moteur de thème.
+
+## Complément après essai utilisateur
+
+Diagnostic initial de géométrie à écarter si le test de reconstructions successives
+conserve les écarts. La chronologie et la garde de `StageCardView.drawEmpty` indiquent
+une carte nommée devenue entièrement transparente après le fondu. Réutiliser le cadre
+de son aperçu pour un emplacement vide toujours visible, sa police configurée et un
+texte tronqué. Tester les quatre rendus, libellés expirés et désactivés. Les libellés
+des stages occupées conservent leur temporisation. Pas de nouvelle lecture AX.

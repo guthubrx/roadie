@@ -293,7 +293,7 @@ final class StageCardView: NSControl {
     }
 
     private func drawStageLabel() {
-        guard !displayLabel.isEmpty else { return }
+        guard !visualMembers.isEmpty, !displayLabel.isEmpty else { return }
         let labelConfig = config.stageLabel
         let now = Date()
         guard labelConfig.opacityMultiplier(now: now) > 0,
@@ -378,11 +378,28 @@ final class StageCardView: NSControl {
     }
 
     private func drawEmpty(in rect: CGRect) {
-        guard config.stageLabel.enabled else { return }
-        let opacity = 0.10 * config.stageLabel.opacityMultiplier()
-        guard opacity > 0 else { return }
-        let line = emptyMarkerFrame(in: rect)
-        rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(opacity))
+        // Une destination nommée reste identifiable après le fondu des libellés (SPEC-053).
+        let projected = config.mode == .parallax ? rect.applying(parallaxProjection(for: rect)) : rect
+        let frame = projected.intersection(bounds).insetBy(dx: 2, dy: 2)
+        guard frame.width > 0, frame.height > 0 else { return }
+        let path = NSBezierPath(roundedRect: frame, xRadius: 6, yRadius: 6)
+        NSColor.labelColor.withAlphaComponent(0.04).setFill()
+        path.fill()
+        NSColor.labelColor.withAlphaComponent(0.30).setStroke()
+        path.lineWidth = 1
+        path.setLineDash([3, 3], count: 2, phase: 0)
+        path.stroke()
+        let font = config.stageLabel.captionFont
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.lineBreakMode = .byTruncatingTail
+        let name = (displayLabel.isEmpty ? stage.name : displayLabel).trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = name.isEmpty ? "Vide" : "\(name)\nVide"
+        let height = min(frame.height, ceil(font.ascender - font.descender + font.leading) * (name.isEmpty ? 1 : 2))
+        (text as NSString).draw(in: CGRect(x: frame.minX + 6, y: frame.midY - height / 2,
+                                         width: max(0, frame.width - 12), height: height), withAttributes: [
+            .font: font, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: paragraph,
+        ])
     }
 
     private func emptyMarkerFrame(in rect: CGRect) -> CGRect {
