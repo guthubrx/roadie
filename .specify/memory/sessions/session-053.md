@@ -20,3 +20,5 @@ Reçu : specs/053-depot-rail/validation.md.
 Release installée, UUID 458CF5AB-3B7E-3F5A-9B09-656E7B0FF331, PID 81466,
 cinq contrôles santé OK. Configuration, certificat et 303 empreintes de fichiers
 Sources/Tests inchangés. Essai utilisateur des trois positions proposé.
+Correction cffaf5c6 fusionnée et poussée sur main. Branche et compilation retirées ;
+worktree de la conversation conservé détaché, diagnostics hors Git.

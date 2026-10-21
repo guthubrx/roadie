@@ -69,3 +69,7 @@ Signature stricte vérifiée ; certificat 78a75e8032f190a20072eb91cc2919aac344ef
 et configuration inchangés. Redémarrage terminé, PID 81466, cinq contrôles santé OK.
 Recette temporaire d'installation à deux tâches retirée. Essai utilisateur proposé
 sur les trois positions ; aucun résultat manuel revendiqué à ce stade.
+
+Correction cffaf5c6 intégrée et poussée sur main. Branche de session supprimée,
+fichiers de compilation et recette temporaire retirés. Worktree de cette
+conversation conservé détaché. Diagnostic, sauvegarde et reçus conservés hors Git.
