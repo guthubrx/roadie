@@ -87,3 +87,29 @@ Commit b92dc331 intégré et poussé sur main. Branche session-055-fullscreen-sa
 supprimée après fusion. Recette temporaire d'installation et dossier de build
 supprimés. Worktree actif de la conversation conservé détaché. Les sauvegardes BTT,
 les diagnostics et les empreintes restent hors Git. Livrables publics 0.6.0 inchangés.
+
+
+## Complément du 23 octobre : exécution du raccourci
+
+Retour utilisateur : raccourci sans réaction. La lecture du JSON seule n'avait
+pas prouvé son exécution. L'appel BTT execute_assigned_actions_for_trigger a
+reproduit l'erreur : « /bin/bash: /bin/bash:::-c:::-:::/Users/moi/.local/bin/roadie:
+No such file or directory ». Aucune commande fullscreen reçue par Roadie.
+
+Cause : BTTShellTaskActionScript contenait le préfixe de configuration BTT.
+Correction par update_trigger AppleScript : Script contient seulement
+/Users/moi/.local/bin/roadie toggle fullscreen ; Config garde le préfixe existant.
+Les masques gauche, le groupe et le raccourci sont conservés. Les deux indicateurs
+d'activation sont explicitement activés. Sauvegarde SQLite cohérente avant mutation.
+
+Validation réelle par BTT : « toggle fullscreen on: changed=true », intent
+zoomReservesRail=false pour la fenêtre active, puis « toggle fullscreen off:
+commands=2 applied=2 clamped=0 failed=0 ». Aucun code de production modifié,
+aucune recompilation ou relance nécessaire. Santé 5/5 avec le même PID17507.
+L'utilisateur confirme ensuite : « ca marche ».
+
+Diagnostics avant/après et sauvegarde hors Git :
+/Users/moi/.roadies/diagnostics/2026-10-23-session055/.
+Preuves visuelles incomplètes : CUA ne fournit pas de surface de contrôle
+(CUA_REPL_ENABLED_SURFACES is required). Aucune capture ni vérification
+visuelle autonome du survol revendiquée ; validation physique par l'utilisateur.

@@ -20,3 +20,8 @@ Preuves visuelles incomplètes : CUA inaccessible, essai utilisateur proposé.
 
 Code b92dc331 fusionné/poussé ; branche supprimée. Recette temporaire et build
 nettoyés ; worktree actif conservé détaché, diagnostics et sauvegarde BTT hors Git.
+
+Complément du 23 octobre : action BTT corrigée par API après reproduction du
+chemin shell invalide. Script brut distinct de Config ; masques et groupe
+conservés. Deux bascules BTT réussies, santé 5/5, utilisateur « ca marche ».
+Aucun changement Sources/Tests ni nouvelle installation.
