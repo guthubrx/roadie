@@ -138,12 +138,19 @@ Release https://github.com/guthubrx/roadie/releases/tag/v0.6.0 (Latest), DMG/SHA
 retéléchargés et identiques. Tag d78fe561 ; branche supprimée, builds/temporaires
 nettoyés, worktree de conversation actif conservé détaché.
 Reçu : specs/054-release-060/validation.md.
-Current SpecKit feature: `054-release-060`.
+Session 055 installée : toggle fullscreen masque le rail, même au survol, sans
+plein écran natif. Une fenêtre déjà grande entre aussi dans le mode explicite.
+Ctrl gauche + Alt gauche + F configuré dans BTT et relu ; pin conservé.
+1 761 tests / 211 suites réussis, revue traitée ; UUID
+E2CE37E8-CD10-3D53-978A-95F10F997E47, PID17507, cinq contrôles santé OK.
+Docs FR/EN et changelog Non publié à jour. CUA inaccessible, essai utilisateur
+proposé. Reçu : specs/055-fullscreen-sans-rail/validation.md.
+Current SpecKit feature: `055-fullscreen-sans-rail`.
 
 Contexte :
-- `specs/054-release-060/spec.md`
-- `specs/054-release-060/plan.md`
-- `specs/054-release-060/tasks.md`
+- `specs/055-fullscreen-sans-rail/spec.md`
+- `specs/055-fullscreen-sans-rail/plan.md`
+- `specs/055-fullscreen-sans-rail/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes

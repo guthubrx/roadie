@@ -5,6 +5,12 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+### Changements
+
+- Le plein écran Roadie (`toggle fullscreen`) cache le rail sur l'écran concerné,
+  même au survol, sans plein écran natif macOS. Répéter restaure la disposition.
+  La maximisation avec rail et le masquage automatique de type Dock restent distincts.
+
 ## 0.6.0 - 2026-10-21
 
 ### Nouveautés

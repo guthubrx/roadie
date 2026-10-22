@@ -523,6 +523,12 @@ roadie window desktop 2 --follow
 
 ## Nav Rail
 
+Roadie fullscreen (`roadie toggle fullscreen`) fills the visible area and hides
+the rail, including on hover, without entering native macOS fullscreen. Repeat
+the command to restore the layout. Maximization (`roadie toggle maximize`) keeps
+the rail accessible. Outside fullscreen, `[fx.rail]` with `auto_hide = true` gives
+the rail Dock-like behavior: hover over the left edge to reveal it.
+
 The nav rail is a native per-display side panel.
 
 It shows non-empty stages, live thumbnails when available, fallback app icons when capture is unavailable, and a halo around the active stage.

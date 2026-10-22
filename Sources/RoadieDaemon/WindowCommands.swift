@@ -565,9 +565,8 @@ public struct WindowCommandService {
         let previous = service.commandLayoutIntent(scope: scope)
         let sameMode = previous?.zoomedWindowID == active.window.id
             && (previous?.zoomReservesRail == true) == reservingRail
-        let implicitFullscreen = !reservingRail && previous?.zoomedWindowID == nil
-            && framesAreClose(active.window.frame.cgRect, display.visibleFrame.cgRect.integral)
-        if sameMode || implicitFullscreen {
+        // Une fenêtre déjà grande entre aussi dans le mode explicite sans rail (SPEC-055).
+        if sameMode {
             let plan: ApplyPlan
             do {
                 plan = try service.restoreZoomLayoutIntentChecked(scope: scope, from: snapshot, generation: generation)

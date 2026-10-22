@@ -146,6 +146,16 @@ Cas d'usage :
 
 ## Navrail
 
+Le plein écran Roadie (`roadie toggle fullscreen`) masque entièrement le rail
+sur l'écran concerné, même au survol. Il ne crée pas de Space plein écran macOS.
+Répéter restaure la disposition et le comportement du rail. La maximisation
+`roadie toggle maximize` conserve son accès au rail.
+
+Le masquage automatique (`fx.rail.auto_hide`) est indépendant : hors plein écran,
+le rail se replie comme le Dock et revient au survol du bord gauche. La largeur
+du bord et le délai de repli sont réglables dans Paramètres > Rail. Un rail épinglé
+reste ouvert ; `roadie rail unpin` réactive le repli si auto_hide est activé.
+
 Le rail conserve l'ordre choisi pour les stages, même lorsqu'elles reçoivent ou
 perdent une fenêtre. Fais défiler le rail lorsque les cartes dépassent l'écran.
 Dépose une fenêtre sur une carte pour rejoindre cette stage. Dans un espace libre,

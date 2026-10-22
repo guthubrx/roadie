@@ -39,17 +39,17 @@ struct Audit022R3Tests {
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
     }
 
-    /// Sortie de plein écran (DaemonSnapshot.restoreZoomLayoutIntentChecked) : intent illisible,
-    /// aucune restauration de cadre.
+    /// Intent illisible : aucune écriture de cadre, même si la fenêtre est déjà grande.
+    /// La taille seule ne permet plus de déduire une sortie du mode explicite (SPEC-055).
     @Test
-    func toggleFullscreenOffDoesNotRestoreWhenLayoutIntentCannotBeRemoved() throws {
+    func toggleFullscreenDoesNotResizeWhenLayoutIntentIsUnreadable() throws {
         let fixture = try R3Fixture("r3-fullscreen-off", leftFrame: Rect(x: 0, y: 0, width: 1000, height: 800))
         defer { fixture.cleanUp() }
         _ = try fixture.corruptIntents()
 
         let result = fixture.windows.toggleFullscreen()
 
-        #expect(result.message.hasPrefix("toggle fullscreen off: failed"))
+        #expect(result.message.hasPrefix("toggle fullscreen on: failed"))
         fixture.expectRefused(result)
     }
 

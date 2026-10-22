@@ -524,6 +524,12 @@ roadie window desktop 2 --follow
 
 ## Nav Rail
 
+Le plein écran Roadie (`roadie toggle fullscreen`) remplit la zone utile et cache
+le rail, même au survol, sans passer au plein écran natif macOS. Répète la commande
+pour restaurer la disposition. La maximisation (`roadie toggle maximize`) garde
+le rail accessible. Hors plein écran, `auto_hide = true` dans `[fx.rail]` replie
+le rail comme le Dock : le survol du bord gauche le révèle.
+
 Le nav rail est un panneau latéral natif par écran.
 
 Il affiche les stages non vides, les thumbnails live quand elles sont disponibles, des icônes d’app fallback quand la capture n’est pas disponible, et un halo autour de la stage active.
@@ -544,7 +550,7 @@ L’intensité de l’aimantation se règle dans **Paramètres > Rail > Aimantat
 
 Le rendu du rail se configure dans `~/.config/roadies/roadies.toml`.
 
-Par défaut, le rail se masque devant une fenêtre en plein écran natif macOS. Pour le masquer aussi devant une fenêtre agrandie, mets `hide_on_maximized = true` dans `[fx.rail]`.
+Le rail se masque en plein écran Roadie et devant une fenêtre en plein écran natif macOS. Pour le masquer aussi devant une fenêtre agrandie, mets `hide_on_maximized = true` dans `[fx.rail]`.
 
 ## Mode Cibles, Grille Ecran Et Grille Fenetre
 

@@ -1004,16 +1004,12 @@ public final class RailController {
             Self.displayID(for: screen).map { ($0, screen) }
         }, uniquingKeysWith: { first, _ in first })
         // Une lecture d'intent par scope : le zoom adapté au rail reste réversible au survol.
-        let railAwareZoomWindowIDs = Set(snapshot.displays.compactMap { display -> WindowID? in
-            guard let scope = snapshot.state.activeScope(on: display.id),
-                  let intent = snapshotService.commandLayoutIntent(scope: scope),
-                  intent.zoomReservesRail == true else { return nil }
-            return intent.zoomedWindowID
-        })
+        let zoom = Self.railZoomWindowIDs(in: snapshot, intentForScope: snapshotService.commandLayoutIntent)
         let hiddenDisplayIDs = Self.railHiddenDisplayIDs(
             in: snapshot,
             hideOnMaximized: config.hideOnMaximized,
-            railAwareZoomWindowIDs: railAwareZoomWindowIDs
+            railAwareZoomWindowIDs: zoom.reservingRail,
+            fullscreenWindowIDs: zoom.fullscreen
         )
         updateManagedWindowFrames(from: snapshot)
 
@@ -1264,14 +1260,30 @@ public final class RailController {
         return CGPoint(x: point.x, y: primary.frame.height - point.y)
     }
 
+    /// O(d) : seuls les intents des stages actives déterminent le mode explicite du rail.
+    nonisolated static func railZoomWindowIDs(
+        in snapshot: DaemonSnapshot, intentForScope: (StageScope) -> LayoutIntent?
+    ) -> (reservingRail: Set<WindowID>, fullscreen: Set<WindowID>) {
+        var reservingRail: Set<WindowID> = []
+        var fullscreen: Set<WindowID> = []
+        for display in snapshot.displays {
+            guard let scope = snapshot.state.activeScope(on: display.id),
+                  let intent = intentForScope(scope), let windowID = intent.zoomedWindowID else { continue }
+            if intent.zoomReservesRail == true { reservingRail.insert(windowID) }
+            else { fullscreen.insert(windowID) }
+        }
+        return (reservingRail, fullscreen)
+    }
+
     /// Ecrans devant lesquels le rail se masque (SPEC-016 FR-028) : une fenetre de la stage active, visible a
-    /// l'ecran, est en plein ecran natif ; avec `hideOnMaximized`, ou simplement agrandie (voir
+    /// l'ecran, est en plein écran Roadie explicite ou natif ; avec `hideOnMaximized`, simplement agrandie (voir
     /// `WindowPresentationStateResolver` : une fenetre tilee seule n'est jamais « agrandie »).
     // Complexite : O(n) - n = fenetres du snapshot.
     nonisolated public static func railHiddenDisplayIDs(
         in snapshot: DaemonSnapshot,
         hideOnMaximized: Bool,
-        railAwareZoomWindowIDs: Set<WindowID> = []
+        railAwareZoomWindowIDs: Set<WindowID> = [],
+        fullscreenWindowIDs: Set<WindowID> = []
     ) -> Set<DisplayID> {
         var displayByActiveScope: [StageScope: DisplayID] = [:]
         for display in snapshot.displays {
@@ -1283,6 +1295,10 @@ public final class RailController {
         var hidden: Set<DisplayID> = []
         for entry in snapshot.windows where entry.window.isTileCandidate && entry.window.isOnScreen {
             guard let scope = entry.scope, let displayID = displayByActiveScope[scope] else { continue }
+            if fullscreenWindowIDs.contains(entry.window.id) {
+                hidden.insert(displayID)
+                continue
+            }
             switch states[entry.window.id] {
             case .nativeFullscreen:
                 hidden.insert(displayID)

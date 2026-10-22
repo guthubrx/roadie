@@ -141,6 +141,16 @@ Use cases:
 
 ## Nav Rail
 
+Roadie fullscreen (`roadie toggle fullscreen`) hides the rail on the affected
+display, including on hover. It does not create a native macOS fullscreen Space.
+Repeat to restore the layout and normal rail behavior. `roadie toggle maximize`
+keeps the rail accessible.
+
+Auto-hide (`fx.rail.auto_hide`) works independently: outside fullscreen, the rail
+retracts like the Dock and returns when you hover over the left edge. Edge width
+and hide delay can be adjusted in Settings > Rail. A pinned rail
+stays open; `roadie rail unpin` restores auto-hide when it is enabled.
+
 The nav rail keeps your chosen stage order, even when stages gain or lose windows.
 Scroll the rail when the cards exceed the display height. Drop a window onto a
 card to join that stage. Drop in free space to create a stage at the top, between
