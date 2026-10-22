@@ -144,7 +144,8 @@ Ctrl gauche + Alt gauche + F configuré dans BTT et relu ; pin conservé.
 1 761 tests / 211 suites réussis, revue traitée ; UUID
 E2CE37E8-CD10-3D53-978A-95F10F997E47, PID17507, cinq contrôles santé OK.
 Docs FR/EN et changelog Non publié à jour. CUA inaccessible, essai utilisateur
-proposé. Reçu : specs/055-fullscreen-sans-rail/validation.md.
+proposé. Code b92dc331 intégré/poussé, branche et build nettoyés.
+Reçu : specs/055-fullscreen-sans-rail/validation.md.
 Current SpecKit feature: `055-fullscreen-sans-rail`.
 
 Contexte :

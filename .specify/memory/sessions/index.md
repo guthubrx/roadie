@@ -36,4 +36,4 @@
 | 053 | Intégrée et installée ; dépôts confirmés, repère vide à confirmer | `session-053-depot-rail` (fusionnée, supprimée) | `specs/053-depot-rail` | Ordre fixe, dépôt haut/interstice/bas, ancre atomique ; 1 760 tests, revue traitée, santé OK ; carte vide toujours identifiable ; rendu réel à confirmer |
 
 | 054 | Clôturée, publiée et installée | `session-054-release-060` (fusionnée, supprimée) | `specs/054-release-060` | 0.6.0 Latest, docs FR/EN, revue traitée ; 1 760 tests Swift + 26 scripts, téléchargement et santé 5/5 vérifiés, nettoyage terminé |
-| 055 | Implémentée et installée ; essai proposé | `session-055-fullscreen-sans-rail` | `specs/055-fullscreen-sans-rail` | Plein écran sans rail, Ctrl gauche+Alt gauche+F BTT ; 1 761 tests, revue traitée, santé 5/5 ; preuve réelle à confirmer |
+| 055 | Intégrée et installée ; essai proposé | `session-055-fullscreen-sans-rail` (fusionnée, supprimée) | `specs/055-fullscreen-sans-rail` | Plein écran sans rail, Ctrl gauche+Alt gauche+F BTT ; 1 761 tests, revue traitée, santé 5/5 ; preuve réelle à confirmer |

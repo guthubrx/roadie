@@ -80,3 +80,10 @@ Essai utilisateur proposé pour les deux appuis et le survol. Non confirmé à c
 stade. Preuves visuelles incomplètes : accès CUA indisponible ; pas de capture
 ou de geste physique automatisé revendiqué. Cette modification reste Non publié,
 sans nouveau tag ni remplacement du DMG 0.6.0.
+
+## Intégration et nettoyage
+
+Commit b92dc331 intégré et poussé sur main. Branche session-055-fullscreen-sans-rail
+supprimée après fusion. Recette temporaire d'installation et dossier de build
+supprimés. Worktree actif de la conversation conservé détaché. Les sauvegardes BTT,
+les diagnostics et les empreintes restent hors Git. Livrables publics 0.6.0 inchangés.

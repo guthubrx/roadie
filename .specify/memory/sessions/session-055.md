@@ -17,3 +17,6 @@ Configuration/certificat conservés. Raccourci BTT créé et relu, UUID
 C9142EF4-3ACE-40DC-9CE4-74EF1811C60F, flags786465 pour les deux modificateurs gauche.
 Reçu : specs/055-fullscreen-sans-rail/validation.md.
 Preuves visuelles incomplètes : CUA inaccessible, essai utilisateur proposé.
+
+Code b92dc331 fusionné/poussé ; branche supprimée. Recette temporaire et build
+nettoyés ; worktree actif conservé détaché, diagnostics et sauvegarde BTT hors Git.
