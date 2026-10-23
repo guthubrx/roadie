@@ -9,9 +9,11 @@ Contrats puis intégration et tests sur le Mac. Aucun code AltTab importé.
 
 ## Vérifications du 23 octobre 2026
 
-- Source compilée : `ce58c06d61af4ea412e2e5b846ed47b32919779e`.
-- Tests ciblés : 135 tests dans 15 suites, succès.
-- Suite complète : 1 845 tests dans 222 suites, succès (22,626 s).
+- Source courante : `6b1850025cc32aef93abe75a506469bf1dadae9c`.
+- Tests ciblés initiaux : 135 tests dans 15 suites, succès. Après grille latérale,
+  CLI externe et gestion des erreurs : 101 tests dans 13 suites, succès.
+- Suite complète finale : 1 849 tests dans 222 suites, succès (32,909 s),
+  via `scripts/with-xcode swift test --jobs 2 --no-parallel`.
 - Scripts : 26 tests, succès.
 - Aucun benchmark : machine chargée. Ces durées ne sont pas une mesure de performance produit.
 - Rendus AppKit hors écran : vignettes, icônes et liste ; sélection, taille de police
@@ -50,13 +52,54 @@ Les raccourcis internes restent facultatifs et vides par défaut.
 
 ## Installation et essai réel
 
-À compléter après compilation et installation.
+Première installation `ce58c06d` : UUID 0BBF207B-370A-34A8-A8F4-FD09EBC8F684,
+PID 60231, santé 5/5. Ouverture CLI constatée dans WindowServer : panneau
+« Sélecteur de fenêtres Roadie », niveau 26, 1100 × 612 points ; disparition
+après annulation. Capture réelle examinée localement. L’utilisateur confirme
+le parcours Ctrl+Alt+Tab, Maj inverse, relâchement et contexte propriétaire.
+Le journal contient des activations réussies, par exemple le 23 octobre à
+03:06:17 UTC et 03:08:39 UTC. Ces événements ne constituent pas un benchmark.
+
+Installation finale grille latérale et raccourci externe : à compléter.
 Configuration avant installation : SHA-256
 `ca42b5c670755e1b39371b1157c116c31e0754930800ad2551841fe5a3f05629`.
 Certificat à conserver : `78a75e8032f190a20072eb91cc2919aac344ef78`.
 
-Preuves visuelles incomplètes : CUA retourne
-`CUA_REPL_ENABLED_SURFACES is required`. Aucun clic physique ni relâchement
-clavier n'est attesté par les rendus hors écran. Ne pas redemander les permissions
-macOS déjà accordées. Essai assisté sur la version installée nécessaire pour
-valider Ctrl+Alt+Tab, Maj inverse, recherche, autre stage/bureau et annulation.
+Preuves partielles : CUA retourne `CUA_REPL_ENABLED_SURFACES is required`.
+Le terminal dispose de la capture écran, mais pas de l’injection Accessibilité.
+La capture réelle contient des documents de travail ; elle reste dans les
+preuves locales hors Git. Aucun clic annoté n’est inventé. Le parcours clavier
+initial est confirmé par l’utilisateur ; les rendus hors écran ne le remplacent pas.
+
+## BetterTouchTool
+
+API AppleScript uniquement ; base SQLite lue et sauvegardée avant mutation.
+Dossier Roadie > 5 - Modes interactifs, parent `C30FADE0-5BEC-4C7E-B2D3-BBB3A18C887A`.
+Aucun trigger Tab préexistant trouvé. Deux triggers créés désactivés avant installation :
+
+- `E28BDB53-9C0B-4A16-82B1-734D305B6CB9` : Cmd+Tab, keycode 48,
+  masque 1048576, configuration additionnelle 1048584 ;
+- `E93DEAC3-71E8-499B-AE46-9A44A2BCE0AE` : Cmd+Maj+Tab, keycode 48,
+  masque 1179648, configuration additionnelle 1179658.
+
+`BTTShellTaskActionScript` contient la commande brute ; `BTTShellTaskActionConfig`
+contient `/bin/bash:::-c:::-:::` suivi de la même commande. Les commandes sont
+`/Users/moi/.local/bin/roadie switcher cycle --hold cmd` et la même avec `--backwards`.
+Les deux flags BTTEnabled et BTTEnabled2 doivent être à 1 après installation.
+Le fichier Roadie n’a pas de section switcher : son défaut hotkey vide suffit
+à désactiver le raccourci interne, sans modifier la configuration de l’utilisateur.
+
+
+## Dernière revue après changement demandé
+
+Diff `ce58c06d..6b185002` : aucun blocage. CLI externe, grille et gestion des
+rechargements validés par lecture. Complément : la liste est rechargée après un
+échec pour retirer une carte devenue obsolète. Défauts de spec corrigés. La
+configuration réelle ne contient pas de raccourci interne à migrer.
+
+Objection non retenue : un refus de cadre ne doit pas être annoncé comme un
+échec de focus si le focus a réussi. Le résultat conserve `changed=true` et
+`outcome=failed` avec « placement incomplete ». Le journal de focus décrit le
+focus, le résultat de commande décrit le placement. Le test
+`refusedFrameDoesNotClaimThatFocusFailed` protège cette distinction. Ne pas
+revenir à un faux événement de focus échoué pour faire disparaître cet écart.

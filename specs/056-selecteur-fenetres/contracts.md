@@ -2,7 +2,7 @@
 
 RoadieCore (public Equatable Codable Sendable, init avec défauts) :
 `WindowSwitcherConfig`: enabled:Bool=true, style:String="thumbnails" (thumbnails/icons/list), autoSize:Bool=true, thumbnailWidth:Double=220 (120...400), fontSize:Double=16 (10...32), fontFamily:String="system", preview:Bool=true, excludedBundles:[String]=[], shortcuts:[WindowSwitcherShortcutConfig] max9.
-`WindowSwitcherShortcutConfig`: id:String="all", name:String="Toutes les fenêtres", hotkey:String="ctrl+alt+tab", scope:String="all" (stage/desktop/display/application/all), releaseAction:String="focus" (focus/stay), sortOrder:String="recent" (recent/title/stage), includeMinimized:Bool=true, includeHidden:Bool=true, includeFullscreen:Bool=true, onePerApp:Bool=false.
+`WindowSwitcherShortcutConfig`: id:String="all", name:String="Toutes les fenêtres", hotkey:String="", scope:String="all" (stage/desktop/display/application/all), releaseAction:String="focus" (focus/stay), sortOrder:String="recent" (recent/title/stage), includeMinimized:Bool=true, includeHidden:Bool=true, includeFullscreen:Bool=true, onePerApp:Bool=false.
 `RoadieConfig.switcher:WindowSwitcherConfig`; TOML [switcher] et [[switcher.shortcuts]], clés snake_case. Décodage rétrocompatible. Éditeur collection intégré, pas fichier config imposé.
 
 RoadieDaemon modèle (internal, tests @testable) :

@@ -48,9 +48,18 @@ fi
 
 mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$local_bin_dir" "$HOME/Applications"
 
+build_args=(--configuration release)
+if [[ -n "${ROADIE_BUILD_JOBS:-}" ]]; then
+  if [[ ! "$ROADIE_BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ROADIE_BUILD_JOBS doit être un entier positif." >&2
+    exit 64
+  fi
+  build_args+=(--jobs "$ROADIE_BUILD_JOBS")
+fi
+
 echo "Building Roadie release binaries..."
-"$script_dir/with-xcode" swift build --configuration release --product roadied
-"$script_dir/with-xcode" swift build --configuration release --product roadie
+"$script_dir/with-xcode" swift build "${build_args[@]}" --product roadied
+"$script_dir/with-xcode" swift build "${build_args[@]}" --product roadie
 bin_dir="$("$script_dir/with-xcode" swift build --show-bin-path --configuration release)"
 
 build_roadied="$bin_dir/roadied"

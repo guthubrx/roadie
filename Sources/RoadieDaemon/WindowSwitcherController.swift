@@ -446,6 +446,7 @@ public final class WindowSwitcherController {
         session.actionFailed = true
         session.panelVisible = false
         presentPanel(session)
+        reload(sessionID: session.id)
     }
 
     private func reload(sessionID: Int) {

@@ -323,6 +323,21 @@ class LifecycleTests(unittest.TestCase):
                 self.assertNotIn("active et demarre", result.stdout)
                 self.assertLessEqual(self.state["calls"].count(["sleep", "0.1"]), 30)
 
+    def test_install_keeps_the_requested_build_concurrency(self):
+        self.env["ROADIE_BUILD_JOBS"] = "2"
+        result = self.run_script("install")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        builds = [call for call in self.state["calls"] if call[0] == "with-xcode" and "--product" in call]
+        self.assertEqual(len(builds), 2)
+        for call in builds:
+            self.assertEqual(call[call.index("--jobs") + 1], "2")
+
+    def test_invalid_build_concurrency_does_not_start_a_build(self):
+        self.env["ROADIE_BUILD_JOBS"] = "0"
+        result = self.run_script("install")
+        self.assertEqual(result.returncode, 64)
+        self.assertFalse(any(call[0] == "with-xcode" for call in self.state["calls"]))
+
     def test_install_reuses_existing_leaf_identity_without_environment(self):
         self.installed_app("Identité existante")
         self.state["identities"] = ["roadied-cert", "Identité existante"]
