@@ -15,6 +15,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
     case rail
     case bordures
     case focus
+    case selecteur
     case regles
     case avance
 
@@ -29,6 +30,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
         case .rail: return "Rail"
         case .bordures: return "Bordures"
         case .focus: return "Focus et souris"
+        case .selecteur: return "Sélecteur"
         case .regles: return "Règles"
         case .avance: return "Avancé"
         }
@@ -46,6 +48,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
         case .rail: return "sidebar.left"
         case .bordures: return "square.dashed"
         case .focus: return "cursorarrow.click"
+        case .selecteur: return "rectangle.on.rectangle"
         case .regles: return "list.bullet.rectangle"
         case .avance: return "wrench.and.screwdriver"
         }
@@ -100,6 +103,9 @@ public struct SettingDescriptor: Equatable, Sendable {
         case ("tiling.split_policy", "largest_dim"): label = "Répartition équilibrée par défaut"
         case ("tiling.split_policy", "balanced"): label = "Répartition équilibrée héritée"
         case ("tiling.split_policy", "dwindle"): label = "Découpage en spirale"
+        case ("switcher.style", "thumbnails"): label = "Vignettes"
+        case ("switcher.style", "icons"): label = "Icônes"
+        case ("switcher.style", "list"): label = "Liste compacte"
         default: return value
         }
         return "\(label) (\(value))"
@@ -140,7 +146,7 @@ public enum SettingsCatalog {
     public static let all: [SettingDescriptor] =
         interfaceDescriptors + tilingDescriptors + stageDescriptors + focusDescriptors + borderDescriptors
         + targetModeDescriptors + appTargetDescriptors + targetGridDescriptors
-        + advancedDescriptors + ruleDescriptors + railDescriptors + fontFamilyDescriptors
+        + advancedDescriptors + ruleDescriptors + railDescriptors + fontFamilyDescriptors + switcherDescriptors
 
     /// Texte de recherche normalisé de chaque réglage, calculé une fois (même ordre que `all`).
     private static let searchTexts: [String] = all.map {

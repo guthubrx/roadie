@@ -21,14 +21,17 @@ public struct CollectionFieldSpec: Equatable, Sendable {
     public let kind: SettingKind
     public let required: Bool
     public let defaultValue: SettingValue
+    /// Libellés affichés pour les choix ; un choix absent de ce dictionnaire s'affiche tel quel.
+    public let choiceLabels: [String: String]
     public init(path: [String], label: String, help: String, kind: SettingKind, required: Bool,
-                defaultValue: SettingValue) {
+                defaultValue: SettingValue, choiceLabels: [String: String] = [:]) {
         self.path = path
         self.label = label
         self.help = help
         self.kind = kind
         self.required = required
         self.defaultValue = defaultValue
+        self.choiceLabels = choiceLabels
     }
 }
 

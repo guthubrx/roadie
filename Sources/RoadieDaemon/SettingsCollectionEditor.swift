@@ -354,7 +354,7 @@ struct SettingsCollectionEditor: View {
                 )).labelsHidden().toggleStyle(.checkbox)
             }
         case .choice(let choices):
-            let options = (field.required ? [] : [("", "Non défini")]) + choices.map { ($0, $0) }
+            let options = (field.required ? [] : [("", "Non défini")]) + choices.map { ($0, field.choiceLabels[$0] ?? $0) }
             SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: field.label,
                                            options: options, selection: selection)
         case .color:

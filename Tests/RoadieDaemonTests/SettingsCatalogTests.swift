@@ -17,11 +17,11 @@ struct SettingsCatalogTests {
     }
 
     @Test
-    func catalogHas182SimpleSettings() {
-        // SPEC-050 : + double_click_maximize.
-        #expect(simple.count == 182)
+    func catalogHas189SimpleSettings() {
+        // Spec056 : 7 réglages du sélecteur ; les listes du sélecteur sont des collections.
+        #expect(simple.count == 189)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 102)
+        #expect(simple.count - railSimple.count == 109)
     }
 
     @Test
@@ -76,6 +76,7 @@ struct SettingsCatalogTests {
             "width_adjustment.presets", "app_targets.include_roles", "app_targets.additional_boost_bundle_ids",
             "tiling.display_overrides", "stage_manager.workspaces", "borders.stage_overrides",
             "rail.preview.stage_overrides", "rules", "signals.hooks",
+            "switcher.excluded_bundles", "switcher.shortcuts",
         ])
         for descriptor in SettingsCatalog.all where descriptor.collection != nil {
             #expect(descriptor.readOnlyReason == nil)
@@ -159,7 +160,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 182)
+        #expect(expected.count == 189)
     }
 
     // MARK: - Défauts
@@ -252,8 +253,8 @@ struct SettingsCatalogTests {
             }
             checked += 1
         }
-        // 27 réglages hors rail ont une plage.
-        #expect(checked == 27)
+        // 29 réglages hors rail ont une plage.
+        #expect(checked == 29)
     }
 
     // MARK: - Recherche

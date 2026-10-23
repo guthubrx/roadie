@@ -19,9 +19,10 @@ extension SettingsCatalog {
             "assign_display": "Envoyer vers l'écran", "assign_stage": "Envoyer vers le stage", "scratchpad": "Groupe temporaire"
         ]
         func field(_ key: String, _ label: String, _ kind: SettingKind = .text,
-                   required: Bool = false, value: SettingValue = .unset, help: String = "") -> CollectionFieldSpec {
+                   required: Bool = false, value: SettingValue = .unset, help: String = "",
+                   choiceLabels: [String: String] = [:]) -> CollectionFieldSpec {
             CollectionFieldSpec(path: key.components(separatedBy: "."), label: label, help: help,
-                                kind: kind, required: required, defaultValue: value)
+                                kind: kind, required: required, defaultValue: value, choiceLabels: choiceLabels)
         }
         func rows(_ table: String, _ fields: [CollectionFieldSpec], key: String? = nil,
                   oneOf: [[String]] = []) -> CollectionSpec {
@@ -38,6 +39,42 @@ extension SettingsCatalog {
             return list(.text, AppTargetsConfig().includeRoles.map(SettingValue.string), suggestions: AppTargetsConfig().includeRoles, minCount: 1)
         case "app_targets.additional_boost_bundle_ids", "exclusions.floating_bundles":
             return list(.text, [])
+        case "switcher.excluded_bundles":
+            return list(.text, [], unique: true)
+        case "switcher.shortcuts":
+            let profile = WindowSwitcherShortcutConfig()
+            let fields = [
+                field("id", "Identifiant", required: true, value: .string(profile.id),
+                      help: "Nom interne du profil. Chaque profil doit avoir un identifiant distinct."),
+                field("name", "Nom affiché", required: true, value: .string(profile.name),
+                      help: "Nom lisible du profil, affiché dans la liste des profils."),
+                field("hotkey", "Touche", required: true, value: .string(profile.hotkey),
+                      help: "Combinaison, par exemple ctrl+alt+tab. AltTab et d'autres outils peuvent utiliser la même touche : dans ce cas, elle peut ne pas réagir. Roadie ne désactive jamais un autre outil."),
+                field("scope", "Fenêtres affichées", .choice(["stage", "desktop", "display", "application", "all"]),
+                      required: true, value: .string(profile.scope),
+                      help: "Fenêtres proposées : stage Roadie actif, bureau Roadie actif, écran actif, application active ou toutes les fenêtres gérées. Ces filtres suivent les stages et bureaux Roadie, pas les espaces natifs de macOS.",
+                      choiceLabels: ["stage": "Stage actif", "desktop": "Bureau actif", "display": "Écran actif",
+                                     "application": "Application active", "all": "Toutes les fenêtres"]),
+                field("release_action", "Action au relâchement", .choice(["focus", "stay"]),
+                      required: true, value: .string(profile.releaseAction),
+                      help: "Ce qui se passe au relâchement de la touche ou à la validation. « Activer » donne le focus à la fenêtre choisie. « Ne pas activer » laisse le focus sur la fenêtre actuelle.",
+                      choiceLabels: ["focus": "Activer la fenêtre choisie", "stay": "Ne pas activer la fenêtre"]),
+                field("sort_order", "Tri", .choice(["recent", "title", "stage"]),
+                      required: true, value: .string(profile.sortOrder),
+                      help: "Ordre des fenêtres dans le sélecteur. « Récentes d'abord » place en tête les fenêtres utilisées récemment.",
+                      choiceLabels: ["recent": "Récentes d'abord", "title": "Titre (A à Z)", "stage": "Par stage"]),
+                field("include_minimized", "Inclure les fenêtres réduites", .bool, value: .bool(profile.includeMinimized),
+                      help: "Affiche aussi les fenêtres réduites."),
+                field("include_hidden", "Inclure les applications masquées", .bool, value: .bool(profile.includeHidden),
+                      help: "Affiche aussi les fenêtres des applications masquées (Cmd+H)."),
+                field("include_fullscreen", "Inclure les fenêtres plein écran", .bool, value: .bool(profile.includeFullscreen),
+                      help: "Affiche aussi les fenêtres en plein écran macOS."),
+                field("one_per_app", "Une fenêtre par application", .bool, value: .bool(profile.onePerApp),
+                      help: "Affiche seulement la fenêtre la plus récente de chaque application."),
+            ]
+            let defaultRow = Dictionary(uniqueKeysWithValues: fields.map { ($0.path.joined(separator: "."), $0.defaultValue) })
+            return CollectionSpec(shape: .rows(table: id, fields: fields, uniqueKey: "id", oneOf: []),
+                                  defaultValue: .rows([CollectionRow(fields: defaultRow)]))
         case "tiling.display_overrides":
             return rows(id, [field("display_id", "Identifiant de l'écran"), field("display_name", "Nom de l'écran")]
                         + ["gaps_outer", "gaps_outer_top", "gaps_outer_right", "gaps_outer_bottom", "gaps_outer_left"].map { field($0, labels[$0] ?? $0, .double(nil)) },

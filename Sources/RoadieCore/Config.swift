@@ -13,6 +13,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var rules: [WindowRule]
     public var widthAdjustment: WidthAdjustmentConfig
     public var experimental: ExperimentalConfig
+    public var switcher: WindowSwitcherConfig
 
     public init(
         interface: InterfaceConfig = InterfaceConfig(),
@@ -25,7 +26,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         windowPlacement: WindowPlacementConfig = WindowPlacementConfig(),
         rules: [WindowRule],
         widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
-        experimental: ExperimentalConfig = ExperimentalConfig()
+        experimental: ExperimentalConfig = ExperimentalConfig(),
+        switcher: WindowSwitcherConfig = WindowSwitcherConfig()
     ) {
         self.interface = interface
         self.tiling = tiling
@@ -38,6 +40,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.rules = rules
         self.widthAdjustment = widthAdjustment
         self.experimental = experimental
+        self.switcher = switcher
     }
 
     public init(
@@ -50,7 +53,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         focus: FocusConfig = FocusConfig(),
         windowPlacement: WindowPlacementConfig = WindowPlacementConfig(),
         widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
-        experimental: ExperimentalConfig = ExperimentalConfig()
+        experimental: ExperimentalConfig = ExperimentalConfig(),
+        switcher: WindowSwitcherConfig = WindowSwitcherConfig()
     ) {
         self.init(
             interface: interface,
@@ -63,7 +67,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
             windowPlacement: windowPlacement,
             rules: [],
             widthAdjustment: widthAdjustment,
-            experimental: experimental
+            experimental: experimental,
+            switcher: switcher
         )
     }
 
@@ -79,6 +84,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case rules
         case widthAdjustment = "width_adjustment"
         case experimental
+        case switcher
     }
 
     public init(from decoder: Decoder) throws {
@@ -94,6 +100,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.rules = try c.decodeIfPresent([WindowRule].self, forKey: .rules) ?? []
         self.widthAdjustment = try c.decodeIfPresent(WidthAdjustmentConfig.self, forKey: .widthAdjustment) ?? WidthAdjustmentConfig()
         self.experimental = try c.decodeIfPresent(ExperimentalConfig.self, forKey: .experimental) ?? ExperimentalConfig()
+        self.switcher = try c.decodeIfPresent(WindowSwitcherConfig.self, forKey: .switcher) ?? WindowSwitcherConfig()
     }
 }
 
@@ -1147,13 +1154,14 @@ public enum RoadieConfigLoader {
         "exclusions": ["floating_bundles"],
         "fx.borders": ["stage_overrides"],
         "width_adjustment": ["presets"],
-        "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"]
+        "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"],
+        "switcher": ["excluded_bundles", "shortcuts"]
     ]
 
     /// Tables qui sont elles-mêmes des tableaux de tables ou leurs sous-tables.
     private static let nonScalarTables: Set<String> = [
         "tiling.display_overrides", "stage_manager.workspaces", "fx.borders.stage_overrides",
-        "fx.rail.preview.stage_overrides", "rules", "rules.match", "rules.action"
+        "fx.rail.preview.stage_overrides", "switcher.shortcuts", "rules", "rules.match", "rules.action"
     ]
 
     /// Clés scalaires reconnues par le validateur, par chemin de table TOML complet.
@@ -1313,6 +1321,8 @@ private enum ConfigValidationRules {
         "focus",
         "window_placement",
         "width_adjustment",
+        "switcher",
+        "switcher.shortcuts",
         "experimental",
         "experimental.titlebar_context_menu",
         "experimental.target_mode",
@@ -1367,6 +1377,8 @@ private enum ConfigValidationRules {
             "focus": ["stage_follows_focus", "assign_follows_focus", "stage_move_follows_focus", "focus_follows_mouse", "mouse_follows_focus"],
             "window_placement": ["new_apps_target", "new_window_side"],
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
+            "switcher": ["enabled", "style", "auto_size", "thumbnail_width", "font_size", "font_family", "preview", "excluded_bundles", "shortcuts"],
+            "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
             "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
@@ -1737,7 +1749,7 @@ private extension WindowManagementMode {
     }
 }
 
-private extension KeyedDecodingContainer {
+extension KeyedDecodingContainer {
     /// Accepte un nombre décimal ou un entier TOML. Clé absente : `nil` (le défaut s'applique).
     /// Autre type (booléen, texte, tableau) : l'erreur de décodage est propagée, jamais remplacée
     /// par le défaut (REL-011).
