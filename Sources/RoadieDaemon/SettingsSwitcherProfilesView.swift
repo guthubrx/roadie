@@ -19,30 +19,27 @@ struct SettingsSwitcherProfilesView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(editor.rows) { row in
+        VStack(alignment: .leading, spacing: 12) {
+            if editor.rows.count > 1 { ForEach(editor.rows) { row in
                 Button { selectedID = row.id } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(row.raw["name"] ?? "Profil").fontWeight(.semibold)
+                            Text(row.raw["name"] ?? "Profil").fontWeight(.semibold).lineLimit(1)
                             Text(summary(row)).font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text(ShortcutCapture.label(row.raw["hotkey"] ?? "")).font(.system(size: fonts.settingsHelpFontSize))
+                        Text((row.raw["hotkey"] ?? "").isEmpty ? (source(row) == "external" ? "Commande externe" : "À définir") : ShortcutCapture.label(row.raw["hotkey"] ?? ""))
+                            .font(.system(size: fonts.settingsHelpFontSize)).lineLimit(1)
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(selectedID == row.id ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: selectedID == row.id ? 2 : 1))
                 }.buttonStyle(.plain)
-            }
-            HStack {
-                Button("Nouveau profil", systemImage: "plus") { selectedID = editor.addProfile() }
-                    .disabled(editor.rows.count >= 9)
-                if let selectedID {
-                    Button("Dupliquer", systemImage: "plus.square.on.square") { self.selectedID = editor.addProfile(copying: selectedID) }
-                        .disabled(editor.rows.count >= 9)
-                }
+            } }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { profileTools }.fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 8) { profileTools }
             }
             if let row = editor.rows.first(where: { $0.id == selectedID }) ?? editor.rows.first {
                 profileForm(row)
@@ -66,44 +63,37 @@ struct SettingsSwitcherProfilesView: View {
     }
 
     private func profileForm(_ row: SettingsCollectionEditorModel.Row) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsFormRow("Nom du profil", fonts: fonts) {
                 TextField("Nom du profil", text: binding(row, "name")).textFieldStyle(.roundedBorder)
                     .accessibilityLabel("Nom du profil")
-                Toggle("Actif", isOn: Binding(get: { row.raw["enabled"] != "false" },
-                    set: { change(row, values: ["enabled": $0 ? "true" : "false"]) }))
-                    .toggleStyle(.switch).fixedSize()
             }
-            Picker("Réglages du profil", selection: $tab) {
-                ForEach(["Raccourci", "Fenêtres", "Navigation", "Apparence"], id: \.self) { Text($0) }
-            }.pickerStyle(.segmented).labelsHidden()
+            SettingsFormRow("Profil actif", fonts: fonts) {
+                Toggle("Profil actif", isOn: Binding(get: { row.raw["enabled"] != "false" },
+                    set: { change(row, values: ["enabled": $0 ? "true" : "false"]) }))
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            profileTabs.padding(.vertical, 10)
             if tab == "Raccourci" {
-                LabeledContent("Géré par") {
-                    Picker("Gestionnaire", selection: Binding(get: { source(row) }, set: { change(row, values: ["trigger_source": $0]) })) {
-                        Text("Roadie").tag("roadie")
-                        Text("BetterTouchTool").tag("btt")
-                        Text("Outil externe / commande").tag("external")
-                    }.labelsHidden().frame(maxWidth: 270)
+                SettingsFormRow("Géré par", help: "Roadie enregistre le raccourci directement. BetterTouchTool utilise une liaison vérifiée. Le mode externe conserve les commandes BTT ou Karabiner existantes.", fonts: fonts) {
+                    SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: "Gestionnaire",
+                        options: [("roadie", "Roadie"), ("btt", "BetterTouchTool"), ("external", "Outil externe / commande")],
+                        selection: Binding(get: { source(row) }, set: { change(row, values: ["trigger_source": $0]) }))
                 }
-                LabeledContent("Combinaison") {
+                SettingsFormRow("Combinaison", help: "Cliquez sur Enregistrer, puis appuyez sur les touches. Échap annule la capture.", fonts: fonts) {
                     ShortcutRecorderControl(value: row.raw["hotkey"] ?? "", fontSize: fonts.settingsTextFontSize) { value in
                         change(row, values: ["hotkey": value, "trigger_source": source(row) == "external" ? "roadie" : source(row)])
                     }
                 }
-                if source(row) == "external" {
-                    Text("Le raccourci actuel peut être géré par BTT ou Karabiner. Choisissez BetterTouchTool pour associer sa liaison, ou Roadie pour l'enregistrer ici.")
-                        .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
-                }
                 picker(row, key: "release_action", label: "Au relâchement",
-                       options: [("focus", "Activer la fenêtre choisie"), ("stay", "Rester ouvert"), ("search", "Passer en recherche")])
-                Text(modeHelp(row.raw["release_action"] ?? "focus"))
-                    .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
+                       options: [("focus", "Activer la fenêtre choisie"), ("stay", "Rester ouvert"), ("search", "Passer en recherche")],
+                       help: modeHelp(row.raw["release_action"] ?? "focus"))
                 picker(row, key: "search_visibility", label: "Champ de recherche",
                        options: [("auto", "Selon le mode"), ("always", "Toujours visible"), ("never", "Masqué")])
                 picker(row, key: "actions_visibility", label: "Menu Actions",
                        options: [("auto", "Selon le mode"), ("always", "Toujours visible"), ("never", "Masqué")])
                 if source(row) == "btt" && (row.raw["btt_forward_uuid"] ?? "").isEmpty {
-                    Button("Associer / configurer dans BTT") { change(row, values: ["trigger_source": "btt"]) }
+                    Button("Configurer BTT") { change(row, values: ["trigger_source": "btt"]) }
                 }
             } else if tab == "Fenêtres" {
                 picker(row, key: "scope", label: "Fenêtres proposées", options: [
@@ -116,32 +106,57 @@ struct SettingsSwitcherProfilesView: View {
                 toggle(row, "include_fullscreen", "Inclure les fenêtres plein écran")
                 toggle(row, "one_per_app", "Une fenêtre par application")
             } else if tab == "Apparence" {
-                Text("Une valeur commune suit les réglages de la catégorie. Ce profil peut aussi avoir sa propre présentation.")
-                    .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
-                picker(row, key: "style", label: "Style", options: [("", "Réglage commun"), ("thumbnails", "Vignettes"), ("icons", "Icônes"), ("list", "Liste compacte")])
+                picker(row, key: "style", label: "Style", options: [("", "Réglage commun"), ("thumbnails", "Vignettes"), ("icons", "Icônes"), ("list", "Liste compacte")],
+                       help: "Un réglage commun suit l'apparence de la catégorie. Une valeur propre à ce profil prend priorité.")
                 picker(row, key: "preview", label: "Grand aperçu", options: [("", "Réglage commun"), ("true", "Afficher"), ("false", "Masquer")])
                 picker(row, key: "auto_size", label: "Taille automatique", options: [("", "Réglage commun"), ("true", "Oui"), ("false", "Non")])
                 number(row, "thumbnail_width", "Largeur des vignettes")
                 number(row, "font_size", "Taille du texte")
-                LabeledContent("Police") {
-                    SettingsFontFamilyPicker(fontSize: fonts.settingsTextFontSize, selection: binding(row, "font_family"))
+                SettingsFormRow("Police", fonts: fonts) {
+                    SettingsFontFamilyPicker(fontSize: fonts.settingsTextFontSize, selection: binding(row, "font_family"), inheritedLabel: "Réglage commun")
                 }
-                Button("Utiliser toute l'apparence commune") {
+                Button("Apparence commune") {
                     _ = editor.updateRow(row.id, values: Dictionary(uniqueKeysWithValues: ["style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"].map { ($0, "") }))
                 }
             } else {
                 toggle(row, "arrow_navigation", "Navigation avec les quatre flèches")
-                toggle(row, "mouse_hover", "Sélectionner au survol de la souris")
-                Text("Le survol sélectionne ; le clic active la fenêtre. Un pointeur immobile ne reprend pas la sélection après une flèche. Quand la recherche contient du texte, Gauche/Droite déplacent le curseur dans ce texte.")
-                    .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
+                toggle(row, "mouse_hover", "Sélection au survol",
+                       help: "Le survol sélectionne ; le clic active la fenêtre. Un pointeur immobile ne reprend pas la sélection après une flèche. Quand la recherche contient du texte, Gauche/Droite déplacent le curseur dans ce texte.")
             }
             if editor.rows.count > 1 {
                 Button("Supprimer ce profil", role: .destructive) { remove(row) }
                     .font(.system(size: fonts.settingsHelpFontSize))
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
+        .padding(.vertical, 6)
+    }
+
+    private var profileTools: some View {
+        Group {
+            Button("Nouveau profil", systemImage: "plus") { selectedID = editor.addProfile() }
+                .disabled(editor.rows.count >= 9).fixedSize(horizontal: true, vertical: false)
+            if let selectedID {
+                Button("Dupliquer", systemImage: "plus.square.on.square") { self.selectedID = editor.addProfile(copying: selectedID) }
+                    .disabled(editor.rows.count >= 9).fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private var profileTabs: some View {
+        let values = ["Raccourci", "Fenêtres", "Navigation", "Apparence"]
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 4) {
+                ForEach(values, id: \.self) { value in
+                    Button { tab = value } label: {
+                        Text(value).font(.system(size: fonts.settingsTextFontSize, weight: .medium))
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(tab == value ? Color.accentColor.opacity(0.18) : .clear))
+                    }.buttonStyle(.plain)
+                }
+            }.fixedSize(horizontal: true, vertical: false)
+            SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: "Réglages du profil",
+                                           options: values.map { ($0, $0) }, selection: $tab)
+        }
     }
 
     private func binding(_ row: SettingsCollectionEditorModel.Row, _ key: String) -> Binding<String> {
@@ -151,22 +166,22 @@ struct SettingsSwitcherProfilesView: View {
                     editor.editField(row: row.id, field: field, raw: value)
                 })
     }
-    private func picker(_ row: SettingsCollectionEditorModel.Row, key: String, label: String, options: [(String, String)]) -> some View {
-        LabeledContent(label) {
-            Picker(label, selection: binding(row, key)) {
-                ForEach(options, id: \.0) { Text($0.1).tag($0.0) }
-            }.labelsHidden().frame(maxWidth: 290)
+    private func picker(_ row: SettingsCollectionEditorModel.Row, key: String, label: String, options: [(String, String)], help: String = "") -> some View {
+        SettingsFormRow(label, help: help, fonts: fonts) {
+            SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: label, options: options, selection: binding(row, key))
         }
     }
     private func number(_ row: SettingsCollectionEditorModel.Row, _ key: String, _ label: String) -> some View {
-        LabeledContent(label) {
+        SettingsFormRow(label, fonts: fonts) {
             TextField("Commun", text: binding(row, key)).textFieldStyle(.roundedBorder).frame(width: 100)
                 .accessibilityLabel(label)
         }
     }
-    private func toggle(_ row: SettingsCollectionEditorModel.Row, _ key: String, _ label: String) -> some View {
-        Toggle(label, isOn: Binding(get: { row.raw[key] == "true" }, set: { _ = editor.updateRow(row.id, values: [key: $0 ? "true" : "false"]) }))
-            .toggleStyle(.switch)
+    private func toggle(_ row: SettingsCollectionEditorModel.Row, _ key: String, _ label: String, help: String = "") -> some View {
+        SettingsFormRow(label, help: help, fonts: fonts) {
+            Toggle(label, isOn: Binding(get: { row.raw[key] == "true" }, set: { _ = editor.updateRow(row.id, values: [key: $0 ? "true" : "false"]) }))
+                .toggleStyle(.switch).labelsHidden()
+        }
     }
     private func source(_ row: SettingsCollectionEditorModel.Row) -> String {
         if row.source.fields["trigger_source"] != nil { return row.raw["trigger_source"] ?? "external" }

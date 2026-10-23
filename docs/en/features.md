@@ -521,11 +521,11 @@ request brings the same window to the front.
 - **Left column**: a search field, then the categories: Général (General),
   Tuilage (Tiling), Stages et bureaux (Stages and desktops), Mode lettres (Letter
   mode), Grille (Grid), Recherche (Search), Rail, Bordures (Borders), Focus et
-  souris (Focus and mouse), Règles (Rules), Avancé (Advanced).
-- **Right area**: the settings of the category. Each setting shows a readable
-  name, a description, a matching control (switch, number with limits, choice
-  list, text, color), and a **Rétablir** (Reset) button when the value differs
-  from the default.
+  souris (Focus and mouse), Sélecteur (Window switcher), Règles (Rules), Avancé (Advanced).
+- **Right area**: settings grouped by purpose, with aligned labels and controls.
+  Narrow windows place the control below its label. The information button opens
+  scrollable help; the reset arrow restores the default. Expand individual rules
+  and their criteria or actions as needed. Menus follow the chosen text size.
 - **Search**: filters the settings of every category by name and description,
   ignoring case and accents.
 - **No Save button**: a change is written to the configuration file and applies

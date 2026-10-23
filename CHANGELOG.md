@@ -16,6 +16,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Changements
 
+- Formulaires des paramètres alignés dans toutes les catégories, y compris les
+  profils du sélecteur. Règles repliables, commandes compactes et aides défilables.
+  Les menus et champs suivent la taille de texte choisie, même en fenêtre étroite.
 - Paramètres regroupés par usage dans toutes les catégories. Profils du sélecteur
   présentés directement, choix Roadie/BTT et enregistrement d'une combinaison
   par appui clavier. Trois modes au relâchement, recherche et actions contextuelles.

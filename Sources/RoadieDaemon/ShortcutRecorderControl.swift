@@ -19,7 +19,7 @@ enum ShortcutCapture {
     }
 
     static func label(_ raw: String) -> String {
-        guard !raw.isEmpty else { return "Enregistrer un raccourci…" }
+        guard !raw.isEmpty else { return "Enregistrer…" }
         let symbols = ["command": "⌘", "cmd": "⌘", "control": "⌃", "ctrl": "⌃",
                        "alt": "⌥", "option": "⌥", "shift": "⇧", "tab": "⇥", "space": "Espace",
                        "return": "↩", "escape": "⎋", "left": "←", "right": "→", "up": "↑", "down": "↓"]
@@ -35,7 +35,7 @@ struct ShortcutRecorderControl: View {
     var body: some View {
         HStack(spacing: 10) {
             RecorderButton(value: value, fontSize: fontSize, onChange: onChange)
-                .frame(minWidth: 150, idealWidth: 230, maxWidth: 310, minHeight: 34)
+                .frame(minWidth: 120, idealWidth: 230, maxWidth: .infinity, minHeight: 34)
             if !value.isEmpty {
                 Button("Effacer", systemImage: "xmark.circle") { onChange("") }
                     .labelStyle(.iconOnly).accessibilityLabel("Effacer le raccourci")
@@ -60,6 +60,10 @@ private struct RecorderButton: NSViewRepresentable {
         view.setAccessibilityLabel("Enregistrer le raccourci : " + ShortcutCapture.label(value))
     }
     static func dismantleNSView(_ view: ShortcutRecorderButton, coordinator: ()) { view.finish() }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: ShortcutRecorderButton, context: Context) -> CGSize? {
+        let font = nsView.font ?? NSFont.systemFont(ofSize: fontSize)
+        return CGSize(width: proposal.width ?? 230, height: max(34, ceil(font.ascender - font.descender + font.leading) + 12))
+    }
 }
 
 @MainActor
@@ -74,11 +78,18 @@ private final class ShortcutRecorderButton: NSButton {
 
     init() {
         super.init(frame: .zero)
-        bezelStyle = .rounded
+        isBordered = false
+        updateSettingsSurface()
+        cell?.lineBreakMode = .byTruncatingTail
         target = self
         action = #selector(begin)
     }
     required init?(coder: NSCoder) { nil }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateSettingsSurface()
+    }
 
     @objc private func begin() {
         guard !recording else { finish(); return }
@@ -100,7 +111,7 @@ private final class ShortcutRecorderButton: NSButton {
                     let change = recorder.onChange
                     recorder.finish()
                     change?(value)
-                } else { recorder.title = "Ajoutez ⌘, ⌃ ou ⌥ à la touche…" }
+                } else { recorder.title = "Ajoutez ⌘, ⌃ ou ⌥" }
                 return true
             }
             return consumed ? nil : Unmanaged.passUnretained(event)
@@ -116,7 +127,8 @@ private final class ShortcutRecorderButton: NSButton {
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
         recording = true
-        title = "Appuyez sur la combinaison… (Échap annule)"
+        title = "Vos touches…"
+        toolTip = "Appuyez sur la combinaison. Échap annule."
         timeout = Timer.scheduledTimer(withTimeInterval: 20, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.finish() }
         }

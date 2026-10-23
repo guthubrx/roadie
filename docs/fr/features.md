@@ -533,11 +533,12 @@ Une seconde demande ramène la même fenêtre au premier plan.
 
 - **Colonne de gauche** : une zone de recherche, puis les catégories : Général,
   Tuilage, Stages et bureaux, Mode lettres, Grille, Recherche, Rail, Bordures,
-  Focus et souris, Règles, Avancé.
-- **Zone de droite** : les réglages de la catégorie. Chaque réglage montre un nom
-  lisible, une description, un contrôle adapté (interrupteur, nombre avec limites,
-  liste de choix, texte, couleur) et un bouton **Rétablir** quand la valeur
-  diffère du défaut.
+  Focus et souris, Sélecteur, Règles, Avancé.
+- **Zone de droite** : des groupes par usage, avec libellés et contrôles alignés.
+  En fenêtre étroite, le contrôle passe sous son libellé. Le bouton d'information
+  ouvre une aide défilable ; la flèche de réinitialisation rétablit le défaut.
+  Les règles, leurs critères et leurs actions se déplient séparément.
+  Les menus suivent la taille de texte choisie.
 - **Recherche** : filtre les réglages de toutes les catégories par nom et par
   description, casse et accents ignorés.
 - **Sans bouton Enregistrer** : un changement est écrit dans le fichier de

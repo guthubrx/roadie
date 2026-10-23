@@ -8,8 +8,8 @@ struct SettingsChoicePicker: NSViewRepresentable {
     @Binding var selection: String
     @Environment(\.isEnabled) private var isEnabled
 
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+    func makeNSView(context: Context) -> SettingsPopUpButton {
+        let button = SettingsPopUpButton(frame: .zero, pullsDown: false)
         button.controlSize = .large
         button.font = .systemFont(ofSize: fontSize)
         button.target = context.coordinator
@@ -17,7 +17,7 @@ struct SettingsChoicePicker: NSViewRepresentable {
         return button
     }
 
-    func updateNSView(_ button: NSPopUpButton, context: Context) {
+    func updateNSView(_ button: SettingsPopUpButton, context: Context) {
         context.coordinator.selection = $selection
         let values = descriptor.choiceValues(includingCurrent: selection)
         let selectable: Set<String>
@@ -44,8 +44,8 @@ struct SettingsChoicePicker: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSPopUpButton, context: Context) -> CGSize? {
-        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: max(30, fontSize + 12))
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: SettingsPopUpButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: nsView.intrinsicContentSize.height)
     }
 
     @MainActor

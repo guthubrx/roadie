@@ -241,6 +241,7 @@ struct SettingsCollectionEditor: View {
     @ObservedObject var model: SettingsViewModel
     let descriptor: SettingDescriptor
     @StateObject private var editor: SettingsCollectionEditorModel
+    @State private var expandedRows: Set<UUID> = []
     private var fonts: RoadieCore.InterfaceConfig { model.interfaceFonts }
 
     init(model: SettingsViewModel, descriptor: SettingDescriptor) {
@@ -270,21 +271,29 @@ struct SettingsCollectionEditor: View {
                 Button("Recharger les données") { editor.reload(discardDrafts: true) }
             }
         }
-        .onAppear { editor.onChange = { model.collectionChanged(descriptor, result: $0) } }
+        .onAppear {
+            editor.onChange = { model.collectionChanged(descriptor, result: $0) }
+            if expandedRows.isEmpty, let first = editor.rows.first { expandedRows.insert(first.id) }
+        }
         .onChange(of: model.collectionRevision) { _, _ in editor.reload() }
         .onChange(of: model.collectionResetRevisions[descriptor.id]) { _, _ in editor.reload(discardDrafts: true) }
     }
 
     private var sides: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) { sideToggles }.fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: .leading, spacing: 8) { sideToggles }
+        }
+    }
+
+    private var sideToggles: some View {
             ForEach([("top", "Haut"), ("right", "Droite"), ("bottom", "Bas"), ("left", "Gauche")], id: \.0) { side, label in
                 Toggle(label, isOn: Binding(
                     get: { editor.items.contains { $0.raw == side } },
                     set: { editor.setSide(side, enabled: $0) }
                 ))
-                .toggleStyle(.checkbox)
+                .toggleStyle(.checkbox).fixedSize()
             }
-        }
     }
 
     private var list: some View {
@@ -303,7 +312,8 @@ struct SettingsCollectionEditor: View {
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel(descriptor.label)
                     Button("Supprimer", systemImage: "minus.circle") { editor.removeItem(item.id) }
-                        .labelStyle(.iconOnly).accessibilityLabel("Supprimer cette entrée")
+                        .labelStyle(.iconOnly).buttonStyle(.plain).frame(width: 26, height: 26)
+                        .help("Supprimer cette entrée").accessibilityLabel("Supprimer cette entrée")
                 }
             }
             Button("Ajouter une entrée", systemImage: "plus") { editor.addItem() }
@@ -319,51 +329,70 @@ struct SettingsCollectionEditor: View {
     }
 
     private var rowForms: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             if editor.rows.isEmpty { Text("Aucune entrée").foregroundStyle(.secondary) }
             ForEach(Array(editor.rows.enumerated()), id: \.element.id) { index, row in
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Entrée \(index + 1)").font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
-                        Spacer()
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Button {
+                            if expandedRows.contains(row.id) { expandedRows.remove(row.id) }
+                            else { expandedRows.insert(row.id) }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: expandedRows.contains(row.id) ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 11, weight: .semibold)).frame(width: 14)
+                                Text(rowTitle(row, index: index)).fontWeight(.semibold)
+                                    .lineLimit(1).truncationMode(.middle)
+                                Spacer(minLength: 0)
+                            }.contentShape(Rectangle())
+                        }.buttonStyle(.plain).accessibilityLabel("Déplier ou replier : " + rowTitle(row, index: index))
                         if descriptor.id == "rules" || descriptor.id == "stage_manager.workspaces" {
                             Button("Monter", systemImage: "arrow.up") { editor.moveRow(row.id, by: -1) }
-                                .labelStyle(.iconOnly).disabled(index == 0)
+                                .labelStyle(.iconOnly).buttonStyle(.plain).frame(width: 26, height: 26)
+                                .help("Monter cette entrée").disabled(index == 0)
                             Button("Descendre", systemImage: "arrow.down") { editor.moveRow(row.id, by: 1) }
-                                .labelStyle(.iconOnly).disabled(index == editor.rows.count - 1)
+                                .labelStyle(.iconOnly).buttonStyle(.plain).frame(width: 26, height: 26)
+                                .help("Descendre cette entrée").disabled(index == editor.rows.count - 1)
                         }
                         Button("Supprimer", systemImage: "minus.circle") { editor.removeRow(row.id) }
-                            .labelStyle(.iconOnly).accessibilityLabel("Supprimer l'entrée \(index + 1)")
+                            .labelStyle(.iconOnly).buttonStyle(.plain).frame(width: 26, height: 26)
+                            .help("Supprimer cette entrée").accessibilityLabel("Supprimer l'entrée \(index + 1)")
                     }
-                    if descriptor.id == "rules" {
-                        fieldForms(row, fields: editor.fields.filter { $0.path.count == 1 })
-                        DisclosureGroup("Critères de correspondance") {
-                            fieldForms(row, fields: editor.fields.filter { $0.path.first == "match" }).padding(.top, 8)
+                    if expandedRows.contains(row.id) {
+                        if descriptor.id == "rules" {
+                            fieldForms(row, fields: editor.fields.filter { $0.path.count == 1 })
+                            SettingsDisclosureSection("Critères de correspondance") {
+                                fieldForms(row, fields: editor.fields.filter { $0.path.first == "match" })
+                            }
+                            SettingsDisclosureSection("Actions à appliquer") {
+                                fieldForms(row, fields: editor.fields.filter { $0.path.first == "action" })
+                            }
+                        } else {
+                            fieldForms(row, fields: editor.fields)
                         }
-                        DisclosureGroup("Actions à appliquer") {
-                            fieldForms(row, fields: editor.fields.filter { $0.path.first == "action" }).padding(.top, 8)
-                        }
-                    } else {
-                        fieldForms(row, fields: editor.fields)
                     }
                 }
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
+                .padding(.vertical, 10)
+                .overlay(alignment: .bottom) { Divider() }
             }
-            Button("Ajouter une entrée", systemImage: "plus") { editor.addRow() }
+            Button(descriptor.id == "rules" ? "Ajouter une règle" : "Ajouter une entrée", systemImage: "plus") {
+                editor.addRow()
+                if let row = editor.rows.last { expandedRows.insert(row.id) }
+            }
         }
     }
 
+    private func rowTitle(_ row: SettingsCollectionEditorModel.Row, index: Int) -> String {
+        let value = ["display_name", "name", "id", "stage_id", "display_id"]
+            .compactMap { row.raw[$0] }.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        return value ?? "Entrée \(index + 1)"
+    }
+
     private func fieldForms(_ row: SettingsCollectionEditorModel.Row, fields: [CollectionFieldSpec]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(fields, id: \.path) { field in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(field.label + (field.required ? " *" : ""))
-                        .font(.system(size: fonts.settingsTextFontSize))
+                SettingsFormRow(field.label + (field.required ? " *" : ""), help: field.help, fonts: fonts) {
                     rowControl(row, field: field)
-                    if !field.help.isEmpty {
-                        Text(field.help).font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
-                    }
                 }
             }
         }
@@ -389,7 +418,7 @@ struct SettingsCollectionEditor: View {
                 Toggle(field.label, isOn: Binding(
                     get: { selection.wrappedValue == "true" },
                     set: { selection.wrappedValue = $0 ? "true" : "false" }
-                )).labelsHidden().toggleStyle(.checkbox)
+                )).labelsHidden().toggleStyle(.switch)
             }
         case .choice(let choices):
             let options = (field.required ? [] : [("", "Non défini")]) + choices.map { ($0, field.choiceLabels[$0] ?? $0) }
@@ -403,6 +432,10 @@ struct SettingsCollectionEditor: View {
                 ), supportsOpacity: true).labelsHidden()
                 TextField("Non défini", text: selection).textFieldStyle(.roundedBorder)
             }
+        case .int, .double:
+            TextField(field.required ? "Valeur requise" : "Non défini", text: selection)
+                .textFieldStyle(.roundedBorder).frame(maxWidth: max(110, fonts.settingsTextFontSize * 6))
+                .accessibilityLabel(field.label)
         default:
             TextField(field.required ? "Valeur requise" : "Non défini", text: selection)
                 .textFieldStyle(.roundedBorder).accessibilityLabel(field.label)
@@ -411,22 +444,22 @@ struct SettingsCollectionEditor: View {
 }
 
 /// Comme les menus principaux, ces choix natifs suivent la taille choisie dans les paramètres.
-private struct SettingsCollectionChoicePicker: NSViewRepresentable {
+struct SettingsCollectionChoicePicker: NSViewRepresentable {
     let fontSize: Double
     let label: String
     let options: [(raw: String, label: String)]
     @Binding var selection: String
     @Environment(\.isEnabled) private var isEnabled
 
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+    func makeNSView(context: Context) -> SettingsPopUpButton {
+        let button = SettingsPopUpButton(frame: .zero, pullsDown: false)
         button.controlSize = .large
         button.target = context.coordinator
         button.action = #selector(Coordinator.select(_:))
         return button
     }
 
-    func updateNSView(_ button: NSPopUpButton, context: Context) {
+    func updateNSView(_ button: SettingsPopUpButton, context: Context) {
         context.coordinator.selection = $selection
         var values = options
         let missing = !values.contains { $0.raw == selection }
@@ -449,8 +482,8 @@ private struct SettingsCollectionChoicePicker: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSPopUpButton, context: Context) -> CGSize? {
-        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: max(30, fontSize + 12))
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: SettingsPopUpButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: nsView.intrinsicContentSize.height)
     }
 
     @MainActor

@@ -81,8 +81,10 @@ struct SettingsView: View {
     private func grouped(_ descriptors: [SettingDescriptor]) -> some View {
         ForEach(SettingsOrganization.groups(descriptors)) { group in
             VStack(alignment: .leading, spacing: 10) {
-                Text(group.title).font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                if group.descriptors.count != 1 || group.descriptors.first?.collection == nil {
+                    Text(group.title).font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
                 card(group.descriptors)
             }
         }
@@ -124,23 +126,31 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             grouped(SettingsCatalog.descriptors(in: .general))
             VStack(alignment: .leading, spacing: 10) {
-                LabeledContent("Fichier de configuration") {
+                SettingsFormRow("Fichier de configuration", fonts: fonts) {
                     Text(model.service.configPath)
                         .font(.system(size: fonts.settingsTextFontSize, design: .monospaced))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                LabeledContent("État") {
+                SettingsFormRow("État", fonts: fonts) {
                     Text(model.validityText).foregroundStyle(model.isLocked ? .red : .primary)
                 }
                 VStack(alignment: .leading, spacing: 10) {
-                    Button("Recharger") { model.reloadConfig() }
-                    Button("Diagnostic") { model.runDiagnostic() }
-                    DisclosureGroup("Outils avancés") {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            Button("Recharger") { model.reloadConfig() }
+                            Button("Diagnostic") { model.runDiagnostic() }
+                        }.fixedSize(horizontal: true, vertical: false)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button("Recharger") { model.reloadConfig() }
+                            Button("Diagnostic") { model.runDiagnostic() }
+                        }
+                    }
+                    SettingsDisclosureSection("Outils avancés") {
                         VStack(alignment: .leading, spacing: 10) {
                             Button("Éditeur intégré") { advancedOpen = true }
                             Button("Ouvrir dans un éditeur externe") { openConfigFile() }
-                        }.padding(.top, 8)
+                        }
                     }
                 }
                 if let notice = model.notice {
@@ -185,53 +195,38 @@ private struct SettingsButtonStyle: ButtonStyle {
 
 // MARK: - Ligne d'un réglage
 
-/// Libellé et description au-dessus du contrôle, « Rétablir » si la valeur n'est pas celle par défaut,
-/// ligne rouge sous un réglage refusé.
+/// Même grille pour les réglages simples ; les collections gardent leur largeur de travail.
 private struct SettingRow: View {
     @ObservedObject var model: SettingsViewModel
     let descriptor: SettingDescriptor
     @State private var advancedOpen = false
-    @State private var helpOpen = false
     @FocusState private var fieldFocused: Bool
     private var fonts: InterfaceConfig { model.interfaceFonts }
     private var isFontSize: Bool { descriptor.key == "font_size" || descriptor.key.hasSuffix("_font_size") }
+    private var displayLabel: String { descriptor.label.replacingOccurrences(of: " (points)", with: "") }
+    private var reset: (() -> Void)? {
+        guard descriptor.readOnlyReason == nil, !model.isDefault(descriptor), !model.isLocked else { return nil }
+        return { model.reset(descriptor) }
+    }
+    private var helpText: String {
+        [descriptor.help, descriptor.label.contains(" (points)") ? "Unité : points." : nil,
+         descriptor.readOnlyReason ?? model.rangeText(descriptor)].compactMap { $0 }.joined(separator: "\n\n")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 12) {
-                Text(descriptor.label)
-                    .font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                Button { helpOpen.toggle() } label: { Image(systemName: "info.circle").foregroundStyle(.secondary) }
-                    .buttonStyle(.plain).accessibilityLabel("Aide : " + descriptor.label)
-                    .popover(isPresented: $helpOpen) {
-                        Text(descriptor.help).font(.system(size: fonts.settingsHelpFontSize))
-                            .padding(16).frame(maxWidth: 380)
-                    }
-                Spacer(minLength: 12)
-                if descriptor.kind == .bool { control.disabled(model.isLocked) }
-                if descriptor.readOnlyReason == nil && !model.isDefault(descriptor) {
-                    Button("Rétablir") { model.reset(descriptor) }
-                        .buttonStyle(.link)
-                        .font(.system(size: fonts.settingsHelpFontSize))
-                        .disabled(model.isLocked)
-                        .fixedSize()
+            if descriptor.collection != nil || descriptor.readOnlyReason != nil {
+                HStack(alignment: .center, spacing: 14) {
+                    SettingsFieldLabel(title: displayLabel, help: helpText, fonts: fonts, prominent: true)
+                    if let reset { SettingsResetButton(action: reset) }
+                }
+                if descriptor.readOnlyReason != nil { Button("Éditeur intégré") { advancedOpen = true } }
+                else { control.disabled(model.isLocked).accessibilityLabel(descriptor.label) }
+            } else {
+                SettingsFormRow(displayLabel, help: helpText, fonts: fonts, reset: reset) {
+                    control.disabled(model.isLocked)
                 }
             }
-            if let detail = descriptor.readOnlyReason ?? model.rangeText(descriptor) {
-                Text(detail)
-                    .font(.system(size: fonts.settingsHelpFontSize))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                if descriptor.readOnlyReason != nil {
-                    Button("Éditeur intégré") { advancedOpen = true }
-                } else if descriptor.kind != .bool {
-                    control.disabled(model.isLocked).accessibilityLabel(descriptor.label)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
             // Valeur actuelle d'une entrée en lecture seule : texte sélectionnable, 6 lignes visibles au plus.
             if let summary = model.readOnlySummary(descriptor), !summary.isEmpty {
                 // Hauteur qui suit le contenu, plafonnée à 6 lignes : le texte seul s'il tient, sinon un ScrollView de 6 lignes.
@@ -249,10 +244,11 @@ private struct SettingRow: View {
             }
             if let error = model.errors[descriptor.id] {
                 Text(error).font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 14)
+        .padding(.vertical, descriptor.collection != nil ? 14 : 2)
         .sheet(isPresented: $advancedOpen) {
             SettingsAdvancedEditor(model: model, descriptor: descriptor.collection == nil ? nil : descriptor)
         }
@@ -280,7 +276,7 @@ private struct SettingRow: View {
             .toggleStyle(.switch)
             .labelsHidden()
         case .int, .double:
-            VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
                 if isFontSize || descriptor.id == "rail.stages.reorder_magnetism", case .double(let range?) = descriptor.kind {
                     Slider(value: Binding(
                         get: {
@@ -291,11 +287,11 @@ private struct SettingRow: View {
                         },
                         set: { model.apply(descriptor, raw: SettingsService.display(.double($0))) }
                     ), in: range, step: 1)
-                    .frame(maxWidth: 320)
+                    .frame(minWidth: 48, maxWidth: .infinity)
                     .accessibilityLabel(descriptor.label)
                 }
                 HStack(spacing: 4) {
-                    field.frame(width: max(120, fonts.settingsTextFontSize * 7))
+                    field.frame(width: max(70, fonts.settingsTextFontSize * 4.5))
                     Stepper("", onIncrement: { model.step(descriptor, by: 1) }, onDecrement: { model.step(descriptor, by: -1) })
                         .labelsHidden()
                         .accessibilityLabel("Ajuster : \(descriptor.label)")
@@ -319,7 +315,7 @@ private struct SettingRow: View {
                     model.apply(descriptor, raw: $0)
                 }
             } else {
-                field.frame(maxWidth: 360)
+                field.frame(maxWidth: .infinity)
             }
         case .color:
             HStack(spacing: 6) {

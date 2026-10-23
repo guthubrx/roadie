@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsFontFamilyPicker: NSViewRepresentable {
     let fontSize: Double
     @Binding var selection: String
+    var inheritedLabel: String? = nil
     @Environment(\.isEnabled) private var isEnabled
 
     // Énumération AppKit une fois au démarrage de ce menu ; tri O(f log f), f = familles installées.
@@ -12,24 +13,24 @@ struct SettingsFontFamilyPicker: NSViewRepresentable {
         $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
     }
 
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+    func makeNSView(context: Context) -> SettingsPopUpButton {
+        let button = SettingsPopUpButton(frame: .zero, pullsDown: false)
         button.controlSize = .large
         button.target = context.coordinator
         button.action = #selector(Coordinator.select(_:))
         return button
     }
 
-    func updateNSView(_ button: NSPopUpButton, context: Context) {
+    func updateNSView(_ button: SettingsPopUpButton, context: Context) {
         context.coordinator.selection = $selection
-        var values = ["system"] + Self.installedFamilies
+        var values = (inheritedLabel == nil ? ["system"] : ["", "system"]) + Self.installedFamilies
         let isMissing = !values.contains(selection)
         if isMissing { values.append(selection) }
         // O(f) : ne pas reconstruire le menu à chaque frappe dans un autre réglage.
         if button.itemArray.compactMap({ $0.representedObject as? String }) != values {
             button.removeAllItems()
             for value in values {
-                let title = value == "system" ? "Police système" : value
+                let title = value.isEmpty ? (inheritedLabel ?? value) : (value == "system" ? "Police système" : value)
                 button.addItem(withTitle: title)
                 button.lastItem?.representedObject = value
             }
@@ -48,8 +49,8 @@ struct SettingsFontFamilyPicker: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSPopUpButton, context: Context) -> CGSize? {
-        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: max(30, fontSize + 12))
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: SettingsPopUpButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: nsView.intrinsicContentSize.height)
     }
 
     @MainActor
