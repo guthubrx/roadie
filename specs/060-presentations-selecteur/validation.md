@@ -11,6 +11,9 @@ ramènent pas un défilement manuel vers la sélection.
 ## Contrôles terminés
 - 143 tests ciblés dans 20 suites : réussite, 2,384 s.
 - Suite complète : 1 892 tests dans 234 suites, réussite en 57,510 s.
+- Passage final après harmonisation des noms générés avec le rail : 1 893 tests
+  dans 234 suites, réussite en 58,192 s. Aucun identifiant interne affiché pour
+  une stage anonyme ; test dédié réussi.
 - Scripts : 28 tests, réussite en 20,817 s.
 - Géométrie des six organisations et des trois styles, largeurs 220/500/1000,
   polices 10/16/32 : cartes dans le document, aucun chevauchement de cartes.
@@ -28,4 +31,11 @@ CUA indisponible : `CUA_REPL_ENABLED_SURFACES is required`. Le circuit natif BTT
 sera utilisé après installation si la fenêtre et le bureau restent disponibles.
 Avant non capturé ; aucun pointeur ni clic supposé ajouté aux captures.
 
-Revue, compilation Release, installation et essai installé en cours.
+## Revue indépendante
+Demande Bridget `roadie-060-presentations-review-20261023-1`, source
+5118b58deb1aab232ac7440e3ec70d3406de35ee. Admission refusée immédiatement :
+`auto_admission_invalid`, sans identifiant de tâche ni revue démarrée. Aucun
+contournement ni autre moteur lancé. Relecture du diff, tests et installation
+poursuivis par le responsable ; cette livraison n'a pas de verdict indépendant.
+
+Compilation Release, installation et essai installé en cours.

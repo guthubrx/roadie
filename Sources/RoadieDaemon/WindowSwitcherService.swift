@@ -118,10 +118,11 @@ struct WindowSwitcherService {
     private func collectDrafts(snapshot: DaemonSnapshot, persisted: PersistentStageState) -> [Draft] {
         var drafts: [Draft] = []
         var seen = Set<WindowID>()
+        let stageLabels = Self.stageLabels(in: persisted, liveWindowIDs: Set(snapshot.windows.map(\.window.id)))
         for scoped in snapshot.windows {
             guard let scope = scoped.scope else { continue }
             seen.insert(scoped.window.id)
-            drafts.append(draft(window: scoped.window, scope: scope, snapshot: snapshot, persisted: persisted))
+            drafts.append(draft(window: scoped.window, scope: scope, snapshot: snapshot, persisted: persisted, stageLabels: stageLabels))
         }
         // Absente de l'écran n'est pas fermée : une fenêtre persistée reste listée si l'inventaire CG
         // confirme encore son pid (autre bureau, réduite, application cachée).
@@ -142,21 +143,35 @@ struct WindowSwitcherService {
                         isOnScreen: false,
                         isTileCandidate: false
                     )
-                    drafts.append(draft(window: window, scope: stageScope, snapshot: snapshot, persisted: persisted))
+                    drafts.append(draft(window: window, scope: stageScope, snapshot: snapshot, persisted: persisted, stageLabels: stageLabels))
                 }
             }
         }
         return drafts
     }
 
-    private func draft(window: WindowSnapshot, scope: StageScope, snapshot: DaemonSnapshot, persisted: PersistentStageState) -> Draft {
+    /// Même numérotation que le rail ; un nom généré ne révèle jamais un UUID interne.
+    static func stageLabels(in state: PersistentStageState, liveWindowIDs: Set<WindowID>) -> [StageScope: String] {
+        var labels: [StageScope: String] = [:]
+        for scope in state.scopes {
+            let order = StagePresentationOrder(scope: scope, liveWindowIDs: liveWindowIDs)
+            for (index, stage) in order.visibleStages.enumerated() {
+                let id = StageScope(displayID: scope.displayID, desktopID: scope.desktopID, stageID: stage.id)
+                labels[id] = StagePresentationOrder.name(stage, position: index + 1)
+            }
+        }
+        return labels
+    }
+
+    private func draft(window: WindowSnapshot, scope: StageScope, snapshot: DaemonSnapshot,
+                       persisted: PersistentStageState, stageLabels: [StageScope: String]) -> Draft {
         Draft(
             window: window,
             scope: scope,
             displayName: snapshot.displays.first { $0.id == scope.displayID }?.name ?? "",
             desktopName: persisted.desktopLabels.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?.label
                 ?? "Bureau \(scope.desktopID.rawValue)",
-            stageName: snapshot.state.stage(scope: scope)?.name ?? ""
+            stageName: stageLabels[scope] ?? ""
         )
     }
 

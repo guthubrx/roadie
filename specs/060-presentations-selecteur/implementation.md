@@ -14,3 +14,7 @@ les deux sont corrigés et les suites complètes passent.
 
 ## T004 et T005
 Revue, preuves du parcours installé et installation restent à terminer.
+La demande de revue a été refusée à l'admission par Bridget ; aucune revue
+indépendante n'a démarré. Relecture propre et validation poursuivies.
+Complément : libellés générés alignés sur ceux du rail, calculés une fois par
+inventaire. Suite finale : 1 893 tests/234 suites réussis en 58,192 s.

@@ -22,6 +22,23 @@ private var presentationEntries: [WindowSwitcherEntry] {
 }
 
 struct Spec060GroupingTests {
+    @Test func anonymousStagesUseRailLabelsInsteadOfInternalIdentifiers() throws {
+        let display = DisplayID(rawValue: "A")
+        let generated = StageID(rawValue: "stage-9c5ab47e-92f4")
+        let member = PersistentStageMember(windowID: WindowID(rawValue: 1), bundleID: "fixture", title: "Terminal",
+            frame: Rect(x: 0, y: 0, width: 500, height: 600))
+        let scope = PersistentStageScope(displayID: display, stages: [PersistentStage(id: StageID(rawValue: "empty")),
+            PersistentStage(id: generated, name: "Stage \(generated.rawValue)", members: [member]),
+            PersistentStage(id: StageID(rawValue: "com"), name: "Communication")])
+        let state = PersistentStageState(scopes: [scope])
+        let labels = WindowSwitcherService.stageLabels(in: state, liveWindowIDs: [member.windowID])
+        let key = StageScope(displayID: display, desktopID: scope.desktopID, stageID: generated)
+        #expect(labels[key] == "Stage 1")
+        let entry = WindowSwitcherEntry(window: presentationEntry(1).window, scope: key)
+        #expect(WindowSwitcherGroups(entries: [entry]).stages.first?.title == "Stage sans nom")
+        #expect(labels.values.allSatisfy { !$0.contains(generated.rawValue) })
+    }
+
     @Test func scopesNotNamesSeparateHomonymsAndKeepInputOrder() {
         let entries = [presentationEntry(4, desktop: 2), presentationEntry(1), presentationEntry(2),
                        presentationEntry(3, display: "B"), presentationEntry(5, stage: "other")]

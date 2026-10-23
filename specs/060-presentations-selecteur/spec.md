@@ -6,7 +6,7 @@ Titre: Cinq présentations du sélecteur par bureau et stage
 Statut: In Progress
 Priorité: P1
 Tâches: 3/5 (60%)
-Tests: 1892/1892 (100%)
+Tests: 1893/1893 (100%)
 
 Demande validée le 23 octobre 2026 : « fais les toutes avec choix par menu parametres ».
 Branche : `session-060-presentations-selecteur`.
