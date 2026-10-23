@@ -153,7 +153,8 @@ facultatifs ; Cmd+Tab et Cmd+Maj+Tab configurés dans BTT par commandes CLI.
 28 tests de scripts réussis. Trois revues traitées. UUID
 E71B3887-DD49-3060-87CA-162E9307A4F5, PID 8089, santé 5/5.
 Configuration et certificat conservés. Parcours initial confirmé par l'utilisateur,
-capture finale vérifiée ; appui physique Cmd+Tab et preuve complète non vérifiés.
+capture finale vérifiée ; Cmd+Tab externe et validation au relâchement confirmés
+après correction BTT. Preuve complète des interactions non enregistrée.
 Reçu : specs/056-selecteur-fenetres/validation.md.
 Current SpecKit feature: `056-selecteur-fenetres`.
 

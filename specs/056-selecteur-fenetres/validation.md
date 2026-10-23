@@ -67,7 +67,7 @@ PID 8089, santé 5/5. L'inode 610462448 de l'exécutable installé correspond
 à celui ouvert par le processus. Build Release, installation et relance terminés.
 Une capture réelle du panneau final (1100 × 536 points) confirme le champ de
 recherche sur toute la largeur et la grille à droite du grand aperçu. Ouverture
-et annulation par CLI vérifiées. Le nouvel appui physique Cmd+Tab reste à confirmer.
+et annulation par CLI vérifiées. Après correction BTT décrite ci-dessous, l’appui physique Cmd+Tab et la validation au relâchement sont confirmés par l’utilisateur.
 Configuration inchangée après installation : SHA-256
 `ca42b5c670755e1b39371b1157c116c31e0754930800ad2551841fe5a3f05629`.
 Certificat conservé : `78a75e8032f190a20072eb91cc2919aac344ef78`.
@@ -126,3 +126,31 @@ dans /Users/moi/.roadies/diagnostics/2026-10-23-session056, hors Git.
 Les worktrees distants créés par Bridget ne sont pas administrables par les outils
 de cette session ; leur suppression n'est pas revendiquée. Aucun nouveau tag ni
 release : version 0.6.0 conservée, nouveautés documentées sous Non publié.
+
+
+## Retour utilisateur : raccourci BTT non intercepté
+
+Après la livraison, l'utilisateur indique que Cmd+Tab ouvre encore le sélecteur
+macOS. La présence et l'activation des entrées BTT ne prouvaient donc pas leur
+déclenchement physique. Les deux entrées étaient globales et actives, sans autre
+trigger Tab concurrent ; AltTab était quitté et la règle Tab Karabiner désactivée.
+
+Anomalie confirmée dans les données : BTTLayoutIndependentChar contenait le
+libellé de l'action, avec BTTAutoAdaptToKeyboardLayout=1. La documentation BTT
+indique que ce champ décrit le caractère clavier. Correction par API : caractère
+tabulation et adaptation désactivée pour le keycode physique 48. Deux entrées
+relues après correction. Le script ajoute provisoirement une date et la réponse
+CLI dans btt-physical.log, sous le dossier local de diagnostics, pour distinguer
+le déclenchement BTT d'une erreur Roadie. Quatre réponses queued_to_roadied: switcher.cycle ont été relevées. L’utilisateur confirme ensuite : « Roadie s’ouvre et valide ». La trace temporaire a été retirée, puis les deux commandes et le keycode ont été relus.
+
+Référence : https://docs.folivora.ai/docs/json/trigger-definitions/
+
+
+Dernière revue BTT en lecture seule : pas de défaut bloquant établi. Les fichiers
+Mac étaient absents du serveur de revue ; réserves traitées sur le Mac par
+relecture du caractère U+0009 (et non du mot « tabulation »), santé du daemon
+et essai utilisateur. Le diagnostic distingue l'anomalie de configuration
+observée de sa causalité précise, qui n'a pas été isolée champ par champ.
+Cmd+Maj+Tab est configuré et relu ; son essai physique après correction n'est
+pas attesté séparément. Aucune mesure de latence ajoutée. La validation immédiate
+d'un appui bref déjà relâché est prévue et testée dans l'état de session.
