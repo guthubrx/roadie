@@ -112,3 +112,17 @@ Objection non retenue : un refus de cadre ne doit pas être annoncé comme un
 focus, le résultat de commande décrit le placement. Le test
 `refusedFrameDoesNotClaimThatFocusFailed` protège cette distinction. Ne pas
 revenir à un faux événement de focus échoué pour faire disparaître cet écart.
+
+
+## Intégration et nettoyage
+
+Code et documentation intégrés par avance rapide sur main et poussés sur origin.
+Branche locale de session et quatre branches distantes de session/délégation
+supprimées après vérification de leur intégration (patchs des agents équivalents).
+Il reste main et le worktree actif de conversation, conservé en HEAD détachée.
+Build local de 1 Go, cache Python de tests, clone temporaire AltTab et fichiers
+temporaires de session retirés. Les journaux, captures et sauvegardes BTT restent
+dans /Users/moi/.roadies/diagnostics/2026-10-23-session056, hors Git.
+Les worktrees distants créés par Bridget ne sont pas administrables par les outils
+de cette session ; leur suppression n'est pas revendiquée. Aucun nouveau tag ni
+release : version 0.6.0 conservée, nouveautés documentées sous Non publié.
