@@ -86,6 +86,8 @@ extension SettingsCatalog {
                 field("mouse_hover", "Sélection au survol", .bool, value: .bool(true)),
                 field("style", "Présentation du profil", .choice(["thumbnails", "icons", "list"]),
                       choiceLabels: ["thumbnails": "Vignettes", "icons": "Icônes", "list": "Liste compacte"]),
+                field("presentation", "Organisation du profil", .choice(WindowSwitcherPresentation.allCases.map(\.rawValue)),
+                      choiceLabels: Dictionary(uniqueKeysWithValues: WindowSwitcherPresentation.allCases.map { ($0.rawValue, $0.label) })),
                 field("preview", "Grand aperçu du profil", .bool),
                 field("auto_size", "Taille automatique du profil", .bool),
                 field("thumbnail_width", "Largeur des vignettes du profil", .double(120...400)),

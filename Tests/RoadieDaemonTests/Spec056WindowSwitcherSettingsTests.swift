@@ -64,6 +64,7 @@ struct Spec056WindowSwitcherSettingsTests {
             "btt_forward_uuid": .string(""),
             "btt_reverse_uuid": .string(""),
             "style": profile.styleOverride.map(SettingValue.string) ?? .unset,
+            "presentation": profile.presentationOverride.map(SettingValue.string) ?? .unset,
             "preview": profile.previewOverride.map(SettingValue.bool) ?? .unset,
             "auto_size": profile.autoSizeOverride.map(SettingValue.bool) ?? .unset,
             "thumbnail_width": profile.thumbnailWidthOverride.map(SettingValue.double) ?? .unset,
@@ -132,7 +133,7 @@ struct Spec056WindowSwitcherSettingsTests {
     @Test
     func switcherSettingsSitInTheSelecteurCategory() throws {
         let ids = [
-            "switcher.enabled", "switcher.style", "switcher.auto_size", "switcher.thumbnail_width",
+            "switcher.enabled", "switcher.style", "switcher.presentation", "switcher.auto_size", "switcher.thumbnail_width",
             "switcher.font_size", "switcher.font_family", "switcher.preview",
             "switcher.excluded_bundles", "switcher.shortcuts",
         ]
@@ -148,7 +149,7 @@ struct Spec056WindowSwitcherSettingsTests {
         #expect(model.category == .selecteur)
         #expect(model.sections.map(\.category) == [.selecteur])
         #expect(model.sections.first?.descriptors.map(\.id) == [
-            "switcher.enabled", "switcher.style", "switcher.auto_size", "switcher.thumbnail_width",
+            "switcher.enabled", "switcher.style", "switcher.presentation", "switcher.auto_size", "switcher.thumbnail_width",
             "switcher.font_size", "switcher.font_family", "switcher.preview",
             "switcher.excluded_bundles", "switcher.shortcuts",
         ])

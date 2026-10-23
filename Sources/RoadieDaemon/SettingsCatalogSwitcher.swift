@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 extension SettingsCatalog {
     static let switcherDescriptors: [SettingDescriptor] = [
@@ -8,6 +9,9 @@ extension SettingsCatalog {
         entry(.selecteur, "switcher", "style", "Affichage des fenêtres",
               "Affichage des fenêtres dans le sélecteur : vignettes, icônes ou liste compacte.",
               .choice(["thumbnails", "icons", "list"]), .string("thumbnails")),
+        entry(.selecteur, "switcher", "presentation", "Organisation",
+              "Choisit la disposition et le regroupement par bureau et stage Roadie. La grille classique conserve l'affichage précédent. Chaque profil peut utiliser sa propre organisation, sans changer les raccourcis ni l'action au relâchement.",
+              .choice(WindowSwitcherPresentation.allCases.map(\.rawValue)), .string("classic")),
         entry(.selecteur, "switcher", "auto_size", "Taille automatique",
               "Calcule la taille des vignettes. Désactivez ce réglage pour utiliser la largeur ci-dessous.",
               .bool, .bool(true)),

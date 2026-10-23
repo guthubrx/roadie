@@ -12,11 +12,13 @@ enum SwitcherNavigation {
         for (i, frame) in frames.enumerated() where i != index {
             let dx = frame.midX - origin.midX, dy = frame.midY - origin.midY
             switch direction {
-            case .left where dx < -1 && abs(dy) < 1,
-                 .right where dx > 1 && abs(dy) < 1:
-                candidates.append((i, abs(dx), 0))
+            case .left where dx < -1, .right where dx > 1:
+                // Les cartes de la vue spatiale n'ont pas toutes la même hauteur.
+                let rowDistance = max(0, abs(dy) - (origin.height + frame.height) / 2)
+                candidates.append((i, rowDistance, abs(dx)))
             case .up where dy < -1, .down where dy > 1:
-                candidates.append((i, abs(dy), abs(dx)))
+                let columnDistance = max(0, abs(dx) - (origin.width + frame.width) / 2)
+                candidates.append((i, columnDistance, abs(dy)))
             default: break
             }
         }

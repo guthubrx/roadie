@@ -107,6 +107,9 @@ struct SettingsSwitcherProfilesView: View {
                 toggle(row, "include_fullscreen", "Fenêtres plein écran")
                 toggle(row, "one_per_app", "Une fenêtre par application")
             } else if tab == "Apparence" {
+                picker(row, key: "presentation", label: "Organisation",
+                       options: [("", "Réglage commun")] + WindowSwitcherPresentation.allCases.map { ($0.rawValue, $0.label) },
+                       help: "Regroupe les fenêtres par bureau et stage Roadie. Le style des cartes et l'action au relâchement restent indépendants.")
                 picker(row, key: "style", label: "Style", options: [("", "Réglage commun"), ("thumbnails", "Vignettes"), ("icons", "Icônes"), ("list", "Liste compacte")],
                        help: "Un réglage commun suit l'apparence de la catégorie. Une valeur propre à ce profil prend priorité.")
                 picker(row, key: "preview", label: "Grand aperçu", options: [("", "Réglage commun"), ("true", "Afficher"), ("false", "Masquer")])
@@ -117,7 +120,7 @@ struct SettingsSwitcherProfilesView: View {
                     SettingsFontFamilyPicker(fontSize: fonts.settingsTextFontSize, selection: binding(row, "font_family"), inheritedLabel: "Réglage commun")
                 }
                 Button("Apparence commune") {
-                    _ = editor.updateRow(row.id, values: Dictionary(uniqueKeysWithValues: ["style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"].map { ($0, "") }))
+                    _ = editor.updateRow(row.id, values: Dictionary(uniqueKeysWithValues: ["presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"].map { ($0, "") }))
                 }
             } else {
                 toggle(row, "arrow_navigation", "Navigation aux flèches")

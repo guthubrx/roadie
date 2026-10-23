@@ -16,6 +16,7 @@ struct WindowSwitcherAppearance: Equatable {
     var fontSize: CGFloat
     var fontFamily: String
     var preview: Bool
+    var presentation: WindowSwitcherPresentation
 
     init(config: WindowSwitcherConfig, profile: WindowSwitcherShortcutConfig? = nil) {
         style = WindowSwitcherStyle.from(profile?.styleOverride ?? config.style)
@@ -24,6 +25,7 @@ struct WindowSwitcherAppearance: Equatable {
         fontSize = CGFloat(profile?.fontSizeOverride ?? config.fontSize)
         fontFamily = profile?.fontFamilyOverride ?? config.fontFamily
         preview = profile?.previewOverride ?? config.preview
+        presentation = WindowSwitcherPresentation(rawValue: profile?.presentationOverride ?? config.presentation) ?? .classic
     }
 
     @MainActor func font(size: CGFloat, weight: NSFont.Weight) -> NSFont {
@@ -185,7 +187,7 @@ final class WindowSwitcherCardView: NSView {
         let width = bounds.width
         switch style {
         case .thumbnails:
-            let imageHeight = WindowSwitcherGrid.imageHeight(cardWidth: width)
+            let imageHeight = min(WindowSwitcherGrid.imageHeight(cardWidth: width), max(0, bounds.height - labels - 22))
             imageView.frame = CGRect(x: 8, y: 8, width: width - 16, height: imageHeight)
             title.frame = CGRect(x: 8, y: 8 + imageHeight + 6, width: width - 16, height: labels * 0.55)
             subtitle.frame = CGRect(x: 8, y: 8 + imageHeight + 6 + labels * 0.5, width: width - 16, height: labels * 0.5)
@@ -249,17 +251,29 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     private let previewView = NSImageView()
     private let scrollView = NSScrollView()
     private let gridContainer = WindowSwitcherFlippedView()
+    private let groupScroll = NSScrollView()
+    private let groupContainer = WindowSwitcherFlippedView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let selectionLabel = NSTextField(labelWithString: "")
     private var detailsByID: [WindowID: String] = [:]
     private let actionsButton = NSPopUpButton(frame: .zero, pullsDown: true)
-    private var grid = WindowSwitcherGridLayout(columns: 1, cardSize: .zero, frames: [], contentSize: .zero)
+    private var groupedLayout = WindowSwitcherGroupedLayout()
+    private var renderedEntries: [WindowSwitcherEntry] = []
+    private var renderedImages: [WindowID: NSImage] = [:]
+    private var groups = WindowSwitcherGroups(entries: [])
+    private var browsing = SwitcherBrowsingState()
+    private var selectedWindowID: WindowID?
+    private var needsSelectionReveal = false
+    private var layoutWidth: CGFloat = 0
     private var cards: [WindowSwitcherCardView] = []
     private var visibleArea = CGRect(x: 0, y: 0, width: 1280, height: 800)
     private var previewShown = false
     private let pad: CGFloat = 16
-    private var headerHeight: CGFloat { field.isHidden ? 16 : 52 }
-    private let footerHeight: CGFloat = 44
+    private var searchHeight: CGFloat { max(28, switcherAppearance.fontSize * 1.4 + 8) }
+    private var headerHeight: CGFloat { field.isHidden ? 16 : searchHeight + 2 * pad }
+    private var footerHeight: CGFloat { max(44, switcherAppearance.fontSize * 1.4 + 18) }
+
+    var renderedWindowIDs: [WindowID] { cards.map(\.entryID) }
 
     override var canBecomeKey: Bool { true }
 
@@ -305,10 +319,12 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     }
 
     private func move(_ direction: SwitcherDirection) {
-        guard profile.arrowNavigation, let index = cards.firstIndex(where: \.isSelected),
-              let target = SwitcherNavigation.destination(from: index, direction: direction, frames: grid.frames),
-              cards.indices.contains(target) else { return }
-        onHighlight?(cards[target].entryID)
+        guard profile.arrowNavigation, let index = cards.firstIndex(where: \.isSelected) else { return }
+        if let target = SwitcherNavigation.destination(from: index, direction: direction, frames: cards.map(\.frame)) {
+            onHighlight?(cards[target].entryID)
+        } else if direction == .left || direction == .right {
+            moveGroup(backwards: direction == .left)
+        }
     }
 
     override var canBecomeMain: Bool { false }
@@ -346,6 +362,12 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         scrollView.borderType = .noBorder
         scrollView.documentView = gridContainer
 
+        groupScroll.drawsBackground = false
+        groupScroll.borderType = .noBorder
+        groupScroll.scrollerStyle = .overlay
+        groupScroll.autohidesScrollers = true
+        groupScroll.documentView = groupContainer
+
         previewView.imageScaling = .scaleProportionallyUpOrDown
         previewView.wantsLayer = true
         previewView.layer?.cornerRadius = 8
@@ -368,6 +390,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         effect.addSubview(field)
         effect.addSubview(previewView)
         effect.addSubview(scrollView)
+        effect.addSubview(groupScroll)
         effect.addSubview(statusLabel)
         effect.addSubview(actionsButton)
         selectionLabel.lineBreakMode = .byTruncatingMiddle
@@ -376,6 +399,10 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     }
 
     func showLoading() {
+        previewShown = false
+        renderedEntries = []
+        renderedImages = [:]
+        groups = WindowSwitcherGroups(entries: [])
         clearCards()
         previewView.image = nil
         setStatus("Chargement des fenêtres…")
@@ -390,28 +417,31 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         previewImage: NSImage?,
         emptyMessage: String
     ) {
-        clearCards()
+        needsSelectionReveal = needsSelectionReveal || selectedID != selectedWindowID || field.stringValue != query
+        renderedEntries = entries
+        renderedImages = images
+        groups = WindowSwitcherGroups(entries: entries)
+        selectedWindowID = selectedID
+        browsing.reconcile(groups: groups, selectedID: selectedID)
         detailsByID = Dictionary(entries.map { ($0.id, [$0.window.title, $0.subtitleText].filter { !$0.isEmpty }.joined(separator: " · ")) }, uniquingKeysWith: { _, last in last })
         if field.stringValue != query { field.stringValue = query }
         previewShown = switcherAppearance.preview && !entries.isEmpty
-        grid = WindowSwitcherGrid.layout(count: entries.count, appearance: switcherAppearance, available: gridWidth)
-        for (entry, frame) in zip(entries, grid.frames) {
-            let card = WindowSwitcherCardView(entry: entry, image: images[entry.id], appearance: switcherAppearance, frame: frame)
-            card.onClick = { [weak self] in self?.onSelect?(entry.id) }
-            gridContainer.addSubview(card)
-            cards.append(card)
-        }
+        rebuildContent()
         setStatus(entries.isEmpty ? emptyMessage : "")
         select(selectedID, previewImage: previewImage)
     }
 
     func select(_ id: WindowID?, previewImage: NSImage?) {
+        needsSelectionReveal = needsSelectionReveal || selectedWindowID != id
+        selectedWindowID = id
+        let oldDesktop = browsing.desktop, oldStage = browsing.stage
+        browsing.reconcile(groups: groups, selectedID: id)
+        if (usesDesktopTabs && oldDesktop != browsing.desktop) || (switcherAppearance.presentation == .hierarchy && oldStage != browsing.stage) {
+            rebuildContent()
+        }
         selectionLabel.stringValue = id.flatMap { detailsByID[$0] } ?? ""
         selectionLabel.textColor = .secondaryLabelColor
         for card in cards { card.isSelected = card.entryID == id }
-        if let selected = cards.first(where: { $0.entryID == id }) {
-            selected.scrollToVisible(selected.bounds)
-        }
         previewView.image = previewImage
         previewView.isHidden = !previewShown
         actionsButton.isEnabled = id != nil
@@ -424,8 +454,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     }
 
     func present(on screen: NSScreen) {
-        visibleArea = screen.visibleFrame
-        relayout()
+        layout(in: screen.visibleFrame)
         orderFrontRegardless()
         makeKey()
         makeFirstResponder(field.isHidden ? gridContainer : field)
@@ -438,6 +467,12 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
                 return event
             }
         }
+    }
+
+    /// Même circuit de géométrie pour l'écran réel et les rendus natifs de validation.
+    func layout(in visibleFrame: CGRect) {
+        visibleArea = visibleFrame
+        relayout()
     }
 
     override func orderOut(_ sender: Any?) {
@@ -522,13 +557,126 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     }
 
     private var maxWidth: CGFloat { max(280, min(visibleArea.width - 40, 1100)) }
-    private var sidePreview: Bool { previewShown && maxWidth >= 700 }
-    private var gridWidth: CGFloat { sidePreview ? floor((maxWidth - 3 * pad) * 0.60) : maxWidth - 2 * pad }
+    private var usesDesktopTabs: Bool { [.stageColumns, .desktopTabs].contains(switcherAppearance.presentation) }
+    private var sideHierarchy: Bool { switcherAppearance.presentation == .hierarchy && maxWidth >= 700 && !renderedEntries.isEmpty }
+    private var sidebarWidth: CGFloat { sideHierarchy ? min(260, max(180, switcherAppearance.fontSize * 10)) : 0 }
+    private var navigationHeight: CGFloat {
+        (usesDesktopTabs || (switcherAppearance.presentation == .hierarchy && !sideHierarchy)) && !renderedEntries.isEmpty
+            ? max(40, switcherAppearance.fontSize * 1.5 + 14) : 0
+    }
+    private var bottomPreview: Bool { [.stageColumns, .overview].contains(switcherAppearance.presentation) }
+    private var sidePreview: Bool { previewShown && maxWidth >= 700 && !bottomPreview }
+    private var rightPreview: Bool { [.sections, .hierarchy].contains(switcherAppearance.presentation) }
+    private var mainWidth: CGFloat { maxWidth - 2 * pad - (sideHierarchy ? sidebarWidth + pad : 0) }
+    private var gridWidth: CGFloat { sidePreview ? floor((mainWidth - pad) * 0.60) : mainWidth }
+
+    /// Change uniquement la sélection du modèle, jamais l'appartenance des fenêtres.
+    func chooseGroup(_ id: SwitcherGroupID) {
+        let entries: [WindowSwitcherEntry]
+        if switcherAppearance.presentation == .hierarchy {
+            entries = groups.stages.first { $0.id == id }?.entries ?? []
+        } else { entries = groups.desktops.first { $0.id == id }?.entries ?? [] }
+        guard let first = entries.first else { return }
+        onHighlight?(first.id)
+    }
+
+    private func moveGroup(backwards: Bool) {
+        let ids: [SwitcherGroupID]
+        let current: SwitcherGroupID?
+        if usesDesktopTabs { ids = groups.desktops.map(\.id); current = browsing.desktop }
+        else if switcherAppearance.presentation == .hierarchy { ids = groups.stages.map(\.id); current = browsing.stage }
+        else { return }
+        guard let index = ids.firstIndex(where: { $0 == current }), ids.count > 1 else { return }
+        chooseGroup(ids[(index + (backwards ? ids.count - 1 : 1)) % ids.count])
+    }
+
+    private func rebuildContent() {
+        clearCards()
+        layoutWidth = gridWidth
+        groupedLayout = WindowSwitcherGroupedGeometry.layout(entries: renderedEntries, appearance: switcherAppearance,
+                                                              width: gridWidth, browsing: browsing)
+        for frame in groupedLayout.surfaces {
+            let surface = NSView(frame: frame)
+            surface.wantsLayer = true
+            surface.layer?.cornerRadius = 9
+            surface.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.025).cgColor
+            surface.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+            surface.layer?.borderWidth = 0.5
+            gridContainer.addSubview(surface)
+        }
+        for heading in groupedLayout.headings {
+            let label = NSTextField(labelWithString: heading.text)
+            label.frame = heading.frame
+            label.font = switcherAppearance.font(size: switcherAppearance.fontSize, weight: heading.isDesktop ? .bold : .semibold)
+            label.textColor = .labelColor
+            label.lineBreakMode = .byTruncatingTail
+            label.maximumNumberOfLines = 1
+            label.toolTip = heading.text
+            gridContainer.addSubview(label)
+        }
+        for item in groupedLayout.cards {
+            let card = WindowSwitcherCardView(entry: item.entry, image: renderedImages[item.entry.id],
+                                              appearance: switcherAppearance, frame: item.frame)
+            card.onClick = { [weak self] in self?.onSelect?(item.entry.id) }
+            card.isSelected = item.entry.id == selectedWindowID
+            gridContainer.addSubview(card)
+            cards.append(card)
+        }
+        rebuildGroupNavigation()
+    }
+
+    private func rebuildGroupNavigation() {
+        groupContainer.subviews.forEach { $0.removeFromSuperview() }
+        groupScroll.isHidden = !sideHierarchy && navigationHeight == 0
+        groupScroll.hasVerticalScroller = sideHierarchy
+        groupScroll.hasHorizontalScroller = !sideHierarchy
+        let font = switcherAppearance.font(size: max(12, switcherAppearance.fontSize - 1), weight: .medium)
+        let rowHeight = max(36, font.pointSize * 1.5 + 12)
+        func button(_ title: String, id: SwitcherGroupID, selected: Bool, frame: CGRect) {
+            let button = SwitcherGroupButton(title: title, selected: selected, frame: frame) { [weak self] in self?.chooseGroup(id) }
+            button.font = font
+            groupContainer.addSubview(button)
+        }
+        if sideHierarchy {
+            var y: CGFloat = 0
+            for desktop in groups.desktops {
+                let label = NSTextField(labelWithString: desktop.title)
+                label.font = switcherAppearance.font(size: font.pointSize, weight: .semibold)
+                label.lineBreakMode = .byTruncatingTail
+                label.toolTip = desktop.title
+                label.frame = CGRect(x: 4, y: y, width: sidebarWidth - 8, height: rowHeight)
+                groupContainer.addSubview(label)
+                y += rowHeight
+                for stage in desktop.stages {
+                    button("\(stage.title) · \(stage.entries.count)", id: stage.id, selected: stage.id == browsing.stage,
+                           frame: CGRect(x: 6, y: y, width: sidebarWidth - 12, height: rowHeight))
+                    y += rowHeight + 4
+                }
+                y += 12
+            }
+            groupContainer.frame = CGRect(x: 0, y: 0, width: sidebarWidth, height: y)
+        } else if navigationHeight > 0 {
+            let choices: [(SwitcherGroupID, String, Bool)] = usesDesktopTabs
+                ? groups.desktops.map { ($0.id, "\($0.title) · \($0.entries.count)", $0.id == browsing.desktop) }
+                : groups.stages.map { ($0.id, "\($0.desktopTitle) / \($0.title)", $0.id == browsing.stage) }
+            let available = maxWidth - 2 * pad
+            let widest = choices.map { ($0.1 as NSString).size(withAttributes: [.font: font]).width + 28 }.max() ?? 120
+            let cell = max(available / CGFloat(max(1, choices.count)), min(320, max(120, widest)))
+            for (i, choice) in choices.enumerated() {
+                button(choice.1, id: choice.0, selected: choice.2,
+                       frame: CGRect(x: CGFloat(i) * cell, y: 0, width: cell - 4, height: navigationHeight - 6))
+            }
+            groupContainer.frame = CGRect(x: 0, y: 0, width: max(available, cell * CGFloat(choices.count)), height: navigationHeight - 2)
+        }
+        if needsSelectionReveal, let selected = groupContainer.subviews.compactMap({ $0 as? NSButton }).first(where: { $0.state == .on }) {
+            selected.scrollToVisible(selected.bounds)
+        }
+    }
 
     private func clearCards() {
-        cards.forEach { $0.removeFromSuperview() }
+        gridContainer.subviews.forEach { $0.removeFromSuperview() }
         cards = []
-        grid = WindowSwitcherGrid.layout(count: 0, appearance: switcherAppearance, available: 0)
+        groupedLayout = WindowSwitcherGroupedLayout()
     }
 
     private func setStatus(_ text: String) {
@@ -538,39 +686,81 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     }
 
     private func relayout() {
+        if abs(layoutWidth - gridWidth) > 0.5 { needsSelectionReveal = true; rebuildContent() }
         let width = maxWidth
         let innerWidth = width - 2 * pad
         let scrollWidth = gridWidth
-        let previewWidth = sidePreview ? innerWidth - scrollWidth - pad : innerWidth
-        let stackedPreviewHeight: CGFloat = previewShown && !sidePreview ? min(200, innerWidth * 9 / 16) : 0
+        let previewWidth = sidePreview ? mainWidth - scrollWidth - pad : mainWidth
+        let stackedPreviewHeight: CGFloat = previewShown && !sidePreview ? min(bottomPreview ? 160 : 200, previewWidth * 9 / 16) : 0
         let previewBlock = stackedPreviewHeight > 0 ? stackedPreviewHeight + pad : 0
-        let availableBody = max(56, visibleArea.height - 32 - headerHeight - footerHeight - previewBlock)
-        let minimumBody: CGFloat = sidePreview ? 260 : 56
-        let bodyHeight = min(max(min(grid.contentSize.height, visibleArea.height * 0.60), minimumBody), availableBody)
-        let height = headerHeight + previewBlock + bodyHeight + footerHeight
+        let availableBody = max(56, visibleArea.height - 32 - headerHeight - footerHeight - previewBlock - navigationHeight)
+        let minimumBody: CGFloat = sidePreview ? 260 : (switcherAppearance.presentation == .classic ? 56 : 220)
+        let bodyHeight = min(max(min(groupedLayout.size.height, visibleArea.height * 0.60), minimumBody), availableBody)
+        let height = headerHeight + navigationHeight + previewBlock + bodyHeight + footerHeight
         let origin = CGPoint(x: visibleArea.midX - width / 2, y: visibleArea.midY - height / 2)
         setFrame(CGRect(origin: origin, size: CGSize(width: width, height: height)), display: true)
 
         field.font = switcherAppearance.font(size: switcherAppearance.fontSize, weight: .regular)
         statusLabel.font = switcherAppearance.font(size: switcherAppearance.fontSize, weight: .regular)
         actionsButton.font = switcherAppearance.font(size: max(12, switcherAppearance.fontSize - 2), weight: .regular)
-        field.frame = CGRect(x: pad, y: height - headerHeight + 12, width: innerWidth, height: 28)
+        field.frame = CGRect(x: pad, y: height - pad - searchHeight, width: innerWidth, height: searchHeight)
+        let mainX = pad + (sideHierarchy ? sidebarWidth + pad : 0)
+        let contentY = footerHeight + (bottomPreview ? previewBlock : 0)
         previewView.frame = sidePreview
-            ? CGRect(x: pad, y: footerHeight, width: previewWidth, height: bodyHeight)
-            : CGRect(x: pad, y: footerHeight + bodyHeight + pad, width: previewWidth, height: stackedPreviewHeight)
-        scrollView.frame = CGRect(x: sidePreview ? pad + previewWidth + pad : pad,
-                                  y: footerHeight, width: scrollWidth, height: bodyHeight)
+            ? CGRect(x: rightPreview ? mainX + scrollWidth + pad : mainX, y: contentY, width: previewWidth, height: bodyHeight)
+            : CGRect(x: mainX, y: bottomPreview ? footerHeight : footerHeight + bodyHeight + pad,
+                     width: previewWidth, height: stackedPreviewHeight)
+        scrollView.frame = CGRect(x: sidePreview && !rightPreview ? mainX + previewWidth + pad : mainX,
+                                  y: contentY, width: scrollWidth, height: bodyHeight)
+        groupScroll.frame = sideHierarchy
+            ? CGRect(x: pad, y: contentY, width: sidebarWidth, height: bodyHeight)
+            : CGRect(x: pad, y: height - headerHeight - navigationHeight, width: innerWidth, height: navigationHeight)
         statusLabel.frame = scrollView.frame
-        actionsButton.frame = CGRect(x: pad, y: 8, width: 190, height: 28)
+        actionsButton.frame = CGRect(x: pad, y: 8, width: 190, height: footerHeight - 16)
         selectionLabel.font = switcherAppearance.font(size: max(12, switcherAppearance.fontSize - 2), weight: .regular)
-        selectionLabel.frame = CGRect(x: pad + (actionsButton.isHidden ? 0 : 202), y: 12, width: max(0, innerWidth - (actionsButton.isHidden ? 0 : 202)), height: 24)
+        selectionLabel.frame = CGRect(x: pad + (actionsButton.isHidden ? 0 : 202), y: 12, width: max(0, innerWidth - (actionsButton.isHidden ? 0 : 202)), height: footerHeight - 20)
 
-        let inset = max(0, (scrollWidth - grid.contentSize.width) / 2)
         gridContainer.frame = CGRect(
-            x: 0, y: 0, width: scrollWidth, height: max(grid.contentSize.height, bodyHeight)
+            x: 0, y: 0, width: scrollWidth, height: max(groupedLayout.size.height, bodyHeight)
         )
-        for (card, frame) in zip(cards, grid.frames) {
-            card.frame = frame.offsetBy(dx: inset, dy: 0)
+        if needsSelectionReveal, let selected = cards.first(where: { $0.entryID == selectedWindowID }) {
+            selected.scrollToVisible(selected.bounds)
         }
+        needsSelectionReveal = false
     }
+}
+
+@MainActor
+private final class SwitcherGroupButton: NSButton {
+    private let pressed: () -> Void
+    private let selected: Bool
+
+    init(title: String, selected: Bool, frame: CGRect, pressed: @escaping () -> Void) {
+        self.pressed = pressed
+        self.selected = selected
+        super.init(frame: frame)
+        self.title = title
+        self.toolTip = title
+        bezelStyle = .roundRect
+        isBordered = false
+        setButtonType(.pushOnPushOff)
+        state = selected ? .on : .off
+        contentTintColor = selected ? .controlAccentColor : .labelColor
+        (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
+        target = self
+        action = #selector(chosen)
+        setAccessibilityValue(selected ? "Sélectionné" : "Non sélectionné")
+    }
+
+    required init?(coder: NSCoder) { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 7, yRadius: 7)
+        (selected ? NSColor.controlAccentColor.withAlphaComponent(0.20) : NSColor.labelColor.withAlphaComponent(0.035)).setFill()
+        path.fill()
+        (selected ? NSColor.controlAccentColor : NSColor.separatorColor.withAlphaComponent(0.5)).setStroke()
+        path.lineWidth = selected ? 2 : 0.5
+        path.stroke()
+        super.draw(dirtyRect)
+    }
+    @objc private func chosen() { state = .on; pressed() }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 // Catalogue des réglages de `roadies.toml` (SPEC-023) : types purs, sans AppKit ni SwiftUI.
 // Les libellés, descriptions, défauts et plages ne se déduisent pas du code : ils sont écrits ici
@@ -91,6 +92,9 @@ public struct SettingDescriptor: Equatable, Sendable {
 
     /// Libellé de présentation seulement : le menu conserve la valeur brute comme tag. O(1).
     public func choiceLabel(_ value: String) -> String {
+        if id == "switcher.presentation", let presentation = WindowSwitcherPresentation(rawValue: value) {
+            return presentation.label
+        }
         let label: String
         switch (id, value) {
         case ("window_placement.new_apps_target", "focused_display"): return "Écran actif (recommandé)"

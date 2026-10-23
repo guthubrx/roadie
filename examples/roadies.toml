@@ -63,9 +63,13 @@ mouse_follows_focus = false
 new_apps_target = "focused_display"
 new_window_side = "right"
 
-# EN: Window switcher. Edit profiles in Settings > Sélecteur (up to nine).
-# FR: Sélecteur de fenêtres. Profils dans Paramètres > Sélecteur (neuf au maximum).
+# EN: Window switcher. Edit profiles in Réglages Roadie > Sélecteur (up to nine).
+# FR: Sélecteur de fenêtres. Profils dans Réglages Roadie > Sélecteur (neuf au maximum).
 [switcher]
+# classic, stage_columns, desktop_tabs, hierarchy, sections, overview.
+# EN: Choose the organization independently from the card style; profiles can override it.
+# FR: Organisation indépendante du style des cartes, surchargeable par profil.
+presentation = "classic"
 enabled = true
 style = "thumbnails"
 auto_size = true

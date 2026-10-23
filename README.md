@@ -85,7 +85,9 @@ stage. In Réglages Roadie > Sélecteur, create profiles for a display, desktop,
 application. Record a shortcut directly, let BetterTouchTool manage it, or use an
 external CLI binding. Choose whether releasing the keys activates the selection,
 keeps the switcher open or starts search. Navigate with the four arrow keys or
-the mouse, and give each profile its own appearance.
+the mouse, and give each profile its own appearance. Organize windows into stage
+columns, desktop tabs, a hierarchy, grouped sections or desktop overviews.
+The classic grid remains available.
 [Window switcher guide](docs/en/window-switcher.md).
 
 Settings are grouped by purpose, with aligned controls and scrollable help.

@@ -15,6 +15,7 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
     public var fontSize: Double
     public var fontFamily: String
     public var preview: Bool
+    public var presentation: String
     public var excludedBundles: [String]
     /// Au plus neuf profils. Un identifiant déjà vu est ignoré : le premier profil gagne.
     public var shortcuts: [WindowSwitcherShortcutConfig]
@@ -28,7 +29,8 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         fontFamily: String = "system",
         preview: Bool = true,
         excludedBundles: [String] = [],
-        shortcuts: [WindowSwitcherShortcutConfig] = [WindowSwitcherShortcutConfig()]
+        shortcuts: [WindowSwitcherShortcutConfig] = [WindowSwitcherShortcutConfig()],
+        presentation: String = "classic"
     ) {
         self.enabled = enabled
         self.style = Self.styles.contains(style) ? style : "thumbnails"
@@ -38,6 +40,7 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         let family = fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
         self.fontFamily = family.isEmpty ? "system" : family
         self.preview = preview
+        self.presentation = WindowSwitcherPresentation(rawValue: presentation)?.rawValue ?? "classic"
         self.excludedBundles = excludedBundles
         self.shortcuts = Self.normalizedShortcuts(shortcuts)
     }
@@ -61,6 +64,7 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         case fontSize = "font_size"
         case fontFamily = "font_family"
         case preview
+        case presentation
         case excludedBundles = "excluded_bundles"
         case shortcuts
     }
@@ -77,7 +81,8 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
             fontFamily: try c.decodeIfPresent(String.self, forKey: .fontFamily) ?? defaults.fontFamily,
             preview: try c.decodeIfPresent(Bool.self, forKey: .preview) ?? defaults.preview,
             excludedBundles: try c.decodeIfPresent([String].self, forKey: .excludedBundles) ?? defaults.excludedBundles,
-            shortcuts: try c.decodeIfPresent([WindowSwitcherShortcutConfig].self, forKey: .shortcuts) ?? defaults.shortcuts
+            shortcuts: try c.decodeIfPresent([WindowSwitcherShortcutConfig].self, forKey: .shortcuts) ?? defaults.shortcuts,
+            presentation: try c.decodeIfPresent(String.self, forKey: .presentation) ?? defaults.presentation
         )
     }
 }
@@ -113,6 +118,7 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
     public var thumbnailWidthOverride: Double?
     public var fontSizeOverride: Double?
     public var fontFamilyOverride: String?
+    public var presentationOverride: String?
 
     public init(
         id: String = "all",
@@ -136,7 +142,8 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
         autoSizeOverride: Bool? = nil,
         thumbnailWidthOverride: Double? = nil,
         fontSizeOverride: Double? = nil,
-        fontFamilyOverride: String? = nil
+        fontFamilyOverride: String? = nil,
+        presentationOverride: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -161,6 +168,7 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
         self.thumbnailWidthOverride = thumbnailWidthOverride.map { min(400, max(120, $0)) }
         self.fontSizeOverride = fontSizeOverride.map { min(32, max(10, $0)) }
         self.fontFamilyOverride = fontFamilyOverride.flatMap { $0.isEmpty ? nil : $0 }
+        self.presentationOverride = presentationOverride.flatMap { WindowSwitcherPresentation(rawValue: $0)?.rawValue }
 
     }
 
@@ -187,6 +195,7 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
         case thumbnailWidthOverride = "thumbnail_width"
         case fontSizeOverride = "font_size"
         case fontFamilyOverride = "font_family"
+        case presentationOverride = "presentation"
     }
 
     public init(from decoder: Decoder) throws {
@@ -214,7 +223,8 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
             autoSizeOverride: try c.decodeIfPresent(Bool.self, forKey: .autoSizeOverride),
             thumbnailWidthOverride: try c.decodeFlexibleDouble(forKey: .thumbnailWidthOverride),
             fontSizeOverride: try c.decodeFlexibleDouble(forKey: .fontSizeOverride),
-            fontFamilyOverride: try c.decodeIfPresent(String.self, forKey: .fontFamilyOverride)
+            fontFamilyOverride: try c.decodeIfPresent(String.self, forKey: .fontFamilyOverride),
+            presentationOverride: try c.decodeIfPresent(String.self, forKey: .presentationOverride)
         )
     }
 }

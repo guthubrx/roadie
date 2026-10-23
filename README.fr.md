@@ -91,7 +91,8 @@ bureau, une stage ou une application. Enregistre directement une combinaison,
 confie-la à BetterTouchTool ou utilise une commande externe. Au relâchement,
 choisis entre activer la fenêtre, garder le sélecteur ouvert et passer en recherche.
 Navigue avec les quatre flèches ou la souris. Chaque profil peut avoir sa propre
-apparence.
+apparence. Organise les fenêtres en colonnes par stage, onglets par bureau,
+arbre, sections ou vue d'ensemble des bureaux. La grille classique reste disponible.
 [Guide du sélecteur](docs/fr/window-switcher.md).
 
 Les paramètres sont regroupés par usage, avec des champs alignés et des aides

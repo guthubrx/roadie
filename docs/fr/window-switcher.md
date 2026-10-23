@@ -73,6 +73,38 @@ La composition de texte et les raccourcis macOS d'édition restent disponibles.
 
 ## Réglages
 
+### Organisation par bureau et stage
+
+Dans **Réglages Roadie > Sélecteur > Apparence commune > Organisation**, choisis :
+
+- **Grille classique** : toutes les fenêtres dans la grille habituelle ;
+- **Colonnes par stage** : les stages du bureau choisi côte à côte, avec des onglets pour changer de bureau ;
+- **Bureaux en onglets** : un bureau par onglet, ses fenêtres réparties en sections par stage ;
+- **Navigation hiérarchique** : les bureaux et stages à gauche, les fenêtres de la stage choisie au centre ;
+- **Grille par sections** : tous les bureaux et stages dans une même liste de groupes ;
+- **Vue d'ensemble des bureaux** : des plans de stages regroupés par bureau. Les positions relatives sont conservées quand les cadres restent lisibles ; sinon une grille prend le relais.
+
+Le grand aperçu reste disponible dans chaque vue. Les colonnes et la vue d'ensemble
+le placent en bas ; les autres vues utilisent le côté ou un empilement sur petit écran.
+Le style des cartes (vignettes, icônes ou liste) reste un choix indépendant.
+
+Dans **Profils de raccourcis > Apparence > Organisation**, choisis une présentation
+pour ce seul profil, ou **Réglage commun**. Le changement prend effet immédiatement,
+y compris si le sélecteur est déjà ouvert. Sans nouvelle clé, Roadie conserve la
+grille classique. Lire les anciens réglages ne réécrit pas le fichier.
+
+La recherche examine toutes les fenêtres autorisées par le profil. Tab et le
+raccourci suivant/inverse gardent le parcours global : l'onglet ou la stage affichée
+suit la sélection. Les flèches suivent les cartes visibles ; aux bords gauche et
+droit des vues en onglets ou en arbre, elles permettent aussi de changer de groupe.
+Les noms identiques ne fusionnent pas les stages de bureaux ou d'écrans différents.
+Ces présentations concernent les bureaux Roadie, pas les espaces natifs de macOS.
+
+Les groupes suivent leur première apparition dans l'ordre du profil. Ce choix
+visuel ne change jamais l'affectation des fenêtres ni l'ordre enregistré des stages.
+
+### Apparence et filtres
+
 Dans **Réglages Roadie > Sélecteur**, choisis l'affichage en vignettes, icônes ou
 liste. La grille de miniatures se place à côté du grand aperçu. Sur un écran
 étroit, elle passe dessous. Le champ de recherche garde la largeur du panneau.
@@ -88,7 +120,7 @@ Tu peux définir jusqu'à neuf profils de raccourcis. Chaque profil possède :
 - une option pour afficher une seule fenêtre par application ;
 - une validation au relâchement ou un maintien ouvert.
 
-Chaque profil peut suivre l'apparence commune ou remplacer le style, le grand aperçu, la taille des vignettes et la police. Vider une valeur personnalisée rétablit le choix commun.
+Chaque profil peut suivre l'apparence commune ou remplacer l'organisation, le style, le grand aperçu, la taille des vignettes et la police. Vider une valeur personnalisée rétablit le choix commun.
 
 Les exclusions par identifiant d'application s'appliquent à tous les profils.
 Les commandes d'action ciblent la fenêtre sélectionnée : fermer, réduire ou

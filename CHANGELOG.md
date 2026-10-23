@@ -5,6 +5,13 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+### Nouveautés
+
+- Cinq organisations du sélecteur au choix : colonnes par stage, bureaux en onglets,
+  navigation hiérarchique, grille par sections et vue d'ensemble des bureaux.
+  Réglage commun ou propre à chaque profil, appliqué sans redémarrage. La grille
+  classique, les raccourcis et le comportement au relâchement sont conservés.
+
 ## 0.7.0 - 2026-10-23
 
 ### Nouveautés

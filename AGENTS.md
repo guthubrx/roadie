@@ -183,12 +183,16 @@ Installation locale 0.7.0, UUID 35F47682-FF59-3D44-86B2-6345129B5B81,
 PID 60119, santé 5/5 ; certificat et configuration conservés. Branche supprimée,
 builds et temporaires nettoyés ; worktree actif conservé détaché.
 Reçu : specs/059-release-070/validation.md.
-Current SpecKit feature: `059-release-070`.
+Session 060 en validation : cinq organisations du sélecteur, configuration commune
+et surcharge par profil, sans nouveau raccourci ni changement d'affectation.
+1 892 tests / 234 suites et 28 scripts réussis. Rendus natifs contrôlés ;
+revue et installation en cours. Reçu : specs/060-presentations-selecteur/validation.md.
+Current SpecKit feature: `060-presentations-selecteur`.
 
 Contexte :
-- `specs/059-release-070/spec.md`
-- `specs/059-release-070/plan.md`
-- `specs/059-release-070/tasks.md`
+- `specs/060-presentations-selecteur/spec.md`
+- `specs/060-presentations-selecteur/plan.md`
+- `specs/060-presentations-selecteur/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes

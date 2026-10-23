@@ -66,6 +66,38 @@ move through results. IME composition and native editing shortcuts remain availa
 
 ## Appearance and filters
 
+### Group windows by desktop and stage
+
+In **Réglages Roadie > Sélecteur > Apparence commune > Organisation**, choose:
+
+- **Grille classique** (classic grid): the existing flat window grid;
+- **Colonnes par stage** (stage columns): stages side by side, with tabs to select a desktop;
+- **Bureaux en onglets** (desktop tabs): one desktop per tab, with a section for each stage;
+- **Navigation hiérarchique** (hierarchy): desktops and stages on the left, selected stage windows in the middle;
+- **Grille par sections** (grouped sections): all desktops and stages in one scrolling view;
+- **Vue d'ensemble des bureaux** (desktop overview): spatial stage maps grouped by desktop. Relative window positions are retained when readable; otherwise a grid is used.
+
+Every presentation supports the larger preview. Columns and overview place it
+below the windows; the others use a side preview or stack on smaller screens.
+Thumbnail, icon and list card styles remain independent.
+
+Under **Profils de raccourcis > Apparence > Organisation**, override the presentation
+for one profile or select **Réglage commun** to inherit it. Changes apply immediately,
+including while the switcher is open. Existing configurations keep the classic
+grid and are not rewritten on read.
+
+Search examines every window allowed by the profile. Tab and forward/reverse
+shortcuts keep the global traversal: the visible desktop or stage follows selection.
+Arrows follow the visible card geometry; at a left or right boundary, tabbed and
+hierarchical views also move to the adjacent group. Identical names never merge
+stages from different desktops or displays. These are Roadie desktops, not native
+macOS Spaces.
+
+Group order follows first appearance in the profile's results. The presentation
+does not change window ownership or the saved stage order.
+
+### Card appearance
+
 In **Réglages Roadie > Sélecteur**, choose thumbnails, icons or a compact list. The grid
 sits beside the larger preview, or below it on narrow screens. The search field
 uses the panel width. Adjust automatic sizing, thumbnail width, font size and
@@ -80,7 +112,7 @@ Up to nine profiles can define:
 - one window per application;
 - behavior on release, search visibility and Actions visibility.
 
-Profiles can inherit the common appearance or override style, preview, thumbnail
+Profiles can inherit the common appearance or override organization, style, preview, thumbnail
 size and font. Clearing an override restores the common value. Application bundle
 identifier exclusions apply to every profile.
 
