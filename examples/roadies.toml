@@ -63,6 +63,30 @@ mouse_follows_focus = false
 new_apps_target = "focused_display"
 new_window_side = "right"
 
+# EN: Window switcher. Edit profiles in Settings > Sélecteur (up to nine).
+# FR: Sélecteur de fenêtres. Profils dans Paramètres > Sélecteur (neuf au maximum).
+[switcher]
+enabled = true
+style = "thumbnails"
+auto_size = true
+thumbnail_width = 220
+font_size = 16
+font_family = "system"
+preview = true
+excluded_bundles = []
+
+[[switcher.shortcuts]]
+id = "all"
+name = "Toutes les fenêtres"
+hotkey = "ctrl+alt+tab"
+scope = "all"
+release_action = "focus"
+sort_order = "recent"
+include_minimized = true
+include_hidden = true
+include_fullscreen = true
+one_per_app = false
+
 # EN: Width presets used by: roadie layout width next|prev.
 # FR: Largeurs prédéfinies utilisées par : roadie layout width next|prev.
 [width_adjustment]

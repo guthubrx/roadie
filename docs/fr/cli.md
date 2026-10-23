@@ -337,7 +337,21 @@ distance au bas du rail en pixels.
 
 ## Raccourcis
 
-Roadie n'a pas de moteur de raccourcis clavier. La seule exception est `search_hotkey`, le raccourci global du mode recherche (voir `[experimental.target_mode]`). Pour le reste, utilise un outil qui lance une commande à l'appui d'une touche. Le dossier `examples/` contient des fichiers prêts à l'emploi :
+Le sélecteur accepte aussi des commandes pour un geste ou un outil externe :
+
+```sh
+roadie switcher show --profile all
+roadie switcher next
+roadie switcher previous
+roadie switcher accept
+roadie switcher cancel
+```
+
+`show` sans profil choisit le premier profil configuré. `--json` renvoie le statut
+de mise en file. Le composant graphique exécute ensuite la commande. Voir le
+[guide du sélecteur](window-switcher.md) pour les profils et leurs filtres.
+
+Roadie intègre le raccourci de recherche `search_hotkey` (voir `[experimental.target_mode]`) et les profils du [sélecteur de fenêtres](window-switcher.md). Pour les autres commandes, utilise un outil qui lance une commande à l'appui d'une touche. Le dossier `examples/` contient des fichiers prêts à l'emploi :
 
 - `examples/skhd/skhdrc` : raccourcis pour [skhd](https://github.com/koekeishiya/skhd). Copie-le vers `~/.config/skhd/skhdrc`, puis lance `skhd --reload`.
 - `examples/karabiner/roadie.json` : règles pour Karabiner-Elements. Copie-le vers `~/.config/karabiner/assets/complex_modifications/`, puis active les règles dans Karabiner-Elements > Complex Modifications > Add predefined rule.

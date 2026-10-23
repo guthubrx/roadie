@@ -74,10 +74,10 @@ final class WindowSwitcherFocusHistory: @unchecked Sendable {
 /// Liste filtrée, triée et recherchable du sélecteur. Ne fait aucune E/S ni aucun focus.
 struct WindowSwitcherModel {
     private var entries: [WindowSwitcherEntry]
-    private let profile: WindowSwitcherShortcutConfig
+    private var profile: WindowSwitcherShortcutConfig
     private let context: WindowSwitcherContext
     private let recentRanks: [WindowID: Int]
-    private let excludedBundles: Set<String>
+    private var excludedBundles: Set<String>
     private(set) var query = ""
     private(set) var matches: [WindowSwitcherEntry] = []
     private var selectedID: WindowID?
@@ -114,6 +114,13 @@ struct WindowSwitcherModel {
         return matches.first { $0.id == selectedID }
     }
 
+    mutating func selectInitialBackwards() {
+        guard !matches.isEmpty else { return }
+        if let index = matches.firstIndex(where: { $0.id == context.focusedWindowID }) {
+            selectedID = matches[(index + matches.count - 1) % matches.count].id
+        } else { selectedID = matches.last?.id }
+    }
+
     mutating func next(backwards: Bool = false) {
         guard !matches.isEmpty else {
             selectedID = nil
@@ -134,7 +141,13 @@ struct WindowSwitcherModel {
     mutating func search(_ query: String) {
         self.query = query
         matches = computeMatches()
-        selectedID = matches.first?.id
+        if !matches.contains(where: { $0.id == selectedID }) { selectedID = matches.first?.id }
+    }
+
+    mutating func configure(profile: WindowSwitcherShortcutConfig, excludedBundles: [String]) {
+        self.profile = profile
+        self.excludedBundles = Set(excludedBundles)
+        search(query)
     }
 
     mutating func remove(id: WindowID) {

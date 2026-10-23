@@ -23,13 +23,14 @@ struct WindowSwitcherSessionState: Equatable {
     private(set) var searching = false
     private(set) var held: Bool
     let stayOpen: Bool
+    let initialBackwards: Bool
 
     var persistent: Bool { stayOpen || searching }
 
     init(stayOpen: Bool, fromHotkey: Bool, heldAtStart: Bool, backwards: Bool) {
-        self.stayOpen = stayOpen
+        self.stayOpen = stayOpen || !fromHotkey
+        initialBackwards = backwards
         held = heldAtStart
-        if backwards { queuedSteps = [true] }
         if fromHotkey, !heldAtStart { pendingAccept = .released }
     }
 
@@ -102,9 +103,9 @@ struct WindowSwitcherSessionState: Equatable {
 @MainActor
 private final class WindowSwitcherSession {
     let id: Int
-    let profile: WindowSwitcherShortcutConfig
-    let config: WindowSwitcherConfig
-    let appearance: WindowSwitcherAppearance
+    var profile: WindowSwitcherShortcutConfig
+    var config: WindowSwitcherConfig
+    var appearance: WindowSwitcherAppearance
     let required: Set<WindowSwitcherModifier>
     let startedAt = Date()
     var state: WindowSwitcherSessionState
@@ -115,6 +116,7 @@ private final class WindowSwitcherSession {
     var loadTask: Task<Void, Never>?
     var timer: Timer?
     var outsideMonitor: Any?
+    var localClickMonitor: Any?
 
     init(
         id: Int,
@@ -144,7 +146,7 @@ public final class WindowSwitcherController {
     private var nextSessionID = 0
 
     public convenience init(service: SnapshotService = SnapshotService()) {
-        self.init(service: service, thumbnails: RailThumbnailStore(), events: EventLog())
+        self.init(service: service, thumbnails: RailThumbnailStore.shared, events: EventLog())
     }
 
     init(service: SnapshotService, thumbnails: RailThumbnailStore, events: EventLog) {
@@ -201,11 +203,21 @@ public final class WindowSwitcherController {
     }
 
     private func applyHotkeys() {
-        let config = ConfigReloadService.shared.activeConfig.switcher
+        let config = ConfigReloadService.shared.currentConfig().switcher
         let requests = config.enabled
             ? config.shortcuts.map { WindowSwitcherHotkeyRequest(profileID: $0.id, hotkey: $0.hotkey) }
             : []
         hotkeys?.apply(WindowSwitcherHotkeyPlan(requests: requests, layout: TargetSearchHotkey.currentLayoutTable()))
+        if let current = session {
+            guard config.enabled, let profile = Self.profile(id: current.profile.id, in: config.shortcuts) else { cancel(); return }
+            current.profile = profile
+            current.config = config
+            current.appearance = WindowSwitcherAppearance(config: config)
+            current.panel?.switcherAppearance = current.appearance
+            current.model?.configure(profile: profile, excludedBundles: config.excludedBundles)
+            hotkeys?.holdEscape(true)
+            refresh(current)
+        }
     }
 
     private func hotkeyPressed(profileID: String, backwards: Bool) {
@@ -219,7 +231,7 @@ public final class WindowSwitcherController {
 
     private func beginSession(profileID: String?, fromHotkey: Bool, backwards: Bool) {
         guard session == nil else { return }
-        let config = ConfigReloadService.shared.activeConfig.switcher
+        let config = ConfigReloadService.shared.currentConfig().switcher
         guard config.enabled else { return }
         guard let profile = Self.profile(id: profileID, in: config.shortcuts) else {
             events.append(RoadieEvent(type: "switcher.session", details: ["state": "unknown_profile", "profile": profileID ?? ""]))
@@ -228,7 +240,7 @@ public final class WindowSwitcherController {
         let required = WindowSwitcherHotkey.parse(profile.hotkey, layout: TargetSearchHotkey.currentLayoutTable())?.modifiers ?? []
         let held = WindowSwitcherHotkey.held(in: CGEventSource.flagsState(.combinedSessionState))
         let state = WindowSwitcherSessionState(
-            stayOpen: profile.releaseAction == "stay",
+            stayOpen: !fromHotkey || profile.releaseAction == "stay",
             fromHotkey: fromHotkey,
             heldAtStart: !WindowSwitcherHotkey.isReleased(required: required, held: held),
             backwards: backwards
@@ -260,7 +272,9 @@ public final class WindowSwitcherController {
 
     private func acquired(sessionID: Int, entries: [WindowSwitcherEntry], context: WindowSwitcherContext) {
         guard let session, session.id == sessionID else { return }
+        thumbnails.prune(keeping: Set(entries.map(\.id)), owner: "switcher")
         session.model = makeModel(entries: entries, context: context, session: session)
+        if session.state.initialBackwards { session.model?.selectInitialBackwards() }
         guard let ready = session.state.ready() else { return }
         switch ready {
         case .acceptImmediately(let steps):
@@ -321,6 +335,17 @@ public final class WindowSwitcherController {
                 }
             }
         }
+        if session.localClickMonitor == nil {
+            session.localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+                MainActor.assumeIsolated {
+                    if let self, let panel = self.session?.panel, let window = event.window,
+                       window !== panel, window.level.rawValue < NSWindow.Level.popUpMenu.rawValue {
+                        self.cancel()
+                    }
+                }
+                return event
+            }
+        }
         refresh(session)
     }
 
@@ -376,6 +401,7 @@ public final class WindowSwitcherController {
 
     private func perform(_ action: WindowSwitcherAction) {
         guard let session, let entry = session.model?.selected else { return }
+        if action == .maximize || action == .fullscreen || action == .hideApp || action == .quitApp { close(session) }
         let result = switcher.perform(action, on: entry)
         events.append(RoadieEvent(
             type: "switcher.action",
@@ -415,10 +441,12 @@ public final class WindowSwitcherController {
         session.loadTask?.cancel()
         session.timer?.invalidate()
         if let monitor = session.outsideMonitor { NSEvent.removeMonitor(monitor) }
+        if let monitor = session.localClickMonitor { NSEvent.removeMonitor(monitor) }
         session.panel?.orderOut(nil)
         session.panel = nil
         session.model = nil
         self.session = nil
+        thumbnails.prune(keeping: [], owner: "switcher")
         hotkeys?.holdEscape(false)
     }
 

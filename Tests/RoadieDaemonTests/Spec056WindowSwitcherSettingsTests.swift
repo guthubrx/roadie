@@ -58,6 +58,25 @@ struct Spec056WindowSwitcherSettingsTests {
         ])
     }
 
+    @Test func profileLimitAndKeyCollisionsAreRejectedBeforeWriting() throws {
+        try withService("") { service, file in
+            let descriptor = try descriptor("switcher.shortcuts")
+            let tooMany = (0..<10).map { row(WindowSwitcherShortcutConfig(id: "p\($0)", hotkey: "")) }
+            #expect(!service.validateCollection(descriptor, value: .rows(tooMany)).isEmpty)
+            let clash = [row(WindowSwitcherShortcutConfig(id: "a")),
+                         row(WindowSwitcherShortcutConfig(id: "b", hotkey: "control+option+shift+tab"))]
+            #expect(!service.validateCollection(descriptor, value: .rows(clash)).isEmpty)
+            guard case .rejected = service.setCollection(descriptor.id, .rows(clash)) else {
+                Issue.record("Raccourci conflictuel enregistré"); return
+            }
+            #expect(try String(contentsOf: file, encoding: .utf8).isEmpty)
+            let commandOnly = [row(WindowSwitcherShortcutConfig(id: "command", hotkey: ""))]
+            #expect(service.validateCollection(descriptor, value: .rows(commandOnly)).isEmpty)
+            expectApplied(service.setCollection(descriptor.id, .rows(commandOnly)))
+            #expect(try RoadieConfigLoader.load(from: file.path).switcher.shortcuts.first?.hotkey == "")
+        }
+    }
+
     @Test
     func defaultsMatchTheContract() {
         let switcher = WindowSwitcherConfig()

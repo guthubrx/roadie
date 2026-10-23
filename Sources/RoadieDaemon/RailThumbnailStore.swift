@@ -12,6 +12,10 @@ import ScreenCaptureKit
 /// - Une capture vide (noire ou transparente) est ignorée.
 @MainActor
 final class RailThumbnailStore {
+    /// Rail et sélecteur réutilisent les mêmes images et le même budget de capture par processus.
+    static let shared = RailThumbnailStore(onMissingPermission: {
+        EventLog().append(RoadieEvent(type: "rail_screen_recording_missing", details: ["effect": "app_icon_fallback"]))
+    })
     /// Incrémenté à chaque nouvelle vignette : le rail l'inclut dans sa signature pour savoir qu'il doit redessiner.
     private(set) var version = 0
     private var revisions: [WindowID: Int] = [:]
@@ -23,6 +27,7 @@ final class RailThumbnailStore {
     private var capturedAt: [WindowID: Date] = [:]
     private var attemptedAt: [WindowID: Date] = [:]
     private var inFlight: Set<WindowID> = []
+    private var retainedByOwner: [String: Set<WindowID>] = [:]
     /// Fenêtres ScreenCaptureKit déjà énumérées (SPEC-048 C-01) : un lot ne réénumère tout le
     /// système que si une fenêtre demandée manque. Une fenêtre absente n'est recherchée à nouveau
     /// qu'après `absentRetryInterval` (membres gardés 15 s après fermeture).
@@ -54,7 +59,11 @@ final class RailThumbnailStore {
         return result
     }
 
-    func prune(keeping ids: Set<WindowID>) {
+    func prune(keeping requested: Set<WindowID>, owner: String = "rail") {
+        if requested.isEmpty { retainedByOwner.removeValue(forKey: owner) }
+        else { retainedByOwner[owner] = requested }
+        // O(n) : un consommateur ne purge pas les vignettes encore utilisées par l'autre.
+        let ids = retainedByOwner.values.reduce(into: Set<WindowID>()) { $0.formUnion($1) }
         revisions = revisions.filter { ids.contains($0.key) }
         images = images.filter { ids.contains($0.key) }
         fallbacks = fallbacks.filter { ids.contains($0.key) }

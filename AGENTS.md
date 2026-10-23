@@ -146,12 +146,15 @@ E2CE37E8-CD10-3D53-978A-95F10F997E47, PID17507, cinq contrôles santé OK.
 Docs FR/EN et changelog Non publié à jour. CUA inaccessible, essai utilisateur
 proposé. Code b92dc331 intégré/poussé, branche et build nettoyés.
 Reçu : specs/055-fullscreen-sans-rail/validation.md.
-Current SpecKit feature: `055-fullscreen-sans-rail`.
+Session 056 en cours : sélecteur de fenêtres intégré aux bureaux/stages/écrans,
+recherche, profils de raccourcis et styles. Trois lots distincts : paramètres,
+navigation et interface. Contrats partagés avant intégration ; validation Mac à venir.
+Current SpecKit feature: `056-selecteur-fenetres`.
 
 Contexte :
-- `specs/055-fullscreen-sans-rail/spec.md`
-- `specs/055-fullscreen-sans-rail/plan.md`
-- `specs/055-fullscreen-sans-rail/tasks.md`
+- `specs/056-selecteur-fenetres/spec.md`
+- `specs/056-selecteur-fenetres/plan.md`
+- `specs/056-selecteur-fenetres/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes

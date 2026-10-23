@@ -496,6 +496,26 @@ extension SettingsService {
     public func validateCollection(_ descriptor: SettingDescriptor, value: CollectionValue) -> [String: String] {
         guard let spec = descriptor.collection else { return ["collection": "Collection inconnue."] }
         var errors = SettingsCollectionCodec.validate(spec, value: value)
+        if descriptor.id == "switcher.shortcuts", case .rows(let rows) = value {
+            if rows.count > WindowSwitcherConfig.maxShortcuts {
+                errors["collection"] = "Neuf profils au maximum. Supprime un profil avant d'en ajouter un autre."
+            }
+            let requests = rows.enumerated().map { index, row in
+                let raw = row.fields["hotkey"].map(Self.display) ?? ""
+                return WindowSwitcherHotkeyRequest(profileID: String(index), hotkey: raw)
+            }
+            // Validation pure : les caractères simples sont distingués sans lire la disposition système.
+            let keys = Set(requests.compactMap { $0.hotkey.split(separator: "+").last.map(String.init) }.filter { $0.count == 1 })
+            let layout = Dictionary(uniqueKeysWithValues: keys.sorted().enumerated().map { (UInt32(1024 + $0.offset), $0.element.lowercased()) })
+            let plan = WindowSwitcherHotkeyPlan(requests: requests, layout: layout)
+            for issue in plan.issues {
+                let parts = issue.split(separator: ":")
+                guard parts.count >= 2 else { continue }
+                errors["\(parts[1]).hotkey"] = parts[0] == "collision"
+                    ? "Ce raccourci, ou sa variante Maj, est déjà utilisé par un autre profil."
+                    : "Combinaison invalide. Exemple : ctrl+alt+tab. Laisse vide pour utiliser seulement la commande."
+            }
+        }
         if errors.isEmpty, descriptor.id == "rules", case .rows(let rows) = value {
             do {
                 // La prévalidation pure ignore les indices source et ne lit aucun fichier utilisateur.

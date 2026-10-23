@@ -15,11 +15,7 @@ public final class RailController {
     private let desktopCommandService: DesktopCommandService
     private let events = EventLog()
     private let railRuntimeStateStore = RailRuntimeStateStore()
-    private lazy var thumbnails = RailThumbnailStore(onMissingPermission: { [weak self] in
-        self?.events.append(RoadieEvent(type: "rail_screen_recording_missing", details: [
-            "effect": "app_icon_fallback"
-        ]))
-    })
+    private let thumbnails = RailThumbnailStore.shared
     private var panels: [DisplayID: RailPanel] = [:]
     private var screenFrames: [DisplayID: CGRect] = [:]
     /// Cadres (coordonnees AX) des fenetres gerees de la stage active de chaque ecran, releves au dernier cycle.
@@ -129,6 +125,7 @@ public final class RailController {
         cancelRailDrags()
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
+        thumbnails.prune(keeping: [], owner: "rail")
         screenFrames.removeAll()
         lastRenderSignatures.removeAll()
         lastThumbnailSignatures.removeAll()

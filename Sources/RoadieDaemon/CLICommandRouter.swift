@@ -220,6 +220,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "group create|add|remove|focus|dissolve|list ..."),
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
         CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|hide ..."),
+        CLICommandSpec(usage: "switcher show [--profile ID] | next | previous | accept | cancel [--json]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
         CLICommandSpec(usage: "record start NAME [--duration S] [--stop-file PATH]"),
         CLICommandSpec(usage: "record replay|list|inspect|delete ..."),
@@ -608,6 +609,11 @@ public final class CLICommandRouter {
             return try runQueryCommand(Array(args.dropFirst()))
         case "targets":
             return try runTargetsCommand(Array(args.dropFirst()))
+        case "switcher":
+            let arguments = Array(args.dropFirst())
+            guard let command = WindowSwitcherRuntimeBridge.command(arguments) else { return usageError() }
+            return try queueTargetModeRuntimeCommand(command, json: args.contains("--json"),
+                                                      notificationName: WindowSwitcherRuntimeBridge.notificationName)
         case "grid":
             return try runGridCommand(Array(args.dropFirst()))
         case "record":
@@ -787,7 +793,8 @@ public final class CLICommandRouter {
         value(after: flag, in: args).flatMap(Int.init) ?? defaultValue
     }
 
-    private func queueTargetModeRuntimeCommand(_ command: TargetModeRuntimeCommand, json: Bool) throws -> Int32 {
+    private func queueTargetModeRuntimeCommand(_ command: TargetModeRuntimeCommand, json: Bool,
+                                               notificationName: Notification.Name = TargetModeRuntimeNotification.name) throws -> Int32 {
         guard isTargetModeReceiverRunning() else {
             let result = TargetActionResult(
                 changed: false,
@@ -802,7 +809,7 @@ public final class CLICommandRouter {
             return 1
         }
         DistributedNotificationCenter.default().postNotificationName(
-            TargetModeRuntimeNotification.name,
+            notificationName,
             object: "roadie",
             userInfo: command.userInfo,
             deliverImmediately: true

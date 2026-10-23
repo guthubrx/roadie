@@ -174,16 +174,29 @@ public final class TargetSearchHotkey {
     private func installHandler() {
         guard handlerRef == nil else { return }
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let callback: EventHandlerUPP = { _, _, userData in
-            guard let userData else { return OSStatus(eventNotHandledErr) }
+        let callback: EventHandlerUPP = { _, event, userData in
+            guard let event, let userData else { return OSStatus(eventNotHandledErr) }
+            var identifier = EventHotKeyID()
+            guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                    nil, MemoryLayout<EventHotKeyID>.size, nil, &identifier) == noErr else {
+                return OSStatus(eventNotHandledErr)
+            }
             let hotkey = Unmanaged<TargetSearchHotkey>.fromOpaque(userData).takeUnretainedValue()
-            MainActor.assumeIsolated { hotkey.onPress() }
-            return noErr
+            return MainActor.assumeIsolated { hotkey.handle(identifier) }
         }
         InstallEventHandler(
             GetApplicationEventTarget(), callback, 1, &spec,
             Unmanaged.passUnretained(self).toOpaque(), &handlerRef
         )
+    }
+
+    /// Plusieurs fonctions partagent la cible Carbon : ne jamais absorber un autre raccourci.
+    func handle(_ identifier: EventHotKeyID) -> OSStatus {
+        guard identifier.signature == OSType(0x5244_5352), identifier.id == 1 else {
+            return OSStatus(eventNotHandledErr)
+        }
+        onPress()
+        return noErr
     }
 
     /// Journalise seulement les changements d'état (pas toutes les 2 s).

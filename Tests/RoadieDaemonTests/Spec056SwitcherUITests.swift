@@ -13,6 +13,14 @@ struct Spec056SwitcherSessionTests {
         WindowSwitcherSessionState(stayOpen: stayOpen, fromHotkey: fromHotkey, heldAtStart: heldAtStart, backwards: backwards)
     }
 
+    @Test func commandOpenedSessionNeverAcceptsOnModifierRelease() {
+        var state = session(fromHotkey: false)
+        _ = state.ready()
+        let release = state.modifiers(held: false)
+        #expect(!release)
+        #expect(state.persistent)
+    }
+
     @Test func quickTapAcceptsAsSoonAsTheTargetIsReady() {
         var state = session(heldAtStart: false)
         let ready = state.ready()
@@ -75,27 +83,32 @@ struct Spec056SwitcherSessionTests {
     @Test func confirmWhilePresentedAcceptsNow() {
         var state = session()
         _ = state.ready()
-        #expect(state.confirm())
+        let mutatedResult1 = state.confirm()
+        #expect(mutatedResult1)
     }
 
     @Test func stepsDuringAcquisitionAreQueuedInOrder() {
         var state = session()
-        #expect(!state.step(backwards: false))
-        #expect(!state.step(backwards: true))
+        let mutatedResult2 = state.step(backwards: false)
+        #expect(!mutatedResult2)
+        let mutatedResult3 = state.step(backwards: true)
+        #expect(!mutatedResult3)
         let ready = state.ready()
         #expect(ready == .present(steps: [false, true]))
     }
 
-    @Test func backwardsStartQueuesTheFirstStep() {
+    @Test func backwardsStartKeepsDirectionSeparateFromRepeatedSteps() {
         var state = session(backwards: true)
         let ready = state.ready()
-        #expect(ready == .present(steps: [true]))
+        #expect(state.initialBackwards)
+        #expect(ready == .present(steps: []))
     }
 
     @Test func stepsWhilePresentedApplyDirectly() {
         var state = session()
         _ = state.ready()
-        #expect(state.step(backwards: false))
+        let mutatedResult4 = state.step(backwards: false)
+        #expect(mutatedResult4)
         #expect(state.queuedSteps.isEmpty)
     }
 
@@ -104,8 +117,10 @@ struct Spec056SwitcherSessionTests {
         state.close()
         let late = state.ready()
         #expect(late == nil)
-        #expect(!state.step(backwards: false))
-        #expect(!state.confirm())
+        let mutatedResult5 = state.step(backwards: false)
+        #expect(!mutatedResult5)
+        let mutatedResult6 = state.confirm()
+        #expect(!mutatedResult6)
     }
 
     @Test func closeWhilePresentedStopsReleaseAndConfirm() {
@@ -114,7 +129,8 @@ struct Spec056SwitcherSessionTests {
         state.close()
         let released = state.modifiers(held: false)
         #expect(!released)
-        #expect(!state.confirm())
+        let mutatedResult7 = state.confirm()
+        #expect(!mutatedResult7)
     }
 }
 

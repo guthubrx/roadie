@@ -80,6 +80,11 @@ Suggestions and history help you enter commands. Set the shortcut in the
 
 ### Make it your own
 
+The **window switcher** opens a selected window in its own Roadie desktop and
+stage. Use Ctrl+Alt+Tab by default, or configure independent profiles for a
+display, desktop, stage or application. Search and choose thumbnails, icons or
+a compact list in Settings > Sélecteur. [Window switcher guide](docs/en/window-switcher.md).
+
 Adjust spacing, stage names, rules and overrides in the settings window.
 Valid values apply as you type. Choose separate sizes for the rail, labels
 and settings, and font families for the search field and its suggestions.

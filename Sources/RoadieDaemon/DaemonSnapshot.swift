@@ -2520,6 +2520,11 @@ final class SnapshotProcessState: @unchecked Sendable {
 
     func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, maxAge: TimeInterval, at date: Date, stateStamp: [Int64],
                  config: RoadieConfig, observationGeneration: UInt64) {
+        if followFocus, let focused = snapshot.focusedWindowID,
+           snapshot.windows.contains(where: { $0.window.id == focused }) {
+            WindowSwitcherFocusHistory.shared.observe(focused)
+            WindowSwitcherRuntimeBridge.publishFocus(focused)
+        }
         lock.withLock {
             revision &+= 1
             gestureSnapshot = snapshot

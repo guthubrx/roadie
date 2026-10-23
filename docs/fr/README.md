@@ -6,6 +6,7 @@ Guides français pour les sources actuelles de `main`. Le [README principal](../
 
 - [Vue d’ensemble des fonctionnalités](features.md)
 - [Commandes CLI](cli.md)
+- [Sélecteur de fenêtres](window-switcher.md)
 - [Configuration et règles](configuration-rules.md)
 - [Événements et API de requêtes](events-query.md)
 - [Cas d’usage](use-cases.md)

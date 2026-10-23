@@ -65,7 +65,7 @@ enum WindowSwitcherGrid {
             columns = 1
             card = CGSize(width: width, height: max(44, labels + 16))
         case .icons:
-            let cardWidth = max(minCardWidth, appearance.fontSize * 7)
+            let cardWidth = min(max(minCardWidth, appearance.fontSize * 7), max(1, width))
             columns = fit(count: count, width: width, cardWidth: cardWidth)
             card = CGSize(width: cardWidth, height: 8 + 56 + 8 + labels + 8)
         case .thumbnails:
@@ -77,7 +77,7 @@ enum WindowSwitcherGrid {
                 cardWidth = max(1, min(base, (width - spacing * CGFloat(columns - 1)) / CGFloat(columns)))
             } else {
                 columns = fit(count: count, width: width, cardWidth: base)
-                cardWidth = base
+                cardWidth = min(base, max(1, width))
             }
             card = CGSize(width: cardWidth, height: 8 + imageHeight(cardWidth: cardWidth) + 6 + labels + 8)
         }
@@ -210,9 +210,8 @@ final class WindowSwitcherCardView: NSView {
         path.stroke()
     }
 
-    override func mouseDown(with event: NSEvent) {
-        onClick?()
-    }
+    override func mouseDown(with event: NSEvent) { onClick?() }
+    override func accessibilityPerformPress() -> Bool { onClick?(); return true }
 }
 
 final class WindowSwitcherFlippedView: NSView {
@@ -226,7 +225,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         case cancel, confirm, next, previous
     }
 
-    var appearance: WindowSwitcherAppearance
+    var switcherAppearance: WindowSwitcherAppearance
     var onQueryChange: ((String) -> Void)?
     var onNavigate: ((_ backwards: Bool) -> Void)?
     var onConfirm: (() -> Void)?
@@ -243,7 +242,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     private let actionsButton = NSPopUpButton(frame: .zero, pullsDown: true)
     private var grid = WindowSwitcherGridLayout(columns: 1, cardSize: .zero, frames: [], contentSize: .zero)
     private var cards: [WindowSwitcherCardView] = []
-    private var visible = CGRect(x: 0, y: 0, width: 1280, height: 800)
+    private var visibleArea = CGRect(x: 0, y: 0, width: 1280, height: 800)
     private var previewShown = false
     private let pad: CGFloat = 16
     private let headerHeight: CGFloat = 52
@@ -253,7 +252,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     override var canBecomeMain: Bool { false }
 
     init(appearance: WindowSwitcherAppearance) {
-        self.appearance = appearance
+        self.switcherAppearance = appearance
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isReleasedWhenClosed = false
         isOpaque = false
@@ -325,9 +324,9 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     ) {
         clearCards()
         if field.stringValue != query { field.stringValue = query }
-        grid = WindowSwitcherGrid.layout(count: entries.count, appearance: appearance, available: maxWidth - 2 * pad)
+        grid = WindowSwitcherGrid.layout(count: entries.count, appearance: switcherAppearance, available: maxWidth - 2 * pad)
         for (entry, frame) in zip(entries, grid.frames) {
-            let card = WindowSwitcherCardView(entry: entry, image: images[entry.id], appearance: appearance, frame: frame)
+            let card = WindowSwitcherCardView(entry: entry, image: images[entry.id], appearance: switcherAppearance, frame: frame)
             card.onClick = { [weak self] in self?.onSelect?(entry.id) }
             gridContainer.addSubview(card)
             cards.append(card)
@@ -342,14 +341,14 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
             selected.scrollToVisible(selected.bounds)
         }
         previewView.image = previewImage
-        previewShown = appearance.preview && previewImage != nil
+        previewShown = switcherAppearance.preview && previewImage != nil
         previewView.isHidden = !previewShown
         actionsButton.isEnabled = id != nil
         relayout()
     }
 
     func present(on screen: NSScreen) {
-        visible = screen.visibleFrame
+        visibleArea = screen.visibleFrame
         relayout()
         orderFrontRegardless()
         makeKey()
@@ -415,12 +414,12 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         onAction?(action)
     }
 
-    private var maxWidth: CGFloat { min(visible.width - 40, 1100) }
+    private var maxWidth: CGFloat { min(visibleArea.width - 40, 1100) }
 
     private func clearCards() {
         cards.forEach { $0.removeFromSuperview() }
         cards = []
-        grid = WindowSwitcherGrid.layout(count: 0, appearance: appearance, available: 0)
+        grid = WindowSwitcherGrid.layout(count: 0, appearance: switcherAppearance, available: 0)
     }
 
     private func setStatus(_ text: String) {
@@ -433,12 +432,16 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         let width = min(max(grid.contentSize.width + 2 * pad, 480), maxWidth)
         let scrollWidth = width - 2 * pad
         let previewHeight: CGFloat = previewShown ? min(240, scrollWidth * 9 / 16) : 0
-        let bodyHeight = max(min(grid.contentSize.height, visible.height * 0.55), 56)
         let previewBlock = previewShown ? previewHeight + pad : 0
+        let availableBody = max(56, visibleArea.height - 32 - headerHeight - footerHeight - previewBlock)
+        let bodyHeight = min(max(min(grid.contentSize.height, visibleArea.height * 0.55), 56), availableBody)
         let height = headerHeight + previewBlock + bodyHeight + footerHeight
-        let origin = CGPoint(x: visible.midX - width / 2, y: visible.midY - height / 2)
+        let origin = CGPoint(x: visibleArea.midX - width / 2, y: visibleArea.midY - height / 2)
         setFrame(CGRect(origin: origin, size: CGSize(width: width, height: height)), display: true)
 
+        field.font = switcherAppearance.font(size: switcherAppearance.fontSize, weight: .regular)
+        statusLabel.font = switcherAppearance.font(size: switcherAppearance.fontSize, weight: .regular)
+        actionsButton.font = switcherAppearance.font(size: max(12, switcherAppearance.fontSize - 2), weight: .regular)
         field.frame = CGRect(x: pad, y: height - headerHeight + 12, width: scrollWidth, height: 28)
         previewView.frame = CGRect(x: pad, y: footerHeight + bodyHeight, width: scrollWidth, height: previewHeight)
         scrollView.frame = CGRect(x: pad, y: footerHeight, width: scrollWidth, height: bodyHeight)

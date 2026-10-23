@@ -6,6 +6,7 @@ English guides for the current `main` sources. The [root README](../../README.md
 
 - [Feature overview](features.md)
 - [CLI commands](cli.md)
+- [Window switcher](window-switcher.md)
 - [Configuration and rules](configuration-rules.md)
 - [Events and Query API](events-query.md)
 - [Use cases](use-cases.md)

@@ -524,8 +524,8 @@ public struct WindowCommandService {
         )
     }
 
-    public func toggleFullscreen() -> WindowCommandResult {
-        toggleZoom(reservingRail: false)
+    public func toggleFullscreen(windowID: WindowID? = nil) -> WindowCommandResult {
+        toggleZoom(reservingRail: false, windowID: windowID)
     }
 
     /// O(w log w) avec restauration d'arbre ; validation sans arbre bornée à O(w²).

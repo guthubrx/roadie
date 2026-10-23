@@ -5,6 +5,13 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+### Nouveautés
+
+- Sélecteur de fenêtres intégré aux bureaux, stages et écrans Roadie. Raccourci
+  configurable, recherche, trois présentations et jusqu'à neuf profils de navigation.
+  La sélection ouvre le contexte de la fenêtre sans changer son affectation.
+  Réglages dans Sélecteur et commandes `roadie switcher` pour les outils externes.
+
 ### Changements
 
 - Le plein écran Roadie (`toggle fullscreen`) cache le rail sur l'écran concerné,

@@ -7,7 +7,7 @@ enum WindowSwitcherModifier: String, CaseIterable, Hashable, Sendable {
     case control, option, command, shift
 }
 
-struct WindowSwitcherHotkey: Equatable, Sendable {
+struct WindowSwitcherHotkey: Hashable, Sendable {
     var keyCode: UInt32
     var modifiers: Set<WindowSwitcherModifier>
 
@@ -81,6 +81,7 @@ struct WindowSwitcherHotkeyPlan: Equatable, Sendable {
     init(requests: [WindowSwitcherHotkeyRequest], layout: [UInt32: String]) {
         var owners: [WindowSwitcherHotkey: String] = [:]
         for request in requests {
+            if request.hotkey.trimmingCharacters(in: .whitespaces).isEmpty { continue }
             guard let forward = WindowSwitcherHotkey.parse(request.hotkey, layout: layout) else {
                 issues.append("invalide:\(request.profileID)")
                 continue
@@ -189,8 +190,9 @@ final class WindowSwitcherHotkeyRegistry {
         let callback: EventHandlerUPP = { _, event, userData in
             guard let userData, let event else { return OSStatus(eventNotHandledErr) }
             var id = EventHotKeyID()
-            GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
-                              nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
+            guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                              nil, MemoryLayout<EventHotKeyID>.size, nil, &id) == noErr,
+                  id.signature == OSType(0x5244_5357) else { return OSStatus(eventNotHandledErr) }
             let registry = Unmanaged<WindowSwitcherHotkeyRegistry>.fromOpaque(userData).takeUnretainedValue()
             MainActor.assumeIsolated { registry.dispatch(id: id.id) }
             return noErr

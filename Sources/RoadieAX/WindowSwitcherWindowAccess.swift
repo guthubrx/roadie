@@ -28,7 +28,7 @@ public enum WindowSwitcherAXOutcome: Equatable, Sendable {
 /// Accès AX ciblé par identité de fenêtre (CGWindowID + pid). Aucun force kill.
 public enum WindowSwitcherWindowAccess {
     public static func states(pid: pid_t, windowIDs: Set<WindowID>) -> [WindowID: WindowSwitcherAXState] {
-        guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return [:] }
+        guard !windowIDs.isEmpty, !AXUnresponsiveApps.shared.isQuarantined(pid) else { return [:] }
         let required = Set(windowIDs.map { CGWindowID($0.rawValue) })
         guard let windows = AXApplicationWindows(pid: pid, requiredWindowIDs: required) else { return [:] }
         let application = NSRunningApplication(processIdentifier: pid)
@@ -39,7 +39,7 @@ public enum WindowSwitcherWindowAccess {
                 appName: application?.localizedName,
                 title: attribute(entry.element, kAXTitleAttribute, pid: pid) as? String,
                 isMinimized: attribute(entry.element, kAXMinimizedAttribute, pid: pid) as? Bool ?? false,
-                isFullscreen: attribute(entry.element, kAXFullScreenAttribute, pid: pid) as? Bool ?? false,
+                isFullscreen: attribute(entry.element, "AXFullScreen", pid: pid) as? Bool ?? false,
                 isHidden: application?.isHidden ?? false
             )
         }
@@ -48,9 +48,12 @@ public enum WindowSwitcherWindowAccess {
 
     public static func close(_ windowID: WindowID, pid: pid_t) -> WindowSwitcherAXOutcome {
         withWindow(windowID, pid: pid) { element in
-            guard let button = attribute(element, kAXCloseButtonAttribute, pid: pid) as? AXUIElement else {
-                return .refused(kAXErrorNoValue.rawValue)
+            guard let raw = attribute(element, kAXCloseButtonAttribute, pid: pid),
+                  CFGetTypeID(raw) == AXUIElementGetTypeID() else {
+                return .refused(AXError.noValue.rawValue)
             }
+            let button = unsafeBitCast(raw, to: AXUIElement.self)
+            guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return .refused(AXError.cannotComplete.rawValue) }
             let error = AXUIElementPerformAction(button, kAXPressAction as CFString)
             AXUnresponsiveApps.shared.noteResult(error, pid: pid)
             return error == .success ? .performed : .refused(error.rawValue)
@@ -59,7 +62,12 @@ public enum WindowSwitcherWindowAccess {
 
     public static func minimize(_ windowID: WindowID, pid: pid_t) -> WindowSwitcherAXOutcome {
         withWindow(windowID, pid: pid) { element in
-            let error = AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
+            guard let minimized = attribute(element, kAXMinimizedAttribute, pid: pid) as? Bool else {
+                return .refused(AXError.noValue.rawValue)
+            }
+            guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return .refused(AXError.cannotComplete.rawValue) }
+            let error = AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString,
+                                                    minimized ? kCFBooleanFalse : kCFBooleanTrue)
             AXUnresponsiveApps.shared.noteResult(error, pid: pid)
             return error == .success ? .performed : .refused(error.rawValue)
         }
@@ -86,9 +94,9 @@ public enum WindowSwitcherWindowAccess {
         pid: pid_t,
         _ body: (AXUIElement) -> WindowSwitcherAXOutcome
     ) -> WindowSwitcherAXOutcome {
-        guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return .refused(kAXErrorCannotComplete.rawValue) }
+        guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return .refused(AXError.cannotComplete.rawValue) }
         guard let windows = AXApplicationWindows(pid: pid, requiredWindowIDs: [CGWindowID(windowID.rawValue)]) else {
-            return .refused(kAXErrorCannotComplete.rawValue)
+            return .refused(AXError.cannotComplete.rawValue)
         }
         guard let element = windows.element(id: CGWindowID(windowID.rawValue)) else { return .targetMissing }
         return body(element)

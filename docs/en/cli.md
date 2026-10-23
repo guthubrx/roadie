@@ -335,7 +335,21 @@ the rail in pixels.
 
 ## Shortcuts
 
-Roadie has no hotkey engine. The only exception is `search_hotkey`, the global shortcut for search mode (see `[experimental.target_mode]`). For everything else, use a tool that runs a command on a key press. The folder `examples/` has ready-to-use files:
+The switcher also accepts commands from gestures or external tools:
+
+```sh
+roadie switcher show --profile all
+roadie switcher next
+roadie switcher previous
+roadie switcher accept
+roadie switcher cancel
+```
+
+Without a profile, `show` chooses the first configured profile. `--json` reports
+that the command was queued. The graphical component then executes it. See the
+[switcher guide](window-switcher.md) for profiles and filters.
+
+Roadie provides `search_hotkey` for search (see `[experimental.target_mode]`) and independent [window switcher profiles](window-switcher.md). For other commands, use a tool that runs a command on a key press. The folder `examples/` has ready-to-use files:
 
 - `examples/skhd/skhdrc`: shortcuts for [skhd](https://github.com/koekeishiya/skhd). Copy it to `~/.config/skhd/skhdrc`, then run `skhd --reload`.
 - `examples/karabiner/roadie.json`: rules for Karabiner-Elements. Copy it to `~/.config/karabiner/assets/complex_modifications/`, then enable the rules in Karabiner-Elements > Complex Modifications > Add predefined rule.

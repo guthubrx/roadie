@@ -49,7 +49,7 @@ struct WindowSwitcherService {
                 stageName: draft.stageName,
                 isMinimized: ax?.isMinimized ?? false,
                 isHidden: ax?.isHidden ?? false,
-                isFullscreen: ax?.isFullscreen ?? false
+                isFullscreen: ax?.isFullscreen ?? window.furniture?.isNativeFullscreen ?? false
             )
         }
         return (entries, context(snapshot: snapshot))
@@ -109,10 +109,11 @@ struct WindowSwitcherService {
             return report(WindowSwitcherWindowAccess.hideApplication(pid: pid, bundleID: entry.window.bundleID), label: label)
         case .quitApp:
             return report(WindowSwitcherWindowAccess.quitApplication(pid: pid, bundleID: entry.window.bundleID), label: label)
-        case .maximize:
-            return WindowCommandService(service: service).toggleMaximize(windowID: entry.id)
-        case .fullscreen:
-            return .failure("\(label): fullscreen needs a window identity, not available yet")
+        case .maximize, .fullscreen:
+            let activation = activate(entry)
+            guard activation.changed else { return activation }
+            let commands = WindowCommandService(service: service)
+            return action == .maximize ? commands.toggleMaximize(windowID: entry.id) : commands.toggleFullscreen(windowID: entry.id)
         }
     }
 
@@ -130,7 +131,7 @@ struct WindowSwitcherService {
         for scope in persisted.scopes {
             for stage in scope.stages {
                 let stageScope = StageScope(displayID: scope.displayID, desktopID: scope.desktopID, stageID: stage.id)
-                for member in stage.members where !seen.contains(member.windowID) {
+                for member in stage.members where member.confirmedClosedAt == nil && !seen.contains(member.windowID) {
                     guard let pid = member.pid, inventory[member.windowID] == pid else { continue }
                     seen.insert(member.windowID)
                     let window = WindowSnapshot(

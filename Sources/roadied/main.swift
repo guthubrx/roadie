@@ -25,6 +25,8 @@ var focusFollowsMouseController: FocusFollowsMouseController?
 var titlebarContextMenuController: TitlebarContextMenuController?
 var targetModeRuntimeController: TargetModeRuntimeController?
 var targetSearchHotkey: TargetSearchHotkey?
+var windowSwitcherController: WindowSwitcherController?
+var windowSwitcherBridge: WindowSwitcherRuntimeBridge?
 var displayChangeObserver: NSObjectProtocol?
 var pendingDisplayHeal: Task<Void, Never>?
 var displaySettlingUntil: Date = .distantPast
@@ -210,6 +212,13 @@ func startTargetModeComponent() {
     targetSearchHotkey = TargetSearchHotkey { targetModeRuntimeController?.requestSearch() }
     targetSearchHotkey?.start()
     ShutdownRegistry.register { targetSearchHotkey?.stop() }
+    let switcher = WindowSwitcherController(service: service)
+    windowSwitcherController = switcher
+    switcher.start()
+    let bridge = WindowSwitcherRuntimeBridge(controller: switcher)
+    windowSwitcherBridge = bridge
+    bridge.start()
+    ShutdownRegistry.register { bridge.stop(); switcher.stop() }
 }
 
 /// Canal socket des commandes CLI, servi par le process qui détient le verrou d'instance.
@@ -334,6 +343,8 @@ func installWorkspaceObservers(maintainer: LayoutMaintainer, scheduler: TickSche
 /// 15 ou 30 ms et n'en perd aucune. Le minuteur périodique n'est plus qu'un filet de sécurité.
 @MainActor
 func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSeconds: Double, enableLiveEvents: Bool) {
+    WindowSwitcherRuntimeBridge.setFocusPublishing(true)
+    ShutdownRegistry.register { WindowSwitcherRuntimeBridge.setFocusPublishing(false) }
     UserInputActivity.shared.startMonitoring()
 
     let maintainer = LayoutMaintainer()
