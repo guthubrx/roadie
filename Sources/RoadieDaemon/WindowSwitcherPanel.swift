@@ -26,8 +26,9 @@ struct WindowSwitcherAppearance: Equatable {
         preview = config.preview
     }
 
-    func font(size: CGFloat, weight: NSFont.Weight) -> NSFont {
-        if fontFamily != "system", let named = NSFont(name: fontFamily, size: size) { return named }
+    @MainActor func font(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        if fontFamily != "system", let named = NSFontManager.shared.font(withFamily: fontFamily,
+            traits: [], weight: weight == .regular ? 5 : 7, size: size) { return named }
         return NSFont.systemFont(ofSize: size, weight: weight)
     }
 }
@@ -104,12 +105,13 @@ enum WindowSwitcherGrid {
 
 extension WindowSwitcherEntry {
     var subtitleText: String {
-        [displayName, desktopName, stageName].filter { !$0.isEmpty }.joined(separator: " · ")
+        [stageName, desktopName, displayName].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     var stateBadges: [String] {
         var badges: [String] = []
         if !isAvailable { badges.append("indisponible") }
+        if !visibilityKnown { badges.append("état non vérifié") }
         if isMinimized { badges.append("réduite") }
         if isHidden { badges.append("masquée") }
         if isFullscreen { badges.append("plein écran") }
@@ -239,6 +241,8 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     private let scrollView = NSScrollView()
     private let gridContainer = WindowSwitcherFlippedView()
     private let statusLabel = NSTextField(labelWithString: "")
+    private let selectionLabel = NSTextField(labelWithString: "")
+    private var detailsByID: [WindowID: String] = [:]
     private let actionsButton = NSPopUpButton(frame: .zero, pullsDown: true)
     private var grid = WindowSwitcherGridLayout(columns: 1, cardSize: .zero, frames: [], contentSize: .zero)
     private var cards: [WindowSwitcherCardView] = []
@@ -261,7 +265,8 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         hidesOnDeactivate = false
         level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        setAccessibilityLabel("Sélecteur de fenêtres Roadie")
+        title = "Sélecteur de fenêtres Roadie"
+        setAccessibilityLabel(title)
 
         effect.material = .popover
         effect.blendingMode = .behindWindow
@@ -277,6 +282,8 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         field.setAccessibilityLabel("Rechercher une fenêtre")
 
         scrollView.hasVerticalScroller = true
+        scrollView.scrollerStyle = .overlay
+        scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         scrollView.documentView = gridContainer
@@ -305,6 +312,9 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         effect.addSubview(scrollView)
         effect.addSubview(statusLabel)
         effect.addSubview(actionsButton)
+        selectionLabel.lineBreakMode = .byTruncatingMiddle
+        selectionLabel.maximumNumberOfLines = 1
+        effect.addSubview(selectionLabel)
     }
 
     func showLoading() {
@@ -323,6 +333,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         emptyMessage: String
     ) {
         clearCards()
+        detailsByID = Dictionary(entries.map { ($0.id, [$0.window.title, $0.subtitleText].filter { !$0.isEmpty }.joined(separator: " · ")) }, uniquingKeysWith: { _, last in last })
         if field.stringValue != query { field.stringValue = query }
         grid = WindowSwitcherGrid.layout(count: entries.count, appearance: switcherAppearance, available: maxWidth - 2 * pad)
         for (entry, frame) in zip(entries, grid.frames) {
@@ -336,6 +347,8 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     }
 
     func select(_ id: WindowID?, previewImage: NSImage?) {
+        selectionLabel.stringValue = id.flatMap { detailsByID[$0] } ?? ""
+        selectionLabel.textColor = .secondaryLabelColor
         for card in cards { card.isSelected = card.entryID == id }
         if let selected = cards.first(where: { $0.entryID == id }) {
             selected.scrollToVisible(selected.bounds)
@@ -345,6 +358,11 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         previewView.isHidden = !previewShown
         actionsButton.isEnabled = id != nil
         relayout()
+    }
+
+    func showActionError() {
+        selectionLabel.stringValue = "Action refusée par l’application. Réessayez ou choisissez une autre fenêtre."
+        selectionLabel.textColor = .systemOrange
     }
 
     func present(on screen: NSScreen) {
@@ -447,6 +465,8 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         scrollView.frame = CGRect(x: pad, y: footerHeight, width: scrollWidth, height: bodyHeight)
         statusLabel.frame = scrollView.frame
         actionsButton.frame = CGRect(x: pad, y: 8, width: 190, height: 28)
+        selectionLabel.font = switcherAppearance.font(size: max(12, switcherAppearance.fontSize - 2), weight: .regular)
+        selectionLabel.frame = CGRect(x: pad + 202, y: 12, width: max(0, scrollWidth - 202), height: 24)
 
         let inset = max(0, (scrollWidth - grid.contentSize.width) / 2)
         gridContainer.frame = CGRect(

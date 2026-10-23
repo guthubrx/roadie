@@ -12,8 +12,6 @@ enum WindowSwitcherAction: String, CaseIterable {
 }
 
 struct WindowSwitcherService {
-    private static let axApplicationLimit = 16
-
     private struct Draft {
         var window: WindowSnapshot
         let scope: StageScope
@@ -25,7 +23,7 @@ struct WindowSwitcherService {
     private let service: SnapshotService
 
     init(service: SnapshotService = SnapshotService()) {
-        self.service = service
+        self.service = service.withoutObservationPersistence()
     }
 
     @MainActor
@@ -49,7 +47,8 @@ struct WindowSwitcherService {
                 stageName: draft.stageName,
                 isMinimized: ax?.isMinimized ?? false,
                 isHidden: ax?.isHidden ?? false,
-                isFullscreen: ax?.isFullscreen ?? window.furniture?.isNativeFullscreen ?? false
+                isFullscreen: ax?.isFullscreen ?? window.furniture?.isNativeFullscreen ?? false,
+                visibilityKnown: window.isOnScreen || ax?.visibilityKnown == true
             )
         }
         return (entries, context(snapshot: snapshot))
@@ -82,6 +81,7 @@ struct WindowSwitcherService {
             label: "switcher activate",
             cause: "switcher.activate",
             eventPrefix: "window.switcher",
+            requireOwnership: true,
             details: [
                 "windowID": String(entry.id.rawValue),
                 "bundleID": entry.window.bundleID,
@@ -111,7 +111,7 @@ struct WindowSwitcherService {
             return report(WindowSwitcherWindowAccess.quitApplication(pid: pid, bundleID: entry.window.bundleID), label: label)
         case .maximize, .fullscreen:
             let activation = activate(entry)
-            guard activation.changed else { return activation }
+            guard activation.changed, activation.outcome != .failed else { return activation }
             let commands = WindowCommandService(service: service)
             return action == .maximize ? commands.toggleMaximize(windowID: entry.id) : commands.toggleFullscreen(windowID: entry.id)
         }
@@ -165,19 +165,30 @@ struct WindowSwitcherService {
     /// Lecture AX seulement pour les fenêtres hors écran, un appel par application, hors MainActor.
     private func accessibilityStates(for drafts: [Draft]) async -> [WindowID: WindowSwitcherAXState] {
         let byPID = Dictionary(grouping: drafts.filter { !$0.window.isOnScreen }) { $0.window.pid }
-        let selected = byPID.keys.sorted().prefix(Self.axApplicationLimit)
-        return await withTaskGroup(of: [WindowID: WindowSwitcherAXState].self) { group in
-            for pid in selected {
-                let ids = Set(byPID[pid, default: []].map(\.window.id))
-                group.addTask {
-                    await Task.detached(priority: .utility) {
-                        WindowSwitcherWindowAccess.states(pid: pid, windowIDs: ids)
-                    }.value
-                }
+        return await Self.loadAccessibilityStates(byPID: byPID.mapValues { Set($0.map(\.window.id)) }) { pid, ids in
+            WindowSwitcherWindowAccess.states(pid: pid, windowIDs: ids)
+        }
+    }
+
+    /// Toutes les applications sont consultées, avec au plus quatre lectures AX simultanées.
+    /// Chaque pid n'est visité qu'une fois ; l'annulation empêche de lancer les suivants.
+    static func loadAccessibilityStates(
+        byPID: [Int32: Set<WindowID>],
+        read: @escaping @Sendable (Int32, Set<WindowID>) -> [WindowID: WindowSwitcherAXState]
+    ) async -> [WindowID: WindowSwitcherAXState] {
+        await withTaskGroup(of: [WindowID: WindowSwitcherAXState].self) { group in
+            var pending = byPID.keys.sorted().makeIterator()
+            func enqueue(_ pid: Int32) {
+                let ids = byPID[pid, default: []]
+                group.addTask { read(pid, ids) }
+            }
+            for _ in 0..<min(4, byPID.count) {
+                if let pid = pending.next() { enqueue(pid) }
             }
             var merged: [WindowID: WindowSwitcherAXState] = [:]
-            for await part in group {
+            while let part = await group.next() {
                 merged.merge(part) { _, new in new }
+                if !Task.isCancelled, let pid = pending.next() { enqueue(pid) }
             }
             return merged
         }

@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import Testing
 import RoadieAX
 import RoadieCore
@@ -24,7 +25,7 @@ struct Spec056ActivationTests {
                 PersistentStage(id: StageID(rawValue: "2"), members: [spec056Member(target)]),
             ]),
         ]))
-        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: store)
         let owner = store.state().stageScope(for: target.id)
         let entry = WindowSwitcherEntry(window: target, scope: owner)
 
@@ -35,6 +36,81 @@ struct Spec056ActivationTests {
         #expect(store.state().stageScope(for: target.id) == owner)
         #expect(owner?.displayID == second.id)
         #expect(owner?.stageID == StageID(rawValue: "2"))
+    }
+
+    @Test func activationChangesDesktopAndStageWithoutMovingMembers() throws {
+        let current = spec056Window(1, x: 100)
+        let target = spec056Window(2, x: 999)
+        let provider = PowerUserProvider(windows: [current, target])
+        provider.focusedID = current.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec056-desktops"))
+        let display = DisplayID(rawValue: "display-main")
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 1), activeStageID: StageID(rawValue: "source"), stages: [
+                PersistentStage(id: StageID(rawValue: "source"), members: [spec056Member(current)])]),
+            PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 2), activeStageID: StageID(rawValue: "other"), stages: [
+                PersistentStage(id: StageID(rawValue: "other")),
+                PersistentStage(id: StageID(rawValue: "destination"), members: [spec056Member(target)])])
+        ]))
+        let owner = try #require(store.state().stageScope(for: target.id))
+        let oldOwner = store.state().stageScope(for: current.id)
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: store)
+        let result = WindowSwitcherService(service: service).activate(WindowSwitcherEntry(window: target, scope: owner))
+        #expect(result.changed)
+        #expect(store.state().currentDesktopID(for: display) == DesktopID(rawValue: 2))
+        #expect(store.state().scopes.first { $0.displayID == display && $0.desktopID == DesktopID(rawValue: 2) }?.activeStageID == owner.stageID)
+        #expect(store.state().stageScope(for: target.id) == owner)
+        #expect(store.state().stageScope(for: current.id) == oldOwner)
+        #expect(writer.focused.last == target.id)
+    }
+
+    @Test func staleOwnershipIsRejectedInsideTheTransaction() throws {
+        let target = spec056Window(2, x: 100)
+        let provider = PowerUserProvider(windows: [target])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec056-stale-owner"))
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: DisplayID(rawValue: "display-main"),
+            stages: [PersistentStage(id: StageID(rawValue: "new"), members: [spec056Member(target)])])]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: store,
+                                      persistStateChanges: false)
+        let snapshot = service.snapshot(followFocus: false)
+        let before = store.state()
+        let stale = StageScope(displayID: DisplayID(rawValue: "display-main"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "old"))
+        let result = WindowBookmarkCommandService(service: service, store: store).focusWindow(target, in: stale,
+            snapshot: snapshot, generation: PlacementGeneration.shared.next(), label: "switcher", cause: "switcher.activate",
+            eventPrefix: "window.switcher", requireOwnership: true, details: [:])
+        #expect(!result.changed)
+        #expect(writer.focused.isEmpty)
+        #expect(store.state() == before)
+    }
+
+    @Test(arguments: [false, true])
+    func minimizedMemberRestoresBeforeLayoutWithoutWritingStaleObservation(becomesReadable: Bool) throws {
+        let current = spec056Window(1, x: 100)
+        let target = spec056Window(2, x: 500)
+        let provider = PowerUserProvider(windows: [current])
+        let writer = Spec056RestoringWriter(provider: provider, target: target, becomesReadable: becomesReadable)
+        let store = StageStore(path: tempPath("spec056-minimized"))
+        let display = DisplayID(rawValue: "display-main")
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: display,
+            activeStageID: StageID(rawValue: "source"), stages: [
+                PersistentStage(id: StageID(rawValue: "source"), members: [spec056Member(current)]),
+                PersistentStage(id: StageID(rawValue: "destination"), mode: .float, members: [spec056Member(target)])])]))
+        let owner = try #require(store.state().stageScope(for: target.id))
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: store,
+                                      persistStateChanges: false)
+        var stale = target
+        stale.title = "Ancien titre de la carte"
+        stale.frame = Rect(x: -2000, y: -2000, width: 100, height: 100)
+        let result = WindowBookmarkCommandService(service: service, store: store).focusWindow(stale, in: owner,
+            snapshot: service.snapshot(followFocus: false), generation: PlacementGeneration.shared.next(),
+            label: "switcher", cause: "switcher.activate", eventPrefix: "window.switcher", requireOwnership: true, details: [:])
+        #expect(result.changed)
+        #expect(writer.calls.first == "focus")
+        #expect(writer.restoredFrame == target.frame)
+        #expect(store.state().stageScope(for: target.id) == owner)
+        #expect(store.state().scopes.first?.stages.first(where: { $0.id == owner.stageID })?.members.first?.title == target.title)
     }
 
     @Test
@@ -49,7 +125,7 @@ struct Spec056ActivationTests {
             ]),
         ]))
         let before = store.state()
-        let service = WindowSwitcherService(service: SnapshotService(provider: provider, frameWriter: writer, stageStore: store))
+        let service = WindowSwitcherService(service: SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: store))
         let closed = WindowSwitcherEntry(window: spec056Window(9, x: 100), scope: nil)
 
         let activated = service.activate(closed)
@@ -62,16 +138,25 @@ struct Spec056ActivationTests {
     }
 
     @Test
-    func fullscreenIsRefusedExplicitlyWithoutAWindowIdentity() {
-        let window = spec056Window(1, x: 100)
-        let provider = PowerUserProvider(windows: [window])
+    func fullscreenTargetsTheSelectedWindowRatherThanTheCurrentFocus() throws {
+        let current = spec056Window(1, x: 100)
+        let target = spec056Window(2, x: 600)
+        let provider = PowerUserProvider(windows: [current, target])
+        provider.focusedID = current.id
         let writer = PowerUserWriter(provider: provider)
         let store = StageStore(path: tempPath("spec056-fullscreen"))
-        let service = WindowSwitcherService(service: SnapshotService(provider: provider, frameWriter: writer, stageStore: store))
-
-        let result = service.perform(.fullscreen, on: WindowSwitcherEntry(window: window, scope: nil))
-
-        #expect(!result.changed)
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: DisplayID(rawValue: "display-main"), activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [spec056Member(current), spec056Member(target)])
+            ])
+        ]))
+        let snapshotService = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: store)
+        let scope = try #require(store.state().stageScope(for: target.id))
+        let result = WindowSwitcherService(service: snapshotService).perform(.fullscreen, on: WindowSwitcherEntry(window: target, scope: scope))
+        #expect(result.changed)
+        #expect(snapshotService.commandLayoutIntent(scope: scope)?.zoomedWindowID == target.id)
+        #expect(snapshotService.commandLayoutIntent(scope: scope)?.zoomReservesRail == false)
+        #expect(writer.nativeFullscreen.isEmpty)
     }
 
     @Test
@@ -85,7 +170,7 @@ struct Spec056ActivationTests {
                 PersistentStage(id: StageID(rawValue: "1"), members: [spec056Member(window)]),
             ]),
         ]))
-        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: good)
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: good)
         let owner = try #require(good.state().stageScope(for: window.id))
         let corruptPath = tempPath("spec056-corrupt")
         try "{ json invalide".write(toFile: corruptPath, atomically: true, encoding: .utf8)
@@ -127,4 +212,30 @@ private func spec056Member(_ window: WindowSnapshot) -> PersistentStageMember {
         frame: window.frame,
         pid: window.pid
     )
+}
+
+private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Sendable {
+    let provider: PowerUserProvider
+    let target: WindowSnapshot
+    let becomesReadable: Bool
+    var calls: [String] = []
+    var restoredFrame: Rect?
+    init(provider: PowerUserProvider, target: WindowSnapshot, becomesReadable: Bool) {
+        self.provider = provider; self.target = target; self.becomesReadable = becomesReadable
+    }
+    func focus(_ window: WindowSnapshot) -> Bool {
+        calls.append("focus")
+        provider.focusedID = target.id
+        if becomesReadable {
+            var restored = target
+            restored.frame = Rect(x: 0, y: 0, width: 100, height: 100)
+            provider.snapshots.append(restored)
+        }
+        return true
+    }
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        calls.append("frame")
+        if window.id == target.id { restoredFrame = Rect(frame) }
+        return frame
+    }
 }

@@ -6,6 +6,15 @@ import RoadieCore
 
 @Suite
 struct Spec056ModelTests {
+    @Test func unknownVisibilityDoesNotPassRestrictiveFilters() {
+        let base = spec056Entry(1)
+        let unknown = WindowSwitcherEntry(window: base.window, scope: base.scope, visibilityKnown: false)
+        let all = WindowSwitcherModel(entries: [unknown], profile: spec056Profile(), context: WindowSwitcherContext())
+        let restricted = WindowSwitcherModel(entries: [unknown], profile: spec056Profile(includeMinimized: false), context: WindowSwitcherContext())
+        #expect(all.matches.count == 1)
+        #expect(restricted.matches.isEmpty)
+    }
+
     @Test
     func historyIgnoresNilAndDuplicatesAndKeepsMostRecentFirst() {
         let history = WindowSwitcherFocusHistory()
@@ -39,6 +48,16 @@ struct Spec056ModelTests {
             recentIDs: [WindowID(rawValue: 1), WindowID(rawValue: 3), WindowID(rawValue: 2)]
         )
 
+        #expect(model.selected?.id == WindowID(rawValue: 3))
+    }
+
+    @Test func reverseStartsBeforeTheFocusedWindowAndSearchKeepsIdentity() {
+        var model = WindowSwitcherModel(entries: [spec056Entry(1), spec056Entry(2), spec056Entry(3)],
+            profile: spec056Profile(), context: WindowSwitcherContext(focusedWindowID: WindowID(rawValue: 1)),
+            recentIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2), WindowID(rawValue: 3)])
+        model.selectInitialBackwards()
+        #expect(model.selected?.id == WindowID(rawValue: 3))
+        model.search("window")
         #expect(model.selected?.id == WindowID(rawValue: 3))
     }
 

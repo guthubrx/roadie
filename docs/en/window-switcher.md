@@ -63,3 +63,9 @@ captured state; the switcher is not a continuous video feed.
 Roadie desktops are distinct from native macOS Spaces. This integration is not
 complete management of native Spaces or native tabs. The switcher is Roadie's
 own implementation; it does not import AltTab code, assets or commercial license.
+
+The switcher remains available in standard mode with `--no-target-mode`. In
+modular mode, it shares the `target-mode` process with the keyboard interfaces.
+If macOS cannot verify an offscreen window's state, the card reports an unknown
+state. Profiles that exclude minimized, hidden or fullscreen windows also
+exclude these unknown states.

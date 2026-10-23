@@ -53,13 +53,19 @@ roadie switcher cancel
 BetterTouchTool peut appeler ces commandes depuis un geste. `show` utilise
 l'identifiant du profil, pas son nom affiché. La CLI confirme la mise en file de
 la commande ; cette réponse ne prouve pas qu'une fenêtre a ensuite été activée.
-Le daemon et son composant graphique doivent être actifs.
+Le daemon et son composant graphique doivent être actifs. En mode standard,
+le sélecteur reste disponible avec `--no-target-mode`. En mode modulaire, il
+partage le processus `target-mode` avec les autres interfaces clavier.
 
 ## Aperçus et limites
 
 Le rail et le sélecteur partagent leur cache d'images dans le même processus.
 Une icône et le titre restent disponibles lorsqu'une capture manque. Les images
 peuvent dater du dernier relevé ; le sélecteur n'est pas un flux vidéo permanent.
+
+Si macOS ne permet pas de vérifier l’état d’une fenêtre hors écran, la carte
+indique « état non vérifié ». Un profil qui exclut les fenêtres réduites,
+masquées ou plein écran écarte aussi ces états inconnus.
 
 Les bureaux Roadie sont distincts des Spaces natifs de macOS. Cette intégration
 ne constitue pas une gestion complète des Spaces ni des onglets natifs.

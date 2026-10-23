@@ -102,6 +102,7 @@ public struct WindowBookmarkCommandService {
         label: String,
         cause: String,
         eventPrefix: String,
+        requireOwnership: Bool = false,
         details: [String: String]
     ) -> WindowCommandResult {
         guard let display = snapshot.displays.first(where: { $0.id == targetScope.displayID }) else {
@@ -119,6 +120,7 @@ public struct WindowBookmarkCommandService {
         let plan: BookmarkFocusPlan
         do {
             plan = try store.mutateChecked { state -> BookmarkFocusPlan in
+                if requireOwnership, state.stageScope(for: target.id) != targetScope { throw WindowFocusContextError.changed }
                 var targetPersistentScope = state.scope(displayID: targetScope.displayID, desktopID: targetScope.desktopID)
                 targetPersistentScope.ensureStage(targetScope.stageID)
                 let previousDesktopID = state.currentDesktopID(for: display.id)
@@ -148,9 +150,18 @@ public struct WindowBookmarkCommandService {
                 state.update(targetPersistentScope)
                 return result
             }
+        } catch WindowFocusContextError.changed {
+            return .failure("\(label): context changed, retry selection")
         } catch {
             return .persistenceFailure(label, error)
         }
+
+        // Une fenêtre réduite peut manquer au relevé AX. La restaurer avant de calculer
+        // son tuilage ; le relevé suivant fournit sa géométrie réelle, jamais celle de la carte.
+        let restoreBeforeLayout = requireOwnership && windowsByID[target.id] == nil
+        if restoreBeforeLayout, !service.focus(target) { return .failure("\(label): restore failed") }
+        let refreshed = restoreBeforeLayout ? service.snapshot(followFocus: false) : nil
+        let observedWindows = refreshed.map { Dictionary($0.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { _, last in last }) } ?? windowsByID
 
         // Plan unique (A15, T212) : masquage de la stage quittée et disposition de la stage du signet
         // dans une seule écriture groupée, puis le focus.
@@ -163,19 +174,28 @@ public struct WindowBookmarkCommandService {
         }
         // Mode arbre (A11, T094) : frames finales de l'arbre, sans restaurer les frames mémorisées.
         if plan.targetStage?.mode.usesTreeEngine != true {
-            for member in plan.targetStage?.members ?? [] where windowsByID[member.windowID] != nil {
+            for member in plan.targetStage?.members ?? [] where observedWindows[member.windowID] != nil {
                 placement.restoring[member.windowID] = member.frame.cgRect
             }
         }
-        let (layoutPlan, result) = service.applyCommandPlacement(placement, cause: cause, generation: generation, events: events)
+        let (layoutPlan, result) = service.applyCommandPlacement(placement, snapshot: refreshed, cause: cause, generation: generation, events: events)
         let layoutAttempted = layoutPlan.commands.count
         let applied = result.applied + result.clamped
-        let ok = service.focus(target)
+        // Si AX n'expose pas encore la fenêtre restaurée, remettre son cadre mémorisé.
+        // Le producteur recalculera le tuilage dès qu'elle redevient lisible.
+        var restoredMissing = true
+        if restoreBeforeLayout, observedWindows[target.id] == nil,
+           let member = plan.targetStage?.members.first(where: { $0.windowID == target.id }) {
+            restoredMissing = service.setFrame(member.frame.cgRect, of: target, generation: generation) != nil
+        }
+        let ok = restoredMissing && (restoreBeforeLayout || service.focus(target))
         if ok {
             mouseFollower.follow(target)
             // Gardé en `mutate` (REL-021) : simple observation après le focus déjà donné, que le
             // snapshot suivant réécrit (`updateBookmarkObservation` à chaque passe).
-            store.mutate { $0.updateBookmarkObservation(window: target, scope: targetScope) }
+            if !requireOwnership {
+                store.mutate { $0.updateBookmarkObservation(window: target, scope: targetScope) }
+            }
         }
         events.append(RoadieEvent(
             type: ok ? "\(eventPrefix)_focused" : "\(eventPrefix)_focus_failed",
@@ -185,6 +205,10 @@ public struct WindowBookmarkCommandService {
                 "layout": String(layoutAttempted)
             ], uniquingKeysWith: { lhs, _ in lhs })
         ))
+        if requireOwnership, result.failed > 0 {
+            return WindowCommandResult(message: "\(label): placement incomplete, failed=\(result.failed)",
+                                       changed: ok, outcome: .failed)
+        }
         return .changedOrFailed(
             ok
                 ? "\(label): window=\(target.id.rawValue) restored=\(applied) layout=\(layoutAttempted)"
@@ -280,3 +304,5 @@ private struct BookmarkFocusPlan {
     var targetMembers: Set<WindowID>
     var targetStage: PersistentStage?
 }
+
+private enum WindowFocusContextError: Error { case changed }

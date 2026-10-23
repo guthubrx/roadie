@@ -12,6 +12,7 @@ struct WindowSwitcherEntry: Identifiable, Equatable, Sendable {
     let isHidden: Bool
     let isFullscreen: Bool
     let isAvailable: Bool
+    let visibilityKnown: Bool
 
     var id: WindowID { window.id }
 
@@ -24,7 +25,8 @@ struct WindowSwitcherEntry: Identifiable, Equatable, Sendable {
         isMinimized: Bool = false,
         isHidden: Bool = false,
         isFullscreen: Bool = false,
-        isAvailable: Bool = true
+        isAvailable: Bool = true,
+        visibilityKnown: Bool = true
     ) {
         self.window = window
         self.scope = scope
@@ -35,6 +37,7 @@ struct WindowSwitcherEntry: Identifiable, Equatable, Sendable {
         self.isHidden = isHidden
         self.isFullscreen = isFullscreen
         self.isAvailable = isAvailable
+        self.visibilityKnown = visibilityKnown
     }
 }
 
@@ -196,6 +199,7 @@ struct WindowSwitcherModel {
 
     private func isVisible(_ entry: WindowSwitcherEntry) -> Bool {
         guard entry.isAvailable, !excludedBundles.contains(entry.window.bundleID) else { return false }
+        if !entry.visibilityKnown, !profile.includeMinimized || !profile.includeHidden || !profile.includeFullscreen { return false }
         if entry.isMinimized, !profile.includeMinimized { return false }
         if entry.isHidden, !profile.includeHidden { return false }
         if entry.isFullscreen, !profile.includeFullscreen { return false }

@@ -212,6 +212,10 @@ func startTargetModeComponent() {
     targetSearchHotkey = TargetSearchHotkey { targetModeRuntimeController?.requestSearch() }
     targetSearchHotkey?.start()
     ShutdownRegistry.register { targetSearchHotkey?.stop() }
+}
+
+@MainActor
+func startWindowSwitcherComponent() {
     let switcher = WindowSwitcherController(service: service)
     windowSwitcherController = switcher
     switcher.start()
@@ -488,6 +492,7 @@ case "run":
     if !args.contains("--no-focus-mouse") { startFocusMouseComponent() }
     if !args.contains("--no-titlebar-menu") { startTitlebarMenuComponent() }
     if !args.contains("--no-target-mode") { startTargetModeComponent() }
+    startWindowSwitcherComponent()
     if !args.contains("--no-tiler") {
         startTilerComponent(
             safetyNetInterval: safetyNetInterval,
@@ -526,7 +531,7 @@ case "focus-mouse":
 case "titlebar-menu":
     runComponent("titlebar-menu") { startTitlebarMenuComponent() }
 case "target-mode":
-    runComponent("target-mode") { startTargetModeComponent() }
+    runComponent("target-mode") { startTargetModeComponent(); startWindowSwitcherComponent() }
 case "restore-safety":
     // Compatibilité : la sécurité de restauration vit désormais dans `run` et `tiler`, pour
     // que le watcher surveille le pid du tiler et non celui d'un process séparé.

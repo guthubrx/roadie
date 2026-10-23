@@ -99,7 +99,7 @@ public struct SnapshotService: Sendable {
     /// maintenu par `tiler` ou `run`. Les commandes utilisateur explicites (StageCommands,
     /// WindowCommands, etc.) continuent a ecrire via leurs propres transactions
     /// `stageStore.mutate { ... }` (verrou flock POSIX, FR-013).
-    private let persistStateChanges: Bool
+    private var persistStateChanges: Bool
     private let userInput: UserInputActivity
     /// Interne (et non privé) : aussi lu par `applyCommandPlacement` (audit TEST-003).
     let clock: @Sendable () -> Date
@@ -213,6 +213,13 @@ public struct SnapshotService: Sendable {
     /// dernier snapshot publié dans le processus pour ce fichier d'état s'il est encore valide
     /// (150 ms, ou le cycle courant du tiler s'il vient de `producerSnapshot`) et que ni l'état
     /// persisté ni la config n'ont changé ; sinon en produit un (FR-023).
+    /// Les commandes du sélecteur écrivent seulement leur transaction explicite, jamais les observations.
+    func withoutObservationPersistence() -> SnapshotService {
+        var copy = self
+        copy.persistStateChanges = false
+        return copy
+    }
+
     public func sharedSnapshot(followFocus: Bool = true) -> DaemonSnapshot {
         sharedSnapshotCountingScan(followFocus: followFocus).snapshot
     }

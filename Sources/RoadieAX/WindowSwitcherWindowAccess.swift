@@ -8,13 +8,15 @@ public struct WindowSwitcherAXState: Equatable, Sendable {
     public var isMinimized: Bool
     public var isFullscreen: Bool
     public var isHidden: Bool
+    public var visibilityKnown: Bool
 
-    public init(appName: String? = nil, title: String? = nil, isMinimized: Bool = false, isFullscreen: Bool = false, isHidden: Bool = false) {
+    public init(appName: String? = nil, title: String? = nil, isMinimized: Bool = false, isFullscreen: Bool = false, isHidden: Bool = false, visibilityKnown: Bool = true) {
         self.appName = appName
         self.title = title
         self.isMinimized = isMinimized
         self.isFullscreen = isFullscreen
         self.isHidden = isHidden
+        self.visibilityKnown = visibilityKnown
     }
 }
 
@@ -35,12 +37,14 @@ public enum WindowSwitcherWindowAccess {
         var result: [WindowID: WindowSwitcherAXState] = [:]
         for entry in windows.entries {
             guard let id = entry.id, required.contains(id) else { continue }
+            let minimized = attribute(entry.element, kAXMinimizedAttribute, pid: pid) as? Bool
             result[WindowID(rawValue: id)] = WindowSwitcherAXState(
                 appName: application?.localizedName,
                 title: attribute(entry.element, kAXTitleAttribute, pid: pid) as? String,
-                isMinimized: attribute(entry.element, kAXMinimizedAttribute, pid: pid) as? Bool ?? false,
+                isMinimized: minimized ?? false,
                 isFullscreen: attribute(entry.element, "AXFullScreen", pid: pid) as? Bool ?? false,
-                isHidden: application?.isHidden ?? false
+                isHidden: application?.isHidden ?? false,
+                visibilityKnown: minimized != nil && application != nil
             )
         }
         return result

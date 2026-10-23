@@ -367,6 +367,7 @@ public final class WindowSwitcherController {
         } else {
             images = Self.appIcons(for: entries)
         }
+        requestSelectedPreview(session)
         session.thumbnailVersion = thumbnails.version
         panel.render(
             entries: entries,
@@ -390,6 +391,7 @@ public final class WindowSwitcherController {
         guard session.state.step(backwards: backwards) else { return }
         session.model?.next(backwards: backwards)
         guard let model = session.model else { return }
+        requestSelectedPreview(session)
         session.panel?.select(model.selected?.id, previewImage: previewImage(for: model.selected?.id))
     }
 
@@ -407,7 +409,8 @@ public final class WindowSwitcherController {
             type: "switcher.action",
             details: ["action": action.rawValue, "window": "\(entry.window.id)", "changed": "\(result.changed)", "message": result.message]
         ))
-        reload(sessionID: session.id)
+        if result.outcome == .failed { session.panel?.showActionError() }
+        else { reload(sessionID: session.id) }
     }
 
     private func reload(sessionID: Int) {
@@ -448,6 +451,12 @@ public final class WindowSwitcherController {
         self.session = nil
         thumbnails.prune(keeping: [], owner: "switcher")
         hotkeys?.holdEscape(false)
+    }
+
+    private func requestSelectedPreview(_ session: WindowSwitcherSession) {
+        guard session.appearance.preview, let entry = session.model?.selected else { return }
+        thumbnails.requestCaptures(for: [Self.member(for: entry)], protectedWindowIDs: [], liveFrames: [:],
+                                   displayWidth: max(400, session.appearance.thumbnailWidth), budget: 1)
     }
 
     private func previewImage(for id: WindowID?) -> NSImage? {
