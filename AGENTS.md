@@ -156,7 +156,8 @@ Configuration et certificat conservés. Parcours initial confirmé par l'utilisa
 capture finale vérifiée ; Cmd+Tab externe et validation au relâchement confirmés
 après correction BTT. Preuve complète des interactions non enregistrée.
 Reçu : specs/056-selecteur-fenetres/validation.md.
-Current SpecKit feature: `056-selecteur-fenetres`.
+Session 057 validée : refonte des paramètres, profils et gestionnaires de raccourcis, capture native, flèches et survol.
+Current SpecKit feature: `057-parametres-raccourcis`.
 
 Contexte :
 - `specs/056-selecteur-fenetres/spec.md`
