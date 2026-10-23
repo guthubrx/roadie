@@ -162,6 +162,8 @@ recherche/actions contextuelles et apparence par profil. Flèches acceptées ave
 les modificateurs maintenus, survol sélectionne et clic active.
 1 869 tests / 227 suites et 28 scripts réussis ; revue indépendante traitée.
 UUID 20584940-BB44-3A34-8DE1-EFC0D35D6159, PID 84023, santé 5/5.
+Navigation réelle aux quatre flèches avec Commande maintenue après Cmd+Tab
+confirmée par l'utilisateur le 23 octobre 2026.
 Configuration et certificat conservés. Captures de la fenêtre installée vérifiées,
 parcours complet de capture des touches et liaison BTT non enregistré.
 Reçu : specs/057-parametres-raccourcis/validation.md.

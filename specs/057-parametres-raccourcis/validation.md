@@ -78,8 +78,13 @@ avant/après cette installation (SHA-256 e1c7dadf176ce2afcd4e39097c0b3d890892fcc
 Les deux entrées BTT Cmd+Tab/Cmd+Maj+Tab ont été relues : keycode 48,
 caractère tabulation réel, actions CLI existantes conservées. Aucun raccourci
 utilisateur réécrit pendant les essais de schéma. Les déclencheurs de contrôle
-ont tous été supprimés. Essai des flèches avec Commande proposé à l'utilisateur
-sur ce build final, sans attendre pour achever l'intégration autorisée.
+ont tous été supprimés.
+
+Essai réel confirmé par l'utilisateur le 23 octobre 2026 sur ce build final :
+ouverture par Cmd+Tab, Commande maintenue, puis navigation avec les quatre
+flèches. Réponse : « Oui, les flèches fonctionnent ». Ce contrôle complète les
+tests AppKit ; il n'a pas fait l'objet d'une capture vidéo. Les autres limites
+du parcours graphique indiquées ci-dessus restent applicables.
 
 ## Intégration et nettoyage
 Code 1ebd36b2 intégré par avance rapide dans main et poussé. Build de travail
