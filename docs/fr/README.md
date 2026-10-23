@@ -16,13 +16,13 @@ Guides français pour les sources actuelles de `main`. Le [README principal](../
 
 `roadie toggle fullscreen` utilise toute la zone utile et cache le rail, même au survol, sans activer le plein écran macOS. `roadie toggle native-fullscreen` utilise le plein écran macOS. Les deux modes Roadie peuvent se remplacer directement ; répéter le mode actif restaure la disposition précédente.
 
-## Fonctions Actuelles
+## Fonctions actuelles
 
 Roadie combine tiling automatique, stages nommés et bureaux virtuels Roadie. Chaque écran garde son bureau courant, son stage actif et sa disposition. SIP reste actif. Roadie ne pilote pas les Spaces natifs de macOS.
 
-- **Tiling réactif :** `spatialBsp` conserve un arbre binaire qui fait référence. Les événements déclenchent les mises à jour. Les fenêtres temporairement absentes gardent leur place enregistrée. `mutableBsp` et `yabai` restent des alias. Les modes `bsp`, `masterStack` et `float` restent disponibles.
+- **Tuilage réactif :** `spatialBsp` conserve un arbre binaire persistant. Les événements déclenchent les mises à jour. Les fenêtres temporairement absentes gardent leur place enregistrée. `mutableBsp` et `yabai` restent des alias. Les modes `bsp`, `masterStack` et `float` restent disponibles.
 - **Glisser-déposer :** un dépôt au centre échange les fenêtres du même stage. Un dépôt sur un bord insère la fenêtre. L’aperçu entre écrans suit le pointeur, y compris vers un stage tilé vide. Les tailles minimales des applications peuvent limiter les proportions finales.
-- **Retour d’écran :** les stages sont placés en parking au débranchement. Le retour conserve les positions visibles utiles. Les anciennes références absentes ne créent plus de cartes visibles dans le rail.
+- **Retour d’écran :** les stages sont mis en attente au débranchement. Le retour conserve les positions visibles utiles. Les anciennes références absentes ne créent plus de cartes visibles dans le rail.
 - **Nav rail :** ordre choisi conservé, aperçu de réorganisation et aimantation réglable. Dépôt sur une carte pour la rejoindre, dans un interstice pour créer une stage à cet endroit. Liste défilable et cartes nommées vides identifiables.
 - **Sélecteur de fenêtres :** retrouve une fenêtre dans son bureau, sa stage et son écran. Recherche, flèches, souris et profils configurables ; raccourcis gérés par Roadie, BetterTouchTool ou un outil externe.
 - **Outils de fenêtre :** bordure de focus, focus à la souris, actions de barre de titre, épinglages, signets et groupes persistants.
@@ -32,7 +32,7 @@ Roadie combine tiling automatique, stages nommés et bureaux virtuels Roadie. Ch
 - **Navigation et outils visuels :** cibles clavier, recherche dans les fenêtres visibles, contrôles exposés par les applications, grilles écran/fenêtre et macros courtes.
 - **Exécution modulaire :** processus séparés pour le tiling, le rail, la bordure, le focus, les actions de barre de titre et les cibles. Les profils limités au rôle de compagnon restent à définir.
 
-## Mettre À Jour Et Contrôler
+## Mettre à jour et contrôler
 
 Depuis le dossier des sources :
 

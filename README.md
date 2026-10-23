@@ -81,7 +81,7 @@ Suggestions and history help you enter commands. Set the shortcut in the
 ### Make it your own
 
 The **window switcher** opens a selected window in its own Roadie desktop and
-stage. In Settings > Sélecteur, create profiles for a display, desktop, stage or
+stage. In Réglages Roadie > Sélecteur, create profiles for a display, desktop, stage or
 application. Record a shortcut directly, let BetterTouchTool manage it, or use an
 external CLI binding. Choose whether releasing the keys activates the selection,
 keeps the switcher open or starts search. Navigate with the four arrow keys or
@@ -557,7 +557,7 @@ Supported interactions:
 - Right-click a stage without dragging to open its menu: rename the stage, send the stage to another display, or send a window to another stage.
 - Clicks in macOS-reserved areas such as the menu bar are ignored by rail empty-click handling.
 
-Adjust the strength in **Settings > Rail > Aimantation du réordonnancement (%)**. At 0, snapping is disabled; higher values keep the preview at its destination through small pointer movements.
+Adjust the strength in **Réglages Roadie > Rail > Aimantation du réordonnancement (%)**. At 0, snapping is disabled; higher values keep the preview at its destination through small pointer movements.
 
 Rail rendering is configured in `~/.config/roadies/roadies.toml`.
 

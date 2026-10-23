@@ -24,7 +24,7 @@ AltTab can remain installed for comparison; assign different shortcuts.
 
 ## Profiles and shortcuts
 
-In **Settings > Sélecteur > Profils de raccourcis**, select or create a profile.
+In **Réglages Roadie > Sélecteur > Profils de raccourcis**, select or create a profile.
 Its name describes its purpose; its identifier stays internal. Choose **Roadie**,
 **BetterTouchTool**, or **Outil externe / commande** (external tool/CLI).
 
@@ -66,7 +66,7 @@ move through results. IME composition and native editing shortcuts remain availa
 
 ## Appearance and filters
 
-In **Settings > Sélecteur**, choose thumbnails, icons or a compact list. The grid
+In **Réglages Roadie > Sélecteur**, choose thumbnails, icons or a compact list. The grid
 sits beside the larger preview, or below it on narrow screens. The search field
 uses the panel width. Adjust automatic sizing, thumbnail width, font size and
 family without restarting Roadie.
@@ -123,5 +123,4 @@ these unknown states.
 
 Roadie desktops are distinct from native macOS Spaces. This integration does not
 provide complete management of native Spaces or native tabs. The switcher is
-Roadie's own implementation; it does not import AltTab code, assets or commercial
-license.
+Roadie's own implementation; it does not import AltTab code, assets or license.

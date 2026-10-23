@@ -5,7 +5,7 @@
 Retrouve les fenêtres gérées par Roadie dans leur bureau, leur stage et leur écran.
 Recherche, grille de miniatures à côté d'un grand aperçu, icônes ou liste, profils
 indépendants et actions ciblées. Les outils de raccourcis appellent la CLI ;
-les réglages se trouvent dans **Paramètres > Sélecteur**.
+les réglages se trouvent dans **Réglages Roadie > Sélecteur**.
 [Guide et commandes](window-switcher.md).
 
 ## Tiling
@@ -161,7 +161,7 @@ Répéter restaure la disposition et le comportement du rail. La maximisation
 
 Le masquage automatique (`fx.rail.auto_hide`) est indépendant : hors plein écran,
 le rail se replie comme le Dock et revient au survol du bord gauche. La largeur
-du bord et le délai de repli sont réglables dans Paramètres > Rail. Un rail épinglé
+du bord et le délai de repli sont réglables dans Réglages Roadie > Rail. Un rail épinglé
 reste ouvert ; `roadie rail unpin` réactive le repli si auto_hide est activé.
 
 Le rail conserve l'ordre choisi pour les stages, même lorsqu'elles reçoivent ou
@@ -260,7 +260,7 @@ même si la souris est restée sur un autre écran. Roadie l'intègre au tuilage
 qu'elle est disponible. Les popups, dialogues et fenêtres non tuilables ne sont
 pas concernés.
 
-Ce choix se règle dans **Paramètres > Tuilage > Écran des nouvelles fenêtres**.
+Ce choix se règle dans **Réglages Roadie > Tuilage > Écran des nouvelles fenêtres**.
 Les choix déjà enregistrés restent conservés ; « Rétablir » sélectionne l'écran actif.
 
 Choisir l'écran actif peut aussi améliorer la réactivité perçue en limitant les

@@ -86,7 +86,7 @@ dans la catégorie Recherche ; `roadie targets search` ouvre aussi la barre.
 ### Une interface à ta mesure
 
 Le **sélecteur de fenêtres** ouvre la fenêtre choisie dans son bureau et sa
-stage Roadie. Dans Paramètres > Sélecteur, crée des profils pour un écran, un
+stage Roadie. Dans Réglages Roadie > Sélecteur, crée des profils pour un écran, un
 bureau, une stage ou une application. Enregistre directement une combinaison,
 confie-la à BetterTouchTool ou utilise une commande externe. Au relâchement,
 choisis entre activer la fenêtre, garder le sélecteur ouvert et passer en recherche.
@@ -169,9 +169,9 @@ Cette cible masque la mise en place macOS habituelle :
 
 - build `roadie` et `roadied` en mode release ;
 - installe le daemon comme application `~/Applications/Roadie.app`, avec son nom et son icône dans les réglages de confidentialité ;
-- installe la commande et un lien vers le daemon hors du dépôt : le service continue de marcher si tu déplaces ou supprimes le dossier source ;
+- installe la commande dans `/Users/moi/.local/bin`, avec un lien `roadied` vers le daemon de l'application : le service reste indépendant du dossier source ;
 - signe l’application et la commande (voir plus bas) ;
-- crée le LaunchAgent, qui lance le daemon depuis l’application ;
+- crée `/Users/moi/Library/LaunchAgents/com.roadie.roadied.plist`, qui lance le daemon depuis l'application ;
 - démarre le LaunchAgent s’il n’est pas déjà chargé.
 
 Ajoute `~/.local/bin` à ton `PATH` pour pouvoir taper `roadie` dans un terminal.
@@ -187,6 +187,8 @@ make restart
 Après une mise à jour, lance `make install`, puis `make restart`, puis `roadie query health`. Si une session de développement tmux tourne, lance d’abord `make stop`.
 
 ### Signature du code et permissions
+
+Donne l'accès à **Roadie** dans Réglages Système > Confidentialité et sécurité > Accessibilité.
 
 macOS lie la permission Accessibilité à la signature de Roadie. `make install` reprend le certificat exact de l’application installée quand son empreinte est disponible. Si ce certificat manque dans le trousseau, l’installation s’arrête avant de remplacer l’application. Un certificat du même nom ne suffit pas. Un choix explicite avec `ROADIE_CODESIGN_IDENTITY` reste prioritaire. À la première installation, il utilise `roadied-cert` si cette identité existe dans le trousseau. Sinon, il utilise une signature ad hoc et affiche un avertissement : macOS peut oublier la permission après une nouvelle compilation.
 
@@ -250,7 +252,7 @@ Le script ne supprime jamais ta configuration dans `~/.config/roadies`. Supprime
 ## Runtime Modulaire
 
 Le chemin classique (`make install`, ou `make dev-start` en développement) lance Roadie comme un daemon unique. Le chemin
-modulaire lance les memes capacites sous forme de processus separes :
+modulaire lance les mêmes capacités sous forme de processus séparés :
 
 ```bash
 ./scripts/start-modular
@@ -557,7 +559,7 @@ Interactions supportées :
 - Glisser une stage avec le bouton droit de la souris pour réordonner les stages. Un aperçu translucide montre sa future place ; les cartes voisines montrent le nouvel ordre. Relâcher pour l’appliquer, ou sortir du rail avant de relâcher pour annuler.
 - Faire un clic droit sur une stage, sans glisser, pour ouvrir son menu : renommer la stage, l’envoyer vers un autre écran ou envoyer une fenêtre vers une autre stage.
 
-L’intensité de l’aimantation se règle dans **Paramètres > Rail > Aimantation du réordonnancement (%)**. À 0, elle est désactivée ; une valeur plus élevée stabilise davantage la destination malgré les petits mouvements de souris.
+L’intensité de l’aimantation se règle dans **Réglages Roadie > Rail > Aimantation du réordonnancement (%)**. À 0, elle est désactivée ; une valeur plus élevée stabilise davantage la destination malgré les petits mouvements de souris.
 
 Le rendu du rail se configure dans `~/.config/roadies/roadies.toml`.
 

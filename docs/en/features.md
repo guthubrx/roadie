@@ -155,7 +155,7 @@ keeps the rail accessible.
 
 Auto-hide (`fx.rail.auto_hide`) works independently: outside fullscreen, the rail
 retracts like the Dock and returns when you hover over the left edge. Edge width
-and hide delay can be adjusted in Settings > Rail. A pinned rail
+and hide delay can be adjusted in Réglages Roadie > Rail. A pinned rail
 stays open; `roadie rail unpin` restores auto-hide when it is enabled.
 
 The nav rail keeps your chosen stage order, even when stages gain or lose windows.
@@ -252,7 +252,7 @@ a terminal with ⌘N keeps it in your workspace even when the pointer is on anot
 display. Roadie adds it to the layout as soon as it is available. Popups, dialogs,
 and non-tileable windows are not affected.
 
-Choose the destination in **Settings > Tiling > New window display**
+Choose the destination in **Réglages Roadie > Tuilage > Écran des nouvelles fenêtres**
 (**Tuilage > Écran des nouvelles fenêtres** in the interface). Saved choices are
 preserved; Reset selects the active display.
 

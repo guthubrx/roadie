@@ -29,7 +29,7 @@ raccourcis différents dans leurs réglages.
 
 ## Profils et raccourcis
 
-Dans **Paramètres > Sélecteur > Profils de raccourcis**, sélectionne un profil
+Dans **Réglages Roadie > Sélecteur > Profils de raccourcis**, sélectionne un profil
 ou crée un nouveau profil. Son nom décrit son usage ; l'identifiant reste interne.
 Choisis **Roadie**, **BetterTouchTool** ou **Outil externe / commande**.
 
@@ -73,7 +73,7 @@ La composition de texte et les raccourcis macOS d'édition restent disponibles.
 
 ## Réglages
 
-Dans **Paramètres > Sélecteur**, choisis l'affichage en vignettes, icônes ou
+Dans **Réglages Roadie > Sélecteur**, choisis l'affichage en vignettes, icônes ou
 liste. La grille de miniatures se place à côté du grand aperçu. Sur un écran
 étroit, elle passe dessous. Le champ de recherche garde la largeur du panneau.
 Ajuste la taille automatique, la largeur des vignettes, la taille et la
@@ -131,4 +131,4 @@ masquées ou plein écran écarte aussi ces états inconnus.
 Les bureaux Roadie sont distincts des Spaces natifs de macOS. Cette intégration
 ne constitue pas une gestion complète des Spaces ni des onglets natifs.
 Le sélecteur est une implémentation propre à Roadie ; il n'importe pas le code,
-les ressources ou la licence commerciale d'AltTab.
+les ressources ou la licence d'AltTab.
