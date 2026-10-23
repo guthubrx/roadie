@@ -80,3 +80,10 @@ caractère tabulation réel, actions CLI existantes conservées. Aucun raccourci
 utilisateur réécrit pendant les essais de schéma. Les déclencheurs de contrôle
 ont tous été supprimés. Essai des flèches avec Commande proposé à l'utilisateur
 sur ce build final, sans attendre pour achever l'intégration autorisée.
+
+## Intégration et nettoyage
+Code 1ebd36b2 intégré par avance rapide dans main et poussé. Build de travail
+supprimé après copie de l'application signée ; journaux de validation archivés
+hors Git. Aucun processus Swift de compilation ou de test encore actif.
+Les deux worktrees Mac utiles sont conservés : checkout principal et conversation.
+La branche de session est supprimée après publication de ce reçu.
