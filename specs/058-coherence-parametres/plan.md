@@ -12,3 +12,8 @@
    polices. Revue indépendante, suite Swift, build signé, installation/restart.
 7. Captures réelles et diaporama selon les accès disponibles. Docs, intégration
    main et nettoyage de la branche/build ; worktree actif conservé.
+8. Retour utilisateur : compacter les lignes, raccourcir les libellés sans perdre
+   les unités, onglets de même largeur dans une barre visible. Repli sur deux
+   rangées à grande police. Vérifier les tailles intermédiaires et le défilement
+   réel du composant d'aide natif. Annuler les anciens insets du bezel AppKit
+   pour aligner les surfaces visibles des menus et des champs.

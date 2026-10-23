@@ -526,6 +526,8 @@ request brings the same window to the front.
   Narrow windows place the control below its label. The information button opens
   scrollable help; the reset arrow restores the default. Expand individual rules
   and their criteria or actions as needed. Menus follow the chosen text size.
+  Switcher tabs span the available width and show the active tab clearly.
+  Larger fonts use two rows instead of breaking tab names.
 - **Search**: filters the settings of every category by name and description,
   ignoring case and accents.
 - **No Save button**: a change is written to the configuration file and applies

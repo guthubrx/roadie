@@ -36,6 +36,7 @@ struct SettingsSwitcherProfilesView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(selectedID == row.id ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: selectedID == row.id ? 2 : 1))
                 }.buttonStyle(.plain)
+                    .accessibilityAddTraits(selectedID == row.id ? .isSelected : [])
             } }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) { profileTools }.fixedSize(horizontal: true, vertical: false)
@@ -101,9 +102,9 @@ struct SettingsSwitcherProfilesView: View {
                     ("display", "Écran actif"), ("application", "Application active")])
                 picker(row, key: "sort_order", label: "Ordre", options: [
                     ("recent", "Récentes d'abord"), ("title", "Titre"), ("stage", "Stage")])
-                toggle(row, "include_minimized", "Inclure les fenêtres réduites")
-                toggle(row, "include_hidden", "Inclure les applications masquées")
-                toggle(row, "include_fullscreen", "Inclure les fenêtres plein écran")
+                toggle(row, "include_minimized", "Fenêtres réduites")
+                toggle(row, "include_hidden", "Applications masquées")
+                toggle(row, "include_fullscreen", "Fenêtres plein écran")
                 toggle(row, "one_per_app", "Une fenêtre par application")
             } else if tab == "Apparence" {
                 picker(row, key: "style", label: "Style", options: [("", "Réglage commun"), ("thumbnails", "Vignettes"), ("icons", "Icônes"), ("list", "Liste compacte")],
@@ -119,7 +120,7 @@ struct SettingsSwitcherProfilesView: View {
                     _ = editor.updateRow(row.id, values: Dictionary(uniqueKeysWithValues: ["style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"].map { ($0, "") }))
                 }
             } else {
-                toggle(row, "arrow_navigation", "Navigation avec les quatre flèches")
+                toggle(row, "arrow_navigation", "Navigation aux flèches")
                 toggle(row, "mouse_hover", "Sélection au survol",
                        help: "Le survol sélectionne ; le clic active la fenêtre. Un pointeur immobile ne reprend pas la sélection après une flèche. Quand la recherche contient du texte, Gauche/Droite déplacent le curseur dans ce texte.")
             }
@@ -143,20 +144,8 @@ struct SettingsSwitcherProfilesView: View {
     }
 
     private var profileTabs: some View {
-        let values = ["Raccourci", "Fenêtres", "Navigation", "Apparence"]
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 4) {
-                ForEach(values, id: \.self) { value in
-                    Button { tab = value } label: {
-                        Text(value).font(.system(size: fonts.settingsTextFontSize, weight: .medium))
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(tab == value ? Color.accentColor.opacity(0.18) : .clear))
-                    }.buttonStyle(.plain)
-                }
-            }.fixedSize(horizontal: true, vertical: false)
-            SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: "Réglages du profil",
-                                           options: values.map { ($0, $0) }, selection: $tab)
-        }
+        SettingsTabs(values: ["Raccourci", "Fenêtres", "Navigation", "Apparence"],
+                     selection: $tab, fontSize: fonts.settingsTextFontSize)
     }
 
     private func binding(_ row: SettingsCollectionEditorModel.Row, _ key: String) -> Binding<String> {

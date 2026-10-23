@@ -95,7 +95,7 @@ struct SettingsView: View {
             Label("Le fichier de configuration est invalide", systemImage: "exclamationmark.triangle.fill")
                 .font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
                 .foregroundStyle(.red)
-            ForEach(Array(model.validity.messages.prefix(10).enumerated()), id: \.offset) { _, message in
+            ForEach(Array(model.validity.messages.enumerated()), id: \.offset) { _, message in
                 Text(message).font(.system(size: fonts.settingsHelpFontSize)).textSelection(.enabled)
             }
             Button("Corriger dans l'éditeur intégré") { advancedOpen = true }
@@ -203,7 +203,11 @@ private struct SettingRow: View {
     @FocusState private var fieldFocused: Bool
     private var fonts: InterfaceConfig { model.interfaceFonts }
     private var isFontSize: Bool { descriptor.key == "font_size" || descriptor.key.hasSuffix("_font_size") }
-    private var displayLabel: String { descriptor.label.replacingOccurrences(of: " (points)", with: "") }
+    private var displayLabel: String {
+        descriptor.label.replacingOccurrences(of: " (points)", with: "")
+            .replacingOccurrences(of: "(secondes)", with: "(s)")
+            .replacingOccurrences(of: "(millisecondes)", with: "(ms)")
+    }
     private var reset: (() -> Void)? {
         guard descriptor.readOnlyReason == nil, !model.isDefault(descriptor), !model.isLocked else { return nil }
         return { model.reset(descriptor) }
@@ -308,7 +312,7 @@ private struct SettingRow: View {
                 SettingsFontFamilyPicker(fontSize: fonts.settingsTextFontSize, selection: Binding(
                     get: { model.text(for: descriptor) },
                     set: { model.apply(descriptor, raw: $0) }
-                ))
+                ), label: descriptor.label)
                 .frame(maxWidth: .infinity)
             } else if descriptor.key == "search_hotkey" {
                 ShortcutRecorderControl(value: model.text(for: descriptor), fontSize: fonts.settingsTextFontSize) {

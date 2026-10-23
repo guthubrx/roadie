@@ -6,6 +6,7 @@ struct SettingsFontFamilyPicker: NSViewRepresentable {
     let fontSize: Double
     @Binding var selection: String
     var inheritedLabel: String? = nil
+    var label: String = "Famille de police"
     @Environment(\.isEnabled) private var isEnabled
 
     // Énumération AppKit une fois au démarrage de ce menu ; tri O(f log f), f = familles installées.
@@ -44,7 +45,7 @@ struct SettingsFontFamilyPicker: NSViewRepresentable {
         button.menu?.font = .systemFont(ofSize: fontSize)
         button.select(button.itemArray.first { $0.representedObject as? String == selection })
         button.isEnabled = isEnabled
-        button.setAccessibilityLabel("Famille de police")
+        button.setAccessibilityLabel(label)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }

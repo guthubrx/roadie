@@ -26,7 +26,7 @@ struct Spec058SettingsGeometryTests {
 
 @MainActor
 struct Spec058SettingsHelpTests {
-    @Test func longHelpIsScrollBoundedAtLargeFontInsteadOfClippingItsText() {
+    @Test func longHelpPanelIsBoundedAtLargeFont() {
         let long = String(repeating: "Chaque valeur valide est appliquée immédiatement. ", count: 100)
         let screen = CGSize(width: 760, height: 520)
         let short = SettingsHelpGeometry(title: "Aide", text: "Une ligne.", fontSize: 14, screen: screen)
@@ -34,6 +34,41 @@ struct Spec058SettingsHelpTests {
         #expect(short.height < large.height)
         #expect(large.height <= screen.height - 100)
         #expect(large.width <= screen.width - 48)
+    }
+
+    @Test func longHelpCanScrollToItsEnd() throws {
+        let text = String(repeating: "Une explication complète doit rester accessible. ", count: 120) + "Fin de l'aide."
+        let hosting = NSHostingView(rootView: SettingsHelpContent(title: "Aide longue", text: text, fontSize: 32))
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 420, height: 480), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        defer { window.close() }
+        hosting.layoutSubtreeIfNeeded()
+        func views(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + views($0) } }
+        let scroll = try #require(views(hosting).compactMap { $0 as? NSScrollView }.first)
+        let document = try #require(scroll.documentView)
+        #expect(document.bounds.height > scroll.contentSize.height)
+        scroll.contentView.scroll(to: CGPoint(x: 0, y: document.bounds.height - scroll.contentSize.height))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        #expect(scroll.contentView.bounds.maxY >= document.bounds.maxY - 1)
+    }
+}
+
+@MainActor
+struct Spec058SettingsTabsTests {
+    @Test func tabsFillTheRowWithEqualWidthsAndKeepTheirNamesReadable() {
+        let titles = ["Raccourci", "Fenêtres", "Navigation", "Apparence"]
+        for (width, font, expectedColumns) in [(700.0, 17.0, 4), (460.0, 32.0, 2), (366.0, 32.0, 2), (240.0, 32.0, 1)] {
+            let geometry = SettingsTabsGeometry(width: width, titles: titles, fontSize: font)
+            #expect(geometry.columns == expectedColumns)
+            let frames = titles.indices.map { geometry.frame(at: $0) }
+            #expect(frames.allSatisfy { $0.minX >= 0 && $0.maxX <= width + 1 && $0.width == frames[0].width })
+            #expect(abs(frames[expectedColumns - 1].maxX - width) < 1)
+            let nativeFont = NSFont.systemFont(ofSize: font, weight: .semibold)
+            for (title, frame) in zip(titles, frames) {
+                #expect((title as NSString).size(withAttributes: [.font: nativeFont]).width + 16 <= frame.width)
+            }
+        }
     }
 }
 
@@ -44,9 +79,9 @@ struct Spec058SettingsRenderingTests {
         try render(category: category, width: 1040, font: 16)
     }
 
-    @Test(arguments: SettingCategory.allCases)
-    func everyCategoryFitsAtMinimumWidthAndLargeFont(category: SettingCategory) throws {
-        try render(category: category, width: 760, font: 32)
+    @Test(arguments: SettingCategory.allCases, [8.0, 16.0, 23.0, 24.0, 32.0])
+    func everyCategoryFitsAtMinimumWidth(category: SettingCategory, font: Double) throws {
+        try render(category: category, width: 760, font: font)
     }
 
     private func render(category: SettingCategory, width: CGFloat, font: Double) throws {
@@ -97,6 +132,7 @@ struct Spec058SettingsRenderingTests {
             let font = menu.font ?? NSFont.systemFont(ofSize: 16)
             return menu.bounds.height >= ceil(font.ascender - font.descender + font.leading)
         })
+        #expect(menus.allSatisfy { $0.alignmentRectInsets.left == 0 && $0.alignmentRectInsets.right == 0 })
         if let first = frames.first {
             #expect(frames.allSatisfy { abs($0.minX - first.minX) < 1 && abs($0.width - first.width) < 1 })
         }

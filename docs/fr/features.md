@@ -538,7 +538,9 @@ Une seconde demande ramène la même fenêtre au premier plan.
   En fenêtre étroite, le contrôle passe sous son libellé. Le bouton d'information
   ouvre une aide défilable ; la flèche de réinitialisation rétablit le défaut.
   Les règles, leurs critères et leurs actions se déplient séparément.
-  Les menus suivent la taille de texte choisie.
+  Les menus suivent la taille de texte choisie. Les onglets du sélecteur sont
+  groupés sur toute la largeur, avec sélection visible. À grande police,
+  ils passent sur deux rangées sans couper les mots.
 - **Recherche** : filtre les réglages de toutes les catégories par nom et par
   description, casse et accents ignorés.
 - **Sans bouton Enregistrer** : un changement est écrit dans le fichier de

@@ -95,7 +95,8 @@ apparence.
 [Guide du sélecteur](docs/fr/window-switcher.md).
 
 Les paramètres sont regroupés par usage, avec des champs alignés et des aides
-défilables. Les règles se déplient une par une. Ajuste les espacements, les noms de stages, les règles et les exceptions depuis
+défilables. Les règles se déplient une par une ; les onglets du sélecteur occupent
+toute la largeur. Ajuste les espacements, les noms de stages, les règles et les exceptions depuis
 la fenêtre de paramètres. Les valeurs valides s'appliquent pendant la saisie.
 Choisis séparément les tailles du rail, des étiquettes et des paramètres, ainsi
 que les polices du champ de recherche et de ses suggestions.

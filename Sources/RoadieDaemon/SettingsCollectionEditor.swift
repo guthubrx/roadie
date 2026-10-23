@@ -346,16 +346,17 @@ struct SettingsCollectionEditor: View {
                                 Spacer(minLength: 0)
                             }.contentShape(Rectangle())
                         }.buttonStyle(.plain).accessibilityLabel("Déplier ou replier : " + rowTitle(row, index: index))
+                            .accessibilityValue(expandedRows.contains(row.id) ? "Déplié" : "Replié")
                         if descriptor.id == "rules" || descriptor.id == "stage_manager.workspaces" {
                             Button("Monter", systemImage: "arrow.up") { editor.moveRow(row.id, by: -1) }
-                                .labelStyle(.iconOnly).buttonStyle(.plain).frame(width: 26, height: 26)
+                                .labelStyle(.iconOnly).font(.system(size: 16)).buttonStyle(.plain).frame(width: 26, height: 26)
                                 .help("Monter cette entrée").disabled(index == 0)
                             Button("Descendre", systemImage: "arrow.down") { editor.moveRow(row.id, by: 1) }
-                                .labelStyle(.iconOnly).buttonStyle(.plain).frame(width: 26, height: 26)
+                                .labelStyle(.iconOnly).font(.system(size: 16)).buttonStyle(.plain).frame(width: 26, height: 26)
                                 .help("Descendre cette entrée").disabled(index == editor.rows.count - 1)
                         }
                         Button("Supprimer", systemImage: "minus.circle") { editor.removeRow(row.id) }
-                            .labelStyle(.iconOnly).buttonStyle(.plain).frame(width: 26, height: 26)
+                            .labelStyle(.iconOnly).font(.system(size: 16)).buttonStyle(.plain).frame(width: 26, height: 26)
                             .help("Supprimer cette entrée").accessibilityLabel("Supprimer l'entrée \(index + 1)")
                     }
                     if expandedRows.contains(row.id) {
@@ -463,7 +464,7 @@ struct SettingsCollectionChoicePicker: NSViewRepresentable {
         context.coordinator.selection = $selection
         var values = options
         let missing = !values.contains { $0.raw == selection }
-        if missing { values.append((selection, "\(selection) (valeur actuelle)")) }
+        if missing { values.append((selection, selection.isEmpty ? "Valeur vide (actuelle)" : "\(selection) (valeur actuelle)")) }
         if button.itemArray.compactMap({ $0.representedObject as? String }) != values.map(\.raw) {
             button.removeAllItems()
             for value in values {

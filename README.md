@@ -89,7 +89,8 @@ the mouse, and give each profile its own appearance.
 [Window switcher guide](docs/en/window-switcher.md).
 
 Settings are grouped by purpose, with aligned controls and scrollable help.
-Expand individual rules as needed. Adjust spacing, stage names, rules and overrides
+Expand individual rules as needed; switcher tabs span the full available width.
+Adjust spacing, stage names, rules and overrides
 in the settings window.
 Valid values apply as you type. Choose separate sizes for the rail, labels
 and settings, and font families for the search field and its suggestions.

@@ -83,14 +83,14 @@ struct SettingsFormRow<Content: View>: View {
         SettingsFormLayout(fontSize: fonts.settingsTextFontSize) {
             SettingsFieldLabel(title: title, help: help, fonts: fonts)
             content
-                .frame(maxWidth: .infinity, minHeight: max(30, fonts.settingsTextFontSize + 10), alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: max(26, fonts.settingsTextFontSize + 8), alignment: .leading)
                 .accessibilityLabel(title)
             ZStack {
                 if let reset { SettingsResetButton(action: reset) }
                 else { Color.clear.accessibilityHidden(true) }
             }.frame(width: 26, height: 26)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
     }
 }
 
@@ -197,7 +197,7 @@ struct SettingsHelpButton: View {
     var body: some View {
         Button { opened.toggle() } label: {
             Image(systemName: "info.circle").font(.system(size: min(18, max(13, fontSize)))).foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
+                .frame(width: 24, height: 24)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Aide : " + title)
@@ -208,6 +208,10 @@ struct SettingsHelpButton: View {
 /// Le bezel arrondi AppKit est limité à 28 pt, même avec une police de 32 pt.
 /// Garder le menu natif avec une surface dont la hauteur suit réellement la police.
 final class SettingsPopUpButton: NSPopUpButton {
+    // Le popup réserve sinon 4 à 5 pt à gauche pour son ancien bezel :
+    // SwiftUI décale alors notre surface par rapport aux champs voisins.
+    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsetsZero }
+
     override init(frame buttonFrame: NSRect, pullsDown flag: Bool) {
         super.init(frame: buttonFrame, pullsDown: flag)
         isBordered = false

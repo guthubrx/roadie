@@ -29,6 +29,9 @@ ne devient inaccessible. L'aide se ferme normalement sans changer la valeur.
 - Une valeur ordinaire tient sur une ligne à largeur normale, sauf libellé long.
 - Les sélecteurs d'un même formulaire partagent leurs bords gauche et droit.
 - Titres redondants et aides permanentes évitables sont supprimés.
+- Après essai : lignes plus compactes ; onglets du sélecteur visiblement groupés,
+  de même largeur et étalés sur toute la zone. À grande police, deux rangées
+  préservent les mots entiers, sans remplacer les onglets par un menu.
 - Fenêtre minimale et polices 8 à 32 points restent utilisables sans débordement
   horizontal. Au besoin, une disposition verticale cohérente est utilisée.
 - Les valeurs inconnues, brouillons, conflits, validations et application immédiate
