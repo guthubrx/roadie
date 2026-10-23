@@ -43,7 +43,7 @@ extension SettingsCatalog {
             return list(.text, [], unique: true)
         case "switcher.shortcuts":
             let profile = WindowSwitcherShortcutConfig()
-            let fields = [
+            var fields = [
                 field("id", "Identifiant", required: true, value: .string(profile.id),
                       help: "Nom interne du profil. Chaque profil doit avoir un identifiant distinct."),
                 field("name", "Nom affiché", required: true, value: .string(profile.name),
@@ -55,10 +55,10 @@ extension SettingsCatalog {
                       help: "Fenêtres proposées : stage Roadie actif, bureau Roadie actif, écran actif, application active ou toutes les fenêtres gérées. Ces filtres suivent les stages et bureaux Roadie, pas les espaces natifs de macOS.",
                       choiceLabels: ["stage": "Stage actif", "desktop": "Bureau actif", "display": "Écran actif",
                                      "application": "Application active", "all": "Toutes les fenêtres"]),
-                field("release_action", "Action au relâchement", .choice(["focus", "stay"]),
+                field("release_action", "Action au relâchement", .choice(["focus", "stay", "search"]),
                       required: true, value: .string(profile.releaseAction),
                       help: "Ce qui se passe au relâchement de la touche ou à la validation. « Activer » donne le focus à la fenêtre choisie. « Garder ouvert » permet de rechercher puis de valider par Retour.",
-                      choiceLabels: ["focus": "Activer la fenêtre choisie", "stay": "Garder le sélecteur ouvert"]),
+                      choiceLabels: ["focus": "Activer la fenêtre choisie", "stay": "Garder le sélecteur ouvert", "search": "Passer en recherche"]),
                 field("sort_order", "Tri", .choice(["recent", "title", "stage"]),
                       required: true, value: .string(profile.sortOrder),
                       help: "Ordre des fenêtres dans le sélecteur. « Récentes d'abord » place en tête les fenêtres utilisées récemment.",
@@ -71,6 +71,26 @@ extension SettingsCatalog {
                       help: "Affiche aussi les fenêtres en plein écran macOS."),
                 field("one_per_app", "Une fenêtre par application", .bool, value: .bool(profile.onePerApp),
                       help: "Affiche seulement la fenêtre la plus récente de chaque application."),
+            ]
+            fields += [
+                field("btt_forward_uuid", "Liaison BTT", value: .string("")),
+                field("btt_reverse_uuid", "Liaison BTT inverse", value: .string("")),
+                field("enabled", "Profil actif", .bool, value: .bool(true)),
+                field("trigger_source", "Gestionnaire du raccourci", .choice(["external", "roadie", "btt"]), value: .string("external"),
+                      choiceLabels: ["external": "Commande ou outil externe", "roadie": "Roadie", "btt": "BetterTouchTool"]),
+                field("search_visibility", "Champ de recherche", .choice(["auto", "always", "never"]), value: .string("auto"),
+                      choiceLabels: ["auto": "Selon le mode", "always": "Toujours visible", "never": "Masqué"]),
+                field("actions_visibility", "Menu Actions", .choice(["auto", "always", "never"]), value: .string("auto"),
+                      choiceLabels: ["auto": "Selon le mode", "always": "Toujours visible", "never": "Masqué"]),
+                field("arrow_navigation", "Navigation aux quatre flèches", .bool, value: .bool(true)),
+                field("mouse_hover", "Sélection au survol", .bool, value: .bool(true)),
+                field("style", "Présentation du profil", .choice(["thumbnails", "icons", "list"]),
+                      choiceLabels: ["thumbnails": "Vignettes", "icons": "Icônes", "list": "Liste compacte"]),
+                field("preview", "Grand aperçu du profil", .bool),
+                field("auto_size", "Taille automatique du profil", .bool),
+                field("thumbnail_width", "Largeur des vignettes du profil", .double(120...400)),
+                field("font_size", "Taille du texte du profil", .double(10...32)),
+                field("font_family", "Police du profil"),
             ]
             let defaultRow = Dictionary(uniqueKeysWithValues: fields.map { ($0.path.joined(separator: "."), $0.defaultValue) })
             return CollectionSpec(shape: .rows(table: id, fields: fields, uniqueKey: "id", oneOf: []),

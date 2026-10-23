@@ -85,7 +85,9 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
 /// Profil de raccourci du sélecteur (`[[switcher.shortcuts]]`). Un profil sans raccourci a `hotkey` vide.
 public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
     public static let scopes: Set<String> = ["stage", "desktop", "display", "application", "all"]
-    public static let releaseActions: Set<String> = ["focus", "stay"]
+    public static let releaseActions: Set<String> = ["focus", "stay", "search"]
+    public static let triggerSources: Set<String> = ["roadie", "btt", "external"]
+    public static let visibilityChoices: Set<String> = ["auto", "always", "never"]
     public static let sortOrders: Set<String> = ["recent", "title", "stage"]
 
     public var id: String
@@ -99,6 +101,18 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
     public var includeHidden: Bool
     public var includeFullscreen: Bool
     public var onePerApp: Bool
+    public var enabled: Bool
+    public var triggerSource: String
+    public var searchVisibility: String
+    public var actionsVisibility: String
+    public var arrowNavigation: Bool
+    public var mouseHover: Bool
+    public var styleOverride: String?
+    public var previewOverride: Bool?
+    public var autoSizeOverride: Bool?
+    public var thumbnailWidthOverride: Double?
+    public var fontSizeOverride: Double?
+    public var fontFamilyOverride: String?
 
     public init(
         id: String = "all",
@@ -110,7 +124,19 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
         includeMinimized: Bool = true,
         includeHidden: Bool = true,
         includeFullscreen: Bool = true,
-        onePerApp: Bool = false
+        onePerApp: Bool = false,
+        enabled: Bool = true,
+        triggerSource: String? = nil,
+        searchVisibility: String = "auto",
+        actionsVisibility: String = "auto",
+        arrowNavigation: Bool = true,
+        mouseHover: Bool = true,
+        styleOverride: String? = nil,
+        previewOverride: Bool? = nil,
+        autoSizeOverride: Bool? = nil,
+        thumbnailWidthOverride: Double? = nil,
+        fontSizeOverride: Double? = nil,
+        fontFamilyOverride: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -122,6 +148,20 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
         self.includeHidden = includeHidden
         self.includeFullscreen = includeFullscreen
         self.onePerApp = onePerApp
+        self.enabled = enabled
+        let source = triggerSource ?? (self.hotkey.isEmpty ? "external" : "roadie")
+        self.triggerSource = Self.triggerSources.contains(source) ? source : "external"
+        self.searchVisibility = Self.visibilityChoices.contains(searchVisibility) ? searchVisibility : "auto"
+        self.actionsVisibility = Self.visibilityChoices.contains(actionsVisibility) ? actionsVisibility : "auto"
+        self.arrowNavigation = arrowNavigation
+        self.mouseHover = mouseHover
+        self.styleOverride = styleOverride.flatMap { WindowSwitcherConfig.styles.contains($0) ? $0 : nil }
+        self.previewOverride = previewOverride
+        self.autoSizeOverride = autoSizeOverride
+        self.thumbnailWidthOverride = thumbnailWidthOverride.map { min(400, max(120, $0)) }
+        self.fontSizeOverride = fontSizeOverride.map { min(32, max(10, $0)) }
+        self.fontFamilyOverride = fontFamilyOverride.flatMap { $0.isEmpty ? nil : $0 }
+
     }
 
     enum CodingKeys: String, CodingKey {
@@ -135,6 +175,18 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
         case includeHidden = "include_hidden"
         case includeFullscreen = "include_fullscreen"
         case onePerApp = "one_per_app"
+        case enabled
+        case triggerSource = "trigger_source"
+        case searchVisibility = "search_visibility"
+        case actionsVisibility = "actions_visibility"
+        case arrowNavigation = "arrow_navigation"
+        case mouseHover = "mouse_hover"
+        case styleOverride = "style"
+        case previewOverride = "preview"
+        case autoSizeOverride = "auto_size"
+        case thumbnailWidthOverride = "thumbnail_width"
+        case fontSizeOverride = "font_size"
+        case fontFamilyOverride = "font_family"
     }
 
     public init(from decoder: Decoder) throws {
@@ -150,7 +202,19 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
             includeMinimized: try c.decodeIfPresent(Bool.self, forKey: .includeMinimized) ?? defaults.includeMinimized,
             includeHidden: try c.decodeIfPresent(Bool.self, forKey: .includeHidden) ?? defaults.includeHidden,
             includeFullscreen: try c.decodeIfPresent(Bool.self, forKey: .includeFullscreen) ?? defaults.includeFullscreen,
-            onePerApp: try c.decodeIfPresent(Bool.self, forKey: .onePerApp) ?? defaults.onePerApp
+            onePerApp: try c.decodeIfPresent(Bool.self, forKey: .onePerApp) ?? defaults.onePerApp,
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
+            triggerSource: try c.decodeIfPresent(String.self, forKey: .triggerSource),
+            searchVisibility: try c.decodeIfPresent(String.self, forKey: .searchVisibility) ?? "auto",
+            actionsVisibility: try c.decodeIfPresent(String.self, forKey: .actionsVisibility) ?? "auto",
+            arrowNavigation: try c.decodeIfPresent(Bool.self, forKey: .arrowNavigation) ?? true,
+            mouseHover: try c.decodeIfPresent(Bool.self, forKey: .mouseHover) ?? true,
+            styleOverride: try c.decodeIfPresent(String.self, forKey: .styleOverride),
+            previewOverride: try c.decodeIfPresent(Bool.self, forKey: .previewOverride),
+            autoSizeOverride: try c.decodeIfPresent(Bool.self, forKey: .autoSizeOverride),
+            thumbnailWidthOverride: try c.decodeFlexibleDouble(forKey: .thumbnailWidthOverride),
+            fontSizeOverride: try c.decodeFlexibleDouble(forKey: .fontSizeOverride),
+            fontFamilyOverride: try c.decodeIfPresent(String.self, forKey: .fontFamilyOverride)
         )
     }
 }

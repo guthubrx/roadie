@@ -27,6 +27,45 @@ L'aperçu agrandi ne donne pas le focus à la vraie fenêtre.
 AltTab peut rester installé pour comparer les deux outils. Choisis des
 raccourcis différents dans leurs réglages.
 
+## Profils et raccourcis
+
+Dans **Paramètres > Sélecteur > Profils et raccourcis**, sélectionne un profil
+ou crée un nouveau profil. Son nom décrit son usage ; l'identifiant reste interne.
+Choisis **Roadie**, **BetterTouchTool** ou **Outil externe / commande**.
+
+Avec Roadie ou BTT, clique sur **Enregistrer**, puis appuie sur la combinaison.
+Les touches s'affichent en symboles ; Échap annule et Effacer retire la combinaison.
+La capture ne reste active que pendant cet enregistrement. Elle utilise l'accès
+Accessibilité déjà accordé au daemon Roadie.
+
+BTT doit être ouvert pour créer ou modifier sa liaison. Roadie prépare une paire
+suivant/inverse, vérifie les entrées, puis l'active. Un échec conserve ou restaure
+la configuration précédente. Les raccourcis non reconnus ne sont pas supprimés.
+Après configuration, essaie la combinaison physique : une relecture d'entrée ne
+prouve pas son interception. L'option externe conserve les commandes CLI/BTT et
+Karabiner déjà utilisées.
+
+Trois modes sont proposés au relâchement :
+
+- **Activer la fenêtre choisie** : basculer rapidement ;
+- **Rester ouvert** : naviguer et utiliser les actions, puis valider ;
+- **Passer en recherche** : saisir le nom recherché après relâchement.
+
+Le champ de recherche et le menu Actions suivent le mode ou un choix explicite.
+Cmd+F ouvre la recherche lorsqu'elle est autorisée. Échap quitte d'abord une
+recherche ouverte en cours de session, puis ferme le sélecteur ; une session
+ouverte directement en recherche se ferme par Échap.
+
+## Navigation au clavier et à la souris
+
+Les quatre flèches déplacent la sélection selon la grille. Sur une dernière ligne
+incomplète, Haut/Bas choisissent la carte la plus proche de la colonne visée.
+Le survol sélectionne une carte ; le clic active sa fenêtre. Un pointeur immobile
+ne reprend pas la sélection après une action au clavier. Ces deux modes de
+navigation se règlent par profil. Pendant la saisie d'un texte de recherche,
+Gauche/Droite gardent leur rôle d'édition et Haut/Bas parcourent les résultats.
+La composition de texte et les raccourcis macOS d'édition restent disponibles.
+
 ## Réglages
 
 Dans **Paramètres > Sélecteur**, choisis l'affichage en vignettes, icônes ou
@@ -43,6 +82,8 @@ Tu peux définir jusqu'à neuf profils de raccourcis. Chaque profil possède :
 - un choix pour les fenêtres réduites, applications masquées et plein écran ;
 - une option pour afficher une seule fenêtre par application ;
 - une validation au relâchement ou un maintien ouvert.
+
+Chaque profil peut suivre l'apparence commune ou remplacer le style, le grand aperçu, la taille des vignettes et la police. Vider une valeur personnalisée rétablit le choix commun.
 
 Les exclusions par identifiant d'application s'appliquent à tous les profils.
 Les commandes d'action ciblent la fenêtre sélectionnée : fermer, réduire ou

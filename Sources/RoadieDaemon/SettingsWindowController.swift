@@ -18,6 +18,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     /// Ouvre la fenêtre, ou la ramène devant. `nil` : dernière catégorie vue (Général à la première ouverture).
     public func show(category: SettingCategory?) {
+        WindowSwitcherHotkeyRegistry.observePeerStatus()
         model.prepareForShow(category: category)
         let window = self.window ?? makeWindow()
         self.window = window

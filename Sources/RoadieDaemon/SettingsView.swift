@@ -61,14 +61,14 @@ struct SettingsView: View {
                     }
                     ForEach(model.sections) { section in
                         Text(section.category.label).font(.system(size: fonts.settingsTitleFontSize, weight: .bold))
-                        card(section.descriptors)
+                        grouped(section.descriptors)
                     }
                 } else {
                     Text(model.category.label).font(.system(size: fonts.settingsTitleFontSize, weight: .bold))
                     if model.category == .general {
                         general
                     } else {
-                        ForEach(model.sections) { card($0.descriptors) }
+                        ForEach(model.sections) { grouped($0.descriptors) }
                     }
                 }
             }
@@ -76,6 +76,16 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func grouped(_ descriptors: [SettingDescriptor]) -> some View {
+        ForEach(SettingsOrganization.groups(descriptors)) { group in
+            VStack(alignment: .leading, spacing: 10) {
+                Text(group.title).font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                card(group.descriptors)
+            }
+        }
     }
 
     private var invalidBanner: some View {
@@ -112,7 +122,7 @@ struct SettingsView: View {
 
     private var general: some View {
         VStack(alignment: .leading, spacing: 16) {
-            card(SettingsCatalog.descriptors(in: .general))
+            grouped(SettingsCatalog.descriptors(in: .general))
             VStack(alignment: .leading, spacing: 10) {
                 LabeledContent("Fichier de configuration") {
                     Text(model.service.configPath)
@@ -181,6 +191,7 @@ private struct SettingRow: View {
     @ObservedObject var model: SettingsViewModel
     let descriptor: SettingDescriptor
     @State private var advancedOpen = false
+    @State private var helpOpen = false
     @FocusState private var fieldFocused: Bool
     private var fonts: InterfaceConfig { model.interfaceFonts }
     private var isFontSize: Bool { descriptor.key == "font_size" || descriptor.key.hasSuffix("_font_size") }
@@ -191,7 +202,14 @@ private struct SettingRow: View {
                 Text(descriptor.label)
                     .font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
                     .fixedSize(horizontal: false, vertical: true)
+                Button { helpOpen.toggle() } label: { Image(systemName: "info.circle").foregroundStyle(.secondary) }
+                    .buttonStyle(.plain).accessibilityLabel("Aide : " + descriptor.label)
+                    .popover(isPresented: $helpOpen) {
+                        Text(descriptor.help).font(.system(size: fonts.settingsHelpFontSize))
+                            .padding(16).frame(maxWidth: 380)
+                    }
                 Spacer(minLength: 12)
+                if descriptor.kind == .bool { control.disabled(model.isLocked) }
                 if descriptor.readOnlyReason == nil && !model.isDefault(descriptor) {
                     Button("Rétablir") { model.reset(descriptor) }
                         .buttonStyle(.link)
@@ -200,10 +218,6 @@ private struct SettingRow: View {
                         .fixedSize()
                 }
             }
-            Text(descriptor.help)
-                .font(.system(size: fonts.settingsHelpFontSize))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             if let detail = descriptor.readOnlyReason ?? model.rangeText(descriptor) {
                 Text(detail)
                     .font(.system(size: fonts.settingsHelpFontSize))
@@ -213,7 +227,7 @@ private struct SettingRow: View {
             HStack {
                 if descriptor.readOnlyReason != nil {
                     Button("Éditeur intégré") { advancedOpen = true }
-                } else {
+                } else if descriptor.kind != .bool {
                     control.disabled(model.isLocked).accessibilityLabel(descriptor.label)
                 }
             }
@@ -250,7 +264,11 @@ private struct SettingRow: View {
             if case .advanced = collection.shape {
                 Button("Modifier dans l'éditeur intégré") { advancedOpen = true }
             } else {
-                SettingsCollectionEditor(model: model, descriptor: descriptor)
+                if descriptor.id == "switcher.shortcuts" {
+                    SettingsSwitcherProfilesView(model: model, descriptor: descriptor)
+                } else {
+                    SettingsCollectionEditor(model: model, descriptor: descriptor)
+                }
             }
         } else {
         switch descriptor.kind {
@@ -296,6 +314,10 @@ private struct SettingRow: View {
                     set: { model.apply(descriptor, raw: $0) }
                 ))
                 .frame(maxWidth: .infinity)
+            } else if descriptor.key == "search_hotkey" {
+                ShortcutRecorderControl(value: model.text(for: descriptor), fontSize: fonts.settingsTextFontSize) {
+                    model.apply(descriptor, raw: $0)
+                }
             } else {
                 field.frame(maxWidth: 360)
             }

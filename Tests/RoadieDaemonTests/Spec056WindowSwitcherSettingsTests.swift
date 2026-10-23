@@ -55,6 +55,20 @@ struct Spec056WindowSwitcherSettingsTests {
             "include_hidden": .bool(profile.includeHidden),
             "include_fullscreen": .bool(profile.includeFullscreen),
             "one_per_app": .bool(profile.onePerApp),
+            "enabled": .bool(profile.enabled),
+            "trigger_source": .string(profile.triggerSource),
+            "search_visibility": .string(profile.searchVisibility),
+            "actions_visibility": .string(profile.actionsVisibility),
+            "arrow_navigation": .bool(profile.arrowNavigation),
+            "mouse_hover": .bool(profile.mouseHover),
+            "btt_forward_uuid": .string(""),
+            "btt_reverse_uuid": .string(""),
+            "style": profile.styleOverride.map(SettingValue.string) ?? .unset,
+            "preview": profile.previewOverride.map(SettingValue.bool) ?? .unset,
+            "auto_size": profile.autoSizeOverride.map(SettingValue.bool) ?? .unset,
+            "thumbnail_width": profile.thumbnailWidthOverride.map(SettingValue.double) ?? .unset,
+            "font_size": profile.fontSizeOverride.map(SettingValue.double) ?? .unset,
+            "font_family": profile.fontFamilyOverride.map(SettingValue.string) ?? .unset,
         ])
     }
 

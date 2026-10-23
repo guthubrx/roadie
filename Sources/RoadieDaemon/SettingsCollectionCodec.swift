@@ -42,6 +42,9 @@ enum SettingsCollectionCodec {
                     if let raw = node(table, path: field.path) {
                         guard let result = scalar(raw, kind: field.kind) else { throw SettingsFileError(message: "Type invalide : \(key).") }
                         values[key] = result
+                    } else if descriptor.id == "switcher.shortcuts", key == "trigger_source" {
+                        let keyText = table["hotkey"]?.string ?? ""
+                        values[key] = .string(keyText.isEmpty ? "external" : "roadie")
                     } else { values[key] = field.defaultValue }
                 }
                 return CollectionRow(fields: values, sourceIndex: index)

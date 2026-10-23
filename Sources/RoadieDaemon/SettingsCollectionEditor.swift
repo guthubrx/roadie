@@ -100,6 +100,34 @@ final class SettingsCollectionEditorModel: ObservableObject {
         persist()
     }
 
+    @discardableResult
+    func updateRow(_ id: UUID, values: [String: String]) -> Bool {
+        guard let index = rows.firstIndex(where: { $0.id == id }) else { return false }
+        let previous = rows[index]
+        for (key, value) in values { rows[index].raw[key] = value }
+        hasDrafts = true
+        guard persist() else { rows[index] = previous; return false }
+        return true
+    }
+
+    @discardableResult
+    func addProfile(copying id: UUID? = nil) -> UUID? {
+        guard rows.count < 9 else { return nil }
+        let newID = UUID()
+        var raw = id.flatMap { id in rows.first(where: { $0.id == id })?.raw }
+            ?? Dictionary(uniqueKeysWithValues: fields.map { ($0.path.joined(separator: "."), Self.text($0.defaultValue)) })
+        raw["id"] = "profil-" + newID.uuidString.lowercased()
+        raw["name"] = id == nil ? "Nouveau profil" : (raw["name"] ?? "Profil") + " (copie)"
+        raw["hotkey"] = ""
+        raw["trigger_source"] = "external"
+        raw["btt_forward_uuid"] = ""
+        raw["btt_reverse_uuid"] = ""
+        rows.append(Row(id: newID, raw: raw, source: CollectionRow(fields: [:])))
+        hasDrafts = true
+        guard persist() else { rows.removeAll { $0.id == newID }; return nil }
+        return newID
+    }
+
     func addRow() {
         let raw = Dictionary(uniqueKeysWithValues: fields.map { ($0.path.joined(separator: "."), Self.text($0.defaultValue)) })
         rows.append(Row(id: UUID(), raw: raw, source: CollectionRow(fields: [:])))
@@ -162,17 +190,18 @@ final class SettingsCollectionEditorModel: ObservableObject {
         }
     }
 
-    private func persist() {
+    @discardableResult
+    private func persist() -> Bool {
         guard let candidate = candidate() else {
             messages = ["Complétez les champs requis et les valeurs en cours de saisie. La dernière configuration valide reste active."]
-            return
+            return false
         }
         let errors = service.validateCollection(descriptor, value: candidate)
-        guard errors.isEmpty else { messages = errors.values.sorted(); return }
+        guard errors.isEmpty else { messages = errors.values.sorted(); return false }
         let result = service.setCollection(descriptor.id, candidate, expected: baseline)
         onChange?(result)
         switch result {
-        case .rejected(let reason): messages = [reason]
+        case .rejected(let reason): messages = [reason]; return false
         case .applied:
             messages = []
             // Actualiser les indices source après ajout/suppression, sans remplacer les UUID ni le texte brut.
@@ -183,6 +212,7 @@ final class SettingsCollectionEditorModel: ObservableObject {
                     for index in rows.indices { rows[index].source = sources[index] }
                 }
             }
+            return true
         }
     }
 

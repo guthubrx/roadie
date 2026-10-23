@@ -86,6 +86,7 @@ public final class TargetSearchHotkey {
     }
 
     nonisolated public static func namedKeyCode(_ key: String) -> UInt32? {
+        if key.hasPrefix("keycode-"), let code = UInt32(key.dropFirst(8)), code < 128 { return code }
         let named: [String: UInt32] = [
             "space": 49, "return": 36, "tab": 48, "escape": 53, "backspace": 51,
             "left": 123, "right": 124, "down": 125, "up": 126,

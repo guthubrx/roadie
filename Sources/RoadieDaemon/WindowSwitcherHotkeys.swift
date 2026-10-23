@@ -118,6 +118,26 @@ final class WindowSwitcherHotkeyRegistry {
     private var handlerRef: EventHandlerRef?
     private var entries: [WindowSwitcherHotkeyPlan.Entry] = []
     private var applied: WindowSwitcherHotkeyPlan?
+    static var activeProfileIDs: Set<String> = []
+    static var activeFingerprints: [String: String] = [:]
+    private static var peerObserver: NSObjectProtocol?
+    private static let statusName = Notification.Name("com.roadie.switcher.registration")
+
+    static func observePeerStatus() {
+        guard peerObserver == nil else { return }
+        peerObserver = DistributedNotificationCenter.default().addObserver(forName: statusName, object: "roadie", queue: .main) { notification in
+            let ids = notification.userInfo?["profiles"] as? [String] ?? []
+            let bindings = notification.userInfo?["bindings"] as? [String: String] ?? [:]
+            Task { @MainActor in activeProfileIDs = Set(ids); activeFingerprints = bindings }
+        }
+    }
+
+    private static func publishStatus() {
+        DistributedNotificationCenter.default().postNotificationName(statusName, object: "roadie",
+            userInfo: ["profiles": Array(activeProfileIDs).sorted(), "bindings": activeFingerprints], deliverImmediately: true)
+    }
+
+
 
     init(
         events: EventLog,
@@ -131,11 +151,12 @@ final class WindowSwitcherHotkeyRegistry {
 
     /// Ne réenregistre que si le plan change ; journalise les diagnostics à chaque changement.
     func apply(_ plan: WindowSwitcherHotkeyPlan) {
-        guard plan != applied else { return }
+        guard plan != applied else { Self.publishStatus(); return }
         unregisterAll()
         applied = plan
         installHandler()
         entries = plan.entries
+        var successes: [String: Int] = [:]
         for issue in plan.issues {
             events.append(RoadieEvent(type: "switcher.hotkey", details: ["state": "issue", "detail": issue]))
         }
@@ -148,6 +169,7 @@ final class WindowSwitcherHotkeyRegistry {
             )
             if status == noErr, let ref {
                 refs.append(ref)
+                successes[entry.profileID, default: 0] += 1
             } else {
                 events.append(RoadieEvent(
                     type: "switcher.hotkey",
@@ -155,6 +177,11 @@ final class WindowSwitcherHotkeyRegistry {
                 ))
             }
         }
+        Self.activeProfileIDs = Set(successes.keys.filter { id in successes[id] == plan.entries.filter { $0.profileID == id }.count })
+        Self.activeFingerprints = Dictionary(uniqueKeysWithValues: plan.entries.filter {
+            !$0.backwards && Self.activeProfileIDs.contains($0.profileID)
+        }.map { ($0.profileID, "\($0.hotkey.keyCode):\(WindowSwitcherHotkey.carbonModifiers($0.hotkey.modifiers))") })
+        Self.publishStatus()
     }
 
     /// Escape est retenu seulement pendant une session ouverte, puis relâché.
@@ -178,6 +205,8 @@ final class WindowSwitcherHotkeyRegistry {
     }
 
     private func unregisterAll() {
+        Self.activeProfileIDs = []
+        Self.activeFingerprints = [:]
         refs.forEach { UnregisterEventHotKey($0) }
         refs = []
         holdEscape(false)

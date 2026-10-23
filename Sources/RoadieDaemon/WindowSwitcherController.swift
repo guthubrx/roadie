@@ -22,12 +22,14 @@ struct WindowSwitcherSessionState: Equatable {
     private(set) var pendingAccept: PendingAccept?
     private(set) var searching = false
     private(set) var held: Bool
-    let stayOpen: Bool
+    private(set) var stayOpen: Bool
+    private let openedPersistently: Bool
     let initialBackwards: Bool
 
     var persistent: Bool { stayOpen || searching }
 
     init(stayOpen: Bool, fromHotkey: Bool, heldAtStart: Bool, backwards: Bool) {
+        self.openedPersistently = !fromHotkey
         self.stayOpen = stayOpen || !fromHotkey
         initialBackwards = backwards
         held = heldAtStart
@@ -62,6 +64,8 @@ struct WindowSwitcherSessionState: Equatable {
             return false
         }
     }
+
+    mutating func configure(stayOpen: Bool) { self.stayOpen = stayOpen || openedPersistently }
 
     mutating func searchChanged(isEmpty: Bool) {
         searching = !isEmpty
@@ -138,7 +142,7 @@ private final class WindowSwitcherSession {
         self.id = id
         self.profile = profile
         self.config = config
-        self.appearance = WindowSwitcherAppearance(config: config)
+        self.appearance = WindowSwitcherAppearance(config: config, profile: profile)
         self.required = required
         self.state = state
     }
@@ -170,7 +174,7 @@ public final class WindowSwitcherController {
         hotkeys = WindowSwitcherHotkeyRegistry(
             events: events,
             onPress: { [weak self] profileID, backwards in self?.hotkeyPressed(profileID: profileID, backwards: backwards) },
-            onEscape: { [weak self] in self?.cancel() }
+            onEscape: { [weak self] in self?.session?.panel?.escape() }
         )
         applyHotkeys()
         settingsObserver = NotificationCenter.default.addObserver(
@@ -226,15 +230,17 @@ public final class WindowSwitcherController {
     private func applyHotkeys() {
         let config = ConfigReloadService.shared.currentConfig().switcher
         let requests = config.enabled
-            ? config.shortcuts.map { WindowSwitcherHotkeyRequest(profileID: $0.id, hotkey: $0.hotkey) }
+            ? config.shortcuts.filter { $0.enabled && $0.triggerSource == "roadie" }.map { WindowSwitcherHotkeyRequest(profileID: $0.id, hotkey: $0.hotkey) }
             : []
         hotkeys?.apply(WindowSwitcherHotkeyPlan(requests: requests, layout: TargetSearchHotkey.currentLayoutTable()))
         if let current = session {
-            guard config.enabled, let profile = Self.profile(id: current.profile.id, in: config.shortcuts) else { cancel(); return }
+            guard config.enabled, let profile = Self.profile(id: current.profile.id, in: config.shortcuts), profile.enabled else { cancel(); return }
             current.profile = profile
+            current.state.configure(stayOpen: profile.releaseAction != "focus")
             current.config = config
-            current.appearance = WindowSwitcherAppearance(config: config)
+            current.appearance = WindowSwitcherAppearance(config: config, profile: profile)
             current.panel?.switcherAppearance = current.appearance
+            current.panel?.configure(profile: profile)
             current.model?.configure(profile: profile, excludedBundles: config.excludedBundles)
             hotkeys?.holdEscape(true)
             refresh(current)
@@ -254,14 +260,14 @@ public final class WindowSwitcherController {
         guard session == nil else { return }
         let config = ConfigReloadService.shared.currentConfig().switcher
         guard config.enabled else { return }
-        guard let profile = Self.profile(id: profileID, in: config.shortcuts) else {
+        guard let profile = Self.profile(id: profileID, in: config.shortcuts), profile.enabled else {
             events.append(RoadieEvent(type: "switcher.session", details: ["state": "unknown_profile", "profile": profileID ?? ""]))
             return
         }
         let required = externalModifiers ?? WindowSwitcherHotkey.parse(profile.hotkey, layout: TargetSearchHotkey.currentLayoutTable())?.modifiers ?? []
         let held = WindowSwitcherHotkey.held(in: CGEventSource.flagsState(.combinedSessionState))
         let state = WindowSwitcherSessionState(
-            stayOpen: !fromHotkey || profile.releaseAction == "stay",
+            stayOpen: !fromHotkey || profile.releaseAction != "focus",
             fromHotkey: fromHotkey,
             heldAtStart: !WindowSwitcherHotkey.isReleased(required: required, held: held),
             backwards: backwards
@@ -277,6 +283,10 @@ public final class WindowSwitcherController {
         panel.onConfirm = { [weak self] in self?.accept() }
         panel.onCancel = { [weak self] in self?.cancel() }
         panel.onSelect = { [weak self] id in self?.select(id) }
+        panel.onHighlight = { [weak self] id in self?.highlight(id) }
+        panel.onSearchMode = { [weak self] editing in self?.session?.state.searchChanged(isEmpty: !editing) }
+        panel.configure(profile: profile, forceSearch: !fromHotkey)
+
         panel.onAction = { [weak self] action in self?.perform(action) }
         newSession.panel = panel
 
@@ -321,6 +331,9 @@ public final class WindowSwitcherController {
         guard let session else { return }
         let held = WindowSwitcherHotkey.held(in: CGEventSource.flagsState(.combinedSessionState))
         let isHeld = !WindowSwitcherHotkey.isReleased(required: session.required, held: held)
+        if !isHeld, session.profile.releaseAction == "search", session.panelVisible, session.panel?.isSearchEditing != true {
+            session.panel?.beginSearch(initial: true)
+        }
         if session.state.modifiers(held: isHeld) {
             validate(session)
             return
@@ -346,6 +359,7 @@ public final class WindowSwitcherController {
         }
         session.panelVisible = true
         panel.present(on: screen)
+        if session.profile.releaseAction == "search", !session.state.held { panel.beginSearch(initial: true) }
         if session.outsideMonitor == nil {
             session.outsideMonitor = NSEvent.addGlobalMonitorForEvents(
                 matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
@@ -404,7 +418,7 @@ public final class WindowSwitcherController {
     private func queryChanged(_ query: String) {
         guard let session, session.model != nil else { return }
         session.actionFailed = false
-        session.state.searchChanged(isEmpty: query.isEmpty)
+        session.state.searchChanged(isEmpty: query.isEmpty && session.panel?.isSearchEditing != true)
         session.model?.search(query)
         refresh(session)
     }
@@ -417,6 +431,13 @@ public final class WindowSwitcherController {
         guard let model = session.model else { return }
         requestSelectedPreview(session)
         session.panel?.select(model.selected?.id, previewImage: previewImage(for: model.selected?.id))
+    }
+
+    private func highlight(_ id: WindowID) {
+        guard let session else { return }
+        session.model?.select(id: id)
+        requestSelectedPreview(session)
+        session.panel?.select(id, previewImage: previewImage(for: id))
     }
 
     private func select(_ id: WindowID) {
@@ -507,7 +528,7 @@ public final class WindowSwitcherController {
     }
 
     private static func profile(id: String?, in shortcuts: [WindowSwitcherShortcutConfig]) -> WindowSwitcherShortcutConfig? {
-        guard let id else { return shortcuts.first }
+        guard let id else { return shortcuts.first(where: \.enabled) }
         return shortcuts.first { $0.id == id }
     }
 

@@ -500,7 +500,13 @@ extension SettingsService {
             if rows.count > WindowSwitcherConfig.maxShortcuts {
                 errors["collection"] = "Neuf profils au maximum. Supprime un profil avant d'en ajouter un autre."
             }
-            let requests = rows.enumerated().map { index, row in
+            for (index, row) in rows.enumerated() {
+                if row.fields["release_action"] == .string("search"), row.fields["search_visibility"] == .string("never") {
+                    errors["\(index).search_visibility"] = "Le mode Recherche nécessite un champ de recherche visible."
+                }
+            }
+            let requests = rows.enumerated().compactMap { index, row -> WindowSwitcherHotkeyRequest? in
+                guard row.fields["enabled"] != .bool(false), row.fields["trigger_source"] != .string("external") else { return nil }
                 let raw = row.fields["hotkey"].map(Self.display) ?? ""
                 return WindowSwitcherHotkeyRequest(profileID: String(index), hotkey: raw)
             }

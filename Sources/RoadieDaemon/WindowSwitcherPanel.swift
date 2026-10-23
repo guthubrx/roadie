@@ -17,13 +17,13 @@ struct WindowSwitcherAppearance: Equatable {
     var fontFamily: String
     var preview: Bool
 
-    init(config: WindowSwitcherConfig) {
-        style = WindowSwitcherStyle.from(config.style)
-        thumbnailWidth = CGFloat(config.thumbnailWidth)
-        autoSize = config.autoSize
-        fontSize = CGFloat(config.fontSize)
-        fontFamily = config.fontFamily
-        preview = config.preview
+    init(config: WindowSwitcherConfig, profile: WindowSwitcherShortcutConfig? = nil) {
+        style = WindowSwitcherStyle.from(profile?.styleOverride ?? config.style)
+        thumbnailWidth = CGFloat(profile?.thumbnailWidthOverride ?? config.thumbnailWidth)
+        autoSize = profile?.autoSizeOverride ?? config.autoSize
+        fontSize = CGFloat(profile?.fontSizeOverride ?? config.fontSize)
+        fontFamily = profile?.fontFamilyOverride ?? config.fontFamily
+        preview = profile?.previewOverride ?? config.preview
     }
 
     @MainActor func font(size: CGFloat, weight: NSFont.Weight) -> NSFont {
@@ -224,7 +224,7 @@ final class WindowSwitcherFlippedView: NSView {
 @MainActor
 final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     enum Key: Equatable {
-        case cancel, confirm, next, previous
+        case cancel, confirm, next, previous, left, right, up, down
     }
 
     var switcherAppearance: WindowSwitcherAppearance
@@ -234,6 +234,14 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     var onCancel: (() -> Void)?
     var onSelect: ((WindowID) -> Void)?
     var onAction: ((WindowSwitcherAction) -> Void)?
+    var onHighlight: ((WindowID) -> Void)?
+    var onSearchMode: ((Bool) -> Void)?
+    private(set) var isSearchEditing = false
+    private var searchStartedOpen = false
+    private var profile = WindowSwitcherShortcutConfig()
+    private var hoverMonitor: Any?
+    private var previousMouse: CGPoint?
+
 
     private let effect = NSVisualEffectView()
     private let field = NSSearchField()
@@ -249,10 +257,58 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     private var visibleArea = CGRect(x: 0, y: 0, width: 1280, height: 800)
     private var previewShown = false
     private let pad: CGFloat = 16
-    private let headerHeight: CGFloat = 52
+    private var headerHeight: CGFloat { field.isHidden ? 16 : 52 }
     private let footerHeight: CGFloat = 44
 
     override var canBecomeKey: Bool { true }
+
+    func configure(profile: WindowSwitcherShortcutConfig, forceSearch: Bool = false) {
+        self.profile = profile
+        let search = SwitcherNavigation.visible(profile.searchVisibility, automatic: forceSearch)
+        field.isHidden = !search && !isSearchEditing
+        actionsButton.isHidden = !SwitcherNavigation.visible(profile.actionsVisibility, automatic: profile.releaseAction != "focus" || forceSearch)
+        if forceSearch && profile.searchVisibility != "never" { beginSearch(initial: true) }
+        relayout()
+    }
+
+    func beginSearch(initial: Bool = false) {
+        guard profile.searchVisibility != "never" else { return }
+        isSearchEditing = true
+        searchStartedOpen = initial
+        field.isHidden = false
+        onSearchMode?(true)
+        relayout()
+        makeFirstResponder(field)
+    }
+
+    func escape() {
+        if isSearchEditing && !searchStartedOpen {
+            isSearchEditing = false
+            field.stringValue = ""
+            field.isHidden = profile.searchVisibility != "always"
+            onQueryChange?("")
+            onSearchMode?(false)
+            relayout()
+            makeFirstResponder(gridContainer)
+        } else { onCancel?() }
+    }
+
+    func hover(at location: CGPoint) {
+        guard profile.mouseHover, previousMouse != location else { return }
+        previousMouse = location
+        let point = gridContainer.convert(location, from: nil)
+        guard scrollView.frame.contains(effect.convert(location, from: nil)),
+              let card = cards.first(where: { $0.frame.contains(point) }), !card.isSelected else { return }
+        onHighlight?(card.entryID)
+    }
+
+    private func move(_ direction: SwitcherDirection) {
+        guard profile.arrowNavigation, let index = cards.firstIndex(where: \.isSelected),
+              let target = SwitcherNavigation.destination(from: index, direction: direction, frames: grid.frames),
+              cards.indices.contains(target) else { return }
+        onHighlight?(cards[target].entryID)
+    }
+
     override var canBecomeMain: Bool { false }
 
     init(appearance: WindowSwitcherAppearance) {
@@ -370,22 +426,50 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         relayout()
         orderFrontRegardless()
         makeKey()
-        makeFirstResponder(field)
+        makeFirstResponder(field.isHidden ? gridContainer : field)
+        acceptsMouseMovedEvents = true
+        if hoverMonitor == nil {
+            hoverMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+                MainActor.assumeIsolated {
+                    if let self, event.window === self { self.hover(at: event.locationInWindow) }
+                }
+                return event
+            }
+        }
+    }
+
+    override func orderOut(_ sender: Any?) {
+        if let hoverMonitor { NSEvent.removeMonitor(hoverMonitor) }
+        hoverMonitor = nil
+        previousMouse = nil
+        super.orderOut(sender)
     }
 
     func controlTextDidChange(_ notification: Notification) {
+        isSearchEditing = true
+        onSearchMode?(true)
         onQueryChange?(field.stringValue)
     }
 
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "f" {
+            beginSearch()
+            return
+        }
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
            let key = Self.key(for: event) {
             switch key {
-            case .cancel: onCancel?()
+            case .cancel: escape()
             case .confirm: onConfirm?()
             case .next: onNavigate?(false)
             case .previous: onNavigate?(true)
+            case .left, .right:
+                if isSearchEditing && !field.stringValue.isEmpty { super.sendEvent(event); return }
+                move(key == .left ? .left : .right)
+            case .up: move(.up)
+            case .down: move(.down)
             }
             return
         }
@@ -410,8 +494,10 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         case 48:
             guard flags.isEmpty || flags == .shift else { return nil }
             return flags.contains(.shift) ? .previous : .next
-        case 125: return flags.isEmpty ? .next : nil
-        case 126: return flags.isEmpty ? .previous : nil
+        case 123: return flags.isEmpty ? .left : nil
+        case 124: return flags.isEmpty ? .right : nil
+        case 125: return flags.isEmpty ? .down : nil
+        case 126: return flags.isEmpty ? .up : nil
         default: return nil
         }
     }
@@ -474,7 +560,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         statusLabel.frame = scrollView.frame
         actionsButton.frame = CGRect(x: pad, y: 8, width: 190, height: 28)
         selectionLabel.font = switcherAppearance.font(size: max(12, switcherAppearance.fontSize - 2), weight: .regular)
-        selectionLabel.frame = CGRect(x: pad + 202, y: 12, width: max(0, innerWidth - 202), height: 24)
+        selectionLabel.frame = CGRect(x: pad + (actionsButton.isHidden ? 0 : 202), y: 12, width: max(0, innerWidth - (actionsButton.isHidden ? 0 : 202)), height: 24)
 
         let inset = max(0, (scrollWidth - grid.contentSize.width) / 2)
         gridContainer.frame = CGRect(

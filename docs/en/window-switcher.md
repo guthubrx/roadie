@@ -80,3 +80,27 @@ optional in each profile; its default is empty.
 
 Thumbnails form a grid beside the larger preview. On narrow screens they move
 below it. The search field uses the panel width, independent of the grid width.
+
+
+## Profiles and direct shortcut recording
+
+Settings groups related controls across all categories. In **Settings > Sélecteur**,
+profiles have a name, a shortcut owner and separate controls for windows and navigation.
+Choose Roadie, BetterTouchTool, or an external tool/CLI. Click Record and press the
+actual key combination; Escape cancels. The temporary recorder uses Roadie's existing
+Accessibility access. BTT must be running to prepare and verify its forward/reverse
+bindings. Failed changes preserve or restore the previous binding. Unrecognized
+third-party bindings are not removed. Test the real combination after setup.
+
+Release can focus the selected window, keep the panel open, or enter search.
+Search and Actions can follow that mode or an explicit visibility choice. Cmd+F
+enters search when allowed; Escape exits search entered mid-session before closing.
+
+Four arrows follow the grid geometry. Hover selects a card and clicking activates
+its window. A stationary pointer does not override a later keyboard selection.
+Both navigation methods are configurable per profile. While editing nonempty search
+text, Left/Right edit text and Up/Down move through results. IME and native editing
+shortcuts remain available. External CLI and Karabiner workflows remain supported.
+
+Profiles can inherit common appearance settings or override style, preview, sizing
+and font. Clearing an override restores the common value.
