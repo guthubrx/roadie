@@ -1,6 +1,6 @@
 # Session 056 - Sélecteur de fenêtres Roadie
 
-Statut : en cours. Autorisation utilisateur : examiner AltTab gratuit et Pro, puis « on le fait » ; répartition entre agents validée.
+Statut : implémenté et installé. Autorisation utilisateur : examiner AltTab gratuit et Pro, puis « on le fait » ; répartition entre agents validée. Limites de validation réelle dans validation.md.
 
 ## Usage
 Un sélecteur natif ouvre les fenêtres dans leur contexte Roadie sans les réaffecter.

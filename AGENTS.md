@@ -146,9 +146,15 @@ E2CE37E8-CD10-3D53-978A-95F10F997E47, PID17507, cinq contrôles santé OK.
 Docs FR/EN et changelog Non publié à jour. CUA inaccessible, essai utilisateur
 proposé. Code b92dc331 intégré/poussé, branche et build nettoyés.
 Reçu : specs/055-fullscreen-sans-rail/validation.md.
-Session 056 en cours : sélecteur de fenêtres intégré aux bureaux/stages/écrans,
-recherche, profils de raccourcis et styles. Trois lots distincts : paramètres,
-navigation et interface. Contrats partagés avant intégration ; validation Mac à venir.
+Session 056 installée : sélecteur de fenêtres intégré aux bureaux/stages/écrans,
+recherche, profils, styles et grille à côté du grand aperçu. Raccourcis internes
+facultatifs ; Cmd+Tab et Cmd+Maj+Tab configurés dans BTT par commandes CLI.
+1 849 tests / 222 suites, puis 88 tests ciblés après le dernier ajustement ;
+28 tests de scripts réussis. Trois revues traitées. UUID
+E71B3887-DD49-3060-87CA-162E9307A4F5, PID 8089, santé 5/5.
+Configuration et certificat conservés. Parcours initial confirmé par l'utilisateur,
+capture finale vérifiée ; appui physique Cmd+Tab et preuve complète non vérifiés.
+Reçu : specs/056-selecteur-fenetres/validation.md.
 Current SpecKit feature: `056-selecteur-fenetres`.
 
 Contexte :

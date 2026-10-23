@@ -9,12 +9,14 @@ Contrats puis intégration et tests sur le Mac. Aucun code AltTab importé.
 
 ## Vérifications du 23 octobre 2026
 
-- Source courante : `6b1850025cc32aef93abe75a506469bf1dadae9c`.
+- Source installée : `0da9e099`.
 - Tests ciblés initiaux : 135 tests dans 15 suites, succès. Après grille latérale,
   CLI externe et gestion des erreurs : 101 tests dans 13 suites, succès.
 - Suite complète finale : 1 849 tests dans 222 suites, succès (32,909 s),
   via `scripts/with-xcode swift test --jobs 2 --no-parallel`.
-- Scripts : 26 tests, succès.
+- Après le dernier ajustement de rechargement : 88 tests dans 11 suites, succès.
+- Scripts : 28 tests, succès, dont le nombre de tâches de compilation demandé
+  à l'installation et le refus d'une valeur invalide.
 - Aucun benchmark : machine chargée. Ces durées ne sont pas une mesure de performance produit.
 - Rendus AppKit hors écran : vignettes, icônes et liste ; sélection, taille de police
   et hauteur bornée contrôlées. Ce sont des fixtures, pas des captures du bureau.
@@ -60,10 +62,15 @@ le parcours Ctrl+Alt+Tab, Maj inverse, relâchement et contexte propriétaire.
 Le journal contient des activations réussies, par exemple le 23 octobre à
 03:06:17 UTC et 03:08:39 UTC. Ces événements ne constituent pas un benchmark.
 
-Installation finale grille latérale et raccourci externe : à compléter.
-Configuration avant installation : SHA-256
+Installation finale : UUID E71B3887-DD49-3060-87CA-162E9307A4F5 (arm64),
+PID 8089, santé 5/5. L'inode 610462448 de l'exécutable installé correspond
+à celui ouvert par le processus. Build Release, installation et relance terminés.
+Une capture réelle du panneau final (1100 × 536 points) confirme le champ de
+recherche sur toute la largeur et la grille à droite du grand aperçu. Ouverture
+et annulation par CLI vérifiées. Le nouvel appui physique Cmd+Tab reste à confirmer.
+Configuration inchangée après installation : SHA-256
 `ca42b5c670755e1b39371b1157c116c31e0754930800ad2551841fe5a3f05629`.
-Certificat à conserver : `78a75e8032f190a20072eb91cc2919aac344ef78`.
+Certificat conservé : `78a75e8032f190a20072eb91cc2919aac344ef78`.
 
 Preuves partielles : CUA retourne `CUA_REPL_ENABLED_SURFACES is required`.
 Le terminal dispose de la capture écran, mais pas de l’injection Accessibilité.
@@ -75,7 +82,7 @@ initial est confirmé par l’utilisateur ; les rendus hors écran ne le remplac
 
 API AppleScript uniquement ; base SQLite lue et sauvegardée avant mutation.
 Dossier Roadie > 5 - Modes interactifs, parent `C30FADE0-5BEC-4C7E-B2D3-BBB3A18C887A`.
-Aucun trigger Tab préexistant trouvé. Deux triggers créés désactivés avant installation :
+Aucun trigger Tab préexistant trouvé. Deux triggers préparés puis activés après installation :
 
 - `E28BDB53-9C0B-4A16-82B1-734D305B6CB9` : Cmd+Tab, keycode 48,
   masque 1048576, configuration additionnelle 1048584 ;
@@ -85,7 +92,9 @@ Aucun trigger Tab préexistant trouvé. Deux triggers créés désactivés avant
 `BTTShellTaskActionScript` contient la commande brute ; `BTTShellTaskActionConfig`
 contient `/bin/bash:::-c:::-:::` suivi de la même commande. Les commandes sont
 `/Users/moi/.local/bin/roadie switcher cycle --hold cmd` et la même avec `--backwards`.
-Les deux flags BTTEnabled et BTTEnabled2 doivent être à 1 après installation.
+Les deux flags BTTEnabled et BTTEnabled2 sont à 1 : API et base relues.
+L'API omet ces champs lorsque leur valeur vaut 1 ; leur valeur effective a donc
+été vérifiée dans la base en lecture seule. Parent et commandes exactes vérifiés.
 Le fichier Roadie n’a pas de section switcher : son défaut hotkey vide suffit
 à désactiver le raccourci interne, sans modifier la configuration de l’utilisateur.
 
