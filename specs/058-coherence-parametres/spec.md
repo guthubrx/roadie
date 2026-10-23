@@ -1,9 +1,9 @@
 # Session 058 - Cohérence et finition des paramètres
 Branche : session-058-coherence-parametres
-Création : 23 octobre 2026. Statut : Ready. Priorité : P1.
+Création : 23 octobre 2026. Statut : Implemented. Priorité : P1.
 Correction demandée explicitement ; validation automatique des correctifs.
 Estimation : 1 à 2 heures, tests, contrôle visuel et installation compris.
-Tests : 0/0.
+Tests : 1 876/1 876, plus 28 tests de scripts.
 
 ## Objectif
 Rendre toutes les catégories de paramètres cohérentes, compactes et lisibles.

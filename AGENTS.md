@@ -167,13 +167,20 @@ confirmée par l'utilisateur le 23 octobre 2026.
 Configuration et certificat conservés. Captures de la fenêtre installée vérifiées,
 parcours complet de capture des touches et liaison BTT non enregistré.
 Reçu : specs/057-parametres-raccourcis/validation.md.
-Session 058 en cours : finition de tous les formulaires, alignements et aides.
+Session 058 installée : formulaires compacts alignés dans les douze catégories,
+règles repliables et aides défilables. Onglets du sélecteur sur toute la largeur,
+segments égaux et sélection visible ; deux rangées à grande police.
+Configuration/raccourcis conservés. 1 876 tests / 231 suites et 28 scripts réussis.
+UUID final 7993A537-B6B2-3509-A069-FA1854E802C7, PID 11485, santé 5/5.
+Deux revues traitées. Captures réelles initiales vérifiées ; dernier rendu des
+onglets contrôlé en test natif, parcours complet des aides non enregistré.
+Reçu : specs/058-coherence-parametres/validation.md.
 Current SpecKit feature: `058-coherence-parametres`.
 
 Contexte :
-- `specs/056-selecteur-fenetres/spec.md`
-- `specs/056-selecteur-fenetres/plan.md`
-- `specs/056-selecteur-fenetres/tasks.md`
+- `specs/058-coherence-parametres/spec.md`
+- `specs/058-coherence-parametres/plan.md`
+- `specs/058-coherence-parametres/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes
