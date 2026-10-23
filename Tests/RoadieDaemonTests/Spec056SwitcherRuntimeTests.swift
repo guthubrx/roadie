@@ -13,6 +13,18 @@ struct Spec056SwitcherRuntimeTests {
         #expect(search.handle(EventHotKeyID(signature: 0x52445352, id: 1)) == noErr)
         #expect(presses == 1)
     }
+    @Test func externalCycleKeepsModifiersDirectionAndProfile() {
+        let command = WindowSwitcherRuntimeBridge.command(["cycle", "--hold", "cmd", "--backwards", "--profile", "work"])
+        #expect(command?.name == "switcher.cycle")
+        #expect(command?.string("hold") == "cmd")
+        #expect(command?.string("backwards") == "true")
+        #expect(command?.string("profile") == "work")
+        #expect(WindowSwitcherRuntimeBridge.command(["cycle", "--hold", "cmd++alt"]) == nil)
+        #expect(WindowSwitcherRuntimeBridge.command(["cycle", "--hold", "tab"]) == nil)
+        #expect(WindowSwitcherRuntimeBridge.command(["show", "--hold", "cmd"]) == nil)
+        #expect(WindowSwitcherRuntimeBridge.command(["cycle", "--backwards", "--backwards"]) == nil)
+    }
+
     @Test func cliKeepsProfileAndNavigationDistinct() {
         let command = WindowSwitcherRuntimeBridge.command(["show", "--profile", "work", "--json"])
         #expect(command?.name == "switcher.show")

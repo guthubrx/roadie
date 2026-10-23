@@ -103,6 +103,7 @@ public struct WindowBookmarkCommandService {
         cause: String,
         eventPrefix: String,
         requireOwnership: Bool = false,
+        prepareTarget: (() -> Bool)? = nil,
         details: [String: String]
     ) -> WindowCommandResult {
         guard let display = snapshot.displays.first(where: { $0.id == targetScope.displayID }) else {
@@ -126,12 +127,13 @@ public struct WindowBookmarkCommandService {
                 let previousDesktopID = state.currentDesktopID(for: display.id)
                 var previousPersistentScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
                 let previousStageID = previousPersistentScope.activeStageID
-                let result = BookmarkFocusPlan(
+                var result = BookmarkFocusPlan(
                     previousScope: StageScope(displayID: display.id, desktopID: previousDesktopID, stageID: previousStageID),
                     previousMembers: Set(previousPersistentScope.memberIDs(in: previousStageID)),
                     targetMembers: Set(targetPersistentScope.memberIDs(in: targetScope.stageID)),
                     // Capturé avant la mise à jour des frames : les membres reprennent leur frame mémorisée.
-                    targetStage: targetPersistentScope.stages.first { $0.id == targetScope.stageID }
+                    targetStage: targetPersistentScope.stages.first { $0.id == targetScope.stageID },
+                    previousState: state
                 )
                 for window in visibleWindows {
                     if previousDesktopID == targetScope.desktopID {
@@ -148,6 +150,7 @@ public struct WindowBookmarkCommandService {
                 state.switchDesktop(displayID: display.id, to: targetScope.desktopID)
                 state.focusDisplay(display.id)
                 state.update(targetPersistentScope)
+                result.committedState = state
                 return result
             }
         } catch WindowFocusContextError.changed {
@@ -156,10 +159,28 @@ public struct WindowBookmarkCommandService {
             return .persistenceFailure(label, error)
         }
 
+        func restoreFailure(_ reason: String) -> WindowCommandResult {
+            // Ne revenir en arrière que si aucun autre écrivain n'a modifié l'état.
+            // Les données d'une commande concurrente ne doivent jamais être écrasées.
+            var rolledBack = false
+            do {
+                try store.mutateChecked { state in
+                    guard let expected = plan.committedState, state == expected else { return }
+                    state = plan.previousState
+                    rolledBack = true
+                }
+            } catch { return .persistenceFailure(label, error) }
+            service.invalidateSharedSnapshot()
+            events.append(RoadieEvent(type: "\(eventPrefix)_focus_failed", scope: targetScope,
+                details: details.merging(["reason": reason, "rolledBack": String(rolledBack)], uniquingKeysWith: { _, new in new })))
+            return .failure("\(label): \(reason)")
+        }
+        if let prepareTarget, !prepareTarget() { return restoreFailure("application refused to unhide") }
+
         // Une fenêtre réduite peut manquer au relevé AX. La restaurer avant de calculer
         // son tuilage ; le relevé suivant fournit sa géométrie réelle, jamais celle de la carte.
         let restoreBeforeLayout = requireOwnership && windowsByID[target.id] == nil
-        if restoreBeforeLayout, !service.focus(target) { return .failure("\(label): restore failed") }
+        if restoreBeforeLayout, !service.focus(target) { return restoreFailure("restore failed") }
         let refreshed = restoreBeforeLayout ? service.snapshot(followFocus: false) : nil
         let observedWindows = refreshed.map { Dictionary($0.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { _, last in last }) } ?? windowsByID
 
@@ -188,7 +209,8 @@ public struct WindowBookmarkCommandService {
            let member = plan.targetStage?.members.first(where: { $0.windowID == target.id }) {
             restoredMissing = service.setFrame(member.frame.cgRect, of: target, generation: generation) != nil
         }
-        let ok = restoredMissing && (restoreBeforeLayout || service.focus(target))
+        // Le placement peut avoir changé la fenêtre active ; confirmer le focus après celui-ci.
+        let ok = service.focus(target)
         if ok {
             mouseFollower.follow(target)
             // Gardé en `mutate` (REL-021) : simple observation après le focus déjà donné, que le
@@ -205,8 +227,8 @@ public struct WindowBookmarkCommandService {
                 "layout": String(layoutAttempted)
             ], uniquingKeysWith: { lhs, _ in lhs })
         ))
-        if requireOwnership, result.failed > 0 {
-            return WindowCommandResult(message: "\(label): placement incomplete, failed=\(result.failed)",
+        if requireOwnership, result.failed > 0 || !restoredMissing {
+            return WindowCommandResult(message: "\(label): placement incomplete, failed=\(result.failed + (restoredMissing ? 0 : 1))",
                                        changed: ok, outcome: .failed)
         }
         return .changedOrFailed(
@@ -303,6 +325,8 @@ private struct BookmarkFocusPlan {
     var previousMembers: Set<WindowID>
     var targetMembers: Set<WindowID>
     var targetStage: PersistentStage?
+    var previousState: PersistentStageState
+    var committedState: PersistentStageState?
 }
 
 private enum WindowFocusContextError: Error { case changed }

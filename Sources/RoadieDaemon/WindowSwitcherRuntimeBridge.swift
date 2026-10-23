@@ -62,6 +62,7 @@ public final class WindowSwitcherRuntimeBridge {
     private func handle(_ command: TargetModeRuntimeCommand?) {
         switch command?.name {
         case "switcher.show": controller.show(profileID: command?.string("profile"))
+        case "switcher.cycle": controller.cycle(profileID: command?.string("profile"), backwards: command?.string("backwards") == "true", hold: command?.string("hold") ?? "cmd")
         case "switcher.next": controller.next()
         case "switcher.previous": controller.next(backwards: true)
         case "switcher.accept": controller.accept()
@@ -73,12 +74,25 @@ public final class WindowSwitcherRuntimeBridge {
     /// Validation stricte avant envoi : une faute de saisie ne choisit pas un autre profil. O(a).
     nonisolated static func command(_ arguments: [String]) -> TargetModeRuntimeCommand? {
         let args = arguments.filter { $0 != "--json" }
-        guard let verb = args.first, ["show", "next", "previous", "accept", "cancel"].contains(verb) else { return nil }
+        guard let verb = args.first, ["show", "cycle", "next", "previous", "accept", "cancel"].contains(verb) else { return nil }
         var payload: [String: String] = [:]
-        if args.count > 1 {
-            guard verb == "show", args.count == 3, args[1] == "--profile",
-                  !args[2].isEmpty, !args[2].hasPrefix("--") else { return nil }
-            payload["profile"] = args[2]
+        var index = 1
+        while index < args.count {
+            let flag = args[index]
+            if verb == "cycle", flag == "--backwards", payload["backwards"] == nil {
+                payload["backwards"] = "true"
+                index += 1
+            } else if (verb == "show" || verb == "cycle"), flag == "--profile", payload["profile"] == nil,
+                      index + 1 < args.count, !args[index + 1].isEmpty, !args[index + 1].hasPrefix("--") {
+                payload["profile"] = args[index + 1]
+                index += 2
+            } else if verb == "cycle", flag == "--hold", payload["hold"] == nil, index + 1 < args.count {
+                let value = args[index + 1].lowercased()
+                let parts = value.split(separator: "+", omittingEmptySubsequences: false)
+                guard !parts.isEmpty, parts.allSatisfy({ WindowSwitcherHotkey.modifier(named: String($0)) != nil }) else { return nil }
+                payload["hold"] = value
+                index += 2
+            } else { return nil }
         }
         return TargetModeRuntimeCommand(name: "switcher.\(verb)", arguments: payload)
     }

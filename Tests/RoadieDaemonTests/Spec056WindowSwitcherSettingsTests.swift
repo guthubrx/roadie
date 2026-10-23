@@ -63,7 +63,7 @@ struct Spec056WindowSwitcherSettingsTests {
             let descriptor = try descriptor("switcher.shortcuts")
             let tooMany = (0..<10).map { row(WindowSwitcherShortcutConfig(id: "p\($0)", hotkey: "")) }
             #expect(!service.validateCollection(descriptor, value: .rows(tooMany)).isEmpty)
-            let clash = [row(WindowSwitcherShortcutConfig(id: "a")),
+            let clash = [row(WindowSwitcherShortcutConfig(id: "a", hotkey: "ctrl+alt+tab")),
                          row(WindowSwitcherShortcutConfig(id: "b", hotkey: "control+option+shift+tab"))]
             #expect(!service.validateCollection(descriptor, value: .rows(clash)).isEmpty)
             guard case .rejected = service.setCollection(descriptor.id, .rows(clash)) else {
@@ -93,7 +93,7 @@ struct Spec056WindowSwitcherSettingsTests {
         let profile = WindowSwitcherShortcutConfig()
         #expect(profile.id == "all")
         #expect(profile.name == "Toutes les fenêtres")
-        #expect(profile.hotkey == "ctrl+alt+tab")
+        #expect(profile.hotkey.isEmpty)
         #expect(profile.scope == "all")
         #expect(profile.releaseAction == "focus")
         #expect(profile.sortOrder == "recent")

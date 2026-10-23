@@ -103,7 +103,7 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
     public init(
         id: String = "all",
         name: String = "Toutes les fenêtres",
-        hotkey: String = "ctrl+alt+tab",
+        hotkey: String = "",
         scope: String = "all",
         releaseAction: String = "focus",
         sortOrder: String = "recent",

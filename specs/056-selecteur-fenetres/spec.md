@@ -27,3 +27,11 @@ Les bureaux/stages Roadie sont prioritaires. La navigation des Spaces natifs mac
 
 ## Vérification
 Tests Swift Testing du filtrage/tri/recherche, sélection stable, annulation et relâchement ; configuration et éditeur ; activation inter-stage/bureau/écran sans réaffectation ; cible fermée/inaccessible, refus AX et erreurs de persistance. Tests ciblés puis suite séquentielle jobs2. Revue indépendante, build/install signé conservé, santé et essai utilisateur. Preuves UI honnêtes si bureau inaccessible.
+
+## Ajustement validé pendant l’essai installé
+
+L’utilisateur demande une grille à côté de l’aperçu, un champ de recherche borné
+au panneau, et le déclenchement via BetterTouchTool/CLI. Il remplace Ctrl+Alt+Tab
+par Cmd+Tab après avoir quitté AltTab. Le défaut `hotkey` devient vide ; les
+raccourcis internes restent facultatifs. `switcher cycle --hold cmd` démarre ou
+avance ; `--backwards` inverse ; le relâchement valide. `show` reste persistant.

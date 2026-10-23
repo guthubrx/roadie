@@ -10,7 +10,9 @@ jour et les limites connues ; les README décrivent la version courante.
 - Sélecteur de fenêtres intégré aux bureaux, stages et écrans Roadie. Raccourci
   configurable, recherche, trois présentations et jusqu'à neuf profils de navigation.
   La sélection ouvre le contexte de la fenêtre sans changer son affectation.
-  Réglages dans Sélecteur et commandes `roadie switcher` pour les outils externes.
+  Grille à côté du grand aperçu, réglages dans Sélecteur et commandes
+  `roadie switcher cycle` pour BetterTouchTool ou Karabiner. Aucun raccourci
+  global d'ouverture enregistré par défaut.
 
 ### Changements
 

@@ -78,7 +78,7 @@ excluded_bundles = []
 [[switcher.shortcuts]]
 id = "all"
 name = "Toutes les fenêtres"
-hotkey = "ctrl+alt+tab"
+hotkey = "" # Raccourci externe : roadie switcher cycle --hold cmd
 scope = "all"
 release_action = "focus"
 sort_order = "recent"

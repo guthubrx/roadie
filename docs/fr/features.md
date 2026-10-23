@@ -1,5 +1,13 @@
 # Fonctionnalites
 
+## Sélecteur de fenêtres
+
+Retrouve les fenêtres gérées par Roadie dans leur bureau, leur stage et leur écran.
+Recherche, grille de miniatures à côté d'un grand aperçu, icônes ou liste, profils
+indépendants et actions ciblées. Les outils de raccourcis appellent la CLI ;
+les réglages se trouvent dans **Paramètres > Sélecteur**.
+[Guide et commandes](window-switcher.md).
+
 ## Tiling
 
 Roadie tile les fenetres visibles d'une stage active.

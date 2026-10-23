@@ -13,6 +13,20 @@ struct Spec056SwitcherSessionTests {
         WindowSwitcherSessionState(stayOpen: stayOpen, fromHotkey: fromHotkey, heldAtStart: heldAtStart, backwards: backwards)
     }
 
+    @Test func failureKeepsThePanelOpenForRetryOrCancellation() {
+        var state = session(heldAtStart: false)
+        _ = state.ready()
+        state.recoverAfterFailure()
+        #expect(state.phase == .presented)
+        #expect(state.persistent)
+        let release = state.modifiers(held: false)
+        #expect(!release)
+        let retry = state.confirm()
+        #expect(retry)
+        state.close()
+        #expect(state.phase == .closed)
+    }
+
     @Test func commandOpenedSessionNeverAcceptsOnModifierRelease() {
         var state = session(fromHotkey: false)
         _ = state.ready()

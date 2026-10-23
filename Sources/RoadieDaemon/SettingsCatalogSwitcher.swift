@@ -3,7 +3,7 @@ import Foundation
 extension SettingsCatalog {
     static let switcherDescriptors: [SettingDescriptor] = [
         entry(.selecteur, "switcher", "enabled", "Activer le sélecteur",
-              "Active le sélecteur de fenêtres et ses raccourcis. Les raccourcis d'AltTab restent indépendants.",
+              "Active le sélecteur, accessible par les commandes CLI depuis BetterTouchTool ou Karabiner. Les raccourcis internes sont facultatifs.",
               .bool, .bool(true)),
         entry(.selecteur, "switcher", "style", "Affichage des fenêtres",
               "Affichage des fenêtres dans le sélecteur : vignettes, icônes ou liste compacte.",

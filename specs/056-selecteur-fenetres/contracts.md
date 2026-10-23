@@ -19,3 +19,11 @@ Activation rejoint écran/bureau/stage propriétaires, jamais assign/summon et j
 RoadieDaemon UI : `@MainActor public final class WindowSwitcherController`, init(service:SnapshotService=SnapshotService()), public start(), stop(), show(profileID:String?=nil), next(backwards:Bool=false), accept(), cancel(). Le parent raccorde main et CLI (notification dédiée admise).
 Le controller utilise RoadieConfig().switcher via ConfigReloadService, les modèles ci-dessus, WindowSwitcherService et RailThumbnailStore (internal accessible). Si cache partagé parent pas prêt, utiliser injection optionnelle/paramètre avec défaut pour RailThumbnailStore. Pas de second timer permanent : observer réglages ; timer de rafraîchissement éventuel uniquement panel ouvert.
 Trois styles, champ natif NSSearchField/NSTextField, scroll, libellés contexte, aperçu image sans focus, boutons/menu actions. Focus/placement seulement à validation/action. Raccourcis press/repeat/release fiables, Maj inverse, Échap annule ; mode recherche persistant autorisant relâchement et édition macOS sans avaler Cmd+A/C/V. Fermer au clic extérieur sans manger clic. En cas collision raccourci rapporter au journal, ne jamais désactiver un autre outil automatiquement. Afficher chargement si acquisition, annulation avant retour async ne réouvre pas panel. Capture vignettes bornée, fallback immédiat icône. Accessibilité labels/buttons respectée.
+
+## Ajustement validé pendant l’essai installé
+
+L’utilisateur demande une grille à côté de l’aperçu, un champ de recherche borné
+au panneau, et le déclenchement via BetterTouchTool/CLI. Il remplace Ctrl+Alt+Tab
+par Cmd+Tab après avoir quitté AltTab. Le défaut `hotkey` devient vide ; les
+raccourcis internes restent facultatifs. `switcher cycle --hold cmd` démarre ou
+avance ; `--backwards` inverse ; le relâchement valide. `show` reste persistant.

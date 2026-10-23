@@ -1,5 +1,12 @@
 # Features
 
+## Window switcher
+
+Find Roadie-managed windows in their own desktop, stage and display. Search,
+thumbnail grid beside a larger preview, icons or list, independent profiles and
+targeted actions. Shortcut tools call the CLI; settings live in **Sélecteur**.
+[Guide and commands](window-switcher.md).
+
 ## Tiling
 
 Roadie tiles the visible windows in the active stage.

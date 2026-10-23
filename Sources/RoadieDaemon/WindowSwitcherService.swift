@@ -67,11 +67,6 @@ struct WindowSwitcherService {
         guard let owner = store.state().stageScope(for: entry.id) else {
             return .failure("switcher activate: window \(entry.id.rawValue) has no owner stage")
         }
-        if entry.isHidden {
-            guard WindowSwitcherWindowAccess.unhideApplication(pid: entry.window.pid, bundleID: entry.window.bundleID) == .performed else {
-                return .failure("switcher activate: application refused to unhide")
-            }
-        }
         let target = snapshot.windows.first { $0.window.id == entry.id }?.window ?? entry.window
         return WindowBookmarkCommandService(service: service, store: store).focusWindow(
             target,
@@ -82,6 +77,9 @@ struct WindowSwitcherService {
             cause: "switcher.activate",
             eventPrefix: "window.switcher",
             requireOwnership: true,
+            prepareTarget: {
+                !entry.isHidden || WindowSwitcherWindowAccess.unhideApplication(pid: entry.window.pid, bundleID: entry.window.bundleID) == .performed
+            },
             details: [
                 "windowID": String(entry.id.rawValue),
                 "bundleID": entry.window.bundleID,

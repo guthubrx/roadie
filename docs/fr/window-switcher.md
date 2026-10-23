@@ -1,14 +1,23 @@
 # Sélecteur de fenêtres
 
-Le sélecteur retrouve une fenêtre dans son bureau, sa stage et son écran Roadie.
+Le sélecteur retrouve les fenêtres gérées par Roadie dans leur bureau, leur stage
+et leur écran.
 Il ouvre ce contexte avant de donner le focus à la fenêtre. Il ne déplace pas la
 fenêtre dans la stage courante.
 
 ## Utilisation
 
-Le raccourci par défaut est **Ctrl + Alt + Tab**. Maintiens Ctrl et Alt, puis
-appuie sur Tab pour avancer ou Maj+Tab pour reculer. Relâche pour ouvrir la
-fenêtre sélectionnée. Échap ferme le sélecteur sans changer de fenêtre.
+Les raccourcis peuvent être gérés par **BetterTouchTool ou Karabiner**, comme les
+autres commandes Roadie. Aucun raccourci global d'ouverture n'est enregistré
+par défaut par Roadie. Exemple avec **⌘ Tab** dans BetterTouchTool :
+
+- ⌘ Tab exécute `roadie switcher cycle --hold cmd` ;
+- ⌘ Maj Tab exécute `roadie switcher cycle --hold cmd --backwards` ;
+- relâcher ⌘ ouvre la fenêtre sélectionnée ; Échap annule.
+
+Dans une action shell, utilise le chemin complet du binaire installé :
+`/Users/moi/.local/bin/roadie`. Pour une autre installation, adapte ce chemin.
+Un raccourci interne reste possible en remplissant le champ facultatif du profil.
 
 Le profil peut aussi garder le sélecteur ouvert après le relâchement. Dans ce
 mode, recherche une application, un titre, une stage ou un bureau, puis valide
@@ -21,12 +30,14 @@ raccourcis différents dans leurs réglages.
 ## Réglages
 
 Dans **Paramètres > Sélecteur**, choisis l'affichage en vignettes, icônes ou
-liste. Ajuste la taille automatique, la largeur des vignettes, la taille et la
+liste. La grille de miniatures se place à côté du grand aperçu. Sur un écran
+étroit, elle passe dessous. Le champ de recherche garde la largeur du panneau.
+Ajuste la taille automatique, la largeur des vignettes, la taille et la
 famille de police. Les réglages prennent effet sans redémarrage.
 
 Tu peux définir jusqu'à neuf profils de raccourcis. Chaque profil possède :
 
-- un nom et des touches ;
+- un nom et, si souhaité, un raccourci interne ;
 - une portée : toutes les fenêtres, écran, bureau, stage ou application active ;
 - un ordre : récent, titre ou stage ;
 - un choix pour les fenêtres réduites, applications masquées et plein écran ;
@@ -43,6 +54,8 @@ sauvegarde.
 
 ```sh
 roadie switcher show
+roadie switcher cycle --hold cmd
+roadie switcher cycle --hold cmd --backwards
 roadie switcher show --profile all
 roadie switcher next
 roadie switcher previous
@@ -53,6 +66,8 @@ roadie switcher cancel
 BetterTouchTool peut appeler ces commandes depuis un geste. `show` utilise
 l'identifiant du profil, pas son nom affiché. La CLI confirme la mise en file de
 la commande ; cette réponse ne prouve pas qu'une fenêtre a ensuite été activée.
+`cycle` suit le relâchement des modificateurs indiqués par `--hold` (exemples :
+`cmd`, `ctrl+alt`). `show` garde le panneau ouvert jusqu’à validation explicite.
 Le daemon et son composant graphique doivent être actifs. En mode standard,
 le sélecteur reste disponible avec `--no-target-mode`. En mode modulaire, il
 partage le processus `target-mode` avec les autres interfaces clavier.

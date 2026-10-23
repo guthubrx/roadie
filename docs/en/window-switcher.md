@@ -6,9 +6,10 @@ current stage.
 
 ## Use
 
-The default shortcut is **Ctrl + Alt + Tab**. Hold Ctrl and Alt, then press Tab
-to move forward or Shift+Tab to move backward. Release to open the selected
-window. Escape closes the switcher without changing windows.
+Configure **Cmd+Tab in BetterTouchTool or Karabiner** to call the CLI commands
+below. Hold Command and press Tab to move forward, or Shift+Tab to move backward.
+Release Command to open the selected window. Escape cancels.
+Roadie does not register a global opening shortcut by default.
 
 A profile can also keep the switcher open after release. In this mode, search
 by application, title, stage or desktop, then confirm with Return or a click.
@@ -69,3 +70,13 @@ modular mode, it shares the `target-mode` process with the keyboard interfaces.
 If macOS cannot verify an offscreen window's state, the card reports an unknown
 state. Profiles that exclude minimized, hidden or fullscreen windows also
 exclude these unknown states.
+
+Global opening shortcuts are now external by default. In BetterTouchTool or
+Karabiner, bind Cmd+Tab to `roadie switcher cycle --hold cmd`, and Cmd+Shift+Tab
+to `roadie switcher cycle --hold cmd --backwards`. Releasing Command confirms
+the selection. `show` keeps the panel open until explicit confirmation. Use the
+full path of the installed CLI in a shell action. An internal shortcut remains
+optional in each profile; its default is empty.
+
+Thumbnails form a grid beside the larger preview. On narrow screens they move
+below it. The search field uses the panel width, independent of the grid width.

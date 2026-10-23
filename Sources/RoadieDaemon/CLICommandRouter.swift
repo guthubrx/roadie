@@ -220,7 +220,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "group create|add|remove|focus|dissolve|list ..."),
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
         CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|hide ..."),
-        CLICommandSpec(usage: "switcher show [--profile ID] | next | previous | accept | cancel [--json]"),
+        CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
         CLICommandSpec(usage: "record start NAME [--duration S] [--stop-file PATH]"),
         CLICommandSpec(usage: "record replay|list|inspect|delete ..."),

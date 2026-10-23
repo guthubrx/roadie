@@ -209,10 +209,6 @@ public struct SnapshotService: Sendable {
         return present
     }
 
-    /// Snapshot pour les composants lecteurs (bordure, focus-souris, rail) : réutilise le
-    /// dernier snapshot publié dans le processus pour ce fichier d'état s'il est encore valide
-    /// (150 ms, ou le cycle courant du tiler s'il vient de `producerSnapshot`) et que ni l'état
-    /// persisté ni la config n'ont changé ; sinon en produit un (FR-023).
     /// Les commandes du sélecteur écrivent seulement leur transaction explicite, jamais les observations.
     func withoutObservationPersistence() -> SnapshotService {
         var copy = self
@@ -220,6 +216,10 @@ public struct SnapshotService: Sendable {
         return copy
     }
 
+    /// Snapshot pour les composants lecteurs (bordure, focus-souris, rail) : réutilise le
+    /// dernier snapshot publié dans le processus pour ce fichier d'état s'il est encore valide
+    /// (150 ms, ou le cycle courant du tiler s'il vient de `producerSnapshot`) et que ni l'état
+    /// persisté ni la config n'ont changé ; sinon en produit un (FR-023).
     public func sharedSnapshot(followFocus: Bool = true) -> DaemonSnapshot {
         sharedSnapshotCountingScan(followFocus: followFocus).snapshot
     }

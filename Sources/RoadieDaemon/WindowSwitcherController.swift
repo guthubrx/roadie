@@ -94,6 +94,14 @@ struct WindowSwitcherSessionState: Equatable {
         return .present(steps: steps)
     }
 
+    mutating func recoverAfterFailure() {
+        phase = .presented
+        held = false
+        searching = true
+        pendingAccept = nil
+        queuedSteps = []
+    }
+
     mutating func close() {
         phase = .closed
         queuedSteps = []
@@ -114,6 +122,8 @@ private final class WindowSwitcherSession {
     var panelVisible = false
     var thumbnailVersion = -1
     var loadTask: Task<Void, Never>?
+    var loadRevision = 0
+    var actionFailed = false
     var timer: Timer?
     var outsideMonitor: Any?
     var localClickMonitor: Any?
@@ -191,6 +201,17 @@ public final class WindowSwitcherController {
         }
     }
 
+    /// Déclenchement externe : BTT/Karabiner garde le raccourci, Roadie suit seulement le relâchement.
+    public func cycle(profileID: String? = nil, backwards: Bool = false, hold: String = "cmd") {
+        if let session {
+            guard profileID == nil || profileID == session.profile.id else { return }
+            advance(backwards: backwards)
+        } else {
+            let required = Set(hold.split(separator: "+").compactMap { WindowSwitcherHotkey.modifier(named: String($0)) })
+            beginSession(profileID: profileID, fromHotkey: true, backwards: backwards, externalModifiers: required)
+        }
+    }
+
     public func accept() {
         guard let session else { return }
         if session.state.confirm() { validate(session) }
@@ -229,7 +250,7 @@ public final class WindowSwitcherController {
         beginSession(profileID: profileID, fromHotkey: true, backwards: backwards)
     }
 
-    private func beginSession(profileID: String?, fromHotkey: Bool, backwards: Bool) {
+    private func beginSession(profileID: String?, fromHotkey: Bool, backwards: Bool, externalModifiers: Set<WindowSwitcherModifier>? = nil) {
         guard session == nil else { return }
         let config = ConfigReloadService.shared.currentConfig().switcher
         guard config.enabled else { return }
@@ -237,7 +258,7 @@ public final class WindowSwitcherController {
             events.append(RoadieEvent(type: "switcher.session", details: ["state": "unknown_profile", "profile": profileID ?? ""]))
             return
         }
-        let required = WindowSwitcherHotkey.parse(profile.hotkey, layout: TargetSearchHotkey.currentLayoutTable())?.modifiers ?? []
+        let required = externalModifiers ?? WindowSwitcherHotkey.parse(profile.hotkey, layout: TargetSearchHotkey.currentLayoutTable())?.modifiers ?? []
         let held = WindowSwitcherHotkey.held(in: CGEventSource.flagsState(.combinedSessionState))
         let state = WindowSwitcherSessionState(
             stayOpen: !fromHotkey || profile.releaseAction == "stay",
@@ -377,10 +398,12 @@ public final class WindowSwitcherController {
             previewImage: previewImage(for: model.selected?.id),
             emptyMessage: "Aucune fenêtre dans ce contexte"
         )
+        if session.actionFailed { panel.showActionError() }
     }
 
     private func queryChanged(_ query: String) {
         guard let session, session.model != nil else { return }
+        session.actionFailed = false
         session.state.searchChanged(isEmpty: query.isEmpty)
         session.model?.search(query)
         refresh(session)
@@ -389,6 +412,7 @@ public final class WindowSwitcherController {
     private func advance(backwards: Bool) {
         guard let session else { return }
         guard session.state.step(backwards: backwards) else { return }
+        session.actionFailed = false
         session.model?.next(backwards: backwards)
         guard let model = session.model else { return }
         requestSelectedPreview(session)
@@ -403,24 +427,38 @@ public final class WindowSwitcherController {
 
     private func perform(_ action: WindowSwitcherAction) {
         guard let session, let entry = session.model?.selected else { return }
-        if action == .maximize || action == .fullscreen || action == .hideApp || action == .quitApp { close(session) }
+        session.loadTask?.cancel()
+        session.loadRevision += 1
+        let closesOnSuccess = action == .maximize || action == .fullscreen || action == .hideApp || action == .quitApp
+        if closesOnSuccess { session.panel?.orderOut(nil) }
         let result = switcher.perform(action, on: entry)
         events.append(RoadieEvent(
             type: "switcher.action",
             details: ["action": action.rawValue, "window": "\(entry.window.id)", "changed": "\(result.changed)", "message": result.message]
         ))
-        if result.outcome == .failed { session.panel?.showActionError() }
-        else { reload(sessionID: session.id) }
+        if result.outcome == .failed { recoverAfterFailure(session) }
+        else if closesOnSuccess { close(session) }
+        else { session.actionFailed = false; reload(sessionID: session.id) }
+    }
+
+    private func recoverAfterFailure(_ session: WindowSwitcherSession) {
+        session.state.recoverAfterFailure()
+        session.actionFailed = true
+        session.panelVisible = false
+        presentPanel(session)
     }
 
     private func reload(sessionID: Int) {
         guard let session, session.id == sessionID else { return }
+        session.loadTask?.cancel()
+        session.loadRevision += 1
+        let revision = session.loadRevision
         let previous = session.model?.selected?.id
         let query = session.model?.query ?? ""
         session.loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let loaded = await self.switcher.load()
-            guard let current = self.session, current.id == sessionID else { return }
+            guard !Task.isCancelled, let current = self.session, current.id == sessionID, current.loadRevision == revision else { return }
             var model = self.makeModel(entries: loaded.entries, context: loaded.context, session: current)
             model.search(query)
             if let previous { model.select(id: previous) }
@@ -430,14 +468,17 @@ public final class WindowSwitcherController {
     }
 
     private func validate(_ session: WindowSwitcherSession) {
-        let entry = session.model?.selected
-        close(session)
-        guard let entry else { return }
+        guard let entry = session.model?.selected else { close(session); return }
+        session.loadTask?.cancel()
+        session.loadRevision += 1
+        session.panel?.orderOut(nil)
         let result = switcher.activate(entry)
         events.append(RoadieEvent(
             type: "switcher.activate",
             details: ["window": "\(entry.window.id)", "changed": "\(result.changed)", "message": result.message]
         ))
+        if result.outcome == .failed { recoverAfterFailure(session) }
+        else { close(session) }
     }
 
     private func close(_ session: WindowSwitcherSession) {

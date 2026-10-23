@@ -86,7 +86,7 @@ dans la catégorie Recherche ; `roadie targets search` ouvre aussi la barre.
 ### Une interface à ta mesure
 
 Le **sélecteur de fenêtres** ouvre la fenêtre choisie dans son bureau et sa
-stage Roadie. Utilise Ctrl+Alt+Tab par défaut, ou définis des profils pour un
+stage Roadie. Relie le raccourci de ton choix à la CLI via BetterTouchTool ou Karabiner, puis définis des profils pour un
 écran, un bureau, une stage ou une application. Recherche, vignettes, icônes et
 liste compacte se règlent dans Paramètres > Sélecteur.
 [Guide du sélecteur](docs/fr/window-switcher.md).
