@@ -83,4 +83,8 @@ isTrusted ni curseur supposé n'a été fabriqué pour ces clics natifs.
 
 ## Livraison
 README FR/EN, guides et changelog Non publié mis à jour. Aucun changement de
-version ni nouvelle release. Intégration et nettoyage à consigner après revue.
+version ni nouvelle release. Code final 550e8b2 et reçu cb3c7d65 intégrés par
+avance rapide dans main, puis poussés. Branche de session locale et distante
+supprimée ; build et cache Python de session supprimés. Journaux archivés hors
+Git ; aucun compilateur ni test encore actif. Les deux worktrees utiles restent
+présents : checkout principal et conversation détachée, sans modification locale.
