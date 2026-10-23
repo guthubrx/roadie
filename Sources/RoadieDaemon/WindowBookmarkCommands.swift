@@ -81,8 +81,31 @@ public struct WindowBookmarkCommandService {
         }
 
         let targetScope = targetEntry.scope ?? state.stageScope(for: bookmark.windowID) ?? bookmark.scope
+        return focusWindow(
+            targetEntry.window,
+            in: targetScope,
+            snapshot: snapshot,
+            generation: generation,
+            label: "bookmark focus \(name)",
+            cause: "bookmark.focus",
+            eventPrefix: "window.bookmark",
+            details: eventDetails(bookmark)
+        )
+    }
+
+    /// Rejoint écran, bureau et stage de la fenêtre sans changer son appartenance.
+    func focusWindow(
+        _ target: WindowSnapshot,
+        in targetScope: StageScope,
+        snapshot: DaemonSnapshot,
+        generation: UInt64,
+        label: String,
+        cause: String,
+        eventPrefix: String,
+        details: [String: String]
+    ) -> WindowCommandResult {
         guard let display = snapshot.displays.first(where: { $0.id == targetScope.displayID }) else {
-            return .failure("bookmark focus \(name): display unavailable")
+            return .failure("\(label): display unavailable")
         }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
@@ -116,7 +139,7 @@ public struct WindowBookmarkCommandService {
                     }
                 }
                 targetPersistentScope.activeStageID = targetScope.stageID
-                targetPersistentScope.setFocusedWindow(bookmark.windowID, in: targetScope.stageID)
+                targetPersistentScope.setFocusedWindow(target.id, in: targetScope.stageID)
                 if previousDesktopID != targetScope.desktopID {
                     state.update(previousPersistentScope)
                 }
@@ -126,7 +149,7 @@ public struct WindowBookmarkCommandService {
                 return result
             }
         } catch {
-            return .persistenceFailure("bookmark focus \(name)", error)
+            return .persistenceFailure(label, error)
         }
 
         // Plan unique (A15, T212) : masquage de la stage quittée et disposition de la stage du signet
@@ -144,28 +167,28 @@ public struct WindowBookmarkCommandService {
                 placement.restoring[member.windowID] = member.frame.cgRect
             }
         }
-        let (layoutPlan, result) = service.applyCommandPlacement(placement, cause: "bookmark.focus", generation: generation, events: events)
+        let (layoutPlan, result) = service.applyCommandPlacement(placement, cause: cause, generation: generation, events: events)
         let layoutAttempted = layoutPlan.commands.count
         let applied = result.applied + result.clamped
-        let ok = service.focus(targetEntry.window)
+        let ok = service.focus(target)
         if ok {
-            mouseFollower.follow(targetEntry.window)
+            mouseFollower.follow(target)
             // Gardé en `mutate` (REL-021) : simple observation après le focus déjà donné, que le
             // snapshot suivant réécrit (`updateBookmarkObservation` à chaque passe).
-            store.mutate { $0.updateBookmarkObservation(window: targetEntry.window, scope: targetScope) }
+            store.mutate { $0.updateBookmarkObservation(window: target, scope: targetScope) }
         }
         events.append(RoadieEvent(
-            type: ok ? "window.bookmark_focused" : "window.bookmark_focus_failed",
+            type: ok ? "\(eventPrefix)_focused" : "\(eventPrefix)_focus_failed",
             scope: targetScope,
-            details: eventDetails(bookmark).merging([
+            details: details.merging([
                 "restored": String(applied),
                 "layout": String(layoutAttempted)
             ], uniquingKeysWith: { lhs, _ in lhs })
         ))
         return .changedOrFailed(
             ok
-                ? "bookmark focus \(name): window=\(bookmark.windowID.rawValue) restored=\(applied) layout=\(layoutAttempted)"
-                : "bookmark focus \(name): focus failed",
+                ? "\(label): window=\(target.id.rawValue) restored=\(applied) layout=\(layoutAttempted)"
+                : "\(label): focus failed",
             changed: ok
         )
     }
