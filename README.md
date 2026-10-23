@@ -12,8 +12,8 @@ English | [Français](README.fr.md)
 Roadie organizes your windows around your activities. Bring a project's apps
 together, find them in the side rail and switch workspaces on each display.
 
-**[Download Roadie 0.6.0](https://github.com/guthubrx/roadie/releases/tag/v0.6.0)** ·
-[What's new](docs/releases/v0.6.0.en.md) · [Installation guide](#manual-installation)
+**[Download Roadie 0.7.0](https://github.com/guthubrx/roadie/releases/tag/v0.7.0)** ·
+[What's new](docs/releases/v0.7.0.en.md) · [Installation guide](#manual-installation)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie workspaces across multiple displays" width="100%">

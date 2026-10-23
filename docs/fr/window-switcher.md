@@ -29,9 +29,13 @@ raccourcis différents dans leurs réglages.
 
 ## Profils et raccourcis
 
-Dans **Paramètres > Sélecteur > Profils et raccourcis**, sélectionne un profil
+Dans **Paramètres > Sélecteur > Profils de raccourcis**, sélectionne un profil
 ou crée un nouveau profil. Son nom décrit son usage ; l'identifiant reste interne.
 Choisis **Roadie**, **BetterTouchTool** ou **Outil externe / commande**.
+
+Les onglets **Raccourci**, **Fenêtres**, **Navigation** et **Apparence** occupent
+toute la largeur. À grande police, ils passent sur deux rangées. Le premier
+choisit le déclenchement ; les autres règlent le contenu et la présentation.
 
 Avec Roadie ou BTT, clique sur **Enregistrer**, puis appuie sur la combinaison.
 Les touches s'affichent en symboles ; Échap annule et Effacer retire la combinaison.

@@ -5,31 +5,38 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+## 0.7.0 - 2026-10-23
+
 ### Nouveautés
 
-- Sélecteur de fenêtres intégré aux bureaux, stages et écrans Roadie. Raccourci
-  configurable, recherche, trois présentations et jusqu'à neuf profils de navigation.
-  La sélection ouvre le contexte de la fenêtre sans changer son affectation.
-  Grille à côté du grand aperçu, réglages dans Sélecteur et commandes
-  `roadie switcher cycle` pour BetterTouchTool ou Karabiner. Aucun raccourci
-  global d'ouverture enregistré par défaut.
+- Sélecteur de fenêtres intégré aux bureaux, stages et écrans Roadie : recherche,
+  navigation aux flèches ou à la souris, grille avec grand aperçu et présentations
+  en vignettes, icônes ou liste. La fenêtre choisie retrouve son contexte d'origine.
+- Jusqu'à neuf profils : portée, tri, filtres, apparence et comportement au
+  relâchement. Raccourcis enregistrés au clavier, gérés par Roadie ou BetterTouchTool ;
+  commandes CLI disponibles pour les outils externes, dont Karabiner.
+- Plein écran Roadie sans rail, même au survol, sans utiliser le plein écran natif
+  macOS. Répéter `roadie toggle fullscreen` restaure la disposition précédente.
 
 ### Changements
 
-- Formulaires des paramètres alignés dans toutes les catégories, y compris les
-  profils du sélecteur. Onglets visibles sur toute la largeur, règles repliables,
-  commandes compactes et aides défilables.
-  Les menus et champs suivent la taille de texte choisie, même en fenêtre étroite.
-- Paramètres regroupés par usage dans toutes les catégories. Profils du sélecteur
-  présentés directement, choix Roadie/BTT et enregistrement d'une combinaison
-  par appui clavier. Trois modes au relâchement, recherche et actions contextuelles.
-- Navigation du sélecteur aux quatre flèches, y compris pendant le maintien du
-  raccourci d'ouverture, et sélection au survol, sans activation
-  de la vraie fenêtre avant validation.
+- Paramètres regroupés par usage, formulaires compacts et alignés, règles
+  repliables, onglets pleine largeur et aides défilables. Les contrôles suivent
+  la taille de texte choisie, y compris dans une fenêtre étroite.
 
-- Le plein écran Roadie (`toggle fullscreen`) cache le rail sur l'écran concerné,
-  même au survol, sans plein écran natif macOS. Répéter restaure la disposition.
-  La maximisation avec rail et le masquage automatique de type Dock restent distincts.
+### Corrections
+
+- Navigation du sélecteur avec les modificateurs maintenus, restauration des
+  fenêtres réduites, filtres d'état et actualisation après un échec d'activation.
+- Vérification et retour arrière des liaisons BetterTouchTool pour éviter les
+  doubles déclenchements lors d'un changement de gestionnaire.
+
+Aucun raccourci global d'ouverture du sélecteur n'est réservé par défaut.
+La configuration et les liaisons existantes sont conservées.
+
+[Notes françaises](docs/releases/v0.7.0.md) ·
+[English release notes](docs/releases/v0.7.0.en.md) ·
+[Comparaison depuis 0.6.0](https://github.com/guthubrx/roadie/compare/v0.6.0...v0.7.0)
 
 ## 0.6.0 - 2026-10-21
 

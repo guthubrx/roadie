@@ -13,8 +13,8 @@ Roadie organise tes fenêtres autour de tes activités. Regroupe les application
 d'un projet, retrouve-les dans le rail latéral et passe d'un espace de travail à
 l'autre sur chaque écran.
 
-**[Télécharger Roadie 0.6.0](https://github.com/guthubrx/roadie/releases/tag/v0.6.0)** ·
-[Découvrir les nouveautés](docs/releases/v0.6.0.md) · [Guide d'installation](#installation-manuelle)
+**[Télécharger Roadie 0.7.0](https://github.com/guthubrx/roadie/releases/tag/v0.7.0)** ·
+[Découvrir les nouveautés](docs/releases/v0.7.0.md) · [Guide d'installation](#installation-manuelle)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">

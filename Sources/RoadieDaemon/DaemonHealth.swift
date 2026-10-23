@@ -322,7 +322,7 @@ public struct DaemonHealthService {
 
 /// Version de Roadie, partagée par `roadied --version`, `roadie --version` et `daemon-status.json`.
 public enum RoadieVersion {
-    public static let current = "0.6.0"
+    public static let current = "0.7.0"
 }
 
 /// État publié par le daemon dans `~/.roadies/daemon-status.json`

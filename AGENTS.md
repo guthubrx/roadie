@@ -175,12 +175,14 @@ UUID final 7993A537-B6B2-3509-A069-FA1854E802C7, PID 11485, santé 5/5.
 Deux revues traitées. Captures réelles initiales vérifiées ; dernier rendu des
 onglets contrôlé en test natif, parcours complet des aides non enregistré.
 Reçu : specs/058-coherence-parametres/validation.md.
-Current SpecKit feature: `058-coherence-parametres`.
+Session 059 en cours : publication 0.7.0, documentation et notes FR/EN,
+validation des paquets, installation et nettoyage.
+Current SpecKit feature: `059-release-070`.
 
 Contexte :
-- `specs/058-coherence-parametres/spec.md`
-- `specs/058-coherence-parametres/plan.md`
-- `specs/058-coherence-parametres/tasks.md`
+- `specs/059-release-070/spec.md`
+- `specs/059-release-070/plan.md`
+- `specs/059-release-070/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes
