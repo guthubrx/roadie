@@ -61,3 +61,27 @@ Les formulations usuelles « garder ouvert » ou « reste disponible » restent
 des descriptions du comportement, pas de nouveaux libellés d'interface.
 Les libellés littéraux des modes sont déjà donnés dans les guides. Aucun changement
 applicatif ou de schéma n'est ajouté pour une variante de formulation.
+
+## Publication et vérification GitHub
+Version publiée le 23 octobre 2026 à 07:45:43Z :
+https://github.com/guthubrx/roadie/releases/tag/v0.7.0
+Latest, hors brouillon et hors préversion. Tag annoté v0.7.0 sur
+808ba04739e7d09a20bf7c76babe981f4174af4f ; référence distante contrôlée.
+Notes françaises et anglaises publiées dans le même corps, relu via l'API et
+identique au texte préparé. README FR/EN et notes FR/EN du tag retéléchargés par
+l'API : contenu identique aux fichiers validés.
+
+Deux pièces : Roadie.dmg (9 961 434 octets) et Roadie.dmg.sha256 (77 octets).
+Retéléchargement GitHub : les deux fichiers sont identiques aux originaux et
+shasum -a 256 -c confirme Roadie.dmg: OK. Aucune PR créée ; intégration directe
+sur main demandée et effectuée par avance rapide.
+
+## Nettoyage
+Une seule paire DMG/SHA-256 à jour est conservée dans
+/Users/moi/Nextcloud/10.Scripts/39.roadie/dist/.
+L'ancien paquet local a été remplacé. Bundle intermédiaire, compilation, cache
+Python, recette temporaire et copie de téléchargement de contrôle supprimés.
+Volumes de contrôle démontés. Journaux, empreintes et reçus conservés hors Git.
+Branche de release locale et distante supprimée, références worktree nettoyées.
+Checkout principal et worktree de conversation actif sont conservés ; celui de
+la conversation reste détaché. Aucun processus de test ou de compilation actif.

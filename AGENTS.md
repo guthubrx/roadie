@@ -175,8 +175,14 @@ UUID final 7993A537-B6B2-3509-A069-FA1854E802C7, PID 11485, santé 5/5.
 Deux revues traitées. Captures réelles initiales vérifiées ; dernier rendu des
 onglets contrôlé en test natif, parcours complet des aides non enregistré.
 Reçu : specs/058-coherence-parametres/validation.md.
-Session 059 en cours : publication 0.7.0, documentation et notes FR/EN,
-validation des paquets, installation et nettoyage.
+Session 059 : 0.7.0 publiée, notes et documentation FR/EN à jour. Changelog
+regroupé depuis 0.6.0 ; revue traitée. 1 876 tests / 231 suites et 28 scripts OK.
+DMG arm64 et SHA-256 vérifiés après téléchargement GitHub. Tag 808ba047,
+release Latest : https://github.com/guthubrx/roadie/releases/tag/v0.7.0.
+Installation locale 0.7.0, UUID 35F47682-FF59-3D44-86B2-6345129B5B81,
+PID 60119, santé 5/5 ; certificat et configuration conservés. Branche supprimée,
+builds et temporaires nettoyés ; worktree actif conservé détaché.
+Reçu : specs/059-release-070/validation.md.
 Current SpecKit feature: `059-release-070`.
 
 Contexte :

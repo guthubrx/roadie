@@ -1,5 +1,5 @@
 # Session 059 - Publication de Roadie 0.7.0
-Création : 23 octobre 2026. Statut : Validated. Priorité : P1.
+Création : 23 octobre 2026. Statut : Published. Priorité : P1.
 Publication, intégration et nettoyage explicitement demandés par l'utilisateur.
 Estimation : 15 à 30 minutes, compilation et vérifications comprises.
 

@@ -3,5 +3,5 @@
 - [x] T002 Harmoniser version, README, guides, notes FR/EN et changelog.
 - [x] T003 Traiter la revue, tester et construire la distribution.
 - [x] T004 Vérifier le DMG, la signature, les versions et les empreintes.
-- [ ] T005 Intégrer et publier, puis vérifier les fichiers GitHub.
-- [ ] T006 Installer, contrôler la santé et terminer le nettoyage.
+- [x] T005 Intégrer et publier, puis vérifier les fichiers GitHub.
+- [x] T006 Installer, contrôler la santé et terminer le nettoyage.
