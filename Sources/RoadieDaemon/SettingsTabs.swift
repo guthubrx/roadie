@@ -15,7 +15,7 @@ struct SettingsTabsGeometry {
         self.width = available
         count = titles.count
         let font = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
-        let minimum = titles.map { ($0 as NSString).size(withAttributes: [.font: font]).width + 20 }.max() ?? 1
+        let minimum = titles.map { ($0 as NSString).size(withAttributes: [.font: font]).width + 12 }.max() ?? 1
         columns = [max(1, count), 2, 1].first { CGFloat($0) * minimum + CGFloat($0 - 1) * 2 <= available } ?? 1
         cellHeight = max(34, ceil(font.ascender - font.descender + font.leading) + 14)
     }

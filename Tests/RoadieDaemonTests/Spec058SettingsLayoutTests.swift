@@ -58,7 +58,7 @@ struct Spec058SettingsHelpTests {
 struct Spec058SettingsTabsTests {
     @Test func tabsFillTheRowWithEqualWidthsAndKeepTheirNamesReadable() {
         let titles = ["Raccourci", "Fenêtres", "Navigation", "Apparence"]
-        for (width, font, expectedColumns) in [(700.0, 17.0, 4), (460.0, 32.0, 2), (366.0, 32.0, 2), (240.0, 32.0, 1)] {
+        for (width, font, expectedColumns) in [(700.0, 17.0, 4), (460.0, 32.0, 2), (348.0, 32.0, 2), (240.0, 32.0, 1)] {
             let geometry = SettingsTabsGeometry(width: width, titles: titles, fontSize: font)
             #expect(geometry.columns == expectedColumns)
             let frames = titles.indices.map { geometry.frame(at: $0) }
@@ -66,7 +66,7 @@ struct Spec058SettingsTabsTests {
             #expect(abs(frames[expectedColumns - 1].maxX - width) < 1)
             let nativeFont = NSFont.systemFont(ofSize: font, weight: .semibold)
             for (title, frame) in zip(titles, frames) {
-                #expect((title as NSString).size(withAttributes: [.font: nativeFont]).width + 16 <= frame.width)
+                #expect((title as NSString).size(withAttributes: [.font: nativeFont]).width + 12 <= frame.width)
             }
         }
     }
