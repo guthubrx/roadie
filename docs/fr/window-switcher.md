@@ -88,6 +88,18 @@ Le grand aperçu reste disponible dans chaque vue. Les colonnes et la vue d'ense
 le placent en bas ; les autres vues utilisent le côté ou un empilement sur petit écran.
 Le style des cartes (vignettes, icônes ou liste) reste un choix indépendant.
 
+Avec l'auto-dimensionnement, Roadie cherche une disposition qui tient sur une
+page. La vue par sections répartit les bureaux sur plusieurs colonnes si besoin,
+puis ajuste les cartes et utilise la hauteur disponible. Les stages d'un bureau
+restent ensemble. La police garde sa taille. Si aucune disposition lisible ne
+tient, le défilement reste disponible. Sans auto-dimensionnement, les tailles
+manuelles sont conservées.
+
+Dans les vues groupées, les cartes montrent une icône et un titre court. Les
+vignettes recadrent le haut du contenu ; le grand aperçu conserve la fenêtre
+entière. Son détail indique le bureau, la stage et l'application. Le bouton
+**Ouvrir** active la fenêtre sélectionnée, comme Entrée.
+
 Dans **Profils de raccourcis > Apparence > Organisation**, choisis une présentation
 pour ce seul profil, ou **Réglage commun**. Le changement prend effet immédiatement,
 y compris si le sélecteur est déjà ouvert. Sans nouvelle clé, Roadie conserve la

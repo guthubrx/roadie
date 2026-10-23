@@ -5,8 +5,8 @@ Spec: 060-presentations-selecteur
 Titre: Cinq présentations du sélecteur par bureau et stage
 Statut: Implemented
 Priorité: P1
-Tâches: 5/5 (100%)
-Tests: 1893/1893 (100%)
+Tâches: 9/9 (100%)
+Tests: 1900/1900 (100%)
 
 Demande validée le 23 octobre 2026 : « fais les toutes avec choix par menu parametres ».
 Branche : `session-060-presentations-selecteur`.
@@ -39,3 +39,18 @@ Diaporama avec limites explicites ; aucune image de conception utilisée comme p
 ## Hors périmètre
 Aucun nouveau moteur de raccourcis, déplacement de fenêtre, capture AX ou service.
 Pas de nouvelle release publique dans cette session.
+
+## Fidélité visuelle corrigée après retour utilisateur
+La comparaison du 23 octobre montre un écart avec les maquettes validées. Le
+sélecteur doit utiliser la place disponible sans écraser les captures. Les cinq organisations
+partagent des en-têtes bureau/stage avec pictogrammes, des cartes compactes à une
+ligne avec icône, et un détail lisible avec chemin, titre et action. Les vignettes
+peuvent recadrer le haut de la capture, tandis que le grand aperçu reste intégral.
+Les préférences de police et de taille restent respectées. Le rendu final doit
+être contrôlé sur des fenêtres verticales et des groupes de tailles différentes.
+
+Le retour utilisateur suivant demande de voir onze fenêtres sur une page. Avec
+`auto_size`, chercher une disposition bornée et lisible avant de faire défiler.
+La vue par sections peut répartir les bureaux en colonnes. Conserver les stages
+d'un bureau ensemble, la police et toutes les fenêtres. Utiliser la hauteur
+utile de l'écran. Le défilement reste le repli si la place manque réellement.

@@ -79,6 +79,8 @@ final class RailThumbnailStore {
         ids.map { "\($0.rawValue):\(revisions[$0, default: 0])" }.joined(separator: ",")
     }
 
+    func hasCapturedImage(for windowID: WindowID) -> Bool { images[windowID] != nil }
+
     func cachedImage(for windowID: WindowID) -> NSImage? {
         images[windowID] ?? fallbacks[windowID]
     }

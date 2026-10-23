@@ -101,8 +101,38 @@ struct WindowSwitcherGroupedLayout {
 
 /// Géométrie commune des cinq présentations ; aucune acquisition, mutation ou vue.
 enum WindowSwitcherGroupedGeometry {
+    /// Recherche bornée : au plus 30 plans O(n), sans réduire la police ni masquer de fenêtre.
+    /// Les réglages manuels gardent leur taille ; le défilement reste le dernier recours.
+    static func fittedLayout(entries: [WindowSwitcherEntry], appearance: WindowSwitcherAppearance,
+                             width: CGFloat, height: CGFloat, browsing: SwitcherBrowsingState) -> WindowSwitcherGroupedLayout {
+        guard appearance.autoSize, appearance.presentation != .classic else {
+            return layout(entries: entries, appearance: appearance, width: width, browsing: browsing)
+        }
+        let maxColumns = appearance.presentation == .sections ? max(1, min(3, Int(width / max(340, appearance.fontSize * 12)))) : 1
+        let sizes: [CGFloat] = appearance.style == .thumbnails
+            ? [appearance.thumbnailWidth, 280, 220, 180, 140].map { min(appearance.thumbnailWidth, $0) }
+            : [appearance.thumbnailWidth]
+        var widths: [CGFloat] = [], seen: Set<CGFloat> = []
+        for size in sizes where seen.insert(size).inserted { widths.append(size) }
+        var best: WindowSwitcherGroupedLayout?
+        for limit: CGFloat in [140, 112] {
+            for size in widths {
+                var candidate = appearance
+                candidate.thumbnailWidth = size
+                candidate.thumbnailHeightLimit = limit
+                for columns in 1...maxColumns {
+                    let plan = layout(entries: entries, appearance: candidate, width: width, browsing: browsing, sectionColumns: columns)
+                    if plan.size.height <= height { return plan }
+                    if let previous = best, previous.size.height <= plan.size.height { continue }
+                    best = plan
+                }
+            }
+        }
+        return best ?? WindowSwitcherGroupedLayout(size: CGSize(width: width, height: 0))
+    }
+
     static func layout(entries: [WindowSwitcherEntry], appearance: WindowSwitcherAppearance,
-                       width: CGFloat, browsing: SwitcherBrowsingState) -> WindowSwitcherGroupedLayout {
+                       width: CGFloat, browsing: SwitcherBrowsingState, sectionColumns: Int = 1) -> WindowSwitcherGroupedLayout {
         let groups = WindowSwitcherGroups(entries: entries)
         let width = max(1, width)
         var result = WindowSwitcherGroupedLayout(size: CGSize(width: width, height: 0))
@@ -154,26 +184,37 @@ enum WindowSwitcherGroupedGeometry {
         case .stageColumns:
             let stages = (groups.desktops.first { $0.id == browsing.desktop } ?? groups.desktops.first)?.stages ?? []
             let columns = max(1, min(stages.count, Int((width + gap) / max(220, appearance.fontSize * 10))))
-            let columnWidth = (width - CGFloat(columns - 1) * gap) / CGFloat(columns)
             var top: CGFloat = 0
             for start in stride(from: 0, to: stages.count, by: columns) {
-                var rowHeight: CGFloat = 0
-                for index in start..<min(stages.count, start + columns) {
-                    rowHeight = max(rowHeight, stage(stages[index], x: CGFloat(index - start) * (columnWidth + gap),
-                                                     y: top, width: columnWidth))
+                let row = Array(stages[start..<min(stages.count, start + columns)])
+                let available = width - CGFloat(row.count - 1) * gap
+                let minimum = min(220, available / CGFloat(row.count))
+                let extra = max(0, available - minimum * CGFloat(row.count))
+                let weights = row.map { CGFloat(min(3, max(1, $0.entries.count))) }
+                let total = weights.reduce(0, +)
+                var rowHeight: CGFloat = 0, x: CGFloat = 0
+                for (index, group) in row.enumerated() {
+                    let columnWidth = minimum + extra * weights[index] / total
+                    rowHeight = max(rowHeight, stage(group, x: x, y: top, width: columnWidth))
+                    x += columnWidth + gap
                 }
                 top += rowHeight + gap
             }
             result.size.height = max(0, top - (stages.isEmpty ? 0 : gap))
         case .sections:
-            var top: CGFloat = 0
+            let columns = max(1, min(sectionColumns, groups.desktops.count))
+            let columnWidth = (width - CGFloat(columns - 1) * gap) / CGFloat(columns)
+            var bottoms = Array(repeating: CGFloat(0), count: columns)
             for desktop in groups.desktops {
+                // Trois colonnes au plus ; les stages d'un bureau restent réunies.
+                let column = bottoms.indices.min { bottoms[$0] < bottoms[$1] } ?? 0
+                let x = CGFloat(column) * (columnWidth + gap), top = bottoms[column]
                 result.headings.append(SwitcherGroupHeading(text: "\(desktop.title) · \(desktop.entries.count)",
-                    frame: CGRect(x: 0, y: top, width: width, height: headingHeight), isDesktop: true))
-                top += headingHeight + 4
-                top += sections(desktop.stages, y: top, width: width) + gap
+                    frame: CGRect(x: x, y: top, width: columnWidth, height: headingHeight), isDesktop: true))
+                bottoms[column] = top + headingHeight + 4
+                    + sections(desktop.stages, x: x, y: top + headingHeight + 4, width: columnWidth) + gap
             }
-            result.size.height = max(0, top - (groups.desktops.isEmpty ? 0 : gap))
+            result.size.height = max(0, (bottoms.max() ?? 0) - (groups.desktops.isEmpty ? 0 : gap))
         case .overview:
             let columns = max(1, min(groups.desktops.count, Int((width + gap) / max(330, appearance.fontSize * 13))))
             let columnWidth = (width - CGFloat(columns - 1) * gap) / CGFloat(columns)

@@ -12,6 +12,15 @@ jour et les limites connues ; les README décrivent la version courante.
   Réglage commun ou propre à chaque profil, appliqué sans redémarrage. La grille
   classique, les raccourcis et le comportement au relâchement sont conservés.
 
+### Corrections
+
+- Présentations du sélecteur rapprochées des maquettes : panneau adapté à l’écran,
+  vignettes groupées compactes, icônes et titres sans contexte répété, détail
+  avec chemin bureau/stage et aperçu intégral. Largeur des colonnes répartie
+  selon leur contenu et cartes spatiales remplies sur toute leur hauteur.
+  En mode automatique, recherche d'une disposition sur une page, avec bureaux
+  répartis en colonnes si nécessaire et police conservée.
+
 ## 0.7.0 - 2026-10-23
 
 ### Nouveautés

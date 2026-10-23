@@ -23,3 +23,25 @@
 Ne pas dupliquer cinq panneaux complets ni ajouter une UI web. Ne pas transformer
 le regroupement visuel en nouveau filtre persistant. Ces choix préserveraient mal
 les actions, la sélection globale et les surcharges existantes.
+
+## Correction de fidélité après comparaison utilisateur
+La capture installée montre un panneau trop vertical, des captures de fenêtres
+hautes réduites dans de grands emplacements et un aperçu sans contexte. Reprendre
+le socle commun : largeur jusqu'à 1440 points, hauteur liée à la largeur et bornée
+à l'écran ; vignettes de groupe uniformes avec recadrage haut et aperçu intégral ;
+une seule ligne de titre avec icône, contexte porté par les en-têtes et le détail.
+Ajouter un vrai panneau de détail (chemin, titre, image, application et action),
+un en-tête et un pied lisibles. Garder les choix de police, les modes d'ouverture,
+les raccourcis, les filtres et les identités. Aucun nouveau relevé AX ni capture.
+Vérifier les écrans larges/hauts/étroits, les textes longs, les groupes de tailles
+différentes, puis comparer les rendus natifs et la fenêtre installée aux maquettes.
+
+## Ajustement à une page après essai utilisateur
+Le second retour porte sur onze fenêtres : éviter une grande largeur avec des
+captures en bandes et un document coupé. L'auto-dimensionnement cherche un plan
+qui tient dans la zone utile. Il essaie au plus trente plans, avec une à trois
+colonnes de bureaux pour les sections et des tailles de cartes bornées. Les
+stages d'un bureau restent réunies. La police ne rétrécit pas ; toutes les
+identités sont conservées. La hauteur du panneau suit le document jusqu'à la
+limite de l'écran. Le défilement sert seulement si aucune taille lisible ne tient.
+Les tailles manuelles sont respectées si l'auto-dimensionnement est désactivé.

@@ -395,10 +395,6 @@ public final class WindowSwitcherController {
         let images: [WindowID: NSImage]
         if session.appearance.style == .thumbnails {
             images = thumbnails.images(for: members)
-            thumbnails.requestCaptures(
-                for: members, protectedWindowIDs: [], liveFrames: [:],
-                displayWidth: session.appearance.thumbnailWidth, budget: 6
-            )
         } else {
             images = Self.appIcons(for: entries)
         }
@@ -410,8 +406,16 @@ public final class WindowSwitcherController {
             query: model.query,
             images: images,
             previewImage: previewImage(for: model.selected?.id),
-            emptyMessage: "Aucune fenêtre dans ce contexte"
+            emptyMessage: "Aucune fenêtre dans ce contexte",
+            iconOnlyIDs: session.appearance.style == .thumbnails
+                ? Set(entries.lazy.filter { !self.thumbnails.hasCapturedImage(for: $0.id) }.map(\.id)) : []
         )
+        if session.appearance.style == .thumbnails {
+            thumbnails.requestCaptures(
+                for: members, protectedWindowIDs: [], liveFrames: [:],
+                displayWidth: max(session.appearance.thumbnailWidth, panel.thumbnailDisplayWidth), budget: 6
+            )
+        }
         if session.actionFailed { panel.showActionError() }
     }
 

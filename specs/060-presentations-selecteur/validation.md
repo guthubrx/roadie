@@ -63,3 +63,55 @@ de la persistance et des interactions restent les preuves disponibles.
 Diaporama autonome : preuves-corrections/2026-10-23-selecteur-060/preuves.html.
 Captures brutes, manifeste et journaux conservés hors Git dans les diagnostics
 2026-10-23-session060. Le diaporama indique les étapes non vérifiées.
+
+## Reprise de fidélité visuelle du 23 octobre
+Retour utilisateur : le regroupement fonctionne, mais le rendu diffère trop des
+maquettes (panneau vertical, captures étroites, contexte répété, aperçu sans détail).
+Correction et validation complémentaire en cours sur `session-060-fidelite-selecteur`.
+Revue demandée par Bridget, clé `roadie-060-fidelite-review-20261023-1`, base
+`cc11fb8fc3b36453ca4818f4bb53d9299f69a367`, espace partagé, lecture seule.
+Refus immédiat `auto_admission_invalid` : aucun identifiant de tâche, décision ou
+exécution retourné, aucun agent lancé. Aucun autre moteur utilisé en remplacement.
+
+Validation complémentaire : 32 tests ciblés / 5 suites réussis, puis 1 899 tests
+Swift / 235 suites réussis en 33,881 secondes ; 28 tests de scripts réussis.
+Un ancien contrôle cherchait l'image directement dans la fenêtre : il vérifie
+maintenant le panneau de détail, sa position et l'image intégrale contenue.
+Aucun benchmark. Six rendus natifs (classique et cinq organisations) comparés
+aux maquettes, dont huit fenêtres verticales et groupes de tailles différentes.
+Les rendus hors écran ne reproduisent pas le flou réel de NSVisualEffectView.
+Complexité : parcours linéaires conservés ; cache d'icônes par PID, recadrage O(1),
+répartition des colonnes O(s). Aucun nouveau relevé AX ni lot de capture.
+
+### Complément : onze fenêtres sur une page
+La capture utilisateur révèle la nécessité de tenir verticalement sans former des
+bandes. Le cas réel de largeur préférée 120 a été ajouté. Le recadrage se fonde
+sur la carte affichée, et la résolution des captures suit sa largeur effective,
+avec le même budget. Les demandes de capture partent après le calcul des cartes.
+Recherche bornée de 30 plans au plus : colonnes de bureaux, tailles de cartes,
+puis hauteur d'image compacte si nécessaire. Les stages d'un bureau restent
+réunies, la police reste inchangée et aucune fenêtre n'est supprimée.
+34 tests ciblés / 6 suites réussis. Cas de onze fenêtres sur quatre bureaux et
+sept stages : 120/220/400 points, 1920×1080 et 3840×2160, zéro défilement vertical.
+Suite finale : 1 900 tests / 235 suites réussis en 37,115 secondes. Les 28 tests
+de scripts restent valides ; aucun script de production n'a été modifié.
+
+### Installation finale et limites des preuves
+Release compilée, installée et relancée ; UUID
+`E367325B-3C1D-3958-B982-886E7E2BD915`, PID 21019. Les cinq contrôles de santé
+sont OK. Certificat `78a75e8032f190a20072eb91cc2919aac344ef78` conservé.
+Les 337 fichiers Swift Sources/Tests empreintés n'ont pas changé entre la suite
+finale et l'installation. Le fichier utilisateur n'a pas changé entre la dernière
+préparation et l'installation ; les choix manuels faits pendant la session restent
+présents. Aucun raccourci BTT ou Karabiner n'a été modifié.
+Une tentative de parcours automatisé par configuration temporaire a été arrêtée
+après fermeture du panneau pendant la capture. Réglages d'origine rétablis,
+fichier temporaire supprimé. Une ouverture réelle de la version intermédiaire
+avec onze fenêtres a été observée, révélant le cas de largeur 120. La version
+finale a été capturée sur le bureau en grille classique, avec douze fenêtres.
+Le contrôle visuel final de la grille par sections et le parcours des paramètres
+restent incomplets ; ils ne sont pas présentés comme validés en réel.
+Le diaporama de fidélité contient six rendus natifs fictifs, dont le cas onze
+fenêtres sur une page. Lecture/pause, navigation, sélection de dernière étape et
+zoom vérifiés dans T3. Les captures réelles, qui contiennent les fenêtres de
+l'utilisateur, restent hors Git. Aucun clic fictif annoté.

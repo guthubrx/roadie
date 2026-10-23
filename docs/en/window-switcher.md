@@ -81,6 +81,17 @@ Every presentation supports the larger preview. Columns and overview place it
 below the windows; the others use a side preview or stack on smaller screens.
 Thumbnail, icon and list card styles remain independent.
 
+With auto-sizing enabled, Roadie looks for a layout that fits on one page.
+Grouped sections can place desktops in several columns, adjust the cards and use
+the available screen height. Stages belonging to one desktop stay together.
+Font size is preserved. Scrolling remains available when no readable layout fits.
+Manual sizes are preserved when auto-sizing is disabled.
+
+Grouped cards show an app icon and a short title. Thumbnails crop the top of the
+content; the larger preview keeps the entire window visible. Its details show
+the desktop, stage and application. **Ouvrir** activates the selected window,
+just like Return.
+
 Under **Profils de raccourcis > Apparence > Organisation**, override the presentation
 for one profile or select **Réglage commun** to inherit it. Changes apply immediately,
 including while the switcher is open. Existing configurations keep the classic
