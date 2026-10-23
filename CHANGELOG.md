@@ -19,7 +19,8 @@ jour et les limites connues ; les README décrivent la version courante.
 - Paramètres regroupés par usage dans toutes les catégories. Profils du sélecteur
   présentés directement, choix Roadie/BTT et enregistrement d'une combinaison
   par appui clavier. Trois modes au relâchement, recherche et actions contextuelles.
-- Navigation du sélecteur aux quatre flèches et sélection au survol, sans activation
+- Navigation du sélecteur aux quatre flèches, y compris pendant le maintien du
+  raccourci d'ouverture, et sélection au survol, sans activation
   de la vraie fenêtre avant validation.
 
 - Le plein écran Roadie (`toggle fullscreen`) cache le rail sur l'écran concerné,

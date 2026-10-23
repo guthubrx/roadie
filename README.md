@@ -81,11 +81,15 @@ Suggestions and history help you enter commands. Set the shortcut in the
 ### Make it your own
 
 The **window switcher** opens a selected window in its own Roadie desktop and
-stage. Connect your preferred shortcut to the CLI through BetterTouchTool or Karabiner, and configure profiles for a
-display, desktop, stage or application. Search and choose thumbnails, icons or
-a compact list in Settings > Sélecteur. [Window switcher guide](docs/en/window-switcher.md).
+stage. In Settings > Sélecteur, create profiles for a display, desktop, stage or
+application. Record a shortcut directly, let BetterTouchTool manage it, or use an
+external CLI binding. Choose whether releasing the keys activates the selection,
+keeps the switcher open or starts search. Navigate with the four arrow keys or
+the mouse, and give each profile its own appearance.
+[Window switcher guide](docs/en/window-switcher.md).
 
-Adjust spacing, stage names, rules and overrides in the settings window.
+Settings are grouped by purpose. Adjust spacing, stage names, rules and overrides
+in the settings window.
 Valid values apply as you type. Choose separate sizes for the rail, labels
 and settings, and font families for the search field and its suggestions.
 

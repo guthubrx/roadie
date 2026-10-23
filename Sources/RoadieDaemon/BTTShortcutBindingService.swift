@@ -45,7 +45,7 @@ struct BTTAppleScriptAPI: BTTShortcutAPI {
         task.standardOutput = output
         task.standardError = error
         try task.run()
-        // Sorties API écrites dans un fichier : éviter un pipe plein pendant waitUntilExit.
+        // Vider stdout avant waitUntilExit pour éviter un pipe plein.
         let outputData = output.fileHandleForReading.readDataToEndOfFile()
         task.waitUntilExit()
         let message = String(data: error.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
@@ -127,7 +127,7 @@ struct BTTShortcutBindingService: Sendable {
 
     /// L'import exige une action CLI exacte et un candidat unique, jamais un nom approchant.
     func legacy(_ binding: BTTBinding) throws -> BTTBinding {
-        guard binding.forwardID.isEmpty, binding.reverseID.isEmpty else { return binding }
+        guard binding.profileID == "all", binding.forwardID.isEmpty, binding.reverseID.isEmpty else { return binding }
         let root = try JSONSerialization.jsonObject(with: Data(api.list().utf8))
         var nodes: [String: [String: Any]] = [:]
         func visit(_ item: Any) {
@@ -138,7 +138,6 @@ struct BTTShortcutBindingService: Sendable {
         }
         visit(root)
         let base = executable + " switcher cycle --hold cmd"
-        guard binding.profileID == "all" else { return binding }
         let forwards = nodes.filter { $0.value["BTTShellTaskActionScript"] as? String == base }
         let backwards = nodes.filter { $0.value["BTTShellTaskActionScript"] as? String == base + " --backwards" }
         if forwards.isEmpty && backwards.isEmpty { return binding }
@@ -174,8 +173,7 @@ struct BTTShortcutBindingService: Sendable {
         do {
             var known = old
             if old.source == "btt" || new.source == "btt" || (old.source == "external" && new.source == "roadie") {
-                if old.source == "external" && new.source == "roadie" { known = (try? legacy(old)) ?? old }
-                else { known = try legacy(old) }
+                known = try legacy(old)
             }
             result.binding.forwardID = known.forwardID
             result.binding.reverseID = known.reverseID
@@ -218,8 +216,10 @@ struct BTTShortcutBindingService: Sendable {
             }
             return result
         } catch {
-            try rollback(result)
-            throw error
+            let initial = error
+            do { try rollback(result) }
+            catch { throw BTTBindingError.message(initial.localizedDescription + " Retour arrière : " + error.localizedDescription) }
+            throw initial
         }
     }
 
@@ -230,9 +230,25 @@ struct BTTShortcutBindingService: Sendable {
         for id in (hasShift ? [value.forwardID] : [value.forwardID, value.reverseID]) where !id.isEmpty {
             try api.write(id, json: Self.json(["BTTEnabled": 1, "BTTEnabled2": 1]))
             let actual = try Self.dictionary(api.read(id))
-            guard (actual["BTTEnabled"] as? Int ?? 1) == 1, (actual["BTTEnabled2"] as? Int ?? 1) == 1 else {
+            // BTT omet les deux champs lorsqu'ils valent 1 (relecture native du 23/10/2026).
+            // Exiger l'identité empêche une réponse vide d'être prise pour une activation.
+            guard actual["BTTUUID"] as? String == id,
+                  (actual["BTTEnabled"] as? Int ?? 1) == 1, (actual["BTTEnabled2"] as? Int ?? 1) == 1 else {
                 throw BTTBindingError.message("BTT n'a pas activé la liaison.")
             }
+        }
+    }
+
+    /// Retire seulement les liaisons reconnues et désactivées par prepare. O(k), k <= 2.
+    func discard(_ mutation: BTTMutation) throws {
+        for id in mutation.previous.keys {
+            let actual = try Self.dictionary(api.read(id))
+            let reverse = id == mutation.binding.reverseID
+            guard owns(actual["BTTShellTaskActionScript"] as? String, profile: mutation.binding.profileID, backwards: reverse),
+                  actual["BTTEnabled"] as? Int == 0, actual["BTTEnabled2"] as? Int == 0 else {
+                throw BTTBindingError.message("La liaison BTT a changé ; elle n'a pas été supprimée.")
+            }
+            try api.delete(id)
         }
     }
 

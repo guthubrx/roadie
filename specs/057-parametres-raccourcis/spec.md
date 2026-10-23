@@ -1,5 +1,5 @@
 # Session 057 - Paramètres structurés et raccourcis directs
-Statut: Ready
+Statut: Implémentée ; preuve graphique partielle documentée dans validation.md
 Priorité: P1
 Validation: « mais ouiiiiii go avance », 23 octobre 2026.
 Estimation: 4 à 6 heures.

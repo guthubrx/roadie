@@ -132,7 +132,7 @@ struct SettingsSwitcherProfilesView: View {
             } else {
                 toggle(row, "arrow_navigation", "Navigation avec les quatre flèches")
                 toggle(row, "mouse_hover", "Sélectionner au survol de la souris")
-                Text("Le survol sélectionne ; le clic active la fenêtre. Un pointeur immobile ne reprend pas la sélection après une flèche. Dans la recherche, Gauche/Droite restent disponibles pour éditer le texte.")
+                Text("Le survol sélectionne ; le clic active la fenêtre. Un pointeur immobile ne reprend pas la sélection après une flèche. Quand la recherche contient du texte, Gauche/Droite déplacent le curseur dans ce texte.")
                     .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
             }
             if editor.rows.count > 1 {
@@ -215,7 +215,9 @@ struct SettingsSwitcherProfilesView: View {
                         throw BTTBindingError.message("Roadie n'a pas pu enregistrer cette combinaison. Vérifiez les autres raccourcis.")
                     }
                     try await Task.detached { try service.activate(mutation) }.value
-                    message = new.source == "btt" ? "Liaison BTT vérifiée. Essayez maintenant la combinaison au clavier." : "Gestionnaire mis à jour."
+                    message = mutation.binding.source == "btt"
+                        ? (mutation.binding.hotkey.isEmpty ? "BetterTouchTool sélectionné. Enregistrez une combinaison pour créer la liaison." : "Liaison BTT vérifiée. Essayez maintenant la combinaison au clavier.")
+                        : "Gestionnaire mis à jour."
                 } catch {
                     if committed {
                         guard editor.updateRow(row.id, values: raw(old)) else {
@@ -245,12 +247,27 @@ struct SettingsSwitcherProfilesView: View {
         return false
     }
     private func remove(_ row: SettingsCollectionEditorModel.Row) {
-        if (source(row) == "btt" || !(row.raw["btt_forward_uuid"] ?? "").isEmpty) && row.raw["enabled"] != "false" {
-            change(row, values: ["enabled": "false", "trigger_source": "external"])
-            message = "Désactivez la liaison, puis supprimez le profil."
-        } else {
-            editor.removeRow(row.id)
-            selectedID = editor.rows.first?.id
+        let old = bindingValue(row)
+        var disabled = old
+        disabled.source = "external"
+        disabled.enabled = false
+        let desired = disabled
+        let layout = TargetSearchHotkey.currentLayoutTable()
+        busy = true
+        message = ""
+        Task { @MainActor in
+            defer { busy = false }
+            do {
+                let service = BTTShortcutBindingService()
+                let mutation = try await Task.detached { try service.prepare(old: old, new: desired, layout: layout) }.value
+                guard editor.removeRow(row.id) else {
+                    try await Task.detached { try service.rollback(mutation) }.value
+                    throw BTTBindingError.message("Le profil n'a pas été supprimé. Sa liaison est conservée.")
+                }
+                selectedID = editor.rows.first?.id
+                try await Task.detached { try service.discard(mutation) }.value
+                message = "Profil et liaisons associées supprimés."
+            } catch { message = error.localizedDescription }
         }
     }
 }

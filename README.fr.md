@@ -86,12 +86,15 @@ dans la catégorie Recherche ; `roadie targets search` ouvre aussi la barre.
 ### Une interface à ta mesure
 
 Le **sélecteur de fenêtres** ouvre la fenêtre choisie dans son bureau et sa
-stage Roadie. Relie le raccourci de ton choix à la CLI via BetterTouchTool ou Karabiner, puis définis des profils pour un
-écran, un bureau, une stage ou une application. Recherche, vignettes, icônes et
-liste compacte se règlent dans Paramètres > Sélecteur.
+stage Roadie. Dans Paramètres > Sélecteur, crée des profils pour un écran, un
+bureau, une stage ou une application. Enregistre directement une combinaison,
+confie-la à BetterTouchTool ou utilise une commande externe. Au relâchement,
+choisis entre activer la fenêtre, garder le sélecteur ouvert et passer en recherche.
+Navigue avec les quatre flèches ou la souris. Chaque profil peut avoir sa propre
+apparence.
 [Guide du sélecteur](docs/fr/window-switcher.md).
 
-Ajuste les espacements, les noms de stages, les règles et les exceptions depuis
+Les paramètres sont regroupés par usage. Ajuste les espacements, les noms de stages, les règles et les exceptions depuis
 la fenêtre de paramètres. Les valeurs valides s'appliquent pendant la saisie.
 Choisis séparément les tailles du rail, des étiquettes et des paramètres, ainsi
 que les polices du champ de recherche et de ses suggestions.

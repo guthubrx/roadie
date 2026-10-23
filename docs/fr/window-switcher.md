@@ -58,7 +58,8 @@ ouverte directement en recherche se ferme par Échap.
 
 ## Navigation au clavier et à la souris
 
-Les quatre flèches déplacent la sélection selon la grille. Sur une dernière ligne
+Les quatre flèches déplacent la sélection selon la grille, même en maintenant
+les modificateurs du raccourci d'ouverture, par exemple Commande après ⌘ Tab. Sur une dernière ligne
 incomplète, Haut/Bas choisissent la carte la plus proche de la colonne visée.
 Le survol sélectionne une carte ; le clic active sa fenêtre. Un pointeur immobile
 ne reprend pas la sélection après une action au clavier. Ces deux modes de

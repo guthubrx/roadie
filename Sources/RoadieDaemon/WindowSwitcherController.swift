@@ -240,7 +240,7 @@ public final class WindowSwitcherController {
             current.config = config
             current.appearance = WindowSwitcherAppearance(config: config, profile: profile)
             current.panel?.switcherAppearance = current.appearance
-            current.panel?.configure(profile: profile)
+            current.panel?.configure(profile: profile, navigationModifiers: current.required)
             current.model?.configure(profile: profile, excludedBundles: config.excludedBundles)
             hotkeys?.holdEscape(true)
             refresh(current)
@@ -285,7 +285,7 @@ public final class WindowSwitcherController {
         panel.onSelect = { [weak self] id in self?.select(id) }
         panel.onHighlight = { [weak self] id in self?.highlight(id) }
         panel.onSearchMode = { [weak self] editing in self?.session?.state.searchChanged(isEmpty: !editing) }
-        panel.configure(profile: profile, forceSearch: !fromHotkey)
+        panel.configure(profile: profile, forceSearch: !fromHotkey, navigationModifiers: required)
 
         panel.onAction = { [weak self] action in self?.perform(action) }
         newSession.panel = panel

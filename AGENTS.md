@@ -156,7 +156,15 @@ Configuration et certificat conservés. Parcours initial confirmé par l'utilisa
 capture finale vérifiée ; Cmd+Tab externe et validation au relâchement confirmés
 après correction BTT. Preuve complète des interactions non enregistrée.
 Reçu : specs/056-selecteur-fenetres/validation.md.
-Session 057 validée : refonte des paramètres, profils et gestionnaires de raccourcis, capture native, flèches et survol.
+Session 057 installée : paramètres regroupés par usage, profils dédiés et capture
+native des raccourcis. Gestionnaire Roadie/BTT/externe, trois modes au relâchement,
+recherche/actions contextuelles et apparence par profil. Flèches acceptées avec
+les modificateurs maintenus, survol sélectionne et clic active.
+1 869 tests / 227 suites et 28 scripts réussis ; revue indépendante traitée.
+UUID 20584940-BB44-3A34-8DE1-EFC0D35D6159, PID 84023, santé 5/5.
+Configuration et certificat conservés. Captures de la fenêtre installée vérifiées,
+parcours complet de capture des touches et liaison BTT non enregistré.
+Reçu : specs/057-parametres-raccourcis/validation.md.
 Current SpecKit feature: `057-parametres-raccourcis`.
 
 Contexte :

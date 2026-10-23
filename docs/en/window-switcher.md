@@ -96,7 +96,8 @@ Release can focus the selected window, keep the panel open, or enter search.
 Search and Actions can follow that mode or an explicit visibility choice. Cmd+F
 enters search when allowed; Escape exits search entered mid-session before closing.
 
-Four arrows follow the grid geometry. Hover selects a card and clicking activates
+Four arrows follow the grid geometry, including while the opening shortcut's
+modifiers remain held, such as Command after Cmd+Tab. Hover selects a card and clicking activates
 its window. A stationary pointer does not override a later keyboard selection.
 Both navigation methods are configurable per profile. While editing nonempty search
 text, Left/Right edit text and Up/Down move through results. IME and native editing

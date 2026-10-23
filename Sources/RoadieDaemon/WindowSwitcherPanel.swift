@@ -239,6 +239,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     private(set) var isSearchEditing = false
     private var searchStartedOpen = false
     private var profile = WindowSwitcherShortcutConfig()
+    private var navigationModifiers: Set<WindowSwitcherModifier> = []
     private var hoverMonitor: Any?
     private var previousMouse: CGPoint?
 
@@ -262,8 +263,9 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
 
     override var canBecomeKey: Bool { true }
 
-    func configure(profile: WindowSwitcherShortcutConfig, forceSearch: Bool = false) {
+    func configure(profile: WindowSwitcherShortcutConfig, forceSearch: Bool = false, navigationModifiers: Set<WindowSwitcherModifier>? = nil) {
         self.profile = profile
+        if let navigationModifiers { self.navigationModifiers = navigationModifiers }
         let search = SwitcherNavigation.visible(profile.searchVisibility, automatic: forceSearch)
         field.isHidden = !search && !isSearchEditing
         actionsButton.isHidden = !SwitcherNavigation.visible(profile.actionsVisibility, automatic: profile.releaseAction != "focus" || forceSearch)
@@ -459,7 +461,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         }
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
-           let key = Self.key(for: event) {
+           let key = Self.key(for: event, allowing: navigationModifiers) {
             switch key {
             case .cancel: escape()
             case .confirm: onConfirm?()
@@ -485,19 +487,20 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         return NSApp.sendAction(action, to: editor, from: self)
     }
 
-    /// Gauche/droite restent au champ (curseur) ; Tab, Maj+Tab et flèches haut/bas parcourent les cartes.
-    static func key(for event: NSEvent) -> Key? {
+    /// Les flèches restent utilisables pendant le maintien du raccourci d'ouverture.
+    static func key(for event: NSEvent, allowing modifiers: Set<WindowSwitcherModifier> = []) -> Key? {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        let arrowAllowed = WindowSwitcherHotkey.held(in: CGEventFlags(rawValue: UInt64(flags.rawValue))).isSubset(of: modifiers)
         switch event.keyCode {
         case 53: return .cancel
         case 36, 76: return .confirm
         case 48:
             guard flags.isEmpty || flags == .shift else { return nil }
             return flags.contains(.shift) ? .previous : .next
-        case 123: return flags.isEmpty ? .left : nil
-        case 124: return flags.isEmpty ? .right : nil
-        case 125: return flags.isEmpty ? .down : nil
-        case 126: return flags.isEmpty ? .up : nil
+        case 123: return arrowAllowed ? .left : nil
+        case 124: return arrowAllowed ? .right : nil
+        case 125: return arrowAllowed ? .down : nil
+        case 126: return arrowAllowed ? .up : nil
         default: return nil
         }
     }

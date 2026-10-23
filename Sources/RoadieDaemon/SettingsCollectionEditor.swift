@@ -104,9 +104,10 @@ final class SettingsCollectionEditorModel: ObservableObject {
     func updateRow(_ id: UUID, values: [String: String]) -> Bool {
         guard let index = rows.firstIndex(where: { $0.id == id }) else { return false }
         let previous = rows[index]
+        let previousDrafts = hasDrafts
         for (key, value) in values { rows[index].raw[key] = value }
         hasDrafts = true
-        guard persist() else { rows[index] = previous; return false }
+        guard persist() else { rows[index] = previous; hasDrafts = previousDrafts; return false }
         return true
     }
 
@@ -134,10 +135,13 @@ final class SettingsCollectionEditorModel: ObservableObject {
         hasDrafts = true
     }
 
-    func removeRow(_ id: UUID) {
+    @discardableResult
+    func removeRow(_ id: UUID) -> Bool {
+        let previous = rows, previousDrafts = hasDrafts
         rows.removeAll { $0.id == id }
         hasDrafts = true
-        persist()
+        guard persist() else { rows = previous; hasDrafts = previousDrafts; return false }
+        return true
     }
 
     func moveRow(_ id: UUID, by offset: Int) {
@@ -192,6 +196,10 @@ final class SettingsCollectionEditorModel: ObservableObject {
 
     @discardableResult
     private func persist() -> Bool {
+        guard baseline != nil else {
+            messages = ["Rechargez les données avant de les modifier."]
+            return false
+        }
         guard let candidate = candidate() else {
             messages = ["Complétez les champs requis et les valeurs en cours de saisie. La dernière configuration valide reste active."]
             return false
