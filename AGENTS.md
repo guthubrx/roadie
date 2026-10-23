@@ -183,10 +183,14 @@ Installation locale 0.7.0, UUID 35F47682-FF59-3D44-86B2-6345129B5B81,
 PID 60119, santé 5/5 ; certificat et configuration conservés. Branche supprimée,
 builds et temporaires nettoyés ; worktree actif conservé détaché.
 Reçu : specs/059-release-070/validation.md.
-Session 060 en validation : cinq organisations du sélecteur, configuration commune
-et surcharge par profil, sans nouveau raccourci ni changement d'affectation.
-1 892 tests / 234 suites et 28 scripts réussis. Rendus natifs contrôlés ;
-revue et installation en cours. Reçu : specs/060-presentations-selecteur/validation.md.
+Session 060 installée : cinq organisations du sélecteur, choix commun et par profil,
+sans nouveau raccourci ni changement d'affectation. Grille classique conservée.
+1 893 tests / 234 suites et 28 scripts réussis. UUID
+92CDDB8A-E428-3103-ADAE-7E1901FBC770, PID 11924, santé 5/5.
+Certificat/configuration conservés. Ouverture réelle du sélecteur observée ;
+parcours des paramètres non capturé (saisie automatisée annulant la barre).
+Revue indépendante non démarrée : admission Bridget auto_admission_invalid.
+Reçu : specs/060-presentations-selecteur/validation.md.
 Current SpecKit feature: `060-presentations-selecteur`.
 
 Contexte :

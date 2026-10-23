@@ -3,9 +3,9 @@
 ## Fiche Synthèse
 Spec: 060-presentations-selecteur
 Titre: Cinq présentations du sélecteur par bureau et stage
-Statut: In Progress
+Statut: Implemented
 Priorité: P1
-Tâches: 3/5 (60%)
+Tâches: 5/5 (100%)
 Tests: 1893/1893 (100%)
 
 Demande validée le 23 octobre 2026 : « fais les toutes avec choix par menu parametres ».

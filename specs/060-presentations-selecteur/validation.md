@@ -38,4 +38,28 @@ Demande Bridget `roadie-060-presentations-review-20261023-1`, source
 contournement ni autre moteur lancé. Relecture du diff, tests et installation
 poursuivis par le responsable ; cette livraison n'a pas de verdict indépendant.
 
-Compilation Release, installation et essai installé en cours.
+## Installation et contrôle réel
+Build Release final installé et relancé. UUID de la compilation et du daemon
+installé identiques : 92CDDB8A-E428-3103-ADAE-7E1901FBC770. PID 11924.
+Les cinq contrôles santé sont OK, dont Accessibilité et validation de configuration.
+339 empreintes Sources/Tests inchangées depuis les tests finaux. Signature stricte
+vérifiée ; certificat 78a75e8032f190a20072eb91cc2919aac344ef78 conservé.
+Configuration utilisateur identique, SHA-256 vérifié après installation et essai.
+Aucun raccourci BTT ni permission macOS modifié. Version locale 0.7.0 conservée ;
+aucune nouvelle release publique.
+
+Ouverture par `roadie switcher show` : panneau réel « Sélecteur de fenêtres Roadie »
+observé, ID 383567, couche 26, 1100 × 652 points. Annulation par la commande publique,
+sans activation ni changement d'appartenance. Santé finale 5/5.
+
+Preuves incomplètes : le parcours des choix dans la fenêtre installée n'a pas été
+capturé. La barre de commande s'est fermée pendant les deux tentatives de saisie
+automatisée (action BTT 193 puis API paste_text). Le journal réel donne
+target_search_cancelled. Les panneaux ont été relus avant de poursuivre ; aucune
+validation n'a été envoyée après leur disparition. Pas de troisième tentative
+aveugle ni demande répétée de permissions. Les rendus natifs et tests des choix,
+de la persistance et des interactions restent les preuves disponibles.
+
+Diaporama autonome : preuves-corrections/2026-10-23-selecteur-060/preuves.html.
+Captures brutes, manifeste et journaux conservés hors Git dans les diagnostics
+2026-10-23-session060. Le diaporama indique les étapes non vérifiées.

@@ -13,8 +13,12 @@ relevé un défaut de navigation spatiale et une fixture de profil à actualiser
 les deux sont corrigés et les suites complètes passent.
 
 ## T004 et T005
-Revue, preuves du parcours installé et installation restent à terminer.
+Documentation FR/EN et diaporama terminés avec les limites du parcours installé.
 La demande de revue a été refusée à l'admission par Bridget ; aucune revue
 indépendante n'a démarré. Relecture propre et validation poursuivies.
 Complément : libellés générés alignés sur ceux du rail, calculés une fois par
 inventaire. Suite finale : 1 893 tests/234 suites réussis en 58,192 s.
+Build Release final installé, signature/configuration conservées, PID 11924,
+santé 5/5. Ouverture du sélecteur installé observée, puis annulation sans activation.
+Parcours des paramètres non capturé : deux saisies automatisées ont fermé la barre.
+Voir validation.md pour les faits, limites et identifiants exacts.
