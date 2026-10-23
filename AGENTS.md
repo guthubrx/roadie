@@ -167,7 +167,8 @@ confirmée par l'utilisateur le 23 octobre 2026.
 Configuration et certificat conservés. Captures de la fenêtre installée vérifiées,
 parcours complet de capture des touches et liaison BTT non enregistré.
 Reçu : specs/057-parametres-raccourcis/validation.md.
-Current SpecKit feature: `057-parametres-raccourcis`.
+Session 058 en cours : finition de tous les formulaires, alignements et aides.
+Current SpecKit feature: `058-coherence-parametres`.
 
 Contexte :
 - `specs/056-selecteur-fenetres/spec.md`
