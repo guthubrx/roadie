@@ -282,7 +282,7 @@ private struct SettingRow: View {
         case .int, .double:
             VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                if isFontSize || descriptor.id == "rail.stages.reorder_magnetism" || descriptor.id == "overview.background_blur",
+                if isFontSize || ["rail.stages.reorder_magnetism", "overview.background_blur", "overview.selection_width"].contains(descriptor.id),
                    case .double(let range?) = descriptor.kind {
                     Slider(value: Binding(
                         get: {

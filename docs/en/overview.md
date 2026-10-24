@@ -11,11 +11,12 @@ In **Réglages Roadie > Vue d’ensemble**, choose:
 - **Loupe au survol** (enabled by default): cards of the desktop under the pointer grow after a short settling delay. Hovering only previews; it never activates a desktop.
 - **Magnification**, from 100 to 250%, default 150%: card size of the hovered desktop relative to the others. Other desktops tighten when space runs out. Real windows keep their sizes.
 - **Wallpaper blur**, from 0 to 100%, default 20%: a slider and a live preview of your wallpaper show the result.
+- **Colour** and **thickness** (1 to 8 points, default 2) of the selection outline.
 - **Optional internal shortcut**: record a key combination directly. A blank shortcut reserves no keys. BetterTouchTool, Karabiner and other tools can call the CLI instead.
 
 The overview shows no controls: change these settings in the settings window; they apply to the open view. The background is the display's wallpaper, blurred, which hides desktop icons. Without a readable image, Roadie blurs what lies under the view. Desktop order stays stable. A layout change alone does not move the magnifier while the pointer is still.
 
-Each desktop is a grid of equally sized 16:10 cards in stage order. The desktop name is a chip; a green dot marks the active desktop, a blue chip the magnified one. Under each card, the window icon and title are followed by a chip with its stage name. Chips of the selected window's stage turn blue. Blue outlines the selected window. Arrow keys and Tab move the selection; Enter or a click opens the window in its original desktop and stage. Escape closes the overview immediately from any control. Clicking another display also closes it.
+Each desktop is a grid of equally sized 16:10 cards in stage order. The desktop name is a chip; a green dot marks the active desktop, a blue chip the magnified one. Under each card, the window icon and title are followed by a chip with its stage name. An outline marks the selected window: at first the frontmost window, then the one chosen with the arrow keys; Enter opens it. Its stage chips turn blue. Hovering does not move the selection: it magnifies with the magnifier and adds a thin light rim to the card a click would open. Arrow keys and Tab move the selection; Enter or a click opens the window in its original desktop and stage. Escape closes the overview immediately from any control. Clicking another display also closes it.
 
 Occupied, named and active desktops are represented. Empty stages are not shown. Unused desktops are not added merely because their number is allowed in configuration. Dense layouts scroll to keep targets usable. A capture fills its card, cropped from the top; it is taken at the card's resolution and stays unchanged while the view is open. An application icon stands in when a capture is unavailable.
 
@@ -26,6 +27,8 @@ presentation = "archipelago" # or "bays"
 loupe = true
 magnification = 150
 background_blur = 20 # 0 = sharp, 100 = very blurred
+selection_color = "#66C2F7"
+selection_width = 2 # points, 1 to 8
 hotkey = "" # optional; use the keyboard recorder
 ```
 

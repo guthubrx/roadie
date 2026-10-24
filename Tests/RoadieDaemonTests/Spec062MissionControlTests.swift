@@ -98,6 +98,22 @@ struct Spec062MissionControlTests {
         #expect(during.windows.first?.frame == window.frame)
     }
 
+    /// La vue d’ensemble et le sélecteur partent de la fenêtre au premier plan selon macOS, pas de celle
+    /// retenue par la stage active du premier écran.
+    @Test func switcherContextUsesTheSystemFocusedWindow() {
+        let builtIn = powerDisplay("display-a", index: 1, x: 0), external = powerDisplay("display-b", index: 2, x: 1000)
+        let retained = powerWindow(1, x: 100), working = powerWindow(2, x: 1100)
+        let provider = PowerUserProvider(displays: [builtIn, external], windows: [retained, working])
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: RoadieConfig(),
+                                      stageStore: StageStore(path: tempPath("spec062-focus")))
+        let snapshot = service.snapshot(followFocus: false)
+        let switcher = WindowSwitcherService(service: service)
+
+        #expect(switcher.context(snapshot: snapshot, systemFocusedID: working.id).focusedWindowID == working.id)
+        #expect(switcher.context(snapshot: snapshot, systemFocusedID: working.id).displayID == external.id)
+        #expect(switcher.context(snapshot: snapshot, systemFocusedID: WindowID(rawValue: 999)).focusedWindowID == snapshot.focusedWindowID)
+    }
+
     /// Les commandes encodées avant SPEC-062 restent lisibles, sans masquage implicite.
     @Test func applyCommandDecodesWithoutPreservesSize() throws {
         let command = ApplyCommand(window: powerWindow(3, x: 0), frame: Rect(x: 1, y: 2, width: 3, height: 4))

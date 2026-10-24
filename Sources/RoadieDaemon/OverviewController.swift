@@ -133,7 +133,7 @@ public final class OverviewController {
             // 0,1 s : une capture arrivée s’affiche sans attendre ; la vérification ne lit que le cache.
             self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
             self.events.append(RoadieEvent(type: "overview.state", details: ["state": "open", "windows": String(self.members.count),
-                "sharpAtOpen": String(self.shownAt.count)]))
+                "sharpAtOpen": String(self.shownAt.count), "selected": p.canvas.selectedID.map { String($0.rawValue) } ?? "-"]))
         }
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in

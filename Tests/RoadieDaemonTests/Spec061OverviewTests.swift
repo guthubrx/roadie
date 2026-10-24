@@ -19,6 +19,9 @@ struct Spec061OverviewTests {
         #expect(OverviewConfig(backgroundBlur: 140).backgroundBlur == 100)
         #expect(OverviewConfig(backgroundBlur: -5).backgroundBlur == 0)
         #expect(OverviewConfig(backgroundBlur: .nan).backgroundBlur == 20)
+        #expect(OverviewConfig().selectionWidth == 2 && OverviewConfig().selectionColor == "#66C2F7")
+        #expect(OverviewConfig(selectionWidth: 20).selectionWidth == 8)
+        #expect(OverviewConfig(selectionWidth: 0).selectionWidth == 1)
     }
 
     @Test func commandIsStrict() {
@@ -232,13 +235,14 @@ struct Spec061OverviewGeometryTests {
         try "# conserver\n[focus]\nfocus_follows_mouse = false\n".write(to: url, atomically: true, encoding: .utf8)
         #expect(try RoadieConfigLoader.load(from: url.path).overview == OverviewConfig())
         let settings = SettingsService(configPath: url.path, eventLog: EventLog(path: directory.appendingPathComponent("events").path), afterWrite: {})
-        for (key, value) in [("presentation", "bays"), ("loupe", "false"), ("magnification", "200"), ("hotkey", "ctrl+alt+o"), ("background_blur", "35")] {
+        for (key, value) in [("presentation", "bays"), ("loupe", "false"), ("magnification", "200"), ("hotkey", "ctrl+alt+o"), ("background_blur", "35"), ("selection_color", "#FF8800"), ("selection_width", "4")] {
             if case .rejected(let reason) = settings.set("overview.\(key)", to: value) { Issue.record("\(reason)") }
         }
         let loaded = try RoadieConfigLoader.load(from: url.path)
         #expect(loaded.overview.presentation == "bays")
         #expect(!loaded.overview.loupe && loaded.overview.magnification == 200)
         #expect(loaded.overview.backgroundBlur == 35)
+        #expect(loaded.overview.selectionColor == "#FF8800" && loaded.overview.selectionWidth == 4)
         #expect(!loaded.focus.focusFollowsMouse)
         #expect(try String(contentsOf: url, encoding: .utf8).contains("# conserver"))
         #expect(SettingsCatalog.find(id: "overview.presentation")?.choiceLabel("bays") == "Baies")

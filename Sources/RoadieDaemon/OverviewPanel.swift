@@ -124,6 +124,8 @@ final class OverviewCanvas: NSView {
     var viewport = CGSize(width: 1000, height: 700)
     var focusedDesktop: OverviewDesktopID?
     var selectedID: WindowID?
+    /// Carte sous la souris : liseré clair seulement, sans effet sur la sélection.
+    private(set) var hoveredID: WindowID?
     var magnifiedID: WindowID?
     var magnifiedFrame: CGRect? {
         guard config.loupe, let card = plan.cards.first(where: { $0.entry.id == magnifiedID }) else { return nil }
@@ -180,6 +182,8 @@ final class OverviewCanvas: NSView {
         guard point != lastPointer else { return }
         lastPointer = point
         let card = plan.cards.first { $0.frame.contains(point) }
+        // Liseré clair sur la carte sous la souris : ce qu’un clic ouvrirait.
+        if card?.entry.id != hoveredID { hoveredID = card?.entry.id; needsDisplay = true }
         let desktop = plan.desktops.first { $0.frame.contains(point) }?.desktop.id
         let target = desktop.map { OverviewHoverTarget(desktopID: $0, windowID: card?.entry.id) }
         guard config.loupe, hover.moved(to: target, at: ProcessInfo.processInfo.systemUptime) else { return }
@@ -191,8 +195,9 @@ final class OverviewCanvas: NSView {
                       let ready = self.hover.ready(at: ProcessInfo.processInfo.systemUptime) else { return }
                 self.hover.consume()
                 self.focusedDesktop = ready.desktopID
+                // Le survol agrandit (loupe) sans déplacer la sélection : elle reste la fenêtre active ou
+                // celle choisie aux flèches, celle qu’Entrée ouvre.
                 self.magnifiedID = ready.windowID
-                if let id = ready.windowID { self.selectedID = id }
                 self.rebuild()
             }
         }
@@ -202,6 +207,7 @@ final class OverviewCanvas: NSView {
 
     override func mouseExited(with event: NSEvent) {
         hoverWork?.cancel(); hover = OverviewHoverState()
+        if hoveredID != nil { hoveredID = nil; needsDisplay = true }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -316,9 +322,16 @@ final class OverviewCanvas: NSView {
         }
         NSGraphicsContext.restoreGraphicsState()
         if selected {
-            palette(0.40, 0.76, 0.97).setStroke()
-            let ring = NSBezierPath(roundedRect: imageRect.insetBy(dx: -2, dy: -2), xRadius: radius + 2, yRadius: radius + 2)
-            ring.lineWidth = 2; ring.stroke()
+            // Couleur et épaisseur réglables (Paramètres > Vue d’ensemble).
+            let width = CGFloat(config.selectionWidth)
+            (NSColor(hex: config.selectionColor) ?? palette(0.40, 0.76, 0.97)).setStroke()
+            let ring = NSBezierPath(roundedRect: imageRect.insetBy(dx: -width / 2 - 1, dy: -width / 2 - 1),
+                                    xRadius: radius + width / 2 + 1, yRadius: radius + width / 2 + 1)
+            ring.lineWidth = width; ring.stroke()
+        } else if item.entry.id == hoveredID {
+            palette(1, 1, 1, 0.55).setStroke()
+            let ring = NSBezierPath(roundedRect: imageRect.insetBy(dx: -1.5, dy: -1.5), xRadius: radius + 1.5, yRadius: radius + 1.5)
+            ring.lineWidth = 1; ring.stroke()
         }
         // Légende : icône et titre à gauche, puce de la stage à droite sur la même ligne.
         let caption = CGRect(x: frame.minX, y: imageRect.maxY + 5, width: frame.width, height: 14)

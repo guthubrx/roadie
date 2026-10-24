@@ -51,7 +51,9 @@ struct WindowSwitcherService {
                 visibilityKnown: window.isOnScreen || ax?.visibilityKnown == true
             )
         }
-        return (entries, context(snapshot: snapshot), snapshot, persisted)
+        // Fenêtre réellement au premier plan selon macOS : le relevé sans suivi du focus retient celle de
+        // la stage active du premier écran, pas forcément celle où l’utilisateur travaille.
+        return (entries, context(snapshot: snapshot, systemFocusedID: service.focusedWindowID()), snapshot, persisted)
     }
 
     func activate(_ entry: WindowSwitcherEntry) -> WindowCommandResult {
@@ -207,11 +209,14 @@ struct WindowSwitcherService {
         }
     }
 
-    private func context(snapshot: DaemonSnapshot) -> WindowSwitcherContext {
-        let focused = snapshot.windows.first { $0.window.id == snapshot.focusedWindowID }
+    /// `systemFocusedID` prime s’il désigne une fenêtre du relevé ; sinon repli sur le relevé. O(n).
+    func context(snapshot: DaemonSnapshot, systemFocusedID: WindowID? = nil) -> WindowSwitcherContext {
+        let focusedID = systemFocusedID.flatMap { id in snapshot.windows.contains { $0.window.id == id } ? id : nil }
+            ?? snapshot.focusedWindowID
+        let focused = snapshot.windows.first { $0.window.id == focusedID }
         let scope = focused?.scope ?? snapshot.displays.lazy.compactMap { snapshot.state.activeScope(on: $0.id) }.first
         return WindowSwitcherContext(
-            focusedWindowID: snapshot.focusedWindowID,
+            focusedWindowID: focusedID,
             displayID: scope?.displayID,
             desktopID: scope?.desktopID,
             stageID: scope?.stageID,

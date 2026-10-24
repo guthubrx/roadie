@@ -8,6 +8,8 @@ extension SettingsCatalog {
         entry(.overview, "overview", "loupe", "Loupe au survol", "Agrandit les cartes du bureau sous la souris après une courte stabilisation. Consulter ne change pas le bureau actif. Désactivez pour garder la même taille partout.", .bool, .bool(true)),
         entry(.overview, "overview", "magnification", "Grossissement de la loupe (%)", "Taille des cartes du bureau survolé, par rapport aux autres. Les autres bureaux se resserrent si la place manque et restent visibles. Aucune fenêtre n’est redimensionnée.", .double(100...250), .double(150)),
         entry(.overview, "overview", "background_blur", "Flou du fond d’écran (%)", "0 % : fond d’écran net. 100 % : très flou. L’aperçu montre votre fond d’écran avec ce réglage. Le flou masque les icônes du bureau sans gêner la lecture des cartes.", .double(0...100), .double(20)),
+        entry(.overview, "overview", "selection_color", "Couleur du contour de sélection", "Contour de la fenêtre sélectionnée : au départ la fenêtre active, puis celle choisie aux flèches. C’est la fenêtre qu’Entrée ouvre. Le survol de la souris ne la déplace pas.", .color, .string("#66C2F7")),
+        entry(.overview, "overview", "selection_width", "Épaisseur du contour de sélection (points)", "Épaisseur du contour de la fenêtre sélectionnée, de 1 à 8 points.", .double(1...8), .double(2)),
         entry(.overview, "overview", "hotkey", "Raccourci interne (facultatif)", "Enregistrez directement une combinaison. Laissez vide pour BetterTouchTool, Karabiner ou un autre outil : roadie overview toggle. Ce réglage ne modifie pas Cmd+Tab.", .text, .string("")),
     ]
 }
