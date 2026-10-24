@@ -280,8 +280,10 @@ private struct SettingRow: View {
             .toggleStyle(.switch)
             .labelsHidden()
         case .int, .double:
+            VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                if isFontSize || descriptor.id == "rail.stages.reorder_magnetism", case .double(let range?) = descriptor.kind {
+                if isFontSize || descriptor.id == "rail.stages.reorder_magnetism" || descriptor.id == "overview.background_blur",
+                   case .double(let range?) = descriptor.kind {
                     Slider(value: Binding(
                         get: {
                             if case .double(let value) = model.value(descriptor) {
@@ -300,6 +302,10 @@ private struct SettingRow: View {
                         .labelsHidden()
                         .accessibilityLabel("Ajuster : \(descriptor.label)")
                 }
+            }
+            if descriptor.id == "overview.background_blur", case .double(let percent) = model.value(descriptor) {
+                OverviewBlurPreview(percent: percent)
+            }
             }
         case .choice:
             SettingsChoicePicker(descriptor: descriptor, fontSize: fonts.settingsTextFontSize, selection: Binding(
@@ -360,5 +366,35 @@ private extension Color {
             .map { Int(($0 * 255).rounded()) }
         let rgb = String(format: "#%02X%02X%02X", parts[0], parts[1], parts[2])
         return parts[3] < 255 ? rgb + String(format: "%02X", parts[3]) : rgb
+    }
+}
+
+/// Aperçu du flou de la vue d’ensemble : le fond d’écran réel, le même flou et le même voile, avec deux
+/// cartes factices pour juger la lisibilité. Recalculé à chaque mouvement du curseur (miniature de 480 pixels).
+private struct OverviewBlurPreview: View {
+    let percent: Double
+
+    var body: some View {
+        let screen = NSScreen.main
+        let image = screen.flatMap { OverviewWallpaper.blurred(for: $0, percent: percent, maxPixel: 480) }
+        ZStack {
+            if let image {
+                Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                Color(nsColor: .windowBackgroundColor)
+                Text("Fond d’écran illisible : flou système").font(.caption).foregroundStyle(.secondary)
+            }
+            Color(nsColor: OverviewWallpaper.veil)
+            HStack(spacing: 10) {
+                ForEach(0..<2, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.85))
+                        .frame(width: 64, height: 40).shadow(radius: 4, y: 2)
+                }
+            }
+        }
+        .frame(width: 240, height: 135)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3)))
+        .accessibilityLabel("Aperçu du flou : \(Int(percent)) %")
     }
 }

@@ -10,6 +10,7 @@ Dans **Réglages Roadie > Vue d’ensemble**, choisissez :
 - **Baies** : écrans en bandes horizontales, bureaux côte à côte.
 - **Loupe au survol**, activée par défaut : les cartes du bureau sous la souris grandissent après une courte stabilisation. Le survol consulte ; il ne change pas le bureau actif.
 - **Grossissement**, de 100 à 250 %, défaut 150 % : taille des cartes du bureau survolé par rapport aux autres. Les autres bureaux se resserrent si la place manque. Les vraies fenêtres gardent leur taille.
+- **Flou du fond d’écran**, de 0 à 100 %, défaut 20 % : un curseur et un aperçu de votre fond d’écran montrent le résultat en direct.
 - **Raccourci interne**, facultatif : utilisez le bouton d’enregistrement pour saisir la combinaison au clavier. Vide, Roadie ne réserve aucune touche. BetterTouchTool, Karabiner ou un autre outil peuvent appeler la CLI.
 
 La vue n’affiche aucun contrôle : ces réglages se changent dans les paramètres et s’appliquent à la vue ouverte. Le fond reprend le fond d’écran de l’écran, flouté, et masque les icônes du bureau. Sans image lisible, Roadie floute ce qui se trouve sous la vue. Les bureaux gardent leur ordre. La loupe ne change pas de bureau quand la souris reste immobile après un agrandissement.
@@ -24,6 +25,7 @@ enabled = true
 presentation = "archipelago" # ou "bays"
 loupe = true
 magnification = 150
+background_blur = 20 # 0 = net, 100 = très flou
 hotkey = "" # combinaison facultative ; préférer l’enregistrement au clavier
 ```
 

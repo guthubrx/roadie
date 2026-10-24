@@ -19,9 +19,9 @@ struct SettingsCatalogTests {
     @Test
     func catalogHas195SimpleSettings() {
         // Spec056 : 7 réglages du sélecteur ; les listes du sélecteur sont des collections.
-        #expect(simple.count == 195)
+        #expect(simple.count == 196)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 115)
+        #expect(simple.count - railSimple.count == 116)
     }
 
     @Test
@@ -160,7 +160,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 195)
+        #expect(expected.count == 196)
     }
 
     // MARK: - Défauts
@@ -253,8 +253,8 @@ struct SettingsCatalogTests {
             }
             checked += 1
         }
-        // 29 réglages hors rail ont une plage.
-        #expect(checked == 30)
+        // 31 réglages hors rail ont une plage.
+        #expect(checked == 31)
     }
 
     // MARK: - Recherche

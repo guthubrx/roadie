@@ -1,5 +1,4 @@
 import AppKit
-import CoreImage
 import RoadieCore
 
 /// Panneau global distinct du cycle Cmd+Tab. Le canevas conserve les images, sans recréer les cartes au survol.
@@ -47,9 +46,7 @@ final class OverviewPanel: NSPanel, NSWindowDelegate {
     func present(on screen: NSScreen, config: OverviewConfig) {
         self.config = config
         setFrame(screen.frame, display: false)
-        let wallpaper = Self.blurredWallpaper(for: screen)
-        backdrop.layer?.contents = wallpaper
-        backdrop.isHidden = wallpaper == nil
+        appliedBlur = nil
         syncControls()
         layoutContent()
         orderFrontRegardless()
@@ -67,30 +64,16 @@ final class OverviewPanel: NSPanel, NSWindowDelegate {
         }
     }
 
-    private static var wallpaperCache: (key: String, image: CGImage)?
+    private var appliedBlur: Double?
 
-    /// Fond d’écran de l’écran, réduit à 960 pixels puis flouté ; gardé tant que l’image ne change pas.
-    /// Coût O(pixels de la miniature). nil si macOS ne fournit pas d’image lisible (dossier, format inconnu).
-    static func blurredWallpaper(for screen: NSScreen) -> CGImage? {
-        guard let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return nil }
-        let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)?.timeIntervalSince1970 ?? 0
-        let key = url.path + "#\(modified)"
-        if let cache = wallpaperCache, cache.key == key { return cache.image }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let small = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                  kCGImageSourceCreateThumbnailFromImageAlways: true,
-                  kCGImageSourceThumbnailMaxPixelSize: 960,
-                  kCGImageSourceCreateThumbnailWithTransform: true] as CFDictionary) else { return nil }
-        let input = CIImage(cgImage: small)
-        let blurred = input.clampedToExtent().applyingGaussianBlur(sigma: 5).cropped(to: input.extent)
-        guard let image = CIContext(options: [.useSoftwareRenderer: false]).createCGImage(blurred, from: input.extent) else { return nil }
-        wallpaperCache = (key, image)
-        return image
-    }
-
-    /// Applique la configuration lue dans Paramètres.
+    /// Applique la configuration lue dans Paramètres ; le fond n’est recalculé que si le flou change.
     func syncControls() {
         canvas.config = config
+        guard appliedBlur != config.backgroundBlur, let screen = screen ?? NSScreen.main else { return }
+        appliedBlur = config.backgroundBlur
+        let wallpaper = OverviewWallpaper.blurred(for: screen, percent: config.backgroundBlur, maxPixel: 960)
+        backdrop.layer?.contents = wallpaper
+        backdrop.isHidden = wallpaper == nil
     }
 
     func showMessage(_ message: String) {
@@ -249,7 +232,7 @@ final class OverviewCanvas: NSView {
         func u(_ r: CGRect) -> CGRect { CGRect(x: r.minX / s, y: r.minY / s, width: r.width / s, height: r.height / s) }
         let bounds = u(self.bounds), dirtyRect = u(dirtyRect)
         // Voile sombre léger sur le fond d’écran flouté : textes lisibles, fond reconnaissable.
-        palette(10.0/255, 18.0/255, 24.0/255, 0.42).setFill(); bounds.fill()
+        OverviewWallpaper.veil.setFill(); bounds.fill()
         for (index, region) in plan.displays.enumerated() {
             let r = u(region.frame)
             let label = CGPoint(x: bays ? r.minX + 2 : r.minX + 12, y: r.minY)

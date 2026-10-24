@@ -10,6 +10,7 @@ In **Réglages Roadie > Vue d’ensemble**, choose:
 - **Baies**: horizontal display bands with desktops side by side.
 - **Loupe au survol** (enabled by default): cards of the desktop under the pointer grow after a short settling delay. Hovering only previews; it never activates a desktop.
 - **Magnification**, from 100 to 250%, default 150%: card size of the hovered desktop relative to the others. Other desktops tighten when space runs out. Real windows keep their sizes.
+- **Wallpaper blur**, from 0 to 100%, default 20%: a slider and a live preview of your wallpaper show the result.
 - **Optional internal shortcut**: record a key combination directly. A blank shortcut reserves no keys. BetterTouchTool, Karabiner and other tools can call the CLI instead.
 
 The overview shows no controls: change these settings in the settings window; they apply to the open view. The background is the display's wallpaper, blurred, which hides desktop icons. Without a readable image, Roadie blurs what lies under the view. Desktop order stays stable. A layout change alone does not move the magnifier while the pointer is still.
@@ -24,6 +25,7 @@ enabled = true
 presentation = "archipelago" # or "bays"
 loupe = true
 magnification = 150
+background_blur = 20 # 0 = sharp, 100 = very blurred
 hotkey = "" # optional; use the keyboard recorder
 ```
 
