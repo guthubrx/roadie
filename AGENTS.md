@@ -204,6 +204,11 @@ PID46329, santé5/5 ; certificat et choix utilisateur160% conservés. Preuves na
 actualisées ; clics finaux, menu ouvert et geste après correction partiellement vérifiés.
 Revue de code distante indisponible, sans verdict favorable inventé.
 Reçu : specs/061-vue-ensemble/validation.md ; clôture Git/audit dans les notes de l’audit final.
+Session 062 installée : fenêtres des stages masquées rétrécies par Mission Control. Pause de la
+disposition et relevés provisoires pendant Mission Control, masquage en position seule, écriture
+sans réponse (−25204) reprise au lieu d'être acceptée. ADR 019. 1 928 tests / 240 suites ;
+Mission Control réel sans changement de taille. PID 94362, santé 5/5.
+Reçu : specs/062-fenetres-mission-control/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

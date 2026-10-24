@@ -72,13 +72,16 @@ public struct RestoreSafetyService {
     /// contient jamais de position masquée. Aucune écriture si le contenu n'a pas changé.
     // O(n + m), n = fenêtres live, m = membres de stage.
     public func writeSnapshot() throws -> RestoreSafetySnapshot {
-        let snapshot = service.snapshot()
         let previous: RestoreSafetySnapshot?
         switch loadSnapshotResult() {
         case .loaded(let loaded): previous = loaded
         case .missing: previous = nil
         case .corrupt(let error): throw error // conservé en `.corrupt-<date>`, jamais écrasé (FR-015)
         }
+        // SPEC-062 : pendant Mission Control, les fenêtres masquées paraissent visibles et réduites ;
+        // les enregistrer comme « dernière frame visible » les rétrécirait à la restauration.
+        if let previous, service.isMissionControlActive() { return previous }
+        let snapshot = service.snapshot()
         let memberFrames = Self.visibleMemberFrames(service.effectiveStageStore.state(), displays: snapshot.displays)
         let previousFrames = Self.visibleFrames(of: previous, displays: snapshot.displays)
         let windows = snapshot.windows

@@ -116,6 +116,8 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "layout_echo_ignored",
         "layout_app_response_accepted",
         "layout_external_change_reverted",
+        "layout_paused_mission_control",
+        "layout_resumed_mission_control",
         "layout_manual_gesture",
         "window_gesture_target",
         "layout_stable",

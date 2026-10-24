@@ -169,6 +169,9 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
         let known = [entry.requested, entry.readBack, entry.accepted].compactMap { $0 }
         if known.contains(where: { Self.matches($0, observed) })
             || (history[windowID] ?? []).contains(where: { Self.matches($0.frame, observed) }) { return .echo }
+        // SPEC-062 : écriture sans relecture (délai AX dépassé −25204, fenêtre illisible) : l’application
+        // n’a pas répondu, la frame observée n’est pas sa réponse. Écart à reprendre, pas à accepter.
+        guard entry.readBack != nil else { return .external }
         return now.timeIntervalSince(entry.writtenAt) < Self.echoWindow ? .appResponse : .external
     }
 

@@ -37,3 +37,4 @@
 
 | 054 | Clôturée, publiée et installée | `session-054-release-060` (fusionnée, supprimée) | `specs/054-release-060` | 0.6.0 Latest, docs FR/EN, revue traitée ; 1 760 tests Swift + 26 scripts, téléchargement et santé 5/5 vérifiés, nettoyage terminé |
 | 055 | Intégrée et installée ; essai proposé | `session-055-fullscreen-sans-rail` (fusionnée, supprimée) | `specs/055-fullscreen-sans-rail` | Plein écran sans rail, Ctrl gauche+Alt gauche+F BTT ; 1 761 tests, revue traitée, santé 5/5 ; preuve réelle à confirmer |
+| 062 | Implémentée et installée | `session-062-fenetres-mission-control` | `specs/062-fenetres-mission-control` | Mission Control ne rétrécit plus les fenêtres masquées : pause de la disposition, relevés provisoires, masquage en position seule, écriture sans réponse reprise ; 1 928 tests, santé 5/5 |

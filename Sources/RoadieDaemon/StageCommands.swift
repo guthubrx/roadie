@@ -1828,7 +1828,7 @@ public struct StageCommandService {
         var hiddenIDs: [String] = []
         for entry in entries where entry.window.id != keepWindowID {
             let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-            if service.setFrame(frame, of: entry.window, generation: generation) != nil {
+            if service.setFrame(frame, of: entry.window, generation: generation, preservingSize: true) != nil {
                 applied += 1
                 hiddenIDs.append(String(entry.window.id.rawValue))
             }

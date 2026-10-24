@@ -74,10 +74,14 @@ public extension WindowFrameWriting {
 public struct WindowFrameUpdate: Sendable {
     public var window: WindowSnapshot
     public var frame: CGRect
+    /// Position seule : garer une fenêtre ne doit jamais changer sa taille, même si le cadre
+    /// observé était transitoire (Mission Control réduit les cadres rapportés). SPEC-062.
+    public var preservesSize: Bool
 
-    public init(window: WindowSnapshot, frame: CGRect) {
+    public init(window: WindowSnapshot, frame: CGRect, preservesSize: Bool = false) {
         self.window = window
         self.frame = frame
+        self.preservesSize = preservesSize
     }
 }
 
@@ -1397,7 +1401,10 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         else { return nil }
 
         var codes = ["nativeFullscreen": nativeCode]
-        for (phase, attribute, value) in [("sizeBefore", kAXSizeAttribute, axSize), ("position", kAXPositionAttribute, axPosition), ("sizeAfter", kAXSizeAttribute, axSize)] {
+        let phases: [(String, String, AXValue)] = update.preservesSize
+            ? [("position", kAXPositionAttribute, axPosition)]
+            : [("sizeBefore", kAXSizeAttribute, axSize), ("position", kAXPositionAttribute, axPosition), ("sizeAfter", kAXSizeAttribute, axSize)]
+        for (phase, attribute, value) in phases {
             let error = io.setValue(value, of: attribute, on: element)
             codes[phase] = error.rawValue
             if registry.noteResult(error, pid: pid) {

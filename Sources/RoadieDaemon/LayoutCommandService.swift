@@ -541,7 +541,8 @@ extension SnapshotService {
         let windowsByID = Dictionary(observed.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { first, _ in first })
         let plan = ApplyPlan(commands: targets.keys.sorted().compactMap { id -> ApplyCommand? in
             guard let window = windowsByID[id], let target = targets[id], !LayoutMaintainer.matches(window.frame.cgRect, target) else { return nil }
-            return ApplyCommand(window: window, frame: Rect(target))
+            // Un masquage gare la fenêtre sans toucher sa taille (SPEC-062).
+            return ApplyCommand(window: window, frame: Rect(target), preservesSize: placement.hiding[id] == target)
         })
         let treeScopes = observed.displays.compactMap { display -> StageScope? in
             guard let scope = working.state.activeScope(on: display.id),

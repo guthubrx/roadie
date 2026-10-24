@@ -424,6 +424,35 @@ struct AXWindowFrameWriterTests {
     }
 }
 
+@Suite("Spec062 écriture et sonde")
+struct Spec062AXTests {
+    /// Garer une fenêtre : une seule écriture, la position ; la taille n’est jamais touchée.
+    @Test
+    func preservesSizeWritesPositionOnly() {
+        let fixture = WriterFixture()
+        fixture.io.windows[62] = index(pid: 62, ids: [621])
+        fixture.io.nativeFullscreen = false
+        let update = WindowFrameUpdate(window: window(621, pid: 62), frame: CGRect(x: 5351, y: 100, width: 449, height: 258), preservesSize: true)
+        _ = fixture.writer.setFrames([update], generation: 1)
+        #expect(fixture.io.frameWrites == ["set AXPosition"])
+        #expect(fixture.frames.entry(for: 621)?.axResultCodes?["sizeBefore"] == nil)
+    }
+
+    /// Signature mesurée le 24 octobre 2026 : fenêtres du Dock de niveau 18 sur tout un écran.
+    @Test
+    func missionControlIsRecognisedFromDockWindows() {
+        func dock(layer: Int, _ rect: CGRect, owner: String = "Dock") -> [String: Any] {
+            [kCGWindowOwnerName as String: owner, kCGWindowLayer as String: layer,
+             kCGWindowBounds as String: rect.dictionaryRepresentation as NSDictionary]
+        }
+        let wallpaper = dock(layer: -2_147_483_624, CGRect(x: 0, y: 0, width: 1512, height: 982))
+        let dockBar = dock(layer: 20, CGRect(x: 400, y: 900, width: 700, height: 80))
+        #expect(!MissionControlProbe.isActive(in: [wallpaper, dockBar]))
+        #expect(MissionControlProbe.isActive(in: [wallpaper, dock(layer: 18, CGRect(x: 1512, y: -797, width: 3840, height: 2160))]))
+        #expect(!MissionControlProbe.isActive(in: [dock(layer: 18, CGRect(x: 0, y: 0, width: 1512, height: 982), owner: "Finder")]))
+    }
+}
+
 @Suite
 struct WrittenFrameRegistryTests {
     private let requested = CGRect(x: 0, y: 0, width: 800, height: 600)
@@ -445,6 +474,18 @@ struct WrittenFrameRegistryTests {
         #expect(registry.entry(for: 1)?.axResultCodes == nil)
         #expect(registry.entry(for: 1)?.nativeFullscreenReading == nil)
         #expect(registry.entry(for: 1)?.writesInGeneration == 1)
+    }
+
+    /// SPEC-062 : une écriture sans relecture (iTerm2, −25204) n’a reçu aucune réponse de l’application ;
+    /// l’ancienne frame encore observée est un écart à reprendre, pas une réponse à accepter.
+    @Test
+    func writeWithoutReadBackIsNotAnApplicationResponse() {
+        let registry = WrittenFrameRegistry()
+        registry.record(windowID: 7, requested: requested, readBack: nil, generation: 1, at: start,
+                        axResultCodes: ["sizeBefore": -25204], nativeFullscreenReading: false)
+        let stale = CGRect(x: 5351, y: 943, width: 276, height: 158)
+        #expect(registry.classify(windowID: 7, observed: stale, now: start.addingTimeInterval(0.2)) == .external)
+        #expect(registry.classify(windowID: 7, observed: requested, now: start.addingTimeInterval(0.2)) == .echo)
     }
 
     @Test

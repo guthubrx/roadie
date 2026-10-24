@@ -19,6 +19,10 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Les fenêtres des stages masquées ne rétrécissent plus après Mission Control. Roadie
+  suspend la disposition et la mémorisation des cadres pendant Mission Control, gare
+  les fenêtres sans toucher leur taille et reprend une écriture restée sans réponse
+  de l’application au lieu d’accepter l’ancienne taille.
 - Présentations du sélecteur rapprochées des maquettes : panneau adapté à l’écran,
   vignettes groupées compactes, icônes et titres sans contexte répété, détail
   avec chemin bureau/stage et aperçu intégral. Largeur des colonnes répartie

@@ -101,6 +101,8 @@ public struct SnapshotService: Sendable {
     /// `stageStore.mutate { ... }` (verrou flock POSIX, FR-013).
     private var persistStateChanges: Bool
     private let userInput: UserInputActivity
+    /// Vrai pendant Mission Control (SPEC-062) : un relevé y voit des cadres réduits et déplacés.
+    private let missionControlActive: @Sendable () -> Bool
     /// Interne (et non privé) : aussi lu par `applyCommandPlacement` (audit TEST-003).
     let clock: @Sendable () -> Date
     /// Mémoire de processus partagée par les services du même fichier d'état.
@@ -140,8 +142,12 @@ public struct SnapshotService: Sendable {
         clock: @escaping @Sendable () -> Date = { Date() },
         frameRegistry: WrittenFrameRegistry = .shared,
         treeScopeApplications: TreeScopeApplicationCenter = .shared,
-        configService: ConfigReloadService = .shared
+        configService: ConfigReloadService = .shared,
+        missionControlActive: (@Sendable () -> Bool)? = nil
     ) {
+        if let missionControlActive { self.missionControlActive = missionControlActive }
+        else if TestEnvironment.isRunningTests { self.missionControlActive = { false } }
+        else { self.missionControlActive = { MissionControlProbe.isActive() } }
         self.treeScopeApplications = treeScopeApplications
         self.provider = provider
         self.frameWriter = frameWriter
@@ -158,6 +164,9 @@ public struct SnapshotService: Sendable {
         self.clock = clock
         self.processState = SnapshotProcessState.forStatePath(stageStore.fileURL.path)
     }
+
+    /// Mission Control ouvert : relevés provisoires, ni enregistrés ni partagés (SPEC-062). O(n).
+    public func isMissionControlActive() -> Bool { missionControlActive() }
 
     /// Config courante : relue à chaud via `ConfigReloadService.shared` (un stat par accès).
     /// Les fonctions qui la lisent plusieurs fois en prennent une copie locale.
@@ -411,7 +420,10 @@ public struct SnapshotService: Sendable {
         )
 
         let result: Reconciliation
-        if persistStateChanges {
+        // SPEC-062 : pendant Mission Control, les cadres rapportés sont réduits et déplacés. Le relevé
+        // est réconcilié sur une copie : aucune frame transitoire n’entre dans stages.json.
+        let transient = missionControlActive()
+        if persistStateChanges, !transient {
             intentStore.prune(keepingDisplayIDs: liveDisplayIDs)
             // SPEC-051 B-01 : réconcilier d'abord une copie, sans verrou. Sans changement, aucune
             // transaction exclusive sur stages.json. Sinon, la transaction réutilise ce résultat si le
@@ -454,6 +466,8 @@ public struct SnapshotService: Sendable {
             focusedWindowID: result.focusedWindowID,
             existingWindowPIDs: inventory
         )
+        // Relevé provisoire : rendu à l’appelant, jamais publié comme relevé partagé.
+        if transient { return snapshot }
         processState.publish(
             snapshot,
             followFocus: followFocus,
@@ -1277,10 +1291,22 @@ public struct ApplyPlan: Equatable, Codable, Sendable {
 public struct ApplyCommand: Equatable, Codable, Sendable {
     public var window: WindowSnapshot
     public var frame: Rect
+    /// Garer une fenêtre de stage masquée : position seule, la taille réelle est conservée (SPEC-062).
+    public var preservesSize: Bool
 
-    public init(window: WindowSnapshot, frame: Rect) {
+    public init(window: WindowSnapshot, frame: Rect, preservesSize: Bool = false) {
         self.window = window
         self.frame = frame
+        self.preservesSize = preservesSize
+    }
+
+    enum CodingKeys: String, CodingKey { case window, frame, preservesSize }
+    /// Les commandes encodées avant SPEC-062 n’ont pas `preservesSize`.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(window: try container.decode(WindowSnapshot.self, forKey: .window),
+                  frame: try container.decode(Rect.self, forKey: .frame),
+                  preservesSize: try container.decodeIfPresent(Bool.self, forKey: .preservesSize) ?? false)
     }
 }
 
@@ -2124,7 +2150,7 @@ public extension SnapshotService {
             return false
         }
         let updates = commands.map { command in
-            WindowFrameUpdate(window: command.window, frame: command.frame.cgRect)
+            WindowFrameUpdate(window: command.window, frame: command.frame.cgRect, preservesSize: command.preservesSize)
         }
         let actualFrames = updates.isEmpty ? [:] : frameWriter.setFrames(updates, generation: generation)
 
@@ -2203,16 +2229,20 @@ public extension SnapshotService {
 
     /// Écriture directe d'une fenêtre (T213) : `generation` est celle de la commande, par défaut la
     /// génération en cours. Budget A13 épuisé : nil sans écriture, frame observée acceptée et signalée.
+    /// `preservingSize` : position seule, pour garer une fenêtre sans toucher sa taille (SPEC-062).
     func setFrame(
         _ frame: CGRect,
         of window: WindowSnapshot,
-        generation: UInt64 = PlacementGeneration.shared.current
+        generation: UInt64 = PlacementGeneration.shared.current,
+        preservingSize: Bool = false
     ) -> CGRect? {
         if frameRegistry.isOverBudget(windowID: window.id.rawValue, generation: generation) {
             acceptOverBudget(window, requested: Rect(frame), generation: generation)
             return nil
         }
-        let actual = frameWriter.setFrame(frame, of: window, generation: generation)
+        let actual = preservingSize
+            ? frameWriter.setFrames([WindowFrameUpdate(window: window, frame: frame, preservesSize: true)], generation: generation)[window.id] ?? nil
+            : frameWriter.setFrame(frame, of: window, generation: generation)
         republishSharedSnapshot(after: [ApplyResultItem(
             windowID: window.id,
             status: actual == nil ? .failed : .applied,

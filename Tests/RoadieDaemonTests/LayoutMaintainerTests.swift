@@ -3388,6 +3388,39 @@ extension LayoutMaintainerTests {
         #expect(heldFrames.isEmpty)
         #expect(released.commands >= 1)
     }
+    /// SPEC-062 : pendant Mission Control puis son animation de fermeture, aucune écriture ; reprise ensuite.
+    @Test
+    func missionControlSuspendsLayoutUntilItSettles() {
+        let display = lotCDisplay()
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[
+                Rect(x: 80, y: 80, width: 320, height: 240),
+                Rect(x: 500, y: 80, width: 320, height: 240),
+            ]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        var active = true
+        var clock = Date(timeIntervalSince1970: 10_000)
+        let maintainer = LayoutMaintainer(service: service, mouseButtonsPressed: { false },
+                                          missionControlActive: { active }, now: { clock })
+
+        let during = maintainer.tick()
+        let suspended = maintainer.nextDeadline(now: clock)
+        active = false
+        clock = clock.addingTimeInterval(0.1)
+        let closing = maintainer.tick()
+        let framesWhilePaused = writer.requestedFrames
+        clock = clock.addingTimeInterval(LayoutMaintainer.missionControlSettle)
+        let resumed = maintainer.tick()
+
+        #expect(during.commands == 0)
+        #expect(closing.commands == 0)
+        #expect(framesWhilePaused.isEmpty)
+        #expect(suspended != nil)
+        #expect(resumed.commands >= 1)
+    }
 }
 
 private let scope1 = StageID(rawValue: "1")

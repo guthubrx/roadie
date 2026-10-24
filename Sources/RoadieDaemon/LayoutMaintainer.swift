@@ -45,6 +45,13 @@ public final class LayoutMaintainer {
     private let commandActivity: LayoutCommandActivity
     /// Vrai tant qu'un bouton de souris est enfoncé (FR-010). Injectable pour les tests.
     private let mouseButtonsPressed: () -> Bool
+    /// Vrai pendant Mission Control (SPEC-062). Injectable pour les tests.
+    private let missionControlActive: () -> Bool
+    /// Dernière détection de Mission Control et début de la pause en cours.
+    private var missionControlLastSeen: Date?
+    private var missionControlPausedAt: Date?
+    /// Délai après la dernière détection : l'animation de fermeture rapporte encore des cadres réduits.
+    static let missionControlSettle: TimeInterval = 0.4
     /// Mémoire des frames écrites : écho, réponse de l'application, refus (R6, A4, A14).
     private let writtenFrames: WrittenFrameRegistry
     /// Génération de placement globale (A13).
@@ -162,6 +169,7 @@ public final class LayoutMaintainer {
         dragActivity: WindowDragActivity = .shared,
         commandActivity: LayoutCommandActivity = .shared,
         mouseButtonsPressed: (() -> Bool)? = nil,
+        missionControlActive: (() -> Bool)? = nil,
         writtenFrames: WrittenFrameRegistry? = nil,
         generations: PlacementGeneration? = nil,
         takeGesture: (() -> GestureSession?)? = nil,
@@ -188,6 +196,7 @@ public final class LayoutMaintainer {
             ?? (testing ? { false } : {
                 UserInputActivity.shared.blocksLayout(mouseButtonsPressed: NSEvent.pressedMouseButtons != 0)
             })
+        self.missionControlActive = missionControlActive ?? (testing ? { false } : { MissionControlProbe.isActive() })
         // Sous les tests, registre et génération propres à l'instance : les suites tournent en
         // parallèle avec les mêmes identifiants de fenêtre.
         self.writtenFrames = writtenFrames ?? (testing ? WrittenFrameRegistry() : .shared)
@@ -238,6 +247,26 @@ public final class LayoutMaintainer {
         defer { service.exactLayoutScopes = [] }
         let startedAt = Date()
         let observationStartedAt = now()
+        // SPEC-062 : pendant Mission Control, macOS rapporte des cadres réduits et déplacés. Aucun relevé
+        // (il enregistrerait ces cadres), aucune écriture (elle rétrécirait les fenêtres masquées), aucune
+        // adoption de déplacement. La référence d'observation reste celle d'avant ; reprise après l'animation.
+        if missionControlActive() { missionControlLastSeen = observationStartedAt }
+        if let lastSeen = missionControlLastSeen,
+           observationStartedAt.timeIntervalSince(lastSeen) < Self.missionControlSettle {
+            if missionControlPausedAt == nil {
+                missionControlPausedAt = observationStartedAt
+                events.append(RoadieEvent(type: "layout_paused_mission_control", details: ["cause": cause]))
+            }
+            globalSuspensionUntil = observationStartedAt.addingTimeInterval(0.25)
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }
+        if let pausedAt = missionControlPausedAt {
+            missionControlPausedAt = nil
+            missionControlLastSeen = nil
+            events.append(RoadieEvent(type: "layout_resumed_mission_control", details: [
+                "durationMs": String(format: "%.0f", observationStartedAt.timeIntervalSince(pausedAt) * 1000)
+            ]))
+        }
         var scans = 1
         var snapshot = service.producerSnapshot(cycle: intervalSeconds)
         globalSuspensionUntil = nil
@@ -2174,7 +2203,7 @@ public final class LayoutMaintainer {
                   entry.pin?.visibility(in: activeScope).shouldBeVisible != true
             else { return nil }
             let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-            return ApplyCommand(window: entry.window, frame: Rect(frame))
+            return ApplyCommand(window: entry.window, frame: Rect(frame), preservesSize: true)
         }
     }
 
@@ -2207,7 +2236,7 @@ public final class LayoutMaintainer {
                 newlyRestorable[scope, default: [:]][entry.window.id] = entry.window.frame
             }
             let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-            return ApplyCommand(window: entry.window, frame: Rect(frame))
+            return ApplyCommand(window: entry.window, frame: Rect(frame), preservesSize: true)
         }
         // Une fenêtre ouverte pendant le zoom garde son cadre visible avant son premier masquage.
         // Le store existant conserve la capture atomiquement, sans remplacer la disposition initiale.
@@ -3311,7 +3340,7 @@ public final class LayoutMaintainer {
             var hiddenIDs: [String] = []
             for entry in entries where entry.window.id != keepID {
                 let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-                if service.setFrame(frame, of: entry.window, generation: PlacementGeneration.outsideBudget) != nil {
+                if service.setFrame(frame, of: entry.window, generation: PlacementGeneration.outsideBudget, preservingSize: true) != nil {
                     hidden += 1
                     hiddenIDs.append(String(entry.window.id.rawValue))
                 }
