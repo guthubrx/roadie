@@ -251,6 +251,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "window close", implemented: false),
         CLICommandSpec(usage: "desktop list|current"),
         CLICommandSpec(usage: "desktop focus N|prev|next|last|back|back-and-forth"),
+        CLICommandSpec(usage: "desktop next|prev|last|back|back-and-forth"),
         CLICommandSpec(usage: "desktop summon N"),
         CLICommandSpec(usage: "desktop label N NAME"),
         CLICommandSpec(usage: "stage list"),
@@ -1042,13 +1043,18 @@ public final class CLICommandRouter {
             )
             return finish(result)
         case "focus":
+            // Forme documentée « desktop focus N|prev|next|last|back|back-and-forth » : les mots-clés
+            // reprennent les sous-commandes courtes (desktop next, desktop prev…).
+            if let keyword = args.dropFirst().first, ["prev", "previous", "next", "last", "back", "back-and-forth"].contains(keyword) {
+                return try runDesktopCommand([keyword == "previous" ? "prev" : keyword])
+            }
             guard let rawID = args.dropFirst().first, let id = Int(rawID), id > 0 else {
-                err("roadie: desktop focus requires a positive id")
+                err("roadie: desktop focus requires N|prev|next|last|back|back-and-forth")
                 return 64
             }
             let result = DesktopCommandService(service: service).focus(DesktopID(rawValue: id))
             return finish(result)
-        case "prev":
+        case "prev", "previous":
             let result = DesktopCommandService(service: service).cycle(.prev)
             return finish(result)
         case "next":

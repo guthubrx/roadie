@@ -19,6 +19,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- `roadie desktop focus next|prev|last|back|back-and-forth`, documenté dans l’aide et les
+  README, est accepté au même titre que `roadie desktop next|prev…` ; l’aide liste les deux formes.
 - Les fenêtres des stages masquées ne rétrécissent plus après Mission Control. Roadie
   suspend la disposition et la mémorisation des cadres pendant Mission Control, gare
   les fenêtres sans toucher leur taille et reprend une écriture restée sans réponse

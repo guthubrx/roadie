@@ -40,6 +40,21 @@ struct CLICommandRouterTests {
         }
     }
 
+    /// La forme documentée `desktop focus next|prev…` (aide, README) est acceptée comme `desktop next|prev…`.
+    @Test
+    func desktopFocusAcceptsTheDocumentedKeywords() {
+        for (documented, short) in [(["desktop", "focus", "next"], ["desktop", "next"]),
+                                    (["desktop", "focus", "prev"], ["desktop", "prev"]),
+                                    (["desktop", "focus", "previous"], ["desktop", "prev"])] {
+            let long = router().run(documented), brief = router().run(short)
+            #expect(long.exitCode == brief.exitCode, "\(documented)")
+            #expect(!long.stderr.contains("requires a positive id"), "\(documented)")
+            #expect(long.stdout == brief.stdout, "\(documented)")
+        }
+        #expect(router().run(["desktop", "focus", "zero"]).stderr.contains("N|prev|next"))
+        #expect(router().run(["help", "desktop"]).stdout.contains("desktop next|prev|last|back|back-and-forth"))
+    }
+
     @Test
     func maximizeIsAdvertisedAndRouted() {
         #expect(router().run(["help", "toggle"]).stdout.contains("maximize|fullscreen|native-fullscreen"))
