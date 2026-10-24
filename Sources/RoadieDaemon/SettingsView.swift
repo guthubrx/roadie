@@ -314,7 +314,7 @@ private struct SettingRow: View {
                     set: { model.apply(descriptor, raw: $0) }
                 ), label: descriptor.label)
                 .frame(maxWidth: .infinity)
-            } else if descriptor.key == "search_hotkey" {
+            } else if descriptor.key == "search_hotkey" || descriptor.id == "overview.hotkey" {
                 ShortcutRecorderControl(value: model.text(for: descriptor), fontSize: fonts.settingsTextFontSize) {
                     model.apply(descriptor, raw: $0)
                 }

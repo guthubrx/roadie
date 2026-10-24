@@ -220,6 +220,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "group create|add|remove|focus|dissolve|list ..."),
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
         CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|hide ..."),
+        CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
         CLICommandSpec(usage: "record start NAME [--duration S] [--stop-file PATH]"),
@@ -609,6 +610,21 @@ public final class CLICommandRouter {
             return try runQueryCommand(Array(args.dropFirst()))
         case "targets":
             return try runTargetsCommand(Array(args.dropFirst()))
+        case "overview":
+            guard let command = OverviewController.command(Array(args.dropFirst())) else { return usageError() }
+            if command.name == "overview.status" {
+                let c = configReload.currentConfig().overview
+                let status: [String: String] = ["enabled": String(c.enabled), "presentation": c.presentation, "loupe": String(c.loupe), "magnification": String(c.magnification), "receiver_available": String(OverviewController.receiverAvailable)]
+                out(String(data: try JSONSerialization.data(withJSONObject: status, options: [.sortedKeys]), encoding: .utf8) ?? "{}")
+                return 0
+            }
+            guard OverviewController.receiverAvailable else {
+                err("roadie: overview receiver unavailable; restart Roadie with this version"); return 1
+            }
+            guard configReload.currentConfig().overview.enabled || command.name == "overview.hide" else {
+                err("roadie: overview disabled"); return 1
+            }
+            return try queueTargetModeRuntimeCommand(command, json: args.contains("--json"), notificationName: OverviewController.notificationName)
         case "switcher":
             let arguments = Array(args.dropFirst())
             guard let command = WindowSwitcherRuntimeBridge.command(arguments) else { return usageError() }

@@ -7,6 +7,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Vue d’ensemble des écrans, bureaux et stages : Archipel et Baies, loupe au
+  survol activable et grossissement réglable 100–250 %. Défaut Archipel avec
+  loupe à 150 %. CLI `overview show|toggle|hide|status`, raccourci interne
+  facultatif et intégration du geste trois doigts vers le haut via BetterTouchTool.
+
 - Cinq organisations du sélecteur au choix : colonnes par stage, bureaux en onglets,
   navigation hiérarchique, grille par sections et vue d'ensemble des bureaux.
   Réglage commun ou propre à chaque profil, appliqué sans redémarrage. La grille

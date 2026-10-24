@@ -27,9 +27,9 @@ struct WindowSwitcherService {
     }
 
     @MainActor
-    func load() async -> (entries: [WindowSwitcherEntry], context: WindowSwitcherContext) {
+    func load() async -> (entries: [WindowSwitcherEntry], context: WindowSwitcherContext, snapshot: DaemonSnapshot?, persisted: PersistentStageState) {
         guard let snapshot = await service.readerSnapshot(followFocus: false) else {
-            return ([], WindowSwitcherContext())
+            return ([], WindowSwitcherContext(), nil, PersistentStageState())
         }
         let persisted = service.effectiveStageStore.state()
         let drafts = collectDrafts(snapshot: snapshot, persisted: persisted)
@@ -51,7 +51,7 @@ struct WindowSwitcherService {
                 visibilityKnown: window.isOnScreen || ax?.visibilityKnown == true
             )
         }
-        return (entries, context(snapshot: snapshot))
+        return (entries, context(snapshot: snapshot), snapshot, persisted)
     }
 
     func activate(_ entry: WindowSwitcherEntry) -> WindowCommandResult {

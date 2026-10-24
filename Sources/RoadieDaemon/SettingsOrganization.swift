@@ -35,6 +35,7 @@ enum SettingsOrganization {
         case .stages: return "Organisation des stages et bureaux"
         case .focus: return key.contains("mouse") ? "Souris et pointeur" : "Changements de focus"
         case .bordures: return key.contains("font") ? "Texte" : "Apparence des bordures"
+        case .overview: return ["enabled", "hotkey"].contains(key) ? "Activation et raccourci" : "Disposition et loupe"
         case .selecteur:
             if key == "shortcuts" { return "Profils et raccourcis" }
             if key == "excluded_bundles" { return "Applications exclues" }

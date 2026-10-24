@@ -1,0 +1,42 @@
+# Tâches 061 - Vue d’ensemble
+
+## Fondations
+- [x] T001 Ajouter OverviewConfig et son décodage/validation dans Sources/RoadieCore/OverviewConfig.swift et Config.swift ; vérifier défauts et bornes dans Tests/RoadieDaemonTests/Spec061OverviewTests.swift.
+
+## US1 - Carte globale (P1)
+- [x] T002 Étendre Sources/RoadieDaemon/WindowSwitcherService.swift avec le snapshot acquis ; projeter écrans/bureaux/stages par identité dans OverviewModel.swift, tester homonymes et contextes vides.
+- [x] T003 Construire le panneau et son contrôleur dans Sources/RoadieDaemon/OverviewPanel.swift et OverviewController.swift ; cartes entières, navigation/clic/Entrée/Échap, activation existante sans réaffectation.
+
+## US2 - Dispositions et loupe (P1)
+- [x] T004 Calculer Archipel/Baies et redistribution bornée dans Sources/RoadieDaemon/OverviewModel.swift ; tester 11/32/64 fenêtres, rectangles disjoints et densité avec défilement.
+- [x] T005 Réaliser la loupe au mouvement réel et sa stabilisation dans Sources/RoadieDaemon/OverviewPanel.swift ; vérifier absence d’oscillation sans mouvement et absence d’acquisition au survol dans Spec061OverviewTests.swift.
+
+## US3 - Déclenchement et paramètres (P1)
+- [x] T006 Raccorder CLI et cycle démon dans Sources/RoadieDaemon/CLICommandRouter.swift, OverviewController.swift et Sources/roadied/main.swift ; tests arguments/récepteur.
+- [x] T007 Ajouter catégorie et recorder dans Sources/RoadieDaemon/SettingsCatalogOverview.swift, SettingsCatalog.swift, SettingsOrganization.swift et SettingsView.swift ; réutiliser TargetSearchHotkey avec signature dédiée ; tests persistance et raccourci vide.
+- [x] T008 Sauvegarder puis configurer BTT trois doigts vers le haut par API officielle ; relire script/type/activation et préserver les autres raccourcis, reçu specs/061-vue-ensemble/validation.md.
+
+## Validation et livraison
+- [ ] T009 Exécuter tests ciblés, suite complète et scripts ; traiter revue indépendante, convergence et audit dans specs/061-vue-ensemble/validation.md.
+- [x] T010 Mettre à jour docs FR/EN et CHANGELOG, construire/installer/relancer, vérifier santé et parcours visible ; produire preuves-corrections/2026-10-24-vue-ensemble061/preuves.html avec limites exactes.
+- [ ] T011 Vérifier les gates, commit/intégration/push, nettoyer les seuls fichiers/branches/builds éligibles ; tracer SHA et conservations dans specs/061-vue-ensemble/validation.md.
+
+Dépendances : T001 -> T002 -> T003/T004 -> T005 -> T006/T007 -> T008 -> T009/T010 -> T011. Travail principal par un responsable ; revue distincte sans modifications. Les tests de géométrie/config précèdent leur validation native. Aucun arrêt au seul premier parcours.
+
+## Convergence
+- [x] T012 Remplacer les recherches répétées de la projection initiale dans Sources/RoadieDaemon/OverviewModel.swift par des index d’identité ; préserver l’ordre des stages et les bureaux nommés vides, puis revalider tests et installation dans Spec061OverviewTests.swift.
+
+## Retour utilisateur du 24 octobre
+- [x] T013 Compacter les cartes et répartir les stages selon leur contenu, choisir les rangées/colonnes selon les deux dimensions ; vérifier cas 1/3/6 fenêtres et densité.
+- [x] T014 Ajouter une loupe de fenêtre au survol dans Archipel et Baies, sans activation et avec grossissement réglable ; rapprocher les îlots de la maquette et vérifier le rendu natif.
+- [x] T015 Identifier et retirer le geste Mission Control concurrent, conserver la liaison CLI BTT et les autres gestes ; sauvegarder et relire les valeurs.
+- [x] T016 Porter fidèlement la maquette approuvée (géométrie 1440×773, partition des stages, grilles, bandeau, légendes, diagonales, sans grands cadres ni loupe flottante). Vérifier les mêmes 32 fenêtres et ajouter une comparaison native/référence avant installation.
+- [x] T017 Retirer ligne d’état, logo, nom et compteurs ; couvrir le bureau par un overlay plein écran sans créer de Space, fermer immédiatement sur Échap, retirer l’overlay avant activation d’une fenêtre ; vérifier le parcours réel.
+- [x] T018 Retour du 24 octobre (2) : textes en points fixes (plus d’agrandissement à la largeur de l’écran), barre d’options de 40 points, cartes de même hauteur au format réel de chaque fenêtre, stages en flux côte à côte, largeur des écrans/bureaux selon leur besoin mesuré et plus grande hauteur de carte tenant sans défilement (dichotomie). Tests : cas réel 3 portraits + 7 fenêtres, 20 tests 061 et suite complète.
+- [x] T019 Retour du 24 octobre (3), rendu jugé loin de la maquette : retour au port fidèle d’Archipel/Baies (colonnes égales, traits obliques, îles, split/grid, titres de stage, légendes 22 points, flottement), en points réels. Grille au format réel des fenêtres, cases resserrées, aperçu plafonné à 240 points hors loupe, loupe agrandissant bureau et stage survolés. Fond flou de ce qui est sous l’overlay (NSVisualEffectView) avec voile sombre. Géométrie de référence 1440×773 de nouveau vérifiée.
+- [x] T020 Comparaison directe avec la direction retenue de /tmp/roadie-explorations.html, données réelles injectées dans la maquette et rendu natif équivalent (`nativePanelRendersRealExport`). Loupe de bureau de la maquette (écran 1,65, bureau agrandi, contour/halo/étiquette), cartes centrées dans leur case, échelle puissance 0,7 plafond 2, barre à l’échelle, traits proportionnels sans couper les titres. Capture réelle de l’écran LG contrôlée.
+- [x] T021 Retour utilisateur : aperçus figés pendant la consultation (remplacés seulement par une version plus définie), captures à la définition réelle de chaque carte (`ifNarrowerThan` dans RailThumbnailStore, largeur demandée une fois par fenêtre, redemande si la carte grandit de 30 %), captures et icônes séparées, image remplissant la carte recadrée par le haut comme le sélecteur, cartes alignées en haut, stages vides et compteurs retirés.
+- [x] T022 Retour utilisateur : format unique 16:10 pour tous les aperçus (capture recadrée par le haut, aucun étirement vertical), cartes sans fond ni cadre (image arrondie avec ombre, icône et titre dessous), cartes serrées sous le titre de leur stage. Capture corrigée dans RailThumbnailStore : format réel de la fenêtre selon ScreenCaptureKit (cadre Roadie périmé pour les fenêtres masquées) et mise à l’échelle forcée (`scalesToFit`, `preservesAspectRatio`) : sur l’écran LG à 1 pixel par point, la fenêtre était déposée dans un quart de la capture.
+- [x] T023 Retour utilisateur : zones et titres de stage remplacés par une puce dans la légende (icône, titre, puce à droite ; puces de la stage sélectionnée en bleu). Une grille par bureau, même taille de carte partout, fenêtres dans l’ordre des stages ; dichotomie sur la largeur de carte. Archipel : largeur des écrans selon leur besoin réel, surplus au prorata ; Baies : colonnes données au bureau le plus haut. Loupe : cartes du bureau consulté agrandies du pourcentage choisi. Code de répartition de la maquette (split, grille par stage, allocation) retiré.
+- [x] T024 Retour utilisateur : barre de commandes retirée (réglages dans Paramètres > Vue d’ensemble, aides mises à jour), fond d’écran de l’écran réduit et flouté (repli : flou système), voile léger, bureaux sans fond, nom de bureau en puce rectangulaire arrondie (point vert actif, bleu loupe), puces de stage rectangulaires. Capture au format extrême affichée entière. Docs FR/EN alignées.
+- [x] T025 Retour utilisateur : flou du fond réduit (sigma 5 sur la miniature de 960 pixels), vue sur une seule page sans défilement (canevas à la taille de l’écran, plus de vue de défilement, borne basse des cartes à 8 unités), format extrême limité aux écarts de plus de trois fois.

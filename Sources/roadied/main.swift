@@ -25,6 +25,7 @@ var focusFollowsMouseController: FocusFollowsMouseController?
 var titlebarContextMenuController: TitlebarContextMenuController?
 var targetModeRuntimeController: TargetModeRuntimeController?
 var targetSearchHotkey: TargetSearchHotkey?
+var overviewController: OverviewController?
 var windowSwitcherController: WindowSwitcherController?
 var windowSwitcherBridge: WindowSwitcherRuntimeBridge?
 var displayChangeObserver: NSObjectProtocol?
@@ -221,6 +222,10 @@ func startWindowSwitcherComponent() {
     switcher.start()
     let bridge = WindowSwitcherRuntimeBridge(controller: switcher)
     windowSwitcherBridge = bridge
+    let overview = OverviewController(service: service)
+    overviewController = overview
+    overview.start()
+    ShutdownRegistry.register { overview.stop() }
     bridge.start()
     ShutdownRegistry.register { bridge.stop(); switcher.stop() }
 }

@@ -145,6 +145,10 @@ public final class SettingsService: @unchecked Sendable {
         guard let descriptor = SettingsCatalog.find(id: id) else {
             return reject("unknown", "réglage inconnu : \(id)")
         }
+        if descriptor.id == "overview.hotkey", !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           TargetModeConfig.hotkeyParts(OverviewConfig(hotkey: raw).hotkey) == nil {
+            return reject(id, "Enregistrez une combinaison avec un modificateur et une touche, ou laissez vide.")
+        }
         if descriptor.collection != nil { return reject(id, "Utilise l’éditeur intégré de cette collection.") }
         if let reason = descriptor.readOnlyReason { return reject(id, reason) }
         switch Self.convert(SettingsCatalog.canonicalChoice(raw, for: id), kind: descriptor.kind) {

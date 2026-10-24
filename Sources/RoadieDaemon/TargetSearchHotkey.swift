@@ -17,6 +17,9 @@ public final class TargetSearchHotkey {
     private let events: EventLog
     private let configLoader: () -> TargetModeConfig
     private let configPathLoader: () -> String
+    private let signature: OSType
+    private let eventType: String
+    private let settingsIDs: Set<String>
     private let pollingInterval: TimeInterval
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
@@ -32,8 +35,14 @@ public final class TargetSearchHotkey {
             ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
         },
         pollingInterval: TimeInterval = 2,
+        signature: OSType = 0x5244_5352,
+        eventType: String = "target_mode.search_hotkey",
+        settingsIDs: Set<String> = ["target_mode.search_hotkey", "target_mode.enabled", "target_mode.overlay_enabled", "*"],
         onPress: @escaping @MainActor () -> Void
     ) {
+        self.signature = signature
+        self.eventType = eventType
+        self.settingsIDs = settingsIDs
         self.events = events
         self.configLoader = configLoader
         self.configPathLoader = configPathLoader
@@ -52,7 +61,7 @@ public final class TargetSearchHotkey {
             let settingID = notification.userInfo?["settingID"] as? String
             Task { @MainActor in
                 guard let self, self.timer != nil, let path, let settingID,
-                      ["target_mode.search_hotkey", "target_mode.enabled", "target_mode.overlay_enabled", "*"].contains(settingID),
+                      self.settingsIDs.contains(settingID),
                       URL(fileURLWithPath: path).resolvingSymlinksInPath()
                         == URL(fileURLWithPath: self.configPathLoader()).resolvingSymlinksInPath() else { return }
                 self.refresh()
@@ -150,7 +159,7 @@ public final class TargetSearchHotkey {
             return
         }
         var ref: EventHotKeyRef?
-        let id = EventHotKeyID(signature: OSType(0x5244_5352), id: 1) // 'RDSR'
+        let id = EventHotKeyID(signature: signature, id: 1) // 'RDSR'
         let status = RegisterEventHotKey(
             wanted.keyCode, wanted.modifiers, id, GetApplicationEventTarget(),
             OptionBits(kEventHotKeyExclusive), &ref
@@ -193,7 +202,7 @@ public final class TargetSearchHotkey {
 
     /// Plusieurs fonctions partagent la cible Carbon : ne jamais absorber un autre raccourci.
     func handle(_ identifier: EventHotKeyID) -> OSStatus {
-        guard identifier.signature == OSType(0x5244_5352), identifier.id == 1 else {
+        guard identifier.signature == signature, identifier.id == 1 else {
             return OSStatus(eventNotHandledErr)
         }
         onPress()
@@ -205,6 +214,6 @@ public final class TargetSearchHotkey {
         let key = "\(state)|\(hotkey)"
         guard key != lastState else { return }
         lastState = key
-        events.append(RoadieEvent(type: "target_mode.search_hotkey", details: ["state": state, "hotkey": hotkey]))
+        events.append(RoadieEvent(type: eventType, details: ["state": state, "hotkey": hotkey]))
     }
 }

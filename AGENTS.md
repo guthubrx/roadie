@@ -194,12 +194,22 @@ quatre bureaux et sept stages sans défilement : tests natifs 120/220/400 points
 parcours complet des paramètres et capture finale par sections non enregistrés.
 Revue indépendante non démarrée : admission Bridget auto_admission_invalid.
 Reçu : specs/060-presentations-selecteur/validation.md.
-Current SpecKit feature: `060-presentations-selecteur`.
+Session 061 : vue globale Archipel/Baies avec loupe de fenêtre au survol, grossissement
+100–250%, CLI overview et raccourci interne facultatif. Geste BTT trois doigts haut
+confirmé ; conflit Mission Control natif désactivé après sauvegarde et relecture.
+Port graphique fidèle à la référence, bandeau épuré sans logo/compteurs ni pied.
+Overlay couvrant NSScreen.frame, sans Space dédié, fermeture Échap vérifiée.
+1918 tests /238 suites et28 scripts réussis. UUID DFD88CB9-B19B-3164-94C7-31CF4550EBDC,
+PID46329, santé5/5 ; certificat et choix utilisateur160% conservés. Preuves natives
+actualisées ; clics finaux, menu ouvert et geste après correction partiellement vérifiés.
+Revue de code distante indisponible, sans verdict favorable inventé.
+Reçu : specs/061-vue-ensemble/validation.md ; clôture Git/audit dans les notes de l’audit final.
+Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
-- `specs/060-presentations-selecteur/spec.md`
-- `specs/060-presentations-selecteur/plan.md`
-- `specs/060-presentations-selecteur/tasks.md`
+- `specs/061-vue-ensemble/spec.md`
+- `specs/061-vue-ensemble/plan.md`
+- `specs/061-vue-ensemble/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes

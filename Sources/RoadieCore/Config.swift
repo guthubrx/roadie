@@ -13,6 +13,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var rules: [WindowRule]
     public var widthAdjustment: WidthAdjustmentConfig
     public var experimental: ExperimentalConfig
+    public var overview: OverviewConfig
     public var switcher: WindowSwitcherConfig
 
     public init(
@@ -27,6 +28,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         rules: [WindowRule],
         widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
         experimental: ExperimentalConfig = ExperimentalConfig(),
+        overview: OverviewConfig = OverviewConfig(),
         switcher: WindowSwitcherConfig = WindowSwitcherConfig()
     ) {
         self.interface = interface
@@ -40,6 +42,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.rules = rules
         self.widthAdjustment = widthAdjustment
         self.experimental = experimental
+        self.overview = overview
         self.switcher = switcher
     }
 
@@ -54,6 +57,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         windowPlacement: WindowPlacementConfig = WindowPlacementConfig(),
         widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
         experimental: ExperimentalConfig = ExperimentalConfig(),
+        overview: OverviewConfig = OverviewConfig(),
         switcher: WindowSwitcherConfig = WindowSwitcherConfig()
     ) {
         self.init(
@@ -68,6 +72,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
             rules: [],
             widthAdjustment: widthAdjustment,
             experimental: experimental,
+            overview: overview,
             switcher: switcher
         )
     }
@@ -84,6 +89,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case rules
         case widthAdjustment = "width_adjustment"
         case experimental
+        case overview
         case switcher
     }
 
@@ -100,6 +106,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.rules = try c.decodeIfPresent([WindowRule].self, forKey: .rules) ?? []
         self.widthAdjustment = try c.decodeIfPresent(WidthAdjustmentConfig.self, forKey: .widthAdjustment) ?? WidthAdjustmentConfig()
         self.experimental = try c.decodeIfPresent(ExperimentalConfig.self, forKey: .experimental) ?? ExperimentalConfig()
+        self.overview = try c.decodeIfPresent(OverviewConfig.self, forKey: .overview) ?? OverviewConfig()
         self.switcher = try c.decodeIfPresent(WindowSwitcherConfig.self, forKey: .switcher) ?? WindowSwitcherConfig()
     }
 }
@@ -1321,6 +1328,7 @@ private enum ConfigValidationRules {
         "focus",
         "window_placement",
         "width_adjustment",
+        "overview",
         "switcher",
         "switcher.shortcuts",
         "experimental",
@@ -1377,6 +1385,7 @@ private enum ConfigValidationRules {
             "focus": ["stage_follows_focus", "assign_follows_focus", "stage_move_follows_focus", "focus_follows_mouse", "mouse_follows_focus"],
             "window_placement": ["new_apps_target", "new_window_side"],
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
+            "overview": ["enabled", "presentation", "loupe", "magnification", "hotkey"],
             "switcher": ["enabled", "presentation", "style", "auto_size", "thumbnail_width", "font_size", "font_family", "preview", "excluded_bundles", "shortcuts"],
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],
@@ -1432,6 +1441,9 @@ private enum ConfigValidationRules {
             }
             items.append(contentsOf: validateTitlebarContextMenu(config.experimental.titlebarContextMenu))
             items.append(contentsOf: validateTargetMode(config.experimental.targetMode))
+            if !config.overview.hotkey.isEmpty, TargetModeConfig.hotkeyParts(config.overview.hotkey) == nil {
+                items.append(ConfigValidationItem(level: .error, path: "overview.hotkey", message: "expected modifiers and one key; empty disables"))
+            }
             items.append(contentsOf: validateAppTargets(config.experimental.appTargets))
             items.append(contentsOf: validateTargetGrid(config.experimental.targetGrid))
             items.append(contentsOf: validateTargetRecord(config.experimental.targetRecord))

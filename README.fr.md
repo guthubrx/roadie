@@ -95,6 +95,12 @@ apparence. Organise les fenêtres en colonnes par stage, onglets par bureau,
 arbre, sections ou vue d'ensemble des bureaux. La grille classique reste disponible.
 [Guide du sélecteur](docs/fr/window-switcher.md).
 
+La **vue d’ensemble** ajoute Archipel et Baies pour parcourir les écrans,
+bureaux et stages. Sa loupe suit la souris ; son grossissement se règle de
+100 à 250 %. Ouvre-la avec `roadie overview show`, avec un geste BTT ou un
+raccourci facultatif. [Guide de la vue d’ensemble](docs/fr/overview.md).
+
+
 Les paramètres sont regroupés par usage, avec des champs alignés et des aides
 défilables. Les règles se déplient une par une ; les onglets du sélecteur occupent
 toute la largeur. Ajuste les espacements, les noms de stages, les règles et les exceptions depuis

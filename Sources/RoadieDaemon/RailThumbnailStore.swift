@@ -89,20 +89,28 @@ final class RailThumbnailStore {
     /// Un seul lot à la fois. Les fenêtres protégées (contenu DRM juste après un changement de focus) sont ignorées.
     // O(m log m) - m = nombre de membres affichés.
     /// `liveFrames` : cadres du relevé courant ; ils fixent les proportions de la capture.
+    /// `ifNarrowerThan` : une vignette en cache moins large que cette valeur (points) est refaite sans
+    /// attendre l’intervalle, pour un affichage plus grand. Retourne les fenêtres effectivement lancées.
+    @discardableResult
     func requestCaptures(
         for members: [PersistentStageMember],
         protectedWindowIDs: Set<WindowID>,
         liveFrames: [WindowID: Rect],
         displayWidth: CGFloat,
-        budget: Int
-    ) {
-        guard budget > 0, inFlight.isEmpty else { return }
+        budget: Int,
+        ifNarrowerThan minimumWidth: CGFloat? = nil
+    ) -> [WindowID] {
+        guard budget > 0, inFlight.isEmpty else { return [] }
         let now = Date()
         let due = members
-            .filter { !protectedWindowIDs.contains($0.windowID) && isDue($0, now: now) }
+            .filter { member in
+                guard !protectedWindowIDs.contains(member.windowID) else { return false }
+                if let minimumWidth, (images[member.windowID]?.size.width ?? 0) < minimumWidth, inFlight.isEmpty { return true }
+                return isDue(member, now: now)
+            }
             .sorted { lastActivity(of: $0.windowID) < lastActivity(of: $1.windowID) }
             .prefix(budget)
-        guard !due.isEmpty else { return }
+        guard !due.isEmpty else { return [] }
         let ids = due.map(\.windowID)
         let sizes = Dictionary(due.map {
             ($0.windowID, (liveFrames[$0.windowID] ?? $0.frame).cgRect.size)
@@ -111,6 +119,7 @@ final class RailThumbnailStore {
         Task { [weak self] in
             await self?.capture(ids, sizes: sizes, displayWidth: displayWidth)
         }
+        return ids
     }
 
     private func isDue(_ member: PersistentStageMember, now: Date) -> Bool {
@@ -175,10 +184,16 @@ final class RailThumbnailStore {
 
     private func screenshot(of window: SCWindow, size: CGSize, displayWidth: CGFloat) async -> CGImage? {
         guard size.width > 0, size.height > 0 else { return nil }
-        let pixelWidth = min(displayWidth * 2, size.width * 2)
+        // Format réel selon macOS : une fenêtre masquée garde parfois un cadre Roadie périmé.
+        let real = window.frame.width > 0 && window.frame.height > 0 ? window.frame.size : size
+        let pixelWidth = min(displayWidth * 2, real.width * 2)
         let configuration = SCStreamConfiguration()
         configuration.width = max(1, Int(pixelWidth.rounded()))
-        configuration.height = max(1, Int((pixelWidth * size.height / size.width).rounded()))
+        configuration.height = max(1, Int((pixelWidth * real.height / real.width).rounded()))
+        // Sur un écran à 1 pixel par point, la fenêtre est plus petite que le tampon : la mettre à l’échelle
+        // au lieu de la déposer dans un coin.
+        configuration.scalesToFit = true
+        configuration.preservesAspectRatio = true
         configuration.showsCursor = false
         configuration.ignoreShadowsSingleWindow = true
         let filter = SCContentFilter(desktopIndependentWindow: window)

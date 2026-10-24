@@ -17,6 +17,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
     case bordures
     case focus
     case selecteur
+    case overview
     case regles
     case avance
 
@@ -31,6 +32,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
         case .rail: return "Rail"
         case .bordures: return "Bordures"
         case .focus: return "Focus et souris"
+        case .overview: return "Vue d’ensemble"
         case .selecteur: return "Sélecteur"
         case .regles: return "Règles"
         case .avance: return "Avancé"
@@ -49,6 +51,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
         case .rail: return "sidebar.left"
         case .bordures: return "square.dashed"
         case .focus: return "cursorarrow.click"
+        case .overview: return "rectangle.3.group"
         case .selecteur: return "rectangle.on.rectangle"
         case .regles: return "list.bullet.rectangle"
         case .avance: return "wrench.and.screwdriver"
@@ -97,6 +100,8 @@ public struct SettingDescriptor: Equatable, Sendable {
         }
         let label: String
         switch (id, value) {
+        case ("overview.presentation", "archipelago"): return "Archipel"
+        case ("overview.presentation", "bays"): return "Baies"
         case ("window_placement.new_apps_target", "focused_display"): return "Écran actif (recommandé)"
         case ("window_placement.new_apps_target", "mouse"): return "Écran de la souris"
         case ("window_placement.new_apps_target", "macos"): return "Choix de macOS"
@@ -150,7 +155,7 @@ public enum SettingsCatalog {
     public static let all: [SettingDescriptor] =
         interfaceDescriptors + tilingDescriptors + stageDescriptors + focusDescriptors + borderDescriptors
         + targetModeDescriptors + appTargetDescriptors + targetGridDescriptors
-        + advancedDescriptors + ruleDescriptors + railDescriptors + fontFamilyDescriptors + switcherDescriptors
+        + advancedDescriptors + ruleDescriptors + railDescriptors + fontFamilyDescriptors + switcherDescriptors + overviewDescriptors
 
     /// Texte de recherche normalisé de chaque réglage, calculé une fois (même ordre que `all`).
     private static let searchTexts: [String] = all.map {

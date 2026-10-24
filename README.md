@@ -90,6 +90,12 @@ columns, desktop tabs, a hierarchy, grouped sections or desktop overviews.
 The classic grid remains available.
 [Window switcher guide](docs/en/window-switcher.md).
 
+The **global overview** adds Archipelago and Bays layouts for displays,
+desktops and stages. Its magnifier follows the pointer, with a configurable
+100–250% enlargement. Open it with `roadie overview show`, a BTT gesture or
+an optional shortcut. [Overview guide](docs/en/overview.md).
+
+
 Settings are grouped by purpose, with aligned controls and scrollable help.
 Expand individual rules as needed; switcher tabs span the full available width.
 Adjust spacing, stage names, rules and overrides
