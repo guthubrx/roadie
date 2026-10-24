@@ -11,6 +11,7 @@ Guides français pour les sources actuelles de `main`. Le [README principal](../
 - [Configuration et règles](configuration-rules.md)
 - [Événements et API de requêtes](events-query.md)
 - [Cas d’usage](use-cases.md)
+- [Notes de release 0.8.0](../releases/v0.8.0.md)
 - [Notes de release 0.7.0](../releases/v0.7.0.md)
 
 `roadie toggle maximize` agrandit la fenêtre active en gardant la bande du navrail visible libre. Relance la commande pour restaurer la disposition. Les voisines de la même stage sont cachées pendant la maximisation. Activer une autre fenêtre de cette stage restaure directement la disposition. Changer de stage conserve le zoom sauvegardé. Avec le masquage automatique, le rail masqué laisse toute la zone utile, comme le plein écran Roadie. Quand il revient au survol ou avec `roadie rail pin`, la fenêtre se redimensionne pour lui laisser la place, sans quitter la maximisation. Le menu de titre propose aussi « Fenêtre → Maximiser / restaurer (garder le navrail) » lorsqu'il est activé.

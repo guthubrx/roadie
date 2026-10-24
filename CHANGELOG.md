@@ -3,14 +3,19 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
-## Non publié
+## 0.8.0 - 2026-10-24
 
 ### Nouveautés
 
-- Vue d’ensemble des écrans, bureaux et stages : Archipel et Baies, loupe au
-  survol activable et grossissement réglable 100–250 %. Défaut Archipel avec
-  loupe à 150 %. CLI `overview show|toggle|hide|status`, raccourci interne
-  facultatif et intégration du geste trois doigts vers le haut via BetterTouchTool.
+- Vue d’ensemble des écrans, bureaux et stages, sur une seule page et sans
+  défilement : Archipel (écrans en colonnes) ou Baies (écrans en bandes), une
+  grille de cartes de même taille par bureau, au format 16:10, avec la stage de
+  chaque fenêtre en puce. Fond d’écran de l’utilisateur flouté (0–100 %, défaut
+  20 %, aperçu en direct dans les paramètres). Loupe qui agrandit le bureau survolé
+  de 100 à 250 %. Contour de sélection réglable (couleur, 1–8 points), au départ
+  sur la fenêtre active. Captures à la définition des cartes, gardées nettes
+  10 minutes pour une réouverture immédiate. CLI `overview show|toggle|hide|status`
+  et raccourci interne facultatif ; réglages dans Paramètres > Vue d’ensemble.
 
 - Cinq organisations du sélecteur au choix : colonnes par stage, bureaux en onglets,
   navigation hiérarchique, grille par sections et vue d'ensemble des bureaux.
@@ -19,12 +24,16 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
-- `roadie desktop focus next|prev|last|back|back-and-forth`, documenté dans l’aide et les
-  README, est accepté au même titre que `roadie desktop next|prev…` ; l’aide liste les deux formes.
 - Les fenêtres des stages masquées ne rétrécissent plus après Mission Control. Roadie
   suspend la disposition et la mémorisation des cadres pendant Mission Control, gare
   les fenêtres sans toucher leur taille et reprend une écriture restée sans réponse
   de l’application au lieu d’accepter l’ancienne taille.
+- Le sélecteur et la vue d’ensemble partent de la fenêtre au premier plan selon macOS,
+  et non de la fenêtre retenue par la stage active du premier écran.
+- Captures des fenêtres justes sur les écrans à 1 pixel par point : la fenêtre est mise
+  à l’échelle au lieu d’occuper un coin de l’image ; captures d’un lot en parallèle.
+- `roadie desktop focus next|prev|last|back|back-and-forth`, documenté dans l’aide et les
+  README, est accepté au même titre que `roadie desktop next|prev…` ; l’aide liste les deux formes.
 - Présentations du sélecteur rapprochées des maquettes : panneau adapté à l’écran,
   vignettes groupées compactes, icônes et titres sans contexte répété, détail
   avec chemin bureau/stage et aperçu intégral. Largeur des colonnes répartie

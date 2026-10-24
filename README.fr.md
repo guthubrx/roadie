@@ -13,8 +13,8 @@ Roadie organise tes fenêtres autour de tes activités. Regroupe les application
 d'un projet, retrouve-les dans le rail latéral et passe d'un espace de travail à
 l'autre sur chaque écran.
 
-**[Télécharger Roadie 0.7.0](https://github.com/guthubrx/roadie/releases/tag/v0.7.0)** ·
-[Découvrir les nouveautés](docs/releases/v0.7.0.md) · [Guide d'installation](#installation-manuelle)
+**[Télécharger Roadie 0.8.0](https://github.com/guthubrx/roadie/releases/tag/v0.8.0)** ·
+[Découvrir les nouveautés](docs/releases/v0.8.0.md) · [Guide d'installation](#installation-manuelle)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">
@@ -95,10 +95,11 @@ apparence. Organise les fenêtres en colonnes par stage, onglets par bureau,
 arbre, sections ou vue d'ensemble des bureaux. La grille classique reste disponible.
 [Guide du sélecteur](docs/fr/window-switcher.md).
 
-La **vue d’ensemble** ajoute Archipel et Baies pour parcourir les écrans,
-bureaux et stages. Sa loupe suit la souris ; son grossissement se règle de
-100 à 250 %. Ouvre-la avec `roadie overview show`, avec un geste BTT ou un
-raccourci facultatif. [Guide de la vue d’ensemble](docs/fr/overview.md).
+La **vue d’ensemble** montre toutes les fenêtres sur une seule page, par écran
+et par bureau, en Archipel ou en Baies, sur ton fond d’écran flouté. La loupe
+agrandit le bureau survolé de 100 à 250 %. Ouvre-la avec `roadie overview show`,
+un geste BTT (quatre doigts vers le haut, par exemple) ou un raccourci facultatif.
+[Guide de la vue d’ensemble](docs/fr/overview.md).
 
 
 Les paramètres sont regroupés par usage, avec des champs alignés et des aides

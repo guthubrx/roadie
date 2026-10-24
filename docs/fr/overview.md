@@ -2,7 +2,7 @@
 
 La vue d’ensemble montre votre organisation Roadie : écrans, bureaux, stages et fenêtres. Elle complète le sélecteur Cmd+Tab. Elle couvre tout l’écran, y compris la barre de menus et le Dock, comme un aperçu global. Elle ne crée pas de Space macOS.
 
-Ouvrez-la avec `roadie overview show`. Le geste trois doigts vers le haut peut appeler `roadie overview toggle` depuis BetterTouchTool. Le second geste ferme la vue. `roadie overview hide` ferme aussi la vue ; `roadie overview status` affiche les réglages et la disponibilité du démon, sans garantir que la vue soit visible.
+Ouvrez-la avec `roadie overview show`. Un geste BetterTouchTool, par exemple quatre doigts vers le haut, peut appeler `roadie overview toggle`. Le second geste ferme la vue. `roadie overview hide` ferme aussi la vue ; `roadie overview status` affiche les réglages et la disponibilité du démon, sans garantir que la vue soit visible.
 
 Dans **Réglages Roadie > Vue d’ensemble**, choisissez :
 
@@ -36,4 +36,4 @@ Les images utilisent le cache partagé du rail et du sélecteur. Le mouvement de
 
 Les cartes restent compactes : les stages utilisent plusieurs rangées et colonnes selon leur contenu. Une stage avec une seule fenêtre ne prend pas toute la hauteur. La fenêtre survolée gagne de la place dans sa stage. La loupe reste dans la composition, sans panneau superposé. Le clic ouvre la fenêtre.
 
-Si Mission Control apparaît aussi après le balayage trois doigts, désactivez ce geste dans Réglages Système > Trackpad > Gestes supplémentaires > Mission Control. Conservez le geste Roadie dans BetterTouchTool.
+Si Mission Control apparaît aussi après le balayage, désactivez le geste macOS correspondant dans Réglages Système > Trackpad > Gestes supplémentaires > Mission Control. Conservez le geste Roadie dans BetterTouchTool.

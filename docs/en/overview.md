@@ -2,7 +2,7 @@
 
 The overview shows your Roadie organization: displays, desktops, stages and windows. It complements the Cmd+Tab switcher. It covers the full screen, including the menu bar and Dock, as a global overview. It does not create a macOS Space.
 
-Open it with `roadie overview show`. BetterTouchTool can bind a three-finger upward swipe to `roadie overview toggle`; a second swipe closes it. `roadie overview hide` also closes it. `roadie overview status` reports configuration and daemon availability, not confirmed window visibility.
+Open it with `roadie overview show`. BetterTouchTool can bind a gesture, such as a four-finger upward swipe, to `roadie overview toggle`; a second swipe closes it. `roadie overview hide` also closes it. `roadie overview status` reports configuration and daemon availability, not confirmed window visibility.
 
 In **Réglages Roadie > Vue d’ensemble**, choose:
 
@@ -36,4 +36,4 @@ Images use the rail and switcher's shared cache. Pointer movement triggers no wi
 
 Cards remain compact. Stages use rows and columns according to their contents. A single window does not stretch to fill the entire height. Magnification stays inside the stage composition, without an overlay. The whole window image is preserved. Clicking it opens that window.
 
-If Mission Control also appears after the three-finger swipe, turn that gesture off in System Settings > Trackpad > More Gestures > Mission Control. Keep the Roadie gesture in BetterTouchTool.
+If Mission Control also appears after the swipe, turn the matching macOS gesture off in System Settings > Trackpad > More Gestures > Mission Control. Keep the Roadie gesture in BetterTouchTool.
