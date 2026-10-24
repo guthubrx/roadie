@@ -17,6 +17,8 @@ public final class OverviewController {
     private var timer: Timer?
     /// Largeur (points de capture) déjà demandée par fenêtre pendant la session : pas de redemande en boucle.
     private var requestedWidths: [WindowID: CGFloat] = [:]
+    /// Date de la capture nette affichée par fenêtre : seule une capture nette plus récente la remplace.
+    private var shownAt: [WindowID: Date] = [:]
     /// Mesure du temps jusqu’à ce que toutes les cartes aient leur capture à la bonne définition.
     private var openedAt = Date()
     private var sharpReported = false
@@ -106,9 +108,19 @@ public final class OverviewController {
             self.liveFrames = Dictionary(p.canvas.model.entries.filter { $0.window.isOnScreen }.map { ($0.id, $0.window.frame) }, uniquingKeysWith: { first, _ in first })
             self.thumbnails.prune(keeping: Set(self.members.map(\.windowID)), owner: "overview")
             // Captures déjà en cache d’un côté, icônes de secours de l’autre : une capture s’agrandit, une icône non.
+            // La dernière capture nette s’affiche tout de suite ; sinon la vignette du rail, sinon l’icône.
             let cached = self.thumbnails.images(for: self.members)
-            p.canvas.images = cached.filter { self.thumbnails.hasCapturedImage(for: $0.key) }
-            p.canvas.icons = cached.filter { !self.thumbnails.hasCapturedImage(for: $0.key) }
+            self.shownAt = [:]
+            var images: [WindowID: NSImage] = [:]
+            for member in self.members {
+                if let sharp = self.thumbnails.detailedImage(for: member.windowID) {
+                    images[member.windowID] = sharp.image; self.shownAt[member.windowID] = sharp.at
+                } else if self.thumbnails.hasCapturedImage(for: member.windowID) {
+                    images[member.windowID] = cached[member.windowID]
+                }
+            }
+            p.canvas.images = images
+            p.canvas.icons = cached.filter { images[$0.key] == nil }
             self.requestedWidths = [:]
             self.openedAt = Date(); self.sharpReported = false
             // Même cache par application que le sélecteur ; aucune résolution au dessin/survol.
@@ -120,7 +132,8 @@ public final class OverviewController {
             self.tick()
             // 0,1 s : une capture arrivée s’affiche sans attendre ; la vérification ne lit que le cache.
             self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
-            self.events.append(RoadieEvent(type: "overview.state", details: ["state": "open", "windows": String(self.members.count)]))
+            self.events.append(RoadieEvent(type: "overview.state", details: ["state": "open", "windows": String(self.members.count),
+                "sharpAtOpen": String(self.shownAt.count)]))
         }
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in
@@ -150,10 +163,17 @@ public final class OverviewController {
         if thumbnails.version != imageVersion {
             imageVersion = thumbnails.version
             var changed = false
-            for member in members where thumbnails.hasCapturedImage(for: member.windowID) {
-                guard let image = thumbnails.cachedImage(for: member.windowID) else { continue }
+            for member in members {
                 let current = panel.canvas.images[member.windowID]
-                if current == nil || image.size.width > (current?.size.width ?? 0) + 1 {
+                if let sharp = thumbnails.detailedImage(for: member.windowID),
+                   sharp.at > (shownAt[member.windowID] ?? .distantPast),
+                   sharp.image.size.width >= (current?.size.width ?? 0) * 0.9 {
+                    // Capture fraîche au moins aussi nette : contenu identique, rien ne bouge ; sinon mise à jour.
+                    panel.canvas.images[member.windowID] = sharp.image
+                    shownAt[member.windowID] = sharp.at
+                    changed = true
+                } else if current == nil, thumbnails.hasCapturedImage(for: member.windowID),
+                          let image = thumbnails.cachedImage(for: member.windowID) {
                     panel.canvas.images[member.windowID] = image; changed = true
                 }
             }
@@ -163,10 +183,12 @@ public final class OverviewController {
         // Une fenêtre n’est redemandée que si sa carte a grandi (loupe) d’au moins 30 %. Le survol seul ne capture pas.
         let pixels = (panel.screen ?? NSScreen.main)?.backingScaleFactor ?? 2
         let needed = Dictionary(panel.canvas.plan.cards.map { ($0.entry.id, ceil($0.frame.width * pixels / 2)) }, uniquingKeysWith: { first, _ in first })
+        // Une capture fraîche par fenêtre et par ouverture (sauf capture de moins de 5 s), puis une
+        // nouvelle seulement si la carte grandit (loupe) d’au moins 30 %.
         let wanted = members.filter { member in
             guard let need = needed[member.windowID] else { return false }
             if let requested = requestedWidths[member.windowID], need <= requested * 1.3 { return false }
-            return (panel.canvas.images[member.windowID]?.size.width ?? 0) < need * 0.9
+            return true
         }
         // Fenêtres sans capture possible (contenu protégé, icône seule) exclues de la mesure.
         let pictured = members.filter { panel.canvas.images[$0.windowID] != nil }

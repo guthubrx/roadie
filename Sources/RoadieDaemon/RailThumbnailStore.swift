@@ -21,6 +21,11 @@ final class RailThumbnailStore {
     private var revisions: [WindowID: Int] = [:]
 
     private var images: [WindowID: NSImage] = [:]
+    /// Dernière capture nette de chaque fenêtre (vue d’ensemble), gardée quand le rail recapture plus petit.
+    /// Affichée tout de suite à l’ouverture suivante ; une capture fraîche la remplace si elle est aussi nette.
+    private var detailed: [WindowID: (image: NSImage, at: Date)] = [:]
+    /// Durée de conservation d’une capture nette dont la fenêtre n’est plus suivie par personne.
+    private let detailedRetention: TimeInterval = 600
     private var fallbacks: [WindowID: NSImage] = [:]
     private var icons: [String: NSImage] = [:]
     private var signatures: [WindowID: String] = [:]
@@ -64,10 +69,14 @@ final class RailThumbnailStore {
         else { retainedByOwner[owner] = requested }
         // O(n) : un consommateur ne purge pas les vignettes encore utilisées par l'autre.
         let ids = retainedByOwner.values.reduce(into: Set<WindowID>()) { $0.formUnion($1) }
+        let now = Date()
+        detailed = detailed.filter { ids.contains($0.key) || now.timeIntervalSince($0.value.at) < detailedRetention }
         revisions = revisions.filter { ids.contains($0.key) }
         images = images.filter { ids.contains($0.key) }
         fallbacks = fallbacks.filter { ids.contains($0.key) }
-        signatures = signatures.filter { ids.contains($0.key) }
+        // L’application d’une fenêtre reste connue tant que sa capture nette est gardée : sans elle,
+        // la réouverture croirait à un changement d’application et effacerait la capture.
+        signatures = signatures.filter { ids.contains($0.key) || detailed[$0.key] != nil }
         shareableWindows = shareableWindows.filter { ids.contains($0.key) }
         absentUntil = absentUntil.filter { ids.contains($0.key) }
         capturedAt = capturedAt.filter { ids.contains($0.key) }
@@ -80,6 +89,9 @@ final class RailThumbnailStore {
     }
 
     func hasCapturedImage(for windowID: WindowID) -> Bool { images[windowID] != nil }
+
+    /// Dernière capture nette et sa date (vue d’ensemble). O(1).
+    func detailedImage(for windowID: WindowID) -> (image: NSImage, at: Date)? { detailed[windowID] }
 
     func cachedImage(for windowID: WindowID) -> NSImage? {
         images[windowID] ?? fallbacks[windowID]
@@ -184,7 +196,10 @@ final class RailThumbnailStore {
         }
         guard !cgImage.looksBlank else { return }
         // Taille en points = pixels / 2 : la vignette garde sa netteté sur un écran Retina.
-        images[id] = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width / 2, height: cgImage.height / 2))
+        let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width / 2, height: cgImage.height / 2))
+        images[id] = image
+        // Une capture au moins aussi nette remplace la capture nette ; une vignette du rail plus petite non.
+        if image.size.width >= (detailed[id]?.image.size.width ?? 0) * 0.9 { detailed[id] = (image, Date()) }
         capturedAt[id] = Date()
         version += 1
         revisions[id] = version
@@ -212,6 +227,7 @@ final class RailThumbnailStore {
     private func invalidateIfAppChanged(_ member: PersistentStageMember) {
         guard signatures[member.windowID] != member.bundleID else { return }
         images.removeValue(forKey: member.windowID)
+        detailed.removeValue(forKey: member.windowID)
         fallbacks.removeValue(forKey: member.windowID)
         capturedAt.removeValue(forKey: member.windowID)
         signatures[member.windowID] = member.bundleID
