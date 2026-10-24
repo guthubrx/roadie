@@ -40,3 +40,29 @@ avant cette publication, à la demande de l'utilisateur de publier.
 Distribution arm64, macOS 14 et ultérieur, signée ad hoc, non notarisée. Pas d'essai
 sur Intel ni sur macOS 14. Rendu des réglages de la vue d'ensemble dans la fenêtre
 des paramètres non capturé. Gestes BetterTouchTool déclenchés par BTT, non au trackpad.
+
+## Publication et vérification GitHub
+Version publiée le 24 octobre 2026 à 14:35:36Z :
+https://github.com/guthubrx/roadie/releases/tag/v0.8.0 - Latest, hors brouillon et
+hors préversion. Tag annoté v0.8.0 sur 7b64afe2b08933404d1af90cae5cbd3d6570c3df,
+référence distante contrôlée. `main` avancé sans commit de fusion et poussé.
+Notes FR et EN publiées dans le même corps ; relu par l'API : identique au texte
+préparé, à une ligne vide finale près ajoutée par GitHub. Deux pièces : Roadie.dmg
+(10 435 451 octets) et Roadie.dmg.sha256 (77 octets), retéléchargées : identiques,
+`shasum -a 256 -c` OK.
+
+## Installation locale
+Roadie 0.8.0 installé, UUID identique au paquet (F5122397-3E44-3F71-8172-5D668E435652),
+PID 52475, santé 5/5, certificat roadied-cert conservé, configuration identique avant
+et après (SHA-256 b4ae077c0be644faf7d5c7ab9f486eac7b14c04dbba24fb5b2f6fd45d3b60206).
+
+## Nettoyage
+Branches locales `session-061-vue-ensemble` et `session-062-fenetres-mission-control`
+supprimées (fusionnées) ; aucune branche distante de session. Worktree d'audit
+obsolète `/private/tmp/roadie-061-audit-checkout` archivé hors Git puis supprimé,
+références prunées. Audit du 24 octobre (version antérieure de la vue) et archive
+déplacés dans `/Users/moi/.roadies/diagnostics/2026-10-24-session061/`. Une seule
+paire DMG/SHA-256 0.8.0 conservée dans `/Users/moi/Nextcloud/10.Scripts/39.roadie/dist/`
+(ancienne 0.7.0 remplacée). Bundle intermédiaire, dossier `dist` et compilation
+`.build` du worktree, caches Python et temporaires supprimés. Checkout principal
+conservé ; worktree de conversation conservé.

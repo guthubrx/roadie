@@ -209,6 +209,11 @@ disposition et relevés provisoires pendant Mission Control, masquage en positio
 sans réponse (−25204) reprise au lieu d'être acceptée. ADR 019. 1 928 tests / 240 suites ;
 Mission Control réel sans changement de taille. PID 94362, santé 5/5.
 Reçu : specs/062-fenetres-mission-control/validation.md.
+Session 063 : 0.8.0 publiée (Latest), tag 7b64afe2, DMG/SHA-256 retéléchargés identiques ;
+installation locale 0.8.0, UUID F5122397-3E44-3F71-8172-5D668E435652, santé 5/5. Branches,
+worktree d'audit et builds nettoyés. Revue indépendante non admise (Bridget permissions_changed).
+Reçu : specs/063-release-080/validation.md. Session 064 abandonnée : film et captures retirés (contenus privés lisibles),
+commit remplacé sur main ; README et guides inchangés depuis 0.8.0.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
