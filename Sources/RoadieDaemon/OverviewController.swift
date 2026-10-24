@@ -17,6 +17,9 @@ public final class OverviewController {
     private var timer: Timer?
     /// Largeur (points de capture) déjà demandée par fenêtre pendant la session : pas de redemande en boucle.
     private var requestedWidths: [WindowID: CGFloat] = [:]
+    /// Mesure du temps jusqu’à ce que toutes les cartes aient leur capture à la bonne définition.
+    private var openedAt = Date()
+    private var sharpReported = false
     private var monitor: Any?
     private var sessionID = UUID()
     private var members: [PersistentStageMember] = []
@@ -107,6 +110,7 @@ public final class OverviewController {
             p.canvas.images = cached.filter { self.thumbnails.hasCapturedImage(for: $0.key) }
             p.canvas.icons = cached.filter { !self.thumbnails.hasCapturedImage(for: $0.key) }
             self.requestedWidths = [:]
+            self.openedAt = Date(); self.sharpReported = false
             // Même cache par application que le sélecteur ; aucune résolution au dessin/survol.
             for pid in Set(p.canvas.model.entries.map { $0.window.pid }) {
                 p.canvas.appIcons[pid] = NSRunningApplication(processIdentifier: pid)?.icon
@@ -114,7 +118,8 @@ public final class OverviewController {
             p.canvas.rebuild()
             p.canvas.notice = nil
             self.tick()
-            self.timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
+            // 0,1 s : une capture arrivée s’affiche sans attendre ; la vérification ne lit que le cache.
+            self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
             self.events.append(RoadieEvent(type: "overview.state", details: ["state": "open", "windows": String(self.members.count)]))
         }
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
@@ -163,9 +168,18 @@ public final class OverviewController {
             if let requested = requestedWidths[member.windowID], need <= requested * 1.3 { return false }
             return (panel.canvas.images[member.windowID]?.size.width ?? 0) < need * 0.9
         }
+        // Fenêtres sans capture possible (contenu protégé, icône seule) exclues de la mesure.
+        let pictured = members.filter { panel.canvas.images[$0.windowID] != nil }
+        if !sharpReported, !pictured.isEmpty, pictured.allSatisfy({ member in
+            needed[member.windowID].map { (panel.canvas.images[member.windowID]?.size.width ?? 0) >= $0 * 0.9 } ?? true
+        }) {
+            sharpReported = true
+            events.append(RoadieEvent(type: "overview.captures_sharp", details: [
+                "windows": String(pictured.count), "durationMs": String(format: "%.0f", Date().timeIntervalSince(openedAt) * 1000)]))
+        }
         guard let widest = wanted.compactMap({ needed[$0.windowID] }).max() else { return }
-        // Réessayer au tick suivant si le rail possède déjà le lot partagé ; aucun lot concurrent.
-        for id in thumbnails.requestCaptures(for: wanted, protectedWindowIDs: [], liveFrames: liveFrames, displayWidth: widest, budget: 4, ifNarrowerThan: widest * 0.9) {
+        // Toutes les fenêtres de la vue en un lot ; réessayer au tick suivant si le rail tient le lot partagé.
+        for id in thumbnails.requestCaptures(for: wanted, protectedWindowIDs: [], liveFrames: liveFrames, displayWidth: widest, budget: wanted.count, ifNarrowerThan: widest * 0.9) {
             requestedWidths[id] = widest
         }
     }

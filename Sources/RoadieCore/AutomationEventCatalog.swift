@@ -46,6 +46,7 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "overview.state",
         "overview.input",
         "overview.hotkey",
+        "overview.captures_sharp",
         "overview.activation_failed",
         "switcher.session",
         "switcher.hotkey",

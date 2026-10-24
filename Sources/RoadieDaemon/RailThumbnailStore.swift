@@ -166,20 +166,28 @@ final class RailThumbnailStore {
                 absentUntil[id] = startedAt.addingTimeInterval(absentRetryInterval)
             }
         }
-        for id in ids {
-            guard let window = shareableWindows[id], let size = sizes[id] else { continue }
-            guard let cgImage = await screenshot(of: window, size: size, displayWidth: displayWidth) else {
-                // Fenêtre fermée ou changée : la prochaine demande la recherche à nouveau.
-                shareableWindows.removeValue(forKey: id)
-                continue
-            }
-            guard !cgImage.looksBlank else { continue }
-            // Taille en points = pixels / 2 : la vignette garde sa netteté sur un écran Retina.
-            images[id] = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width / 2, height: cgImage.height / 2))
-            capturedAt[id] = Date()
-            version += 1
-            revisions[id] = version
+        // Captures du lot en parallèle : ScreenCaptureKit travaille hors du fil principal, le lot
+        // dure autant que la plus lente au lieu de leur somme. Chaque tâche enregistre son image.
+        let tasks = ids.compactMap { id -> Task<Void, Never>? in
+            guard shareableWindows[id] != nil, let size = sizes[id] else { return nil }
+            return Task { @MainActor in await self.captureOne(id, size: size, displayWidth: displayWidth) }
         }
+        for task in tasks { await task.value }
+    }
+
+    private func captureOne(_ id: WindowID, size: CGSize, displayWidth: CGFloat) async {
+        guard let window = shareableWindows[id] else { return }
+        guard let cgImage = await screenshot(of: window, size: size, displayWidth: displayWidth) else {
+            // Fenêtre fermée ou changée : la prochaine demande la recherche à nouveau.
+            shareableWindows.removeValue(forKey: id)
+            return
+        }
+        guard !cgImage.looksBlank else { return }
+        // Taille en points = pixels / 2 : la vignette garde sa netteté sur un écran Retina.
+        images[id] = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width / 2, height: cgImage.height / 2))
+        capturedAt[id] = Date()
+        version += 1
+        revisions[id] = version
     }
 
     private func screenshot(of window: SCWindow, size: CGSize, displayWidth: CGFloat) async -> CGImage? {
