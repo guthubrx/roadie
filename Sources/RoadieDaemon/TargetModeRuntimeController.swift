@@ -426,6 +426,10 @@ public final class TargetModeRuntimeController: NSObject {
         let activeStage = state.scopes.first { $0.displayID == homeDisplay && $0.desktopID == homeDesktop }
             .map { StageScope(displayID: homeDisplay, desktopID: homeDesktop, stageID: $0.activeStageID) }
         let affinity = WindowRuleAffinityService(eventLog: events)
+        let rankingContext = activeStage.map { scope in
+            LauncherSearchContext.rankingContext(scope, name: state.scopes.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+                .stages.first { $0.id == scope.stageID }?.name)
+        }
         let webSearchURL = service.effectiveConfig.experimental.targetMode.webSearchURL
         var context = LauncherSearchContext(
             apps: catalog.current,
@@ -433,7 +437,7 @@ public final class TargetModeRuntimeController: NSObject {
             ranking: rankingStore.load(),
             refreshApps: { done in catalog.refresh(done: done) },
             launch: { [weak self] app in self?.launch(app) ?? TargetActionResult(changed: false, message: "launcher_unavailable") },
-            recordVisit: { key, query in rankingStore.recordVisit(key, query: query) },
+            recordVisit: { key, query in rankingStore.recordVisit(key, query: query, context: rankingContext) },
             destinations: LauncherPlacement.destinations(state: state, displays: snapshot.displays, stageNames: names),
             newStageHome: (homeDisplay, homeDesktop),
             perform: { [weak self] action in
@@ -441,6 +445,7 @@ public final class TargetModeRuntimeController: NSObject {
             }
         )
         context.activeStage = activeStage
+        context.rankingContext = rankingContext
         context.initialSubject = initialSubject
         context.tiling = { id in
             guard let entry = snapshot.windows.first(where: { $0.window.id == id }) else { return nil }

@@ -1155,7 +1155,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         launcherQuery = model.query
         launcherTargetIDs = ids
         launcherList = LauncherList(query: model.query, apps: launcher.apps, details: launcher.details,
-                                    targets: model.matches, ranking: launcher.ranking, now: Date())
+                                    targets: model.matches, ranking: launcher.ranking, now: Date(), context: launcher.rankingContext)
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
         syncHighlight()
     }
@@ -1528,7 +1528,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .appElement, .gridCell: "cursorarrow.rays"
             }
             let label = target.label.isEmpty ? "" : "\(target.label)  "
-            let icon: SlashSuggestion.Icon = if target.kind == .window, let path = appPaths[target.title] { .file(path) } else { .symbol(symbol) }
+            // Fenêtre : sa vignette réelle si Roadie l'a capturée, sinon l'icône de son application (SPEC-076).
+            let icon: SlashSuggestion.Icon = if target.kind == .window, let id = target.scope.windowId {
+                .window(id, app: appPaths[target.title])
+            } else { .symbol(symbol) }
             return SlashSuggestion(text: label + target.title, detail: target.subtitle, kind: .result, icon: icon)
         }
     }

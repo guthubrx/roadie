@@ -437,6 +437,11 @@ remembers your choices: the row picked after the same input comes first next tim
 app that is already open goes to its window, in its stage and desktop; on a closed
 app, opens it in the active stage of the active display, unless an `assign_stage`
 rule applies. Arrow keys move through the list; clicking a row activates it.
+The ranking also remembers the stage active when you choose: in "Com", `o` first offers
+what you usually pick there, in "Dev" something else. A named stage is known by its name,
+even after moving; at most six stages per item. Windows show their real thumbnail
+(already captured by the rail, switcher or overview) with their app icon as a badge;
+without a thumbnail, the icon alone.
 
 **Verbs and destinations**: Tab on the selected row opens its verbs. App: open or go
 to its window, open in…, new window here, gather its windows in…, bring here, hide,

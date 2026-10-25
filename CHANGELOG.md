@@ -22,6 +22,8 @@ jour et les limites connues ; les README décrivent la version courante.
   couleur d'accent avec le rappel des touches. L'icône suit la taille du texte
   (deux fois la hauteur du nom), le nom est en graisse normale, les fenêtres
   montrent l'icône de leur application et les symboles sont posés sur une tuile.
+- Le classement du lanceur tient compte de la stage active ; les fenêtres montrent leur
+  vignette réelle avec la pastille de leur application.
 - Touches du lanceur : ⌘, ⌥ et ⌃ + Retour ouvrent dans une nouvelle stage, amènent ici
   ou cherchent sur le web, annoncés sur la ligne tant que la touche est tenue ; ⌘1 à ⌘9 ;
   → ouvre les verbes ; Capslock + Maj + F et `roadie targets actions` ouvrent les verbes

@@ -1,4 +1,5 @@
 import AppKit
+import RoadieCore
 
 /// Mise en page de la barre de saisie et de la boîte de commandes (SPEC-023 R4), pure. La barre reste
 /// collée en bas de l'écran (y = minY + 48) ; la liste et le message s'empilent au-dessus d'elle,
@@ -326,6 +327,8 @@ enum SearchBarRenderer {
                 let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
                 image.draw(in: CGRect(x: tile.midX - size.width / 2, y: tile.midY - size.height / 2, width: size.width, height: size.height))
             }
+        case .window(let id, let app)?:
+            drawWindow(WindowID(rawValue: id), app: app, in: iconRect)
         case nil:
             break
         }
@@ -353,6 +356,42 @@ enum SearchBarRenderer {
         if let hint { draw(hint, in: CGRect(x: row.maxX - hintWidth, y: row.minY, width: hintWidth, height: row.height)) }
     }
 
+    /// Dernière vignette nette, sinon celle du rail ou du sélecteur ; jamais l'icône de repli du cache.
+    /// Remplaçable par les tests de rendu, qui n'ont pas de capture. O(1).
+    static var thumbnail: @MainActor (WindowID) -> NSImage? = { id in
+        let store = RailThumbnailStore.shared
+        return store.detailedImage(for: id)?.image ?? (store.hasCapturedImage(for: id) ? store.cachedImage(for: id) : nil)
+    }
+
+    /// Vignette déjà capturée (vue d'ensemble, puis rail et sélecteur) aux proportions de la fenêtre,
+    /// avec la pastille de son application ; sans vignette, l'icône de l'application. Ne capture jamais.
+    private static func drawWindow(_ id: WindowID, app: String?, in rect: CGRect) {
+        let appIcon = icon(app.map(SlashSuggestion.Icon.file))
+        guard let thumbnail = thumbnail(id), thumbnail.size.width > 0, thumbnail.size.height > 0 else {
+            appIcon?.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
+                          hints: [.interpolation: NSImageInterpolation.high.rawValue])
+            return
+        }
+        let scale = min(rect.width / thumbnail.size.width, rect.height / thumbnail.size.height)
+        let size = CGSize(width: thumbnail.size.width * scale, height: thumbnail.size.height * scale)
+        let frame = CGRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height)
+        let path = NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4)
+        NSGraphicsContext.saveGraphicsState()
+        path.addClip()
+        thumbnail.draw(in: frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
+                       hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.white.withAlphaComponent(0.25).setStroke()
+        path.lineWidth = 0.5
+        path.stroke()
+        if let appIcon {
+            let badge = rect.width * 0.46
+            appIcon.draw(in: CGRect(x: rect.maxX - badge * 0.8, y: rect.minY - badge * 0.15, width: badge, height: badge),
+                         from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
+                         hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        }
+    }
+
     /// Icônes des lignes du lanceur, gardées pendant la vie du processus. O(1) après la première lecture.
     private static var icons: [SlashSuggestion.Icon: NSImage] = [:]
 
@@ -362,6 +401,7 @@ enum SearchBarRenderer {
         let image: NSImage? = switch icon {
         // Lien résolu : sans la flèche d'alias (Safari est un lien vers le système).
         case .file(let path): NSWorkspace.shared.icon(forFile: URL(fileURLWithPath: path).resolvingSymlinksInPath().path)
+        case .window(_, let app): app.map { NSWorkspace.shared.icon(forFile: URL(fileURLWithPath: $0).resolvingSymlinksInPath().path) }
         case .symbol(let name): NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
                 .applying(.init(paletteColors: [NSColor(calibratedWhite: 0.9, alpha: 1)])))

@@ -4,8 +4,9 @@ import Foundation
 public struct SlashSuggestion: Equatable, Sendable {
     /// `header` : titre de section du lanceur, non choisissable ; `result` : ligne du lanceur (SPEC-073).
     public enum Kind: Equatable, Sendable { case command, argument, setting, header, result }
-    /// Icône d'une ligne du lanceur : celle d'un fichier (application) ou un symbole système.
-    public enum Icon: Hashable, Sendable { case file(String), symbol(String) }
+    /// Icône d'une ligne du lanceur : celle d'un fichier (application), un symbole système, ou la vignette
+    /// d'une fenêtre avec le chemin de son application pour la pastille et le repli (SPEC-076).
+    public enum Icon: Hashable, Sendable { case file(String), symbol(String), window(UInt32, app: String?) }
 
     /// Texte à insérer à la place du mot courant (`stage `, `target_grid.rows`).
     public var text: String

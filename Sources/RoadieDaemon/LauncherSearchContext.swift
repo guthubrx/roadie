@@ -25,6 +25,8 @@ struct LauncherSearchContext {
     }
     /// Stage active du bureau affiché : la destination de ⌥ Retour (SPEC-075).
     var activeStage: StageScope?
+    /// Identité de cette stage pour le classement appris (SPEC-076) : `stage:<nom>` ou `scope:<place>`.
+    var rankingContext: String?
     /// Objet dont la barre montre tout de suite les verbes (Capslock + Maj + F) ; nil : la liste.
     var initialSubject: LauncherSubject?
     /// État de tuilage d'une fenêtre, pour ses verbes de flottement.
@@ -116,6 +118,15 @@ enum LauncherPlacement {
 }
 
 /// Recherche web de ⌃ Retour (SPEC-075), reprise par le repli de la session 077.
+extension LauncherSearchContext {
+    /// Stage nommée : son nom, unique dans tout Roadie et stable quand elle change de bureau.
+    /// Stage anonyme : sa place. O(1).
+    static func rankingContext(_ scope: StageScope, name: String?) -> String {
+        let folded = name.map(LauncherMatch.fold) ?? ""
+        return folded.isEmpty ? "scope:\(scope.description)" : "stage:\(folded)"
+    }
+}
+
 enum LauncherWeb {
     /// `{query}` remplacé par le texte encodé ; nil si l'adresse obtenue est invalide. O(q).
     static func searchURL(_ template: String, query: String) -> URL? {

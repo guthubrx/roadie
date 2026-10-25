@@ -453,6 +453,12 @@ choisie après une même saisie remonte en tête la fois suivante (classement lo
 application déjà ouverte va à sa fenêtre, dans sa stage et son bureau ; sur une
 application fermée, l'ouvre dans la stage active de l'écran actif, sauf règle
 `assign_stage`. Les flèches parcourent la liste ; un clic sur une ligne l'active.
+Le classement retient aussi la stage active au moment du choix : dans « Com », `o`
+propose d'abord ce que vous y choisissez d'habitude, dans « Dev » autre chose. Une
+stage nommée est reconnue par son nom, même déplacée ; six stages au plus par objet.
+Les fenêtres montrent leur vignette réelle (déjà capturée par le rail, le sélecteur ou
+la vue d'ensemble) avec l'icône de leur application en pastille ; sans vignette,
+l'icône seule.
 
 **Verbes et destinations** : Tab sur la ligne choisie ouvre ses verbes. Application :
 ouvrir ou aller à sa fenêtre, ouvrir dans…, nouvelle fenêtre ici, réunir ses fenêtres

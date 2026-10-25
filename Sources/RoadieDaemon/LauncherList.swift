@@ -73,8 +73,9 @@ struct LauncherList: Equatable, Sendable {
 
     /// `targets` : correspondances du mode recherche, déjà filtrées et ordonnées. `details` : état des
     /// applications par identifiant. O(a × q × t + n log n), a applications, n lignes retenues.
+    /// `context` : stage active (SPEC-076) ; ses choix passent avant ceux faits ailleurs.
     init(query: String, apps: [LauncherApp], details: [String: String], targets: [RoadieTarget],
-         ranking: LauncherRanking, now: Date) {
+         ranking: LauncherRanking, now: Date, context: String? = nil) {
         guard !LauncherMatch.fold(query).isEmpty else { return }
         struct Candidate { let row: Row; let id: String; let key: String; let section: Section; let score: Int; let name: String }
         var candidates: [Candidate] = []
@@ -91,14 +92,19 @@ struct LauncherList: Equatable, Sendable {
             candidates.append(Candidate(row: .target(target), id: "target:\(target.id)", key: Self.rankingKey(target),
                                         section: Section.of(target.kind), score: score, name: target.title))
         }
-        // Ordre : choix appris pour cette requête, puis pour une requête plus longue, puis l'appariement,
-        // puis la fréquence-récence, puis la section et le nom.
+        // Ordre : choix appris pour cette requête dans cette stage, puis partout, puis pour une requête
+        // plus longue, puis l'appariement, puis la fréquence-récence dans cette stage, puis partout,
+        // puis la section et le nom (SPEC-076 R1).
         func before(_ a: Candidate, _ b: Candidate) -> Bool {
+            let local = (ranking.exactUses(a.key, query: query, context: context), ranking.exactUses(b.key, query: query, context: context))
+            if local.0 != local.1 { return local.0 > local.1 }
             let exact = (ranking.exactUses(a.key, query: query), ranking.exactUses(b.key, query: query))
             if exact.0 != exact.1 { return exact.0 > exact.1 }
             let prefix = (ranking.prefixUses(a.key, query: query), ranking.prefixUses(b.key, query: query))
             if prefix.0 != prefix.1 { return prefix.0 > prefix.1 }
             if a.score != b.score { return a.score > b.score }
+            let here = (ranking.frecency(a.key, at: now, context: context), ranking.frecency(b.key, at: now, context: context))
+            if here.0 != here.1 { return here.0 > here.1 }
             let used = (ranking.frecency(a.key, at: now), ranking.frecency(b.key, at: now))
             if used.0 != used.1 { return used.0 > used.1 }
             if a.section != b.section { return a.section.rawValue < b.section.rawValue }
