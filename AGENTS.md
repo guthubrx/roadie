@@ -252,6 +252,8 @@ Session 080 installée : projets de stage (enregistrer, rouvrir aux mêmes cadre
 redémarrage), `roadie project save|open|list|delete`. 2 017 tests, santé 5/5.
 Session 081 installée : barre vide utile, `roadie undo`, règles proposées avec chip. Les
 fichiers du lanceur suivent `TestEnvironment.launcherFile`. 2 024 tests, santé 5/5.
+Session 082 installée : documents et onglets ouverts dans la recherche (Firefox non couvert),
+diagnostic `roadie launch --open-items`. 2 028 tests, santé 5/5.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
