@@ -248,6 +248,8 @@ Session 083 installée : fenêtre neuve gardée sur l'écran actif (rattachement
 2 006 tests / 269 suites, santé 5/5. Reçu : specs/083-stabilite-placement/validation.md.
 Session 079 installée : phrase complète FR/EN (`fire perso gauche`), ⌘S garde une action
 (abréviation, commande `roadie launch … --position …`). 2 008 tests, santé 5/5.
+Session 080 installée : projets de stage (enregistrer, rouvrir aux mêmes cadres, même après
+redémarrage), `roadie project save|open|list|delete`. 2 017 tests, santé 5/5.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
