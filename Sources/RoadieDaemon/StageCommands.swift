@@ -792,18 +792,21 @@ public struct StageCommandService {
         )
     }
 
-    /// Déplace une stage à une place d'un bureau du même écran (SPEC-067) : avant `anchor`, ou en
-    /// dernier si nil. Même bureau : réordonnancement seul. Autre bureau : la stage arrive inactive ;
-    /// si elle était affichée, l'écran bascule d'abord sur une autre stage de son bureau, ce qui masque
-    /// ses fenêtres. Le bureau affiché ne change pas. O(s + m), s stages et m membres de l'écran.
+    /// Déplace une stage à une place d'un bureau (SPEC-067), sur le même écran ou sur `targetDisplay`
+    /// (SPEC-070) : avant `anchor`, ou en dernier si nil. Même bureau : réordonnancement seul. Ailleurs :
+    /// la stage arrive inactive ; si elle était affichée, l'écran bascule d'abord sur une autre stage de
+    /// son bureau, ce qui masque ses fenêtres. Sur un autre écran, ses fenêtres rejoignent le coin de
+    /// masquage de cet écran. Les bureaux affichés ne changent pas. O(s + m), s stages et m membres.
     public func moveStage(
         _ stageID: StageID,
         displayID: DisplayID,
         from sourceDesktop: DesktopID,
         to targetDesktop: DesktopID,
-        before anchor: StageID?
+        before anchor: StageID?,
+        targetDisplay: DisplayID? = nil
     ) -> StageCommandResult {
-        let label = "stage move \(stageID.rawValue) desktop \(sourceDesktop.rawValue)->\(targetDesktop.rawValue)"
+        let targetDisplayID = targetDisplay ?? displayID
+        let label = "stage move \(stageID.rawValue) \(displayID.rawValue)/\(sourceDesktop.rawValue)->\(targetDisplayID.rawValue)/\(targetDesktop.rawValue)"
         func isSource(_ scope: PersistentStageScope) -> Bool { scope.displayID == displayID && scope.desktopID == sourceDesktop }
         let current = store.state()
         guard anchor != stageID,
@@ -812,7 +815,7 @@ public struct StageCommandService {
         else {
             return StageCommandResult(message: "\(label): stage or place not found", changed: false, outcome: .failed)
         }
-        if sourceDesktop == targetDesktop {
+        if sourceDesktop == targetDesktop, targetDisplayID == displayID {
             do {
                 let moved = try store.mutateChecked { state -> Bool in
                     guard let index = state.scopes.firstIndex(where: isSource),
@@ -851,8 +854,8 @@ public struct StageCommandService {
                 if state.scopes[sourceIndex].activeStageID == stageID {
                     state.scopes[sourceIndex].activeStageID = state.scopes[sourceIndex].stages[0].id
                 }
-                var target = state.scope(displayID: displayID, desktopID: targetDesktop)
-                target.applyConfiguredStages(stageManager, takenNames: state.namedStageKeys(excludingDisplay: displayID, desktop: targetDesktop))
+                var target = state.scope(displayID: targetDisplayID, desktopID: targetDesktop)
+                target.applyConfiguredStages(stageManager, takenNames: state.namedStageKeys(excludingDisplay: targetDisplayID, desktop: targetDesktop))
                 let automaticallyNamed = !StagePresentationOrder.isNamed(stage)
                 // Même règle que le transfert vers un autre écran : un emplacement vide anonyme cède sa
                 // place, toute autre stage homonyme garde la sienne et la stage arrivante change d'identifiant.
@@ -872,7 +875,7 @@ public struct StageCommandService {
                 let to = anchor.flatMap { id in target.stages.firstIndex { $0.id == id } } ?? target.stages.count
                 target.stages.insert(stage, at: to)
                 state.update(target)
-                let scope = StageScope(displayID: displayID, desktopID: targetDesktop, stageID: stage.id)
+                let scope = StageScope(displayID: targetDisplayID, desktopID: targetDesktop, stageID: stage.id)
                 for member in stage.members {
                     state.updatePinHomeScope(windowID: member.windowID, to: scope)
                 }
@@ -886,10 +889,20 @@ public struct StageCommandService {
         guard let moved else {
             return StageCommandResult(message: "\(label): stage changed meanwhile", changed: false, outcome: .failed)
         }
+        var relocated = (moved: 0, failed: 0)
+        if targetDisplayID != displayID {
+            beginLayoutCommand("stage.move_desktop_display")
+            defer { finishLayoutCommand("stage.move_desktop_display") }
+            let ids = Set(store.state().scopes.first { $0.displayID == targetDisplayID && $0.desktopID == targetDesktop }?
+                .stages.first { $0.id == moved.stageID }?.members.map(\.windowID) ?? [])
+            relocated = relocateHiddenWindows(ids, to: targetDisplayID, service: service, store: store, events: events,
+                                              cause: "stage.move_desktop_display")
+        }
         events.append(RoadieEvent(type: "stage_move_desktop", scope: moved, details: [
             "stageID": moved.stageID.rawValue, "requestedStageID": stageID.rawValue,
+            "sourceDisplayID": displayID.rawValue, "targetDisplayID": targetDisplayID.rawValue,
             "sourceDesktopID": String(sourceDesktop.rawValue), "targetDesktopID": String(targetDesktop.rawValue),
-            "before": anchor?.rawValue ?? "-"
+            "before": anchor?.rawValue ?? "-", "relocated": String(relocated.moved), "failed": String(relocated.failed)
         ]))
         return StageCommandResult(message: "\(label): stage=\(moved.stageID.rawValue)", changed: true)
     }

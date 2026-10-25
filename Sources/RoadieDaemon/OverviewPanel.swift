@@ -136,11 +136,12 @@ final class OverviewCanvas: NSView {
     var appIcons: [Int32: NSImage] = [:]
     var notice: String?
     var onOpen: ((WindowSwitcherEntry) -> Void)?
-    /// Puce lâchée sur un autre bureau du même écran : écran, bureau déplacé, place visée (SPEC-066).
-    var onMoveDesktop: ((DisplayID, DesktopID, DesktopID) -> Void)?
-    /// Puce de stage lâchée dans un espace entre stages : stage, bureau visé, stage devant laquelle
-    /// elle s’insère (nil = en dernier) (SPEC-067).
-    var onMoveStage: ((StageScope, DesktopID, StageID?) -> Void)?
+    /// Puce de bureau lâchée dans un espace entre bureaux : bureau déplacé, écran visé et numéro de
+    /// la place visée (SPEC-066, autre écran SPEC-070).
+    var onMoveDesktop: ((OverviewDesktopID, DisplayID, DesktopID) -> Void)?
+    /// Puce de stage lâchée dans un espace entre stages : stage, écran et bureau visés, stage devant
+    /// laquelle elle s’insère (nil = en dernier) (SPEC-067, autre écran SPEC-070).
+    var onMoveStage: ((StageScope, DisplayID, DesktopID, StageID?) -> Void)?
     /// Carte lâchée sur une carte d’une autre stage : la fenêtre rejoint cette stage (SPEC-067).
     var onMoveWindow: ((WindowSwitcherEntry, StageScope) -> Void)?
     private(set) var plan = OverviewLayout()
@@ -256,25 +257,26 @@ final class OverviewCanvas: NSView {
         }
         switch current.subject {
         case .desktop(let source):
-            if let slot = dropSlot(source: source, point: current.point) { onMoveDesktop?(source.displayID, source.desktopID, slot.target) }
+            if let slot = dropSlot(source: source, point: current.point) { onMoveDesktop?(source, slot.display, slot.target) }
         case .stage(let scope, _):
-            if let slot = stageSlot(source: scope, point: current.point) { onMoveStage?(scope, slot.desktop, slot.before) }
+            if let slot = stageSlot(source: scope, point: current.point) { onMoveStage?(scope, slot.display, slot.desktop, slot.before) }
         case .window(let entry):
             if let target = windowTarget(for: entry, point: current.point) { onMoveWindow?(entry, target) }
         }
     }
 
-    /// Espace d’insertion : numéro que prendra le bureau et trait à dessiner, en coordonnées de la vue.
-    struct DropSlot: Equatable { let target: DesktopID; let line: CGRect }
+    /// Espace d’insertion : écran visé, numéro que prendra le bureau et trait, en coordonnées de la vue.
+    struct DropSlot: Equatable { let display: DisplayID; let target: DesktopID; let line: CGRect }
 
-    /// Espace entre deux bureaux du même écran le plus proche du pointeur, y compris avant le premier
-    /// et après le dernier. Bureaux empilés en Archipel, côte à côte en Baies. nil hors de l’écran
-    /// ou si l’espace touche le bureau déplacé (rien ne changerait). O(b).
+    /// Espace entre deux bureaux de l’écran sous le pointeur le plus proche, y compris avant le premier
+    /// et après le dernier. Bureaux empilés en Archipel, côte à côte en Baies. Sur l’écran d’origine,
+    /// les espaces qui touchent le bureau déplacé ne changent rien ; sur un autre écran, le bureau prend
+    /// le numéro de celui devant lequel il s’insère, ou suit le dernier. nil hors des écrans. O(b).
     func dropSlot(source: OverviewDesktopID, point: CGPoint) -> DropSlot? {
-        guard let region = plan.displays.first(where: { $0.display.id == source.displayID })?.frame,
-              region.insetBy(dx: -24, dy: -24).contains(point) else { return nil }
-        let desktops = plan.desktops.filter { $0.desktop.id.displayID == source.displayID }
-        guard let from = desktops.firstIndex(where: { $0.desktop.id == source }) else { return nil }
+        guard let region = plan.displays.first(where: { $0.frame.insetBy(dx: -24, dy: -24).contains(point) }) else { return nil }
+        let displayID = region.display.id
+        let desktops = plan.desktops.filter { $0.desktop.id.displayID == displayID }
+        guard !desktops.isEmpty else { return nil }
         let vertical = config.presentation != "bays"
         func lead(_ r: CGRect) -> CGFloat { vertical ? r.minY : r.minX }
         func trail(_ r: CGRect) -> CGFloat { vertical ? r.maxY : r.maxX }
@@ -284,14 +286,21 @@ final class OverviewCanvas: NSView {
             return (trail(desktops[k - 1].frame) + lead(desktops[k].frame)) / 2
         }
         let along = vertical ? point.y : point.x
-        guard let k = gaps.indices.min(by: { abs(gaps[$0] - along) < abs(gaps[$1] - along) }), k != from, k != from + 1 else { return nil }
-        // Vers le haut, il prend le numéro du bureau devant lequel il s’insère ; vers le bas, celui d’avant l’espace.
-        let target = k < from ? desktops[k].desktop.id.desktopID : desktops[k - 1].desktop.id.desktopID
+        guard let k = gaps.indices.min(by: { abs(gaps[$0] - along) < abs(gaps[$1] - along) }) else { return nil }
+        let target: DesktopID
+        if displayID == source.displayID {
+            guard let from = desktops.firstIndex(where: { $0.desktop.id == source }), k != from, k != from + 1 else { return nil }
+            // Vers le haut, il prend le numéro du bureau devant lequel il s’insère ; vers le bas, celui d’avant l’espace.
+            target = k < from ? desktops[k].desktop.id.desktopID : desktops[k - 1].desktop.id.desktopID
+        } else {
+            target = k < desktops.count ? desktops[k].desktop.id.desktopID
+                : DesktopID(rawValue: desktops[k - 1].desktop.id.desktopID.rawValue + 1)
+        }
         let frames = desktops.map(\.frame)
         let line = vertical
             ? CGRect(x: frames.map(\.minX).min() ?? 0, y: gaps[k], width: (frames.map(\.maxX).max() ?? 0) - (frames.map(\.minX).min() ?? 0), height: 0)
             : CGRect(x: gaps[k], y: frames.map(\.minY).min() ?? 0, width: 0, height: (frames.map(\.maxY).max() ?? 0) - (frames.map(\.minY).min() ?? 0))
-        return DropSlot(target: target, line: line)
+        return DropSlot(display: displayID, target: target, line: line)
     }
 
     /// Puce du nom de bureau, en coordonnées de la vue : la même pour le dessin et le clic.
@@ -316,26 +325,27 @@ final class OverviewCanvas: NSView {
         return CGRect(x: chip.minX * s, y: chip.minY * s, width: chip.width * s, height: chip.height * s)
     }
 
-    /// Place d’une stage : bureau visé, stage devant laquelle elle s’insère (nil = en dernier) et trait.
-    struct StageSlot: Equatable { let desktop: DesktopID; let before: StageID?; let line: CGRect }
+    /// Place d’une stage : écran et bureau visés, stage devant laquelle elle s’insère (nil = en dernier) et trait.
+    struct StageSlot: Equatable { let display: DisplayID; let desktop: DesktopID; let before: StageID?; let line: CGRect }
 
-    /// Espace entre deux groupes de cartes d’une stage, dans le bureau du même écran sous le pointeur ;
+    /// Espace entre deux groupes de cartes d’une stage, dans le bureau sous le pointeur, sur tout écran ;
     /// trait vertical devant la première carte du groupe suivant, ou après la dernière carte. Bureau sans
     /// carte : trait sous sa puce. Les espaces qui touchent la stage déplacée ne changent rien. O(c).
     func stageSlot(source: StageScope, point: CGPoint) -> StageSlot? {
-        guard let item = plan.desktops.first(where: { $0.desktop.id.displayID == source.displayID && $0.frame.contains(point) }) else { return nil }
-        let desktopID = item.desktop.id.desktopID
+        guard let item = plan.desktops.first(where: { $0.frame.contains(point) }) else { return nil }
+        let desktopID = item.desktop.id.desktopID, displayID = item.desktop.id.displayID
+        let sameDesktop = displayID == source.displayID && desktopID == source.desktopID
         let s = plan.scale
         var groups: [(stage: StageID, first: CGRect, last: CGRect)] = []
-        for card in plan.cards where card.entry.scope?.displayID == source.displayID && card.entry.scope?.desktopID == desktopID {
+        for card in plan.cards where card.entry.scope?.displayID == displayID && card.entry.scope?.desktopID == desktopID {
             guard let stage = card.entry.scope?.stageID else { continue }
             if groups.last?.stage == stage { groups[groups.count - 1].last = card.frame } else { groups.append((stage, card.frame, card.frame)) }
         }
         guard !groups.isEmpty else {
-            guard desktopID != source.desktopID else { return nil }
+            guard !sameDesktop else { return nil }
             let chip = chipFrame(for: item)
             let side = OverviewLayout.side * s
-            return StageSlot(desktop: desktopID, before: nil,
+            return StageSlot(display: displayID, desktop: desktopID, before: nil,
                              line: CGRect(x: item.frame.minX + side, y: chip.maxY + 10 * s, width: item.frame.width - 2 * side, height: 0))
         }
         let gap = 5 * s, imageHeight = max(1, groups[0].first.height - OverviewLayout.caption * s)
@@ -347,16 +357,15 @@ final class OverviewCanvas: NSView {
             hypot(point.x - line.minX, point.y - min(max(point.y, line.minY), line.maxY))
         }
         guard let k = lines.indices.min(by: { distance(lines[$0]) < distance(lines[$1]) }) else { return nil }
-        if desktopID == source.desktopID, let from = groups.firstIndex(where: { $0.stage == source.stageID }), k == from || k == from + 1 {
+        if sameDesktop, let from = groups.firstIndex(where: { $0.stage == source.stageID }), k == from || k == from + 1 {
             return nil
         }
-        return StageSlot(desktop: desktopID, before: k < groups.count ? groups[k].stage : nil, line: lines[k])
+        return StageSlot(display: displayID, desktop: desktopID, before: k < groups.count ? groups[k].stage : nil, line: lines[k])
     }
 
-    /// Stage de la carte sous le pointeur, sur le même écran et différente de celle de la fenêtre. O(c).
+    /// Stage de la carte sous le pointeur, sur tout écran, différente de celle de la fenêtre. O(c).
     func windowTarget(for entry: WindowSwitcherEntry, point: CGPoint) -> StageScope? {
-        guard let scope = plan.cards.first(where: { $0.frame.contains(point) })?.entry.scope,
-              scope != entry.scope, scope.displayID == entry.scope?.displayID else { return nil }
+        guard let scope = plan.cards.first(where: { $0.frame.contains(point) })?.entry.scope, scope != entry.scope else { return nil }
         return scope
     }
 

@@ -182,6 +182,74 @@ public struct DesktopCommandService {
         return StageCommandResult(message: label, changed: true)
     }
 
+    /// Bureau `source` de l'écran `origin` inséré à la place `position` de l'écran `destination`
+    /// (SPEC-070). S'il est affiché, l'écran d'origine bascule d'abord sur un autre bureau, ce qui masque
+    /// ses fenêtres ; elles rejoignent ensuite le coin de masquage de l'autre écran. Intentions du bureau
+    /// déplacé retirées, celles des bureaux renumérotés suivies ; retour arrière si elles échouent.
+    public func move(
+        _ source: DesktopID, from origin: DisplayID, toDisplay destination: DisplayID, position: DesktopID
+    ) -> StageCommandResult {
+        let label = "desktop move \(origin.rawValue)/\(source.rawValue) -> \(destination.rawValue)/\(position.rawValue)"
+        let initial = store.state()
+        guard origin != destination, initial.scopes.contains(where: { $0.displayID == origin && $0.desktopID == source }) else {
+            return StageCommandResult(message: "\(label): desktop not found", changed: false, outcome: .failed)
+        }
+        let snapshot = service.snapshot(followFocus: false)
+        if initial.currentDesktopID(for: origin) == source {
+            guard let display = snapshot.displays.first(where: { $0.id == origin }) else {
+                return StageCommandResult(message: "\(label): unknown display", changed: false, outcome: .failed)
+            }
+            let others = initial.scopes.filter { $0.displayID == origin && $0.desktopID != source }.map(\.desktopID).sorted()
+            let fallback = initial.lastDesktopID(for: origin).flatMap { others.contains($0) ? $0 : nil }
+                ?? others.first ?? DesktopID(rawValue: source.rawValue + 1)
+            let switched = switchDisplay(display, to: fallback, snapshot: snapshot)
+            guard switched.outcome != .failed else { return switched }
+        }
+        var before: PersistentStageState?
+        var after: PersistentStageState?
+        let outcome: (windows: Set<WindowID>, origin: [DesktopID: DesktopID], destination: [DesktopID: DesktopID])?
+        do {
+            outcome = try store.mutateChecked { state in
+                before = state
+                let result = state.moveDesktop(source, from: origin, to: destination, position: position)
+                after = state
+                return result
+            }
+            if let outcome {
+                do {
+                    try service.effectiveIntentStore.mutateChecked { intents in
+                        intents = intents.filter { !($0.value.scope.displayID == origin && $0.value.scope.desktopID == source) }
+                        DesktopReorder.remap(intents: &intents, on: destination, outcome.destination)
+                        DesktopReorder.remap(intents: &intents, on: origin, outcome.origin)
+                    }
+                } catch {
+                    if let before, let after {
+                        try store.mutateChecked { state in
+                            guard state == after else { throw StageStateChangedError() }
+                            state = before
+                        }
+                    }
+                    throw error
+                }
+            }
+        } catch {
+            return .persistenceFailure(label, error)
+        }
+        guard let outcome else {
+            return StageCommandResult(message: "\(label): desktop changed meanwhile", changed: false, outcome: .failed)
+        }
+        beginLayoutCommand("desktop.move_display")
+        defer { finishLayoutCommand("desktop.move_display") }
+        let relocated = relocateHiddenWindows(outcome.windows, to: destination, service: service, store: store, events: events,
+                                              cause: "desktop.move_display")
+        events.append(RoadieEvent(type: "desktop_moved_display", details: [
+            "sourceDisplayID": origin.rawValue, "targetDisplayID": destination.rawValue,
+            "from": String(source.rawValue), "to": String(position.rawValue),
+            "windows": String(outcome.windows.count), "relocated": String(relocated.moved), "failed": String(relocated.failed)
+        ]))
+        return StageCommandResult(message: label, changed: true)
+    }
+
     public func assignActiveWindow(to desktopID: DesktopID, follow: Bool = false) -> StageCommandResult {
         beginLayoutCommand("desktop.assign_active_window")
         defer { finishLayoutCommand("desktop.assign_active_window") }

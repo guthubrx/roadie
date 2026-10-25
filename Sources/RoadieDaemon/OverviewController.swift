@@ -93,8 +93,8 @@ public final class OverviewController {
         p.onClose = { [weak self] in self?.hide() }
         p.onKey = { [weak self] code, shift in self?.key(code, backwards: shift) }
         p.canvas.onOpen = { [weak self] entry in self?.activate(entry) }
-        p.canvas.onMoveDesktop = { [weak self] displayID, source, target in self?.moveDesktop(displayID, source, to: target) }
-        p.canvas.onMoveStage = { [weak self] scope, desktop, before in self?.moveStage(scope, to: desktop, before: before) }
+        p.canvas.onMoveDesktop = { [weak self] source, display, target in self?.moveDesktop(source, to: display, target) }
+        p.canvas.onMoveStage = { [weak self] scope, display, desktop, before in self?.moveStage(scope, to: display, desktop, before: before) }
         p.canvas.onMoveWindow = { [weak self] entry, target in self?.moveWindow(entry, to: target) }
         p.present(on: screen, config: config)
         p.showMessage("Chargement des bureaux et stages…")
@@ -228,19 +228,27 @@ public final class OverviewController {
     }
 
     /// Renumérote puis recharge la vue ouverte : les cartes gardent leurs captures, seuls les bureaux changent.
-    private func moveDesktop(_ displayID: DisplayID, _ source: DesktopID, to target: DesktopID) {
+    private func moveDesktop(_ source: OverviewDesktopID, to display: DisplayID, _ target: DesktopID) {
         let commands = DesktopCommandService(service: snapshots, store: snapshots.effectiveStageStore, events: events)
-        let mapping = DesktopReorder.mapping(from: source, to: target)
-        reload(after: commands.move(source, to: target, displayID: displayID), failure: "Impossible de déplacer ce bureau.") { desktop in
+        guard display == source.displayID else {
+            // Autre écran (SPEC-070) : la loupe ne suit pas, les deux écrans sont renumérotés.
+            let result = commands.move(source.desktopID, from: source.displayID, toDisplay: display, position: target)
+            reload(after: result, failure: "Impossible de déplacer ce bureau vers cet écran.") { _ in source }
+            return
+        }
+        let displayID = source.displayID
+        let mapping = DesktopReorder.mapping(from: source.desktopID, to: target)
+        reload(after: commands.move(source.desktopID, to: target, displayID: displayID), failure: "Impossible de déplacer ce bureau.") { desktop in
             guard desktop.displayID == displayID, let moved = mapping[desktop.desktopID] else { return desktop }
             return OverviewDesktopID(displayID: displayID, desktopID: moved)
         }
     }
 
-    /// Stage glissée entre deux stages, dans son bureau ou un autre du même écran (SPEC-067).
-    private func moveStage(_ scope: StageScope, to desktop: DesktopID, before: StageID?) {
+    /// Stage glissée entre deux stages, dans son bureau, un autre bureau ou un autre écran (SPEC-067, SPEC-070).
+    private func moveStage(_ scope: StageScope, to display: DisplayID, _ desktop: DesktopID, before: StageID?) {
         let commands = StageCommandService(service: snapshots, store: snapshots.effectiveStageStore, events: events)
-        let result = commands.moveStage(scope.stageID, displayID: scope.displayID, from: scope.desktopID, to: desktop, before: before)
+        let result = commands.moveStage(scope.stageID, displayID: scope.displayID, from: scope.desktopID, to: desktop,
+                                        before: before, targetDisplay: display)
         reload(after: result, failure: "Impossible de déplacer cette stage.")
     }
 
@@ -248,6 +256,14 @@ public final class OverviewController {
     private func moveWindow(_ entry: WindowSwitcherEntry, to target: StageScope) {
         let actions = WindowContextActions(snapshotService: snapshots, stageStore: snapshots.effectiveStageStore, eventLog: events)
         let result = actions.assign(windowID: entry.id, to: target.stageID, desktopID: target.desktopID, displayID: target.displayID)
+        // Autre écran, stage non affichée (SPEC-070) : le cadre de retour est recentré sur cet écran.
+        let state = snapshots.effectiveStageStore.state()
+        let shown = state.currentDesktopID(for: target.displayID) == target.desktopID
+            && state.scopes.first { $0.displayID == target.displayID && $0.desktopID == target.desktopID }?.activeStageID == target.stageID
+        if result.changed, entry.scope?.displayID != target.displayID, !shown {
+            _ = relocateHiddenWindows([entry.id], to: target.displayID, service: snapshots, store: snapshots.effectiveStageStore,
+                                      events: events, cause: "window.move_display")
+        }
         reload(after: result, failure: "Impossible de déplacer cette fenêtre.")
     }
 

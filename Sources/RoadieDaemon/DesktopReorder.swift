@@ -66,3 +66,54 @@ extension PersistentStageState {
         }
     }
 }
+
+extension PersistentStageState {
+    /// Bureau `source` de l'écran `from` inséré à la place `position` de l'écran `to` (SPEC-070) :
+    /// les bureaux de `to` à partir de `position` glissent d'un cran, ceux de `from` après `source`
+    /// referment le trou. Stages, nom, épinglages et signets suivent ; l'historique de `from` qui
+    /// désignait ce bureau est oublié. nil si le bureau n'existe pas. Renvoie les fenêtres membres
+    /// et la correspondance appliquée sur chaque écran. O(s + p + b).
+    mutating func moveDesktop(
+        _ source: DesktopID, from origin: DisplayID, to destination: DisplayID, position: DesktopID
+    ) -> (windows: Set<WindowID>, origin: [DesktopID: DesktopID], destination: [DesktopID: DesktopID])? {
+        guard origin != destination, position.rawValue >= 1,
+              let index = scopes.firstIndex(where: { $0.displayID == origin && $0.desktopID == source }) else { return nil }
+        // Le bureau affiché de l'écran d'arrivée compte comme occupé, même sans état enregistré (écran
+        // tout juste branché) : le bureau déplacé n'y devient jamais le bureau affiché par accident.
+        if !desktopSelections.contains(where: { $0.displayID == destination }) {
+            desktopSelections.append(PersistentDesktopSelection(displayID: destination))
+        }
+        var used = Set(scopes.filter { $0.displayID == destination }.map(\.desktopID.rawValue))
+        used.formUnion(desktopLabels.filter { $0.displayID == destination }.map(\.desktopID.rawValue))
+        used.insert(currentDesktopID(for: destination).rawValue)
+        let shiftedDestination = Dictionary(uniqueKeysWithValues: used.filter { $0 >= position.rawValue }
+            .map { (DesktopID(rawValue: $0), DesktopID(rawValue: $0 + 1)) })
+        renumberDesktops(on: destination, shiftedDestination)
+        let template = scopes.first { $0.displayID == destination }
+        scopes[index].displayID = destination
+        scopes[index].desktopID = position
+        scopes[index].logicalDisplayID = template?.logicalDisplayID
+        scopes[index].lastKnownDisplayFingerprint = template?.lastKnownDisplayFingerprint
+        for i in desktopLabels.indices where desktopLabels[i].displayID == origin && desktopLabels[i].desktopID == source {
+            desktopLabels[i].displayID = destination
+            desktopLabels[i].desktopID = position
+        }
+        func moved(_ scope: StageScope) -> StageScope {
+            guard scope.displayID == origin, scope.desktopID == source else { return scope }
+            return StageScope(displayID: destination, desktopID: position, stageID: scope.stageID)
+        }
+        for i in windowPins.indices { windowPins[i].homeScope = moved(windowPins[i].homeScope) }
+        for i in windowBookmarks.indices { windowBookmarks[i].scope = moved(windowBookmarks[i].scope) }
+        if commandFocusProtection?.displayID == origin, commandFocusProtection?.desktopID == source { commandFocusProtection = nil }
+        for i in desktopSelections.indices where desktopSelections[i].displayID == origin && desktopSelections[i].lastDesktopID == source {
+            desktopSelections[i].lastDesktopID = nil
+        }
+        var remaining = Set(scopes.filter { $0.displayID == origin }.map(\.desktopID.rawValue))
+        remaining.formUnion(desktopLabels.filter { $0.displayID == origin }.map(\.desktopID.rawValue))
+        let closedOrigin = Dictionary(uniqueKeysWithValues: remaining.filter { $0 > source.rawValue }
+            .map { (DesktopID(rawValue: $0), DesktopID(rawValue: $0 - 1)) })
+        renumberDesktops(on: origin, closedOrigin)
+        let windows = Set(scopes[index].stages.flatMap { $0.members.map(\.windowID) })
+        return (windows, closedOrigin, shiftedDestination)
+    }
+}
