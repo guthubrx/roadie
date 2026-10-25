@@ -9,14 +9,17 @@ public struct WindowSwitcherAXState: Equatable, Sendable {
     public var isFullscreen: Bool
     public var isHidden: Bool
     public var visibilityKnown: Bool
+    /// Faux si l'application a répondu sans lister cette fenêtre (autre bureau ou fenêtre retirée).
+    public var isListed: Bool
 
-    public init(appName: String? = nil, title: String? = nil, isMinimized: Bool = false, isFullscreen: Bool = false, isHidden: Bool = false, visibilityKnown: Bool = true) {
+    public init(appName: String? = nil, title: String? = nil, isMinimized: Bool = false, isFullscreen: Bool = false, isHidden: Bool = false, visibilityKnown: Bool = true, isListed: Bool = true) {
         self.appName = appName
         self.title = title
         self.isMinimized = isMinimized
         self.isFullscreen = isFullscreen
         self.isHidden = isHidden
         self.visibilityKnown = visibilityKnown
+        self.isListed = isListed
     }
 }
 
@@ -45,6 +48,12 @@ public enum WindowSwitcherWindowAccess {
                 isFullscreen: attribute(entry.element, "AXFullScreen", pid: pid) as? Bool ?? false,
                 isHidden: application?.isHidden ?? false,
                 visibilityKnown: minimized != nil && application != nil
+            )
+        }
+        for id in required where result[WindowID(rawValue: id)] == nil {
+            result[WindowID(rawValue: id)] = WindowSwitcherAXState(
+                appName: application?.localizedName, isHidden: application?.isHidden ?? false,
+                visibilityKnown: false, isListed: false
             )
         }
         return result

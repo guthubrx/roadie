@@ -1077,13 +1077,14 @@ struct PowerUserDesktopCommandTests {
                     PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
                 ]),
                 PersistentStage(id: StageID(rawValue: "2"), name: "Perso"),
-                PersistentStage(id: StageID(rawValue: "3")),
+                PersistentStage(id: StageID(rawValue: "3"), name: "Com"),
                 PersistentStage(id: StageID(rawValue: "4"), members: [
                     PersistentStageMember(windowID: occupied.id, bundleID: occupied.bundleID, title: occupied.title, frame: occupied.frame),
                 ]),
             ]),
         ]))
-        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        // Configuration explicite : la configuration réelle de l’utilisateur ne doit pas nommer les stages.
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: RoadieConfig(), stageStore: store)
 
         let result = StageCommandService(service: service, store: store).assignEmpty()
         var state = store.state()

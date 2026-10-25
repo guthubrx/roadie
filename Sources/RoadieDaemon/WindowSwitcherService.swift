@@ -34,7 +34,8 @@ struct WindowSwitcherService {
         let persisted = service.effectiveStageStore.state()
         let drafts = collectDrafts(snapshot: snapshot, persisted: persisted)
         let axStates = await accessibilityStates(for: drafts)
-        let entries = drafts.map { draft -> WindowSwitcherEntry in
+        let retired = Self.retiredWindows(axStates, withoutSpace: SpaceProbe.windowsWithoutSpace)
+        let entries = drafts.filter { !retired.contains($0.window.id) }.map { draft -> WindowSwitcherEntry in
             let ax = axStates[draft.window.id]
             var window = draft.window
             if let appName = ax?.appName { window.appName = appName }
@@ -183,6 +184,19 @@ struct WindowSwitcherService {
         return await Self.loadAccessibilityStates(byPID: byPID.mapValues { Set($0.map(\.window.id)) }) { pid, ids in
             WindowSwitcherWindowAccess.states(pid: pid, windowIDs: ids)
         }
+    }
+
+    /// Fenêtre fermée que son application garde en mémoire (AlDente, réglages d'applications de barre
+    /// des menus) : l'application répond sans la lister, elle n'est ni cachée ni réduite, et aucun
+    /// bureau ne la porte. Une fenêtre d'un autre bureau garde son bureau ; sans réponse SkyLight,
+    /// rien n'est écarté. O(k), k = fenêtres absentes de la liste AX.
+    static func retiredWindows(
+        _ states: [WindowID: WindowSwitcherAXState],
+        withoutSpace: (Set<WindowID>) -> Set<WindowID>?
+    ) -> Set<WindowID> {
+        let unlisted = Set(states.lazy.filter { !$0.value.isListed && !$0.value.isHidden }.map(\.key))
+        guard !unlisted.isEmpty else { return [] }
+        return withoutSpace(unlisted)?.intersection(unlisted) ?? []
     }
 
     /// Toutes les applications sont consultées, avec au plus quatre lectures AX simultanées.

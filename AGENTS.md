@@ -214,6 +214,11 @@ installation locale 0.8.0, UUID F5122397-3E44-3F71-8172-5D668E435652, santé 5/5
 worktree d'audit et builds nettoyés. Revue indépendante non admise (Bridget permissions_changed).
 Reçu : specs/063-release-080/validation.md. Session 064 abandonnée : film et captures retirés (contenus privés lisibles),
 commit remplacé sur main ; README et guides inchangés depuis 0.8.0.
+Session 065 installée : fenêtres fermées mais gardées en mémoire par leur application
+(AlDente) écartées du sélecteur et de la vue d'ensemble : non listées par AX, application
+visible, aucun bureau SkyLight. 1 934 tests / 241 suites. PID 62987, santé 5/5.
+Contrôle réel sans AlDente ; diaporama non produit (contenu privé). Reçu :
+specs/065-fenetres-conservees/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

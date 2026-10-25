@@ -1,6 +1,7 @@
 import ApplicationServices
 import Darwin
 import Foundation
+import RoadieCore
 
 /// Lecture seule du type du bureau courant d'un écran (SPEC-017 A5, ADR 010). Elle ferme la
 /// garde de transition de bureau dès que l'écran affiche un bureau utilisateur, comme
@@ -9,12 +10,28 @@ import Foundation
 public enum SpaceProbe {
     private typealias MainConnection = @convention(c) () -> Int32
     private typealias CopyManagedDisplaySpaces = @convention(c) (Int32) -> Unmanaged<CFArray>?
+    private typealias CopySpacesForWindows = @convention(c) (Int32, Int32, CFArray) -> Unmanaged<CFArray>?
 
     // Résolus une fois ; nil si le système ne les expose plus (repli public chez l'appelant).
     private static let mainConnection: MainConnection? =
         symbol(["CGSMainConnectionID", "SLSMainConnectionID"])
     private static let copyManagedDisplaySpaces: CopyManagedDisplaySpaces? =
         symbol(["CGSCopyManagedDisplaySpaces", "SLSCopyManagedDisplaySpaces"])
+    private static let copySpacesForWindows: CopySpacesForWindows? =
+        symbol(["CGSCopySpacesForWindows", "SLSCopySpacesForWindows"])
+
+    /// Fenêtres rattachées à aucun bureau, tous types confondus (masque 7) : une fenêtre retirée
+    /// de l'écran par son application, mais aussi une fenêtre réduite ou d'application cachée.
+    /// L'appelant doit donc écarter ces deux cas. nil si un symbole est absent. O(k) appels.
+    public static func windowsWithoutSpace(_ ids: Set<WindowID>) -> Set<WindowID>? {
+        guard let mainConnection, let copySpacesForWindows else { return nil }
+        let connection = mainConnection()
+        return ids.filter { id in
+            let spaces = copySpacesForWindows(connection, 7, [NSNumber(value: id.rawValue)] as CFArray)?
+                .takeRetainedValue() as? [NSNumber]
+            return spaces?.isEmpty ?? false
+        }
+    }
 
     /// Vrai si le bureau courant de l'écran est un bureau utilisateur (type 0), faux pendant un
     /// plein écran natif ou sa transition (type 4). nil si un symbole est absent, si la réponse
