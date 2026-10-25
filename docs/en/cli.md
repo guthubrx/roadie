@@ -279,7 +279,7 @@ actions return structured errors instead of silently falling back.
 configurable `search_hotkey` shortcut. `targets actions` opens it directly on the
 verbs of the active window, like `actions_hotkey`. `launch PATH` opens a file, folder or
 app like Return in the bar, or in a stage with `--stage NAME`, `--here` (active stage) or
-`--new-stage`; `--preview-only` shows the live preview for 2 s without opening anything
+`--new-stage`, then at a place with `--position left|right|full|float`; `--preview-only` shows the live preview for 2 s without opening anything
 (diagnostic). See `docs/en/features.md`,
 Search mode section.
 

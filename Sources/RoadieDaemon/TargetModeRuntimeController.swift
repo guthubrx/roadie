@@ -468,6 +468,19 @@ public final class TargetModeRuntimeController: NSObject {
                                        rule: affinity.tilingChoice(for: entry.window))
         }
         context.preview = { [weak self] request, done in self?.preview(request, ghost: done) ?? done(nil) }
+        let aliasStore = LauncherAliasStore()
+        context.aliases = aliasStore.load()
+        context.aliasAction = { alias in alias.action(state: state, activeStage: activeStage, home: (homeDisplay, homeDesktop)) }
+        context.stageName = { scope in
+            state.scopes.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+                .stages.first { $0.id == scope.stageID }
+                .flatMap { StagePresentationOrder.isNamed($0) ? $0.name : nil }
+        }
+        context.saveAlias = { [events] alias, name in
+            let previous = aliasStore.save(alias, as: name)
+            events.append(RoadieEvent(type: "launcher.alias_saved", details: ["replaced": String(previous != nil)]))
+            return previous
+        }
         context.endPreview = { [weak self] commit in self?.endPreview(commit: commit) }
         context.webSearch = { [events] text in
             guard let url = LauncherWeb.searchURL(webSearchURL, query: text) else {
@@ -486,6 +499,7 @@ public final class TargetModeRuntimeController: NSObject {
     /// le résultat rendu décrit ce qui a été demandé. Chaque issue est journalisée.
     private func perform(_ action: LauncherAction) -> TargetActionResult {
         let label = "launcher \(action.verb.rawValue)"
+        if action.position != nil { position(after: action) }
         switch action.subject {
         case .app(let app):
             switch action.verb {
@@ -579,6 +593,11 @@ public final class TargetModeRuntimeController: NSObject {
                     .send(windowID: window, toDisplayID: display, focusMovedWindow: false).message
             }
             return TargetActionResult(changed: true, message: message)
+        case (.window, .focus):
+            // Phrase avec position (« terminal gauche ») : aller à la fenêtre, puis la position.
+            guard let window = scope.windowId.map(WindowID.init(rawValue:)) else { return refused(label, "window") }
+            focus(window)
+            return TargetActionResult(changed: true, message: label)
         case (.window, .bringHere):
             guard let window = scope.windowId.map(WindowID.init(rawValue:)),
                   let here = destination.flatMap(stageScope) ?? activeStageScope() else { return refused(label, "window") }
@@ -699,6 +718,58 @@ public final class TargetModeRuntimeController: NSObject {
         events.append(RoadieEvent(type: "launcher.placement_expired", details: ["bundleID": bundleID, "stage": scope.description]))
     }
 
+    // MARK: - Position (SPEC-079)
+
+    /// Après l'action, la fenêtre attendue (son application, dans la stage visée s'il y en a une, ou la
+    /// fenêtre elle-même) reçoit le focus : elle va alors à gauche, à droite, en plein écran ou flotte.
+    /// 20 s au plus (une application lancée à froid met plusieurs secondes) ; sinon rien ne bouge. O(w) par relevé.
+    private func position(after action: LauncherAction) {
+        guard let position = action.position else { return }
+        let target: StageScope? = switch action.destination?.kind {
+        case .stage(let scope)?: scope
+        default: nil
+        }
+        // Une fenêtre que Roadie ne tuile pas (taille fixe, panneau) n'a pas de stage : sa seule application suffit.
+        let inTarget: (ScopedWindowSnapshot) -> Bool = { target == nil || $0.scope == nil || $0.scope == target }
+        let expected: (ScopedWindowSnapshot) -> Bool
+        switch action.subject {
+        case .app(let app):
+            expected = { $0.window.bundleID == app.bundleID && inTarget($0) }
+        case .file(let file):
+            let bundle = NSWorkspace.shared.urlForApplication(toOpen: URL(fileURLWithPath: file.path)).flatMap { Bundle(url: $0)?.bundleIdentifier }
+            expected = { $0.window.bundleID == bundle && inTarget($0) }
+        case .target(let window):
+            let id = window.scope.windowId
+            expected = { $0.window.id.rawValue == id }
+        }
+        let service = service
+        let events = events
+        Task { @MainActor in
+            let start = Date()
+            var seen = "none"
+            while Date().timeIntervalSince(start) < 20 {
+                try? await Task.sleep(for: .milliseconds(300))
+                // Relevé normal, comme `warp` : celui sans suivi du focus garde un focus ancien.
+                let snapshot = service.snapshot()
+                let entry = snapshot.focusedWindowID.flatMap { focused in snapshot.windows.first { $0.window.id == focused } }
+                seen = entry.map { "\($0.window.id.rawValue) \($0.window.bundleID) \($0.scope?.description ?? "sans stage")" }
+                    ?? "focus \(snapshot.focusedWindowID.map { String($0.rawValue) } ?? "nil")"
+                guard let entry, let focused = snapshot.focusedWindowID, expected(entry) else { continue }
+                let message: String = switch position {
+                case .left: WindowCommandService(service: service, stageStore: service.effectiveStageStore, events: events).warp(.left).message
+                case .right: WindowCommandService(service: service, stageStore: service.effectiveStageStore, events: events).warp(.right).message
+                case .full: WindowCommandService(service: service, stageStore: service.effectiveStageStore, events: events).toggleMaximize(windowID: focused).message
+                case .float: WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
+                    .toggleFloating(windowID: focused).message
+                }
+                events.append(RoadieEvent(type: "launcher.position", details: ["position": position.rawValue, "message": message]))
+                return
+            }
+            events.append(RoadieEvent(type: "launcher.position_expired", details: [
+                "position": position.rawValue, "lastSeen": seen, "target": target?.description ?? "aucune"]))
+        }
+    }
+
     // MARK: - Aperçu actif (SPEC-078)
 
     /// Pose l'aperçu : la stage visée (affichée, ou basculée si elle est cachée sur le bureau affiché),
@@ -806,7 +877,9 @@ public final class TargetModeRuntimeController: NSObject {
             FileManager.default.fileExists(atPath: path, isDirectory: &isFolder)
             subject = .file(LauncherFile(path: path, name: url.lastPathComponent, isFolder: isFolder.boolValue, lastUsed: nil))
         }
-        let action = LauncherAction(subject: subject, verb: destination == nil ? .open : .openIn, destination: destination)
+        var action = LauncherAction(subject: subject, verb: destination == nil ? .open : .openIn, destination: destination)
+        if command.bool("here"), let destination { action = LauncherAction(subject: subject, verb: .bringHere, destination: destination) }
+        action.position = command.string("position").flatMap(LauncherPosition.init(rawValue:))
         if command.bool("previewOnly") {
             // Diagnostic SPEC-078 : la disposition future 2 s, puis tout revient ; rien n'est ouvert.
             guard let request = LauncherPreviewRequest.of(action) else { _ = refused("launcher launch", "preview"); return }

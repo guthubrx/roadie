@@ -10,6 +10,10 @@ struct LauncherList: Equatable, Sendable {
         case app(LauncherApp, detail: String)
         case target(RoadieTarget)
         case file(LauncherFile)
+        /// Phrase reconnue (SPEC-079) : l'action et ce qu'elle annonce.
+        case phrase(LauncherAction, String)
+        /// Abréviation tapée (SPEC-079) : son nom, l'action, ce qu'elle annonce.
+        case alias(String, LauncherAction, String)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -18,6 +22,8 @@ struct LauncherList: Equatable, Sendable {
             case .app(let app, _): app.rankingKey
             case .target(let target): "target:\(target.id)"
             case .file(let file): file.rankingKey
+            case .phrase: "phrase"
+            case .alias(let name, _, _): "alias:\(name)"
             }
         }
 
@@ -28,6 +34,7 @@ struct LauncherList: Equatable, Sendable {
             case .app(let app, _): app.rankingKey
             case .target(let target): LauncherList.rankingKey(target)
             case .file(let file): file.rankingKey
+            case .phrase(let action, _), .alias(_, let action, _): action.subject.rankingKey
             }
         }
     }
@@ -162,4 +169,10 @@ struct LauncherList: Equatable, Sendable {
     }
 
     func row(for id: String?) -> Row? { id.flatMap { id in rows.first { $0.id == id } } }
+
+    /// Phrase ou abréviation en tête, sous son titre, et choisie par défaut (SPEC-079). O(n).
+    mutating func prepend(_ row: Row, header: String) {
+        rows.insert(contentsOf: [.header(header), row], at: 0)
+        best = row.id
+    }
 }

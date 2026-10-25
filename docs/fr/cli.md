@@ -283,7 +283,8 @@ Cibles (`enabled = false`) ou seulement le picker (`picker_enabled = false`).
 visibles), comme le raccourci configurable `search_hotkey`. `targets actions` l'ouvre
 directement sur les verbes de la fenêtre active, comme `actions_hotkey`. `launch CHEMIN`
 ouvre un fichier, un dossier ou une application comme Retour dans la barre, ou dans une
-stage avec `--stage NOM`, `--here` (stage active) ou `--new-stage` ; `--preview-only`
+stage avec `--stage NOM`, `--here` (stage active) ou `--new-stage`, puis à une place avec
+`--position left|right|full|float` ; `--preview-only`
 montre 2 s l'aperçu actif sans rien ouvrir (diagnostic). Voir
 `docs/fr/features.md`, section Mode recherche.
 

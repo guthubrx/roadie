@@ -896,6 +896,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case objects
         case verbs(LauncherSubject)
         case destinations(LauncherSubject, LauncherVerb)
+        /// ⌘S (SPEC-079) : la saisie est l'abréviation ; échec si l'action ne se garde pas.
+        case saving(LauncherAction, Result<LauncherAlias, LauncherAlias.Refusal>)
     }
     private var step = LauncherStep.objects
     private var actionList = LauncherActionList()
@@ -920,6 +922,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var pendingPreview: LauncherPreviewRequest?
     private var previewWork: DispatchWorkItem?
     private var ghost: LauncherGhost?
+    /// Étape « Garder » : la commande vient d'être copiée par ⌘C.
+    private var savingCopied = false
 
     init(
         targets: [RoadieTarget],
@@ -1104,6 +1108,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 finishAction(LauncherAction(subject: .file(file), verb: .open, destination: nil))
                 return
             }
+            switch launcherList.row(for: launcherSelection) {
+            case .phrase(let action, _)?, .alias(_, let action, _)?:
+                finishAction(action)
+                return
+            default: break
+            }
             guard let target = model.highlighted else { return }
             if let verb = model.pressReturn(shift: shift, command: command, at: Date()) {
                 finishActivating(target, verb)
@@ -1129,6 +1139,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return
         case .copy:
             copySelection()
+        case .save:
+            if let action = objectAction() { enterSaving(action) }
         case .preview:
             if case .file(let file)? = launcherList.row(for: launcherSelection) {
                 finishAction(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil))
@@ -1148,6 +1160,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .app(let app, _): enterVerbs(.app(app))
             case .target(let target): enterVerbs(.target(target))
             case .file(let file): enterVerbs(.file(file))
+            case .phrase(let action, _), .alias(_, let action, _): enterVerbs(action.subject)
             case .header, nil: model.handleNavigation(input)
             }
             return
@@ -1165,7 +1178,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func syncHighlight() {
         switch launcherList.row(for: launcherSelection) {
         case .target(let target): model.highlight(targetID: target.id)
-        case .app, .file: model.highlight(targetID: nil)
+        case .app, .file, .phrase, .alias: model.highlight(targetID: nil)
         case .header, nil: break
         }
     }
@@ -1181,9 +1194,18 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         launcherQuery = model.query
         launcherTargetIDs = ids
         filesChanged = false
-        launcherList = LauncherList(query: model.query, apps: launcher.apps, details: launcher.details,
+        // Phrase (SPEC-079) : les premiers mots cherchent l'objet, la ligne de l'action passe en tête.
+        let phrase = LauncherPhrase.parse(model.query, destinations: launcher.destinations, newStageHome: launcher.newStageHome)
+        launcherList = LauncherList(query: phrase?.objectQuery ?? model.query, apps: launcher.apps, details: launcher.details,
                                     targets: model.matches, ranking: launcher.ranking, now: Date(), context: launcher.rankingContext,
-                                    files: files)
+                                    files: phrase == nil ? files : [])
+        if let phrase, let subject = Self.subject(of: launcherList.row(for: launcherList.best)),
+           let action = phrase.action(for: subject, activeStage: launcher.activeStage) {
+            launcherList.prepend(.phrase(action, LauncherPhrase.title(action)), header: "Phrase")
+        }
+        if let (name, alias) = launcher.aliases.alias(for: model.query), let action = launcher.aliasAction(alias) {
+            launcherList.prepend(.alias(name, action, LauncherPhrase.title(action)), header: "Abréviation")
+        }
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
         syncHighlight()
     }
@@ -1204,12 +1226,24 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
     }
 
+    /// Objet d'une ligne de la liste. O(1).
+    private static func subject(of row: LauncherList.Row?) -> LauncherSubject? {
+        switch row {
+        case .app(let app, _): .app(app)
+        case .target(let target): .target(target)
+        case .file(let file): .file(file)
+        case .phrase(let action, _), .alias(_, let action, _): action.subject
+        case .header, nil: nil
+        }
+    }
+
     /// ⌘C : chemin d'un fichier ou d'une application, titre d'une fenêtre ou d'une cible (SPEC-077).
     private func copySelection() {
         let text: String? = switch launcherList.row(for: launcherSelection) {
         case .app(let app, _): app.path
         case .file(let file): file.path
         case .target(let target): target.subtitle.isEmpty ? target.title : "\(target.title) - \(target.subtitle)"
+        case .phrase(_, let title), .alias(_, _, let title): title
         case .header, nil: nil
         }
         guard let text else { return }
@@ -1226,6 +1260,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .app(let app, _): finishLaunching(app)
         case .target(let target): finishActivating(target, target.source == .app ? .click : (target.actions.first ?? .focus))
         case .file(let file): finishAction(LauncherAction(subject: .file(file), verb: .open, destination: nil))
+        case .phrase(let action, _), .alias(_, let action, _): finishAction(action)
         case .header, nil: break
         }
     }
@@ -1247,7 +1282,64 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch step {
         case .objects: nil
         case .verbs(let subject), .destinations(let subject, _): subject
+        case .saving(let action, _): action.subject
         }
+    }
+
+    // MARK: - Garder une action (SPEC-079)
+
+    /// Action de la ligne choisie à l'étape des objets : son action par défaut, ou celle de la phrase. O(1).
+    private func objectAction() -> LauncherAction? {
+        switch launcherList.row(for: launcherSelection) {
+        case .app(let app, _): LauncherAction(subject: .app(app), verb: .open, destination: nil)
+        case .file(let file): LauncherAction(subject: .file(file), verb: .open, destination: nil)
+        case .target(let target): LauncherAction(subject: .target(target), verb: .focus, destination: nil)
+        case .phrase(let action, _), .alias(_, let action, _): action
+        case .header, nil: nil
+        }
+    }
+
+    /// Action composée aux étapes des verbes et des destinations. O(1).
+    private func stepAction() -> LauncherAction? {
+        guard let subject = stepSubject else { return nil }
+        switch actionList.row(for: actionSelection) {
+        case .verb(let verb): return verb.needsDestination ? nil : LauncherAction(subject: subject, verb: verb, destination: nil)
+        case .destination(let verb, let destination): return LauncherAction(subject: subject, verb: verb, destination: destination)
+        case .header, nil: return nil
+        }
+    }
+
+    private func enterSaving(_ action: LauncherAction) {
+        step = .saving(action, LauncherAlias.from(action, stageName: launcher.stageName))
+        stepQuery = ""
+        savingCopied = false
+        actionList = LauncherActionList()
+        actionSelection = nil
+    }
+
+    /// Lignes de l'étape « Garder » : l'abréviation tapée, la commande, ou la raison du refus.
+    private func savingRows(_ action: LauncherAction, _ alias: Result<LauncherAlias, LauncherAlias.Refusal>) -> [SlashSuggestion] {
+        var rows = [SlashSuggestion(text: "Garder : \(LauncherPhrase.title(action))", kind: .header)]
+        switch alias {
+        case .failure(let refusal):
+            rows.append(SlashSuggestion(text: "Cette action ne se garde pas", detail: refusal.message, kind: .result, icon: .symbol("xmark.circle")))
+        case .success(let alias):
+            let name = stepQuery.trimmingCharacters(in: .whitespaces)
+            let replaced = launcher.aliases.alias(for: name).map { " · remplace « \($0.1.name) »" } ?? ""
+            rows.append(SlashSuggestion(text: name.isEmpty ? "Abréviation…" : "Abréviation « \(name) »",
+                                        detail: LauncherAlias.isValidName(name) ? "Retour enregistre\(replaced)" : "1 à 12 caractères, sans espace",
+                                        kind: .result, icon: .symbol("character.cursor.ibeam")))
+            rows.append(SlashSuggestion(text: alias.command, detail: savingCopied ? "Copiée dans le presse-papiers" : "⌘C copie la commande",
+                                        kind: .result, icon: .symbol("terminal")))
+        }
+        return rows
+    }
+
+    private func confirmSaving(_ alias: LauncherAlias) {
+        let name = stepQuery.trimmingCharacters(in: .whitespaces)
+        guard LauncherAlias.isValidName(name) else { return }
+        _ = launcher.saveAlias(alias, name)
+        finish(TargetActionResult(changed: true, message: "launcher alias saved: \(LauncherMatch.fold(name))"))
     }
 
     private func enterDestinations(_ subject: LauncherSubject, _ verb: LauncherVerb) {
@@ -1266,6 +1358,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             launcherQuery = nil
         case .destinations(let subject, _):
             enterVerbs(subject)
+        case .saving:
+            step = .objects
+            stepQuery = ""
+            launcherQuery = nil
         }
     }
 
@@ -1278,12 +1374,34 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .destinations(let subject, let verb):
             actionList = .destinations(for: subject, verb: verb, query: stepQuery, destinations: launcher.destinations,
                                        newStageHome: launcher.newStageHome)
+        case .saving:
+            return
         }
         actionSelection = actionList.best
     }
 
     private func handleStep(_ input: SearchKeyInput) {
+        if case .saving(_, let alias) = step {
+            switch input.kind {
+            case .escape: stepBack()
+            case .delete: if stepQuery.isEmpty { stepBack() }
+            case .confirm(_, _, _, _, let isRepeat):
+                guard !isRepeat, case .success(let alias) = alias else { return }
+                confirmSaving(alias)
+                return
+            case .copy:
+                guard case .success(let alias) = alias else { break }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(alias.command, forType: .string)
+                savingCopied = true
+            default: break
+            }
+            render()
+            return
+        }
         switch input.kind {
+        case .save:
+            if let action = stepAction() { enterSaving(action) }
         case .escape:
             stepBack()
         case .delete:
@@ -1378,7 +1496,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .app(let app, _): subject = .app(app)
         case .target(let target): subject = .target(target)
         case .file(let file): subject = .file(file)
-        case .header, nil: return nil
+        case .phrase, .alias, .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
                                   newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
@@ -1415,7 +1533,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func confirmStep() {
         let subject: LauncherSubject
         switch step {
-        case .objects: return
+        case .objects, .saving: return
         case .verbs(let current): subject = current
         case .destinations(let current, _): subject = current
         }
@@ -1437,7 +1555,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Verbes d'une cible déjà connus du mode recherche : exécutés comme avant (clics, aller à).
     /// Les autres passent au lanceur, après la fermeture de la barre.
     private func finishAction(_ action: LauncherAction) {
-        if case .target(let target) = action.subject, let verb = Self.searchVerb(action.verb, for: target) {
+        if action.position == nil, case .target(let target) = action.subject, let verb = Self.searchVerb(action.verb, for: target) {
             finishActivating(target, verb)
             return
         }
@@ -1538,6 +1656,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     private func render() {
         schedulePreview()
+        if case .saving(let action, let alias) = step {
+            let rows = savingRows(action, alias)
+            show(badges: [], bar: TargetSearchBar(query: stepQuery, matchCount: 0, properties: nil, isLoading: false,
+                                                  suggestions: rows, selectedSuggestion: rows.count > 1 ? 1 : nil, richRows: true))
+            return
+        }
         if step != .objects {
             let subjectID = model.highlighted?.id
             let badges: [TargetOverlayBadge] = model.matches.compactMap { target in
@@ -1644,6 +1768,19 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return SlashSuggestion(text: label + target.title, detail: target.subtitle, kind: .result, icon: icon)
         case .file(let file):
             return SlashSuggestion(text: file.name, detail: file.location, kind: .result, icon: .file(file.path))
+        case .phrase(let action, let title):
+            return SlashSuggestion(text: title, detail: "Retour fait l'action · ⌘S la garde", kind: .result, icon: icon(of: action, appPaths: appPaths))
+        case .alias(let name, let action, let title):
+            return SlashSuggestion(text: title, detail: "Abréviation « \(name) »", kind: .result, icon: icon(of: action, appPaths: appPaths))
+        }
+    }
+
+    /// Icône de l'objet d'une phrase ou d'une abréviation : application, fichier, ou symbole. O(1).
+    private static func icon(of action: LauncherAction, appPaths: [String: String]) -> SlashSuggestion.Icon {
+        switch action.subject {
+        case .app(let app): .file(app.path)
+        case .file(let file): .file(file.path)
+        case .target(let target): appPaths[target.title].map(SlashSuggestion.Icon.file) ?? .symbol("macwindow")
         }
     }
 
@@ -1666,6 +1803,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .objects: "Rechercher ou saisir /commande"
         case .verbs: "Verbe ou destination…"
         case .destinations: "Stage, bureau ou écran…"
+        case .saving: "Abréviation (12 caractères au plus)…"
         }
         if let layout = searchBarLayout {
             let text = step != .objects ? stepQuery : commandModel.map { "/" + $0.input } ?? model.query
@@ -1789,7 +1927,7 @@ extension SlashCommandModel {
             }
         case .escape:
             return .close
-        case .ignored, .pick, .actions, .copy, .preview:
+        case .ignored, .pick, .actions, .copy, .preview, .save:
             break
         }
         return .update
@@ -1827,6 +1965,8 @@ public struct SearchKeyInput: Sendable, Equatable {
         /// ⌘C sans texte sélectionné : copier la ligne choisie ; ⌘Y : son aperçu (SPEC-077).
         case copy
         case preview
+        /// ⌘S : garder l'action choisie en abréviation et en commande (SPEC-079).
+        case save
         case ignored
     }
 

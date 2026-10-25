@@ -22,6 +22,8 @@ jour et les limites connues ; les README décrivent la version courante.
   couleur d'accent avec le rappel des touches. L'icône suit la taille du texte
   (deux fois la hauteur du nom), le nom est en graisse normale, les fenêtres
   montrent l'icône de leur application et les symboles sont posés sur une tuile.
+- Phrase complète en français ou en anglais (`fire perso gauche`) ; ⌘S garde une action en
+  abréviation et donne la commande `roadie launch … --position …` pour BetterTouchTool.
 - Aperçu actif du lanceur : pendant le choix d'une stage, les vraies fenêtres prennent leur
   future place, un fantôme marque la fenêtre à ouvrir ; Échap restaure tout.
 - Fichiers et dossiers dans le lanceur (Spotlight), recherche rapide avec une espace, un

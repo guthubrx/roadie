@@ -34,6 +34,12 @@ struct LauncherSearchContext {
     /// Aperçu actif (SPEC-078) : nil termine l'aperçu en remettant tout comme avant ; le fantôme est
     /// rendu quand les fenêtres ont pris leur place (nil sans fantôme ou sans aperçu).
     var preview: @MainActor (LauncherPreviewRequest?, @escaping @MainActor (LauncherGhost?) -> Void) -> Void = { _, done in done(nil) }
+    /// Abréviations de l'utilisateur (SPEC-079), l'action d'une abréviation aujourd'hui, le nom réel
+    /// d'une stage (nil si anonyme) et l'enregistrement d'une abréviation.
+    var aliases = LauncherAliasBook()
+    var aliasAction: @MainActor (LauncherAlias) -> LauncherAction? = { _ in nil }
+    var stageName: @MainActor (StageScope) -> String? = { _ in nil }
+    var saveAlias: @MainActor (LauncherAlias, String) -> LauncherAlias? = { _, _ in nil }
     /// Fin de l'aperçu par Retour : la disposition de l'aperçu reste (vrai) ou est restaurée (faux).
     var endPreview: @MainActor (Bool) -> Void = { _ in }
     /// ⌃ Retour : le texte tapé sur le web ; appelé après la fermeture de la barre.

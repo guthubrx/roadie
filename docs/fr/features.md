@@ -481,6 +481,20 @@ qu'on tape un nom à l'étape des verbes, les destinations correspondantes
 apparaissent : `fire`, Tab, `perso`, Retour ouvre une fenêtre Firefox dans la stage
 Perso et y va. Échap, ou l'effacement dans un champ vide, revient d'une étape.
 
+**Phrase** : plusieurs mots dont les derniers désignent une destination et une position,
+en français ou en anglais : `fire perso gauche` ou `fire perso left` ouvre Firefox dans la
+stage Perso, à gauche. Mots reconnus : un nom de stage (exact, ou début unique de 3 lettres),
+`ici`/`here`, `nouvelle`/`new`, `bureau N`/`desktop N`, `écran N`/`screen N`, et
+`gauche`/`left`, `droite`/`right`, `plein`/`full`, `flotte`/`float`. La ligne « Phrase »
+annonce l'action avant Retour.
+
+**Garder une action** : ⌘S sur une application, un fichier, une phrase ou un verbe composé
+ouvre l'étape « Garder » : tapez une abréviation (12 caractères au plus), Retour
+l'enregistre ; ⌘C copie la commande `roadie launch` équivalente, à coller dans
+BetterTouchTool. Taper ensuite l'abréviation met l'action en tête. Les fenêtres et les
+stages ne se gardent pas (elles disparaissent) ; une stage visée doit être nommée.
+Abréviations : `~/.roadies/launcher-aliases.json`.
+
 **Aperçu actif** : quand la ligne choisie se pose sur une stage de destination (Ouvrir
 dans…, Envoyer vers…, Amener ici), les vraies fenêtres de cette stage prennent leur future
 place ; la fenêtre envoyée y va aussi, et une fenêtre à ouvrir est marquée par un fantôme

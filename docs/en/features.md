@@ -463,6 +463,19 @@ free). As soon as you type a name at the verb step, matching destinations appear
 `fire`, Tab, `perso`, Return opens a Firefox window in the Perso stage and goes
 there. Escape, or deleting in an empty field, goes back one step.
 
+**Phrase**: several words whose last ones name a destination and a position, in French or
+English: `fire perso gauche` or `fire perso left` opens Firefox in the Perso stage, on the
+left. Recognized words: a stage name (exact, or a unique 3-letter start), `ici`/`here`,
+`nouvelle`/`new`, `bureau N`/`desktop N`, `écran N`/`screen N`, and `gauche`/`left`,
+`droite`/`right`, `plein`/`full`, `flotte`/`float`. The "Phrase" row states the action
+before Return.
+
+**Keep an action**: ⌘S on an app, a file, a phrase or a composed verb opens the "Keep" step:
+type an abbreviation (12 characters at most), Return saves it; ⌘C copies the equivalent
+`roadie launch` command, to paste into BetterTouchTool. Typing the abbreviation later puts the
+action first. Windows and stages are not kept (they disappear); a target stage must be named.
+Abbreviations: `~/.roadies/launcher-aliases.json`.
+
 **Live preview**: when the selected row rests on a destination stage (Open in…, Send to…,
 Bring here), the real windows of that stage take their future place; the window being sent
 goes there too, and a window about to open is marked by a translucent ghost with its app

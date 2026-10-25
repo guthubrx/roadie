@@ -206,6 +206,18 @@ struct LauncherAction: Equatable, Sendable {
     let verb: LauncherVerb
     let destination: LauncherDestination?
     var follow = false
+    /// Place de la fenêtre après l'action (phrase, abréviation, SPEC-079).
+    var position: LauncherPosition?
+}
+
+extension LauncherDestination {
+    /// Destinations d'un déplacement : bureau ou écran pour une stage, écran pour un bureau. O(1).
+    static func acceptsMove(_ destination: LauncherDestination, of kind: TargetKind) -> Bool {
+        switch (kind, destination.kind) {
+        case (.stage, .desktop), (.stage, .display), (.desktop, .display): true
+        default: false
+        }
+    }
 }
 
 /// Touches qui changent ce que fait Retour (SPEC-075).
