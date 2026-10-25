@@ -20,6 +20,8 @@ struct LauncherList: Equatable, Sendable {
         case action(String, LauncherAction, String, String)
         /// Règle proposée et le choix de cette ligne (SPEC-081).
         case rule(RuleSuggestion, RuleChoice)
+        /// Document ou onglet ouvert, même caché (SPEC-082).
+        case openItem(LauncherOpenItem)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -33,6 +35,7 @@ struct LauncherList: Equatable, Sendable {
             case .project(let project): "project:\(LauncherMatch.fold(project.name))"
             case .action(let key, _, _, _): "action:\(key)"
             case .rule(let suggestion, let choice): "rule:\(suggestion.declineKey):\(choice.rawValue)"
+            case .openItem(let item): item.id
             }
         }
 
@@ -47,18 +50,20 @@ struct LauncherList: Equatable, Sendable {
             case .project(let project): "project:\(LauncherMatch.fold(project.name))"
             case .action(_, let action, _, _): action.subject.rankingKey
             case .rule: nil
+            case .openItem(let item): "open:\(item.kind.rawValue):\(item.bundleID):\(item.title)"
             }
         }
     }
 
     enum Section: Int, CaseIterable, Sendable {
-        case applications, projects, windows, files, places, screen
+        case applications, projects, windows, openItems, files, places, screen
 
         var title: String {
             switch self {
             case .applications: "Applications"
             case .projects: "Projets"
             case .windows: "Fenêtres"
+            case .openItems: "Documents et onglets"
             case .files: "Fichiers"
             case .places: "Stages et bureaux"
             case .screen: "À l'écran"
@@ -69,7 +74,7 @@ struct LauncherList: Equatable, Sendable {
         var limit: Int {
             switch self {
             case .applications, .windows: 4
-            case .projects, .files: 5
+            case .projects, .openItems, .files: 5
             case .places, .screen: 3
             }
         }
@@ -106,7 +111,8 @@ struct LauncherList: Equatable, Sendable {
     /// `context` : stage active (SPEC-076) ; ses choix passent avant ceux faits ailleurs. `files` : réponses de
     /// Spotlight, les plus récentes d'abord (SPEC-077) ; une espace en tête ne garde qu'elles.
     init(query rawQuery: String, apps: [LauncherApp], details: [String: String], targets: [RoadieTarget],
-         ranking: LauncherRanking, now: Date, context: String? = nil, files: [LauncherFile] = [], projects: [StageProject] = []) {
+         ranking: LauncherRanking, now: Date, context: String? = nil, files: [LauncherFile] = [], projects: [StageProject] = [],
+         openItems: [LauncherOpenItem] = []) {
         let filesOnly = LauncherFileRules.filesOnly(rawQuery)
         let query = filesOnly ? LauncherFileRules.needle(rawQuery) : rawQuery
         guard !LauncherMatch.fold(query).isEmpty else { return }
@@ -117,6 +123,11 @@ struct LauncherList: Equatable, Sendable {
             let score = LauncherMatch.score(query, in: file.name) ?? 1
             candidates.append(Candidate(row: .file(file), id: file.rankingKey, key: file.rankingKey, section: .files,
                                         score: score, name: file.name, order: order))
+        }
+        for item in filesOnly ? [] : openItems {
+            guard let score = item.score(query) else { continue }
+            let key = "open:\(item.kind.rawValue):\(item.bundleID):\(item.title)"
+            candidates.append(Candidate(row: .openItem(item), id: item.id, key: key, section: .openItems, score: score, name: item.title))
         }
         for project in filesOnly ? [] : projects {
             guard let score = LauncherMatch.score(query, in: project.name) else { continue }

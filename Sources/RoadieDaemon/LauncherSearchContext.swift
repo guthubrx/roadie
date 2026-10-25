@@ -39,6 +39,11 @@ struct LauncherSearchContext {
     var aliases = LauncherAliasBook()
     /// Projets gardés (SPEC-080).
     var projects: [StageProject] = []
+    /// Documents et onglets ouverts, lus en fond à l'ouverture (SPEC-082), et Retour sur l'un d'eux.
+    var loadOpenItems: (@escaping @MainActor @Sendable ([LauncherOpenItem]) -> Void) -> Void = { _ in }
+    var activateOpenItem: @MainActor (LauncherOpenItem) -> TargetActionResult = { _ in
+        TargetActionResult(changed: false, message: "launcher_disabled")
+    }
     /// Liste de la barre vide, règles à proposer (chip) et choix d'une règle (SPEC-081).
     var idleRows: [LauncherList.Row] = []
     var pendingRules = 0

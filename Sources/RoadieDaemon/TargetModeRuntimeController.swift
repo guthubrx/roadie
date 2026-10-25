@@ -266,6 +266,19 @@ public final class TargetModeRuntimeController: NSObject {
         case "launcher.undo":
             _ = undoLastMove()
             return
+        case "launcher.open_items":
+            // Diagnostic SPEC-082 : comptes par application et par sorte, sans titre ni adresse.
+            let service = service
+            let events = events
+            let tabs = command.bool("tabs")
+            Task { @MainActor in
+                let entries = await WindowSwitcherService(service: service).load().entries
+                let items = await Self.openItems(entries, stageTitle: { _ in nil }, tabs: tabs)
+                var counts: [String: Int] = [:]
+                for item in items { counts["\(item.kind.rawValue):\(item.bundleID)", default: 0] += 1 }
+                events.append(RoadieEvent(type: "launcher.open_items", details: counts.mapValues(String.init)))
+            }
+            return
         case "project.delete":
             let deleted = command.string("name").map { StageProjectStore().delete($0) } ?? false
             events.append(RoadieEvent(type: "project.command", details: ["command": "delete", "deleted": String(deleted)]))
@@ -546,6 +559,15 @@ public final class TargetModeRuntimeController: NSObject {
             if !habits.isEmpty { idle += [.header("Souvent ici")] + habits.map { .app($0, detail: "souvent dans cette stage") } }
         }
         context.idleRows = idle
+        context.loadOpenItems = { [service] done in
+            Task { @MainActor in
+                let entries = await WindowSwitcherService(service: service).load().entries
+                done(await Self.openItems(entries, stageTitle: { scope in scope.flatMap { names[$0] } }))
+            }
+        }
+        context.activateOpenItem = { [weak self] item in
+            self?.activate(item) ?? TargetActionResult(changed: false, message: "launcher_unavailable")
+        }
         context.ruleChoice = { [weak self] suggestion, choice in
             self?.chooseRule(suggestion, choice) ?? TargetActionResult(changed: false, message: "launcher_unavailable")
         }
@@ -920,6 +942,64 @@ public final class TargetModeRuntimeController: NSObject {
         } else {
             _ = try? await NSWorkspace.shared.openApplication(at: appURL, configuration: configuration)
         }
+    }
+
+    // MARK: - Documents et onglets (SPEC-082)
+
+    /// Documents (fichier lu par l'accessibilité) de chaque fenêtre gérée, puis onglets des navigateurs
+    /// scriptables déjà ouverts (AppleScript, 2 s au plus chacun). Rien n'est journalisé. O(w + t).
+    private static func openItems(_ entries: [WindowSwitcherEntry], stageTitle: @escaping @Sendable (StageScope?) -> String?,
+                                  tabs: Bool = true) async -> [LauncherOpenItem] {
+        let groups = Dictionary(grouping: entries, by: \.window.pid)
+        var items: [LauncherOpenItem] = await Task.detached(priority: .userInitiated) {
+            var found: [LauncherOpenItem] = []
+            for (pid, group) in groups {
+                guard let bundle = group.first?.window.bundleID, !LauncherBrowsers.all.contains(bundle) else { continue }
+                let elements = axWindowElements(pid: pid)
+                for entry in group {
+                    guard let element = elements[CGWindowID(entry.id.rawValue)], let path = axDocumentRead(element).path else { continue }
+                    let folder = LauncherList.shortPath((path as NSString).deletingLastPathComponent)
+                    let stage = stageTitle(entry.scope).map { " · \($0)" } ?? ""
+                    found.append(LauncherOpenItem(kind: .document, windowID: entry.id, bundleID: bundle, appName: entry.window.appName,
+                                                  title: (path as NSString).lastPathComponent, detail: "\(entry.window.appName) · \(folder)\(stage)",
+                                                  url: nil, browserWindow: nil, tabIndex: nil))
+                }
+            }
+            return found
+        }.value
+        for bundle in tabs ? LauncherBrowsers.all : [] {
+            guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first,
+                  let script = LauncherBrowsers.listScript(bundleID: bundle),
+                  let output = await LauncherBrowsers.run(script) else { continue }
+            let windows = entries.filter { $0.window.bundleID == bundle }
+            let frames = windows.map { ($0.id, $0.window.frame.cgRect) }
+            let appName = running.localizedName ?? bundle
+            for tab in LauncherBrowsers.parse(output) {
+                let id = LauncherBrowsers.window(matching: tab.bounds, among: frames)
+                let stage = stageTitle(windows.first { $0.id == id }?.scope).map { " · \($0)" } ?? ""
+                let host = URL(string: tab.url)?.host ?? tab.url
+                items.append(LauncherOpenItem(kind: .tab, windowID: id, bundleID: bundle, appName: appName, title: tab.title,
+                                              detail: "\(host) · \(appName)\(stage)", url: tab.url, browserWindow: tab.window, tabIndex: tab.index))
+            }
+        }
+        return items
+    }
+
+    /// Onglet : sélectionné dans le navigateur, puis sa fenêtre devant, dans sa stage. Document : sa fenêtre.
+    private func activate(_ item: LauncherOpenItem) -> TargetActionResult {
+        let events = events
+        Task { @MainActor in
+            if item.kind == .tab, let window = item.browserWindow, let tab = item.tabIndex {
+                _ = await LauncherBrowsers.run(LauncherBrowsers.activateScript(bundleID: item.bundleID, window: window, tab: tab))
+            }
+            if let id = item.windowID {
+                self.focus(id)
+            } else {
+                NSRunningApplication.runningApplications(withBundleIdentifier: item.bundleID).first?.activate()
+            }
+            events.append(RoadieEvent(type: "launcher.open_item", details: ["kind": item.kind.rawValue, "window": String(item.windowID != nil)]))
+        }
+        return TargetActionResult(changed: true, message: "launcher open item: \(item.kind.rawValue)")
     }
 
     // MARK: - Mémoire (SPEC-081)

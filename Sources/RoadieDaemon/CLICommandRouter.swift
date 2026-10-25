@@ -223,6 +223,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
         CLICommandSpec(usage: "project save [NAME] | open NAME | list [--json] | delete NAME"),
         CLICommandSpec(usage: "undo"),
+        CLICommandSpec(usage: "launch --open-items [--tabs]"),
         CLICommandSpec(usage: "launch PATH [--stage NAME | --here | --new-stage] [--position left|right|full|float] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
@@ -643,6 +644,12 @@ public final class CLICommandRouter {
                 return usageError()
             }
         case "launch":
+            // SPEC-082 : diagnostic des documents (et onglets avec --tabs) que la barre trouverait.
+            if args.count >= 2, args[1] == "--open-items" {
+                return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "launcher.open_items",
+                                                                                  arguments: args.contains("--tabs") ? ["tabs": "true"] : [:]),
+                                                         json: args.contains("--json"))
+            }
             // SPEC-077 : fichier, dossier ou application ouvert comme Retour dans la barre.
             guard args.count >= 2, !args[1].hasPrefix("--") else { return usageError() }
             let expanded = NSString(string: args[1]).expandingTildeInPath

@@ -439,7 +439,14 @@ app, opens it in the active stage of the active display, unless an `assign_stage
 rule applies. Arrow keys move through the list; clicking a row activates it.
 The ranking also remembers the stage active when you choose: in "Com", `o` first offers
 what you usually pick there, in "Dev" something else. A named stage is known by its name,
-even after moving; at most six stages per item. **Files**: from 3 letters, Spotlight searches the home folder (outside `~/Library`,
+even after moving; at most six stages per item. **Documents and tabs**: the bar also finds what is open, even in a hidden stage or on another
+desktop: each window's document (TextEdit, Preview, Pages…) and the tabs of Chrome, Brave, Edge
+and Safari (title and address). Return shows the stage, brings the window forward and selects
+the tab. macOS asks once for automation permission per browser. Firefox does not expose its
+tabs: not covered. Nothing is written or logged. Diagnostic: `roadie launch --open-items
+[--tabs]` (item count per app).
+
+**Files**: from 3 letters, Spotlight searches the home folder (outside `~/Library`,
 hidden items and `node_modules`) for folders, documents, text, images, PDFs, spreadsheets
 and presentations; a "Files" section shows icon and folder. A leading space or apostrophe
 searches files only (from 2 letters). Return goes to the window already showing the file

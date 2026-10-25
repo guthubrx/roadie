@@ -456,6 +456,14 @@ application fermée, l'ouvre dans la stage active de l'écran actif, sauf règle
 Le classement retient aussi la stage active au moment du choix : dans « Com », `o`
 propose d'abord ce que vous y choisissez d'habitude, dans « Dev » autre chose. Une
 stage nommée est reconnue par son nom, même déplacée ; six stages au plus par objet.
+**Documents et onglets** : la barre trouve aussi ce qui est ouvert, même dans une stage
+cachée ou sur un autre bureau : le document de chaque fenêtre (TextEdit, Aperçu, Pages…)
+et les onglets de Chrome, Brave, Edge et Safari (titre et adresse). Retour affiche la
+stage, met la fenêtre devant et sélectionne l'onglet. macOS demande une fois
+l'autorisation d'automatisation pour chaque navigateur. Firefox n'expose pas ses
+onglets : non couvert. Rien n'est écrit ni journalisé. Diagnostic :
+`roadie launch --open-items [--tabs]` (nombre d'éléments par application).
+
 **Fichiers** : dès 3 lettres, Spotlight cherche dans le dossier personnel (hors
 `~/Library`, éléments cachés et `node_modules`) les dossiers, documents, textes, images,
 PDF, tableurs et présentations ; section « Fichiers » avec icône et dossier. Une espace

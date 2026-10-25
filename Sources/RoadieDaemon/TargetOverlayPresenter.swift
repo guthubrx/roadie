@@ -917,6 +917,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var filesChanged = false
     /// Ligne copiée par ⌘C : son détail le dit jusqu'à la frappe suivante.
     private var copiedRowID: String?
+    /// Documents et onglets ouverts (SPEC-082), arrivés en fond après l'ouverture.
+    private var openItems: [LauncherOpenItem] = []
     /// Aperçu actif (SPEC-078) : demande envoyée au contrôleur, attente de 150 ms, fantôme rendu.
     private var sentPreview: LauncherPreviewRequest?
     private var pendingPreview: LauncherPreviewRequest?
@@ -986,6 +988,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         inputPanel = input
         render()
         input.beginEditing()
+        launcher.loadOpenItems { [weak self] items in
+            guard let self, !self.finished else { return }
+            self.openItems = items
+            self.filesChanged = true
+            self.render()
+        }
         launcher.refreshApps { [weak self] apps in
             guard let self, !self.finished else { return }
             self.launcher.apps = apps
@@ -1121,6 +1129,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .rule(let suggestion, let choice)?:
                 finishRule(suggestion, choice)
                 return
+            case .openItem(let item)?:
+                finishOpenItem(item)
+                return
             default: break
             }
             guard let target = model.highlighted else { return }
@@ -1174,7 +1185,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .phrase(let action, _), .alias(_, let action, _): enterVerbs(action.subject)
             case .project(let project): enterVerbs(.project(project.name))
             case .action(_, let action, _, _): enterVerbs(action.subject)
-            case .rule: break
+            case .rule, .openItem: break
             case .header, nil: model.handleNavigation(input)
             }
             return
@@ -1192,7 +1203,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func syncHighlight() {
         switch launcherList.row(for: launcherSelection) {
         case .target(let target): model.highlight(targetID: target.id)
-        case .app, .file, .phrase, .alias, .project, .action, .rule: model.highlight(targetID: nil)
+        case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem: model.highlight(targetID: nil)
         case .header, nil: break
         }
     }
@@ -1219,7 +1230,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let phrase = LauncherPhrase.parse(model.query, destinations: launcher.destinations, newStageHome: launcher.newStageHome)
         launcherList = LauncherList(query: phrase?.objectQuery ?? model.query, apps: launcher.apps, details: launcher.details,
                                     targets: model.matches, ranking: launcher.ranking, now: Date(), context: launcher.rankingContext,
-                                    files: phrase == nil ? files : [], projects: launcher.projects)
+                                    files: phrase == nil ? files : [], projects: launcher.projects, openItems: openItems)
         if let phrase, let subject = Self.subject(of: launcherList.row(for: launcherList.best)),
            let action = phrase.action(for: subject, activeStage: launcher.activeStage) {
             launcherList.prepend(.phrase(action, LauncherPhrase.title(action)), header: "Phrase")
@@ -1256,7 +1267,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .phrase(let action, _), .alias(_, let action, _): action.subject
         case .project(let project): .project(project.name)
         case .action(_, let action, _, _): action.subject
-        case .rule, .header, nil: nil
+        case .rule, .openItem, .header, nil: nil
         }
     }
 
@@ -1269,6 +1280,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .phrase(_, let title), .alias(_, _, let title): title
         case .project(let project): project.name
         case .action(_, _, let title, _): title
+        case .openItem(let item): item.url ?? item.title
         case .rule, .header, nil: nil
         }
         guard let text else { return }
@@ -1289,6 +1301,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .project(let project): finishAction(LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil))
         case .action(_, let action, _, _): finishAction(action)
         case .rule(let suggestion, let choice): finishRule(suggestion, choice)
+        case .openItem(let item): finishOpenItem(item)
         case .header, nil: break
         }
     }
@@ -1325,8 +1338,18 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .phrase(let action, _), .alias(_, let action, _): action
         case .project(let project): LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil)
         case .action(_, let action, _, _): action
-        case .rule, .header, nil: nil
+        case .rule, .openItem, .header, nil: nil
         }
+    }
+
+    /// Document ou onglet : la barre se ferme, sa fenêtre passe devant (SPEC-082).
+    private func finishOpenItem(_ item: LauncherOpenItem) {
+        guard !finished else { return }
+        finished = true
+        let query = model.query
+        cleanup()
+        launcher.recordVisit("open:\(item.kind.rawValue):\(item.bundleID):\(item.title)", query)
+        onFinish?(launcher.activateOpenItem(item))
     }
 
     /// Choix d'une règle proposée : la barre se ferme sur le résultat (SPEC-081).
@@ -1534,7 +1557,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .app(let app, _): subject = .app(app)
         case .target(let target): subject = .target(target)
         case .file(let file): subject = .file(file)
-        case .phrase, .alias, .project, .action, .rule, .header, nil: return nil
+        case .phrase, .alias, .project, .action, .rule, .openItem, .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
                                   newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
@@ -1818,6 +1841,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                                    kind: .result, icon: .symbol("square.stack.3d.down.right"))
         case .action(_, let action, let title, let detail):
             return SlashSuggestion(text: title, detail: detail, kind: .result, icon: icon(of: action, appPaths: appPaths))
+        case .openItem(let item):
+            let icon: SlashSuggestion.Icon = item.windowID.map { .window($0.rawValue, app: appPaths[item.appName]) }
+                ?? appPaths[item.appName].map(SlashSuggestion.Icon.file) ?? .symbol(item.kind == .tab ? "globe" : "doc")
+            return SlashSuggestion(text: item.title, detail: item.detail, kind: .result, icon: icon)
         case .rule(let suggestion, let choice):
             let text = switch choice {
             case .create: "Créer la règle : \(suggestion.appName) toujours dans \(suggestion.stageTitle)"

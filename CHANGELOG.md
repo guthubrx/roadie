@@ -22,6 +22,8 @@ jour et les limites connues ; les README décrivent la version courante.
   couleur d'accent avec le rappel des touches. L'icône suit la taille du texte
   (deux fois la hauteur du nom), le nom est en graisse normale, les fenêtres
   montrent l'icône de leur application et les symboles sont posés sur une tuile.
+- Documents et onglets ouverts dans la recherche, même cachés : Retour va à la fenêtre et
+  sélectionne l'onglet (Chrome, Brave, Edge, Safari ; Firefox non couvert).
 - Barre vide utile : revenir, annuler le dernier déplacement (`roadie undo`), rouvrir une
   fenêtre fermée dans sa stage, applications souvent choisies ici ; règles proposées après
   trois déplacements semblables, signalées par « 💡 » dans la barre (⌘R).
