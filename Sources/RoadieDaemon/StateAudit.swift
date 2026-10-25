@@ -75,6 +75,8 @@ public struct StateAuditService {
         checks.append(activeStagesCheck(state: state, liveDisplayIDs: liveDisplayIDs))
         checks.append(focusedMembersCheck(state: state))
         checks.append(duplicateMembershipCheck(state: state))
+        let duplicateNames = state.duplicateStageNameCount
+        checks.append(StateAuditCheck(level: duplicateNames == 0 ? .ok : .warn, name: "duplicate-stage-names", message: "count=\(duplicateNames)"))
         checks.append(staleMembersCheck(state: state, liveWindowIDs: liveManagedWindowIDs))
 
         return StateAuditReport(checks: checks)
@@ -97,6 +99,8 @@ public struct StateAuditService {
                     repaired += state.activeDisplayID == nil ? 0 : 1
                 }
                 repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs, isProcessAlive: isProcessAlive)
+                // Après le retrait des membres fermés : une copie vidée redevient anonyme (SPEC-067).
+                repaired += state.makeStageNamesUnique()
                 return repaired
             }
             return StateHealReport(repaired: repaired, audit: run())

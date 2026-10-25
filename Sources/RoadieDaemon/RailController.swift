@@ -783,7 +783,8 @@ public final class RailController {
                 type: "rail_stage_rename",
                 details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]
             ))
-            _ = commandService.rename(stageID.rawValue, to: name, displayID: displayID)
+            // Nom déjà porté par une autre stage (SPEC-067) : refus signalé par le son d’alerte système.
+            if commandService.rename(stageID.rawValue, to: name, displayID: displayID).outcome == .failed { NSSound.beep() }
         case .moveStageToDisplay(let stageID, let targetDisplayID):
             print("rail move stage \(stageID.rawValue) -> display \(targetDisplayID.rawValue)")
             fflush(stdout)

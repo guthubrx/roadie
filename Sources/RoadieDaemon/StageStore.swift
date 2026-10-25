@@ -1258,19 +1258,26 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         stages.append(PersistentStage(id: id, mode: mode))
     }
 
-    public mutating func applyConfiguredStages(_ config: StageManagerConfig, defaultMode: WindowManagementMode = .bsp) {
+    /// `takenNames` : clés des noms déjà portés ailleurs (SPEC-067). Un workspace configuré ne nomme
+    /// qu'une seule stage dans tout Roadie ; ailleurs, son emplacement reste anonyme.
+    public mutating func applyConfiguredStages(_ config: StageManagerConfig, defaultMode: WindowManagementMode = .bsp,
+                                               takenNames: Set<String> = []) {
         if stages.isEmpty {
             activeStageID = StageID(rawValue: config.defaultStage)
         }
+        var taken = takenNames
         for workspace in config.workspaces {
             let id = StageID(rawValue: workspace.id)
+            let key = StageNameUniqueness.key(workspace.displayName)
+            let available = !taken.contains(key)
             if let index = stages.firstIndex(where: { $0.id == id }) {
-                if stages[index].name == "Stage \(id.rawValue)" {
+                if stages[index].name == "Stage \(id.rawValue)", available {
                     stages[index].name = workspace.displayName
                 }
             } else {
-                stages.append(PersistentStage(id: id, name: workspace.displayName, mode: defaultMode))
+                stages.append(PersistentStage(id: id, name: available ? workspace.displayName : nil, mode: defaultMode))
             }
+            taken.insert(key)
         }
     }
 

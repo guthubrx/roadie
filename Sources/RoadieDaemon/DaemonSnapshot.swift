@@ -579,7 +579,8 @@ public struct SnapshotService: Sendable {
                 desktopID: currentDesktopID,
                 defaultMode: config.tiling.defaultStrategy
             )
-            persistentScope.applyConfiguredStages(config.stageManager, defaultMode: config.tiling.defaultStrategy)
+            persistentScope.applyConfiguredStages(config.stageManager, defaultMode: config.tiling.defaultStrategy,
+                takenNames: config.stageManager.workspaces.isEmpty ? [] : persistedStages.namedStageKeys(excludingDisplay: display.id, desktop: currentDesktopID))
             persistentScope.adoptDefaultModeForEmptyDefaultStages(config.tiling.defaultStrategy)
             persistedStages.update(persistentScope)
             let activePersistentStage = persistentScope.stages.first { $0.id == persistentScope.activeStageID }

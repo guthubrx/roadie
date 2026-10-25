@@ -246,7 +246,7 @@ public struct DesktopCommandService {
                     .flatMap { $0.stages.lazy.flatMap { $0.members } }
                     .first { $0.windowID == entry.window.id }?.frame.cgRect
                 var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-                targetScope.applyConfiguredStages(stageManager)
+                targetScope.applyConfiguredStages(stageManager, takenNames: state.namedStageKeys(excludingDisplay: displayID, desktop: desktopID))
                 for scopeIndex in state.scopes.indices {
                     state.scopes[scopeIndex].remove(windowID: entry.window.id)
                 }
@@ -349,7 +349,7 @@ public struct DesktopCommandService {
         // `LayoutCommandActivity` (R12). Mode lu sur une copie de l'état, comme la transaction le verra.
         var preview = store.state()
         var targetPreview = preview.scope(displayID: display.id, desktopID: desktopID)
-        targetPreview.applyConfiguredStages(stageConfig)
+        targetPreview.applyConfiguredStages(stageConfig, takenNames: preview.namedStageKeys(excludingDisplay: display.id, desktop: desktopID))
         let targetUsesTree = targetPreview.stages.first { $0.id == targetPreview.activeStageID }?.mode.usesTreeEngine == true
         if !targetUsesTree { beginLayoutCommand("desktop.switch") }
         defer { if !targetUsesTree { finishLayoutCommand("desktop.switch") } }
@@ -366,7 +366,7 @@ public struct DesktopCommandService {
                 guard previousDesktopID != desktopID else { return nil }
                 var previousScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
                 var targetScope = state.scope(displayID: display.id, desktopID: desktopID)
-                targetScope.applyConfiguredStages(stageConfig)
+                targetScope.applyConfiguredStages(stageConfig, takenNames: state.namedStageKeys(excludingDisplay: display.id, desktop: desktopID))
                 for window in visibleWindows {
                     previousScope.updateFrame(window: window)
                 }

@@ -398,19 +398,28 @@ public struct StageCommandService {
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage rename")
         }
-        let renamed: Bool
+        enum Rename { case done, notFound, nameTaken }
+        let renamed: Rename
         do {
-            renamed = try store.mutateChecked { state -> Bool in
+            renamed = try store.mutateChecked { state -> Rename in
                 var scope = activeScope(displayID: displayID, in: &state)
-                guard scope.renameStage(stageID, to: name) else { return false }
+                // Nom unique dans tout Roadie (SPEC-067) : un nom porté par une autre stage est refusé.
+                let candidate = PersistentStage(id: stageID, name: name)
+                if StagePresentationOrder.isNamed(candidate),
+                   state.namedStageKeys(excludingDisplay: displayID, desktop: scope.desktopID, stage: stageID)
+                       .contains(StageNameUniqueness.key(name)) {
+                    return .nameTaken
+                }
+                guard scope.renameStage(stageID, to: name) else { return .notFound }
                 state.update(scope)
-                return true
+                return .done
             }
         } catch {
             return .persistenceFailure("stage rename \(stageID.rawValue)", error)
         }
-        guard renamed else {
-            return StageCommandResult(message: "stage rename \(stageID.rawValue): not found", changed: false, outcome: .failed)
+        guard renamed == .done else {
+            let reason = renamed == .nameTaken ? "name already used by another stage" : "not found"
+            return StageCommandResult(message: "stage rename \(stageID.rawValue): \(reason)", changed: false, outcome: .failed)
         }
         return StageCommandResult(message: "stage rename \(stageID.rawValue): \(name)", changed: true)
     }
@@ -781,6 +790,108 @@ public struct StageCommandService {
             source: source,
             requestedStageID: requestedStageID
         )
+    }
+
+    /// Déplace une stage à une place d'un bureau du même écran (SPEC-067) : avant `anchor`, ou en
+    /// dernier si nil. Même bureau : réordonnancement seul. Autre bureau : la stage arrive inactive ;
+    /// si elle était affichée, l'écran bascule d'abord sur une autre stage de son bureau, ce qui masque
+    /// ses fenêtres. Le bureau affiché ne change pas. O(s + m), s stages et m membres de l'écran.
+    public func moveStage(
+        _ stageID: StageID,
+        displayID: DisplayID,
+        from sourceDesktop: DesktopID,
+        to targetDesktop: DesktopID,
+        before anchor: StageID?
+    ) -> StageCommandResult {
+        let label = "stage move \(stageID.rawValue) desktop \(sourceDesktop.rawValue)->\(targetDesktop.rawValue)"
+        func isSource(_ scope: PersistentStageScope) -> Bool { scope.displayID == displayID && scope.desktopID == sourceDesktop }
+        let current = store.state()
+        guard anchor != stageID,
+              let source = current.scopes.first(where: isSource),
+              source.stages.contains(where: { $0.id == stageID })
+        else {
+            return StageCommandResult(message: "\(label): stage or place not found", changed: false, outcome: .failed)
+        }
+        if sourceDesktop == targetDesktop {
+            do {
+                let moved = try store.mutateChecked { state -> Bool in
+                    guard let index = state.scopes.firstIndex(where: isSource),
+                          let from = state.scopes[index].stages.firstIndex(where: { $0.id == stageID }) else { return false }
+                    let before = state.scopes[index].stages.map(\.id)
+                    let stage = state.scopes[index].stages.remove(at: from)
+                    let to = anchor.flatMap { id in state.scopes[index].stages.firstIndex { $0.id == id } } ?? state.scopes[index].stages.count
+                    state.scopes[index].stages.insert(stage, at: to)
+                    return state.scopes[index].stages.map(\.id) != before
+                }
+                return moved ? StageCommandResult(message: label, changed: true)
+                    : StageCommandResult(message: "\(label): already in place", changed: false, outcome: .noOp)
+            } catch {
+                return .persistenceFailure(label, error)
+            }
+        }
+        if current.currentDesktopID(for: displayID) == sourceDesktop, source.activeStageID == stageID {
+            let snapshot = service.snapshot()
+            guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
+                return StageCommandResult(message: "\(label): unknown display", changed: false, outcome: .failed)
+            }
+            let fallback = source.stages.first { $0.id != stageID && !$0.members.isEmpty }?.id
+                ?? source.stages.first { $0.id != stageID }?.id
+                ?? nextAvailableStageID(preferred: StageID(rawValue: "1"), in: source)
+            let switched = switchDisplay(display, to: fallback, snapshot: snapshot)
+            guard switched.outcome != .failed else { return switched }
+        }
+        let stageManager = ConfigReloadService.shared.currentConfig().stageManager
+        let moved: StageScope?
+        do {
+            moved = try service.commitStageTransfer(in: store, { state -> StageScope? in
+                guard let sourceIndex = state.scopes.firstIndex(where: isSource),
+                      let from = state.scopes[sourceIndex].stages.firstIndex(where: { $0.id == stageID }) else { return nil }
+                var stage = state.scopes[sourceIndex].stages.remove(at: from)
+                if state.scopes[sourceIndex].stages.isEmpty { state.scopes[sourceIndex].ensureStage(StageID(rawValue: "1")) }
+                if state.scopes[sourceIndex].activeStageID == stageID {
+                    state.scopes[sourceIndex].activeStageID = state.scopes[sourceIndex].stages[0].id
+                }
+                var target = state.scope(displayID: displayID, desktopID: targetDesktop)
+                target.applyConfiguredStages(stageManager, takenNames: state.namedStageKeys(excludingDisplay: displayID, desktop: targetDesktop))
+                let automaticallyNamed = !StagePresentationOrder.isNamed(stage)
+                // Même règle que le transfert vers un autre écran : un emplacement vide anonyme cède sa
+                // place, toute autre stage homonyme garde la sienne et la stage arrivante change d'identifiant.
+                if let conflict = target.stages.first(where: { $0.id == stage.id }) {
+                    if conflict.members.isEmpty, conflict.groups.isEmpty, !StagePresentationOrder.isNamed(conflict),
+                       conflict.mode == stage.mode, conflict.bspTree == nil, target.activeStageID != conflict.id {
+                        target.stages.removeAll { $0.id == stage.id }
+                    } else {
+                        stage.id = nextAvailableStageID(preferred: stage.id, in: target)
+                    }
+                }
+                if automaticallyNamed { stage.name = "Stage \(stage.id.rawValue)" }
+                stage.parkingState = .native
+                stage.origin = nil
+                stage.hostDisplayID = nil
+                stage.restoredAt = nil
+                let to = anchor.flatMap { id in target.stages.firstIndex { $0.id == id } } ?? target.stages.count
+                target.stages.insert(stage, at: to)
+                state.update(target)
+                let scope = StageScope(displayID: displayID, desktopID: targetDesktop, stageID: stage.id)
+                for member in stage.members {
+                    state.updatePinHomeScope(windowID: member.windowID, to: scope)
+                }
+                return scope
+            }, clearingIntentsOf: { scope in
+                scope.map { [StageScope(displayID: displayID, desktopID: sourceDesktop, stageID: stageID), $0] } ?? []
+            })
+        } catch {
+            return .persistenceFailure(label, error)
+        }
+        guard let moved else {
+            return StageCommandResult(message: "\(label): stage changed meanwhile", changed: false, outcome: .failed)
+        }
+        events.append(RoadieEvent(type: "stage_move_desktop", scope: moved, details: [
+            "stageID": moved.stageID.rawValue, "requestedStageID": stageID.rawValue,
+            "sourceDesktopID": String(sourceDesktop.rawValue), "targetDesktopID": String(targetDesktop.rawValue),
+            "before": anchor?.rawValue ?? "-"
+        ]))
+        return StageCommandResult(message: "\(label): stage=\(moved.stageID.rawValue)", changed: true)
     }
 
     /// `treeMutation` : mutation de l'arbre cible d'un dépôt glissé (échange ou insertion du côté

@@ -343,7 +343,8 @@ public struct WindowContextActions {
         }
     }
 
-    private func assign(
+    /// Aussi utilisé par la vue d'ensemble (SPEC-067) pour une fenêtre déposée sur une stage.
+    func assign(
         windowID: WindowID,
         to stageID: StageID,
         desktopID: DesktopID,
@@ -381,7 +382,7 @@ public struct WindowContextActions {
                     state.scopes[scopeIndex].remove(windowID: windowID)
                 }
                 var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-                targetScope.applyConfiguredStages(stageManagerConfig)
+                targetScope.applyConfiguredStages(stageManagerConfig, takenNames: state.namedStageKeys(excludingDisplay: displayID, desktop: desktopID))
                 targetScope.ensureStage(stageID)
                 targetScope.assign(window: window, to: stageID)
                 state.update(targetScope)
