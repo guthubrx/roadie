@@ -1262,6 +1262,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         bar.usesNativeInput = true
         let barWindow = pointerScreen.flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
         searchBarLayout = barWindow.map { bar.layout(in: $0.frame, style: style) }
+        inputPanel?.labelsEnabled = commandModel == nil && !model.query.isEmpty
         if let layout = searchBarLayout {
             inputPanel?.update(text: commandModel.map { "/" + $0.input } ?? model.query,
                 frame: SearchBarRenderer.inputFrame(bar, bar: layout.bar, style: style),

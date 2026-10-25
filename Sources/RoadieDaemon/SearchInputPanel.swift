@@ -8,6 +8,9 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     var onChange: ((String) -> Void)?
     var onKey: ((SearchKeyInput) -> Void)?
     var onCancel: (() -> Void)?
+    /// Étiquettes affichées (recherche non vide) : Maj + lettre choisit une étiquette au lieu d'écrire
+    /// une majuscule. Faux en mode commande, où les majuscules sont du texte (`/stage rename Perso`).
+    var labelsEnabled = false
     private var updating = false
     private var closing = false
 
@@ -88,7 +91,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
-           let input = Self.navigation(event) {
+           let input = Self.navigation(event, labels: labelsEnabled) {
             onKey?(input)
             return
         }
@@ -123,8 +126,12 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     /// O(1). Les modificateurs de déplacement/sélection restent à AppKit.
-    static func navigation(_ event: NSEvent) -> SearchKeyInput? {
+    static func navigation(_ event: NSEvent, labels: Bool = false) -> SearchKeyInput? {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if labels, flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(),
+           letter.count == 1, letter.first?.isLetter == true {
+            return SearchKeyInput(kind: .labelCharacter(letter))
+        }
         switch event.keyCode {
         case 53: return SearchKeyInput(kind: .escape)
         case 36, 76:
