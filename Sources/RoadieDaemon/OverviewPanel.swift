@@ -453,26 +453,24 @@ final class OverviewCanvas: NSView {
         }
     }
 
-    /// Trait d’insertion fin : dégradé qui s’efface aux deux bouts, léger halo et petit point central.
+    /// Trait d’insertion fin et translucide : dégradé qui s’efface aux deux bouts, léger halo.
     private func drawInsertion(_ line: CGRect) {
         let vertical = line.height == 0
         let length = vertical ? line.width : line.height
         let inset = min(18, length * 0.08)
         let bar = vertical
-            ? CGRect(x: line.minX + inset, y: line.minY - 1, width: max(0, line.width - 2 * inset), height: 2)
-            : CGRect(x: line.minX - 1, y: line.minY + inset, width: 2, height: max(0, line.height - 2 * inset))
+            ? CGRect(x: line.minX + inset, y: line.minY - 0.5, width: max(0, line.width - 2 * inset), height: 1)
+            : CGRect(x: line.minX - 0.5, y: line.minY + inset, width: 1, height: max(0, line.height - 2 * inset))
         let blue = palette(0.48, 0.80, 0.97)
-        let fade = palette(0.48, 0.80, 0.97, 0)
         NSGraphicsContext.saveGraphicsState()
         let glow = NSShadow()
-        glow.shadowColor = blue.withAlphaComponent(0.55); glow.shadowBlurRadius = 7; glow.shadowOffset = .zero
+        glow.shadowColor = blue.withAlphaComponent(0.3); glow.shadowBlurRadius = 5; glow.shadowOffset = .zero
         glow.set()
-        let gradient = NSGradient(colors: [fade, blue.withAlphaComponent(0.9), palette(0.85, 0.95, 1), blue.withAlphaComponent(0.9), fade],
+        let gradient = NSGradient(colors: [blue.withAlphaComponent(0), blue.withAlphaComponent(0.5), palette(0.85, 0.95, 1, 0.65),
+                                           blue.withAlphaComponent(0.5), blue.withAlphaComponent(0)],
                                   atLocations: [0, 0.22, 0.5, 0.78, 1], colorSpace: .sRGB)
-        gradient?.draw(in: NSBezierPath(roundedRect: bar, xRadius: 1, yRadius: 1), angle: vertical ? 0 : 90)
+        gradient?.draw(in: NSBezierPath(rect: bar), angle: vertical ? 0 : 90)
         NSGraphicsContext.restoreGraphicsState()
-        let center = CGPoint(x: bar.midX, y: bar.midY)
-        box(CGRect(x: center.x - 3, y: center.y - 3, width: 6, height: 6), fill: palette(0.85, 0.95, 1), stroke: blue.withAlphaComponent(0.6), radius: 3, line: 1)
     }
 
     /// Contour des cartes de la stage visée par une fenêtre glissée.
