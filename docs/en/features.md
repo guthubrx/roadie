@@ -463,6 +463,13 @@ free). As soon as you type a name at the verb step, matching destinations appear
 `fire`, Tab, `perso`, Return opens a Firefox window in the Perso stage and goes
 there. Escape, or deleting in an empty field, goes back one step.
 
+**Live preview**: when the selected row rests on a destination stage (Open in…, Send to…,
+Bring here), the real windows of that stage take their future place; the window being sent
+goes there too, and a window about to open is marked by a translucent ghost with its app
+icon. A hidden stage of the shown desktop is shown during the choice. Escape, another row or
+closing put everything back; Return keeps the layout. No preview to another desktop or a new
+stage.
+
 **Return variants**: holding ⌘, ⌥ or ⌃ changes what Return does, and the selected row's
 detail says so. ⌘ Return opens the app in a new stage of the shown desktop, or sends
 the window there, then Roadie goes there. ⌥ Return brings the window (or the app's

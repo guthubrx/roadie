@@ -31,6 +31,11 @@ struct LauncherSearchContext {
     var initialSubject: LauncherSubject?
     /// État de tuilage d'une fenêtre, pour ses verbes de flottement.
     var tiling: @MainActor (WindowID) -> LauncherTilingState? = { _ in nil }
+    /// Aperçu actif (SPEC-078) : nil termine l'aperçu en remettant tout comme avant ; le fantôme est
+    /// rendu quand les fenêtres ont pris leur place (nil sans fantôme ou sans aperçu).
+    var preview: @MainActor (LauncherPreviewRequest?, @escaping @MainActor (LauncherGhost?) -> Void) -> Void = { _, done in done(nil) }
+    /// Fin de l'aperçu par Retour : la disposition de l'aperçu reste (vrai) ou est restaurée (faux).
+    var endPreview: @MainActor (Bool) -> Void = { _ in }
     /// ⌃ Retour : le texte tapé sur le web ; appelé après la fermeture de la barre.
     var webSearch: @MainActor (String) -> TargetActionResult = { _ in
         TargetActionResult(changed: false, message: "launcher_disabled")
@@ -115,6 +120,36 @@ enum LauncherPlacement {
         }
         return stages + desktops + screens
     }
+}
+
+/// Aperçu demandé par la barre (SPEC-078) : la stage visée et la fenêtre qui y arrive, réelle ou à
+/// venir (nil : fantôme, avec l'application dont il montre l'icône).
+struct LauncherPreviewRequest: Equatable, Sendable {
+    let stage: StageScope
+    let incoming: WindowID?
+    let appPath: String?
+
+    /// Aperçu d'une action de la barre : destination stage d'Ouvrir dans, Envoyer vers ou Amener ici.
+    static func of(_ action: LauncherAction) -> LauncherPreviewRequest? {
+        guard [.openIn, .sendTo, .bringHere].contains(action.verb), case .stage(let stage)? = action.destination?.kind else { return nil }
+        switch action.subject {
+        case .app(let app):
+            return LauncherPreviewRequest(stage: stage, incoming: nil, appPath: app.path)
+        case .file(let file):
+            return LauncherPreviewRequest(stage: stage, incoming: nil,
+                                          appPath: NSWorkspace.shared.urlForApplication(toOpen: URL(fileURLWithPath: file.path))?.path)
+        case .target(let target):
+            guard target.kind == .window, let id = target.scope.windowId,
+                  LauncherActionList.ownStage(of: action.subject) != stage else { return nil }
+            return LauncherPreviewRequest(stage: stage, incoming: WindowID(rawValue: id), appPath: nil)
+        }
+    }
+}
+
+/// Place de la fenêtre à venir, en coordonnées d'écran AppKit, et l'icône de son application.
+struct LauncherGhost {
+    let frame: CGRect
+    let icon: NSImage?
 }
 
 /// Recherche web de ⌃ Retour (SPEC-075), reprise par le repli de la session 077.

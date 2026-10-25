@@ -173,6 +173,16 @@ public final class TargetModeRuntimeController: NSObject {
     private var currentSession: TargetOverlaySessionHandle?
     private var currentCommand: String?
     private var styleTimer: Timer?
+    /// Aperçu actif du lanceur (SPEC-078) : cadres relevés avant, stage de départ si une bascule a eu lieu.
+    private struct ActivePreview {
+        let request: LauncherPreviewRequest
+        var saved: [WindowID: Rect] = [:]
+        let returnTo: StageScope?
+    }
+    private var activePreview: ActivePreview?
+    private var previewLease: Timer?
+    /// Change à chaque début ou fin : une étape asynchrone d'un aperçu dépassé s'arrête.
+    private var previewToken = 0
     private var settingsObserver: NSObjectProtocol?
     /// Émission des événements souris de la grille. Point d'injection des tests (TEST-002) : clic
     /// réellement émis par `TargetGridService`, observé sans événement réel.
@@ -457,6 +467,8 @@ public final class TargetModeRuntimeController: NSObject {
             return LauncherTilingState(pinned: entry.pin != nil, tiled: entry.window.isTileCandidate && entry.pin == nil,
                                        rule: affinity.tilingChoice(for: entry.window))
         }
+        context.preview = { [weak self] request, done in self?.preview(request, ghost: done) ?? done(nil) }
+        context.endPreview = { [weak self] commit in self?.endPreview(commit: commit) }
         context.webSearch = { [events] text in
             guard let url = LauncherWeb.searchURL(webSearchURL, query: text) else {
                 return TargetActionResult(changed: false, message: "launcher web: invalid url", error: "web_search_url")
@@ -687,6 +699,82 @@ public final class TargetModeRuntimeController: NSObject {
         events.append(RoadieEvent(type: "launcher.placement_expired", details: ["bundleID": bundleID, "stage": scope.description]))
     }
 
+    // MARK: - Aperçu actif (SPEC-078)
+
+    /// Pose l'aperçu : la stage visée (affichée, ou basculée si elle est cachée sur le bureau affiché),
+    /// la disposition suspendue, chaque fenêtre écrite à sa future place, puis le fantôme rendu. Un
+    /// autre bureau ne donne pas d'aperçu. O(n log n) pour le plan, une écriture par fenêtre.
+    private func preview(_ request: LauncherPreviewRequest?, ghost: @escaping @MainActor (LauncherGhost?) -> Void) {
+        if let request, activePreview?.request == request { return }
+        endPreview(commit: false)
+        guard let request else { ghost(nil); return }
+        let store = service.effectiveStageStore
+        let state = store.state()
+        guard state.currentDesktopID(for: request.stage.displayID) == request.stage.desktopID,
+              let desk = state.scopes.first(where: { $0.displayID == request.stage.displayID && $0.desktopID == request.stage.desktopID }) else {
+            ghost(nil)
+            return
+        }
+        let returnTo: StageScope? = desk.activeStageID == request.stage.stageID ? nil
+            : StageScope(displayID: desk.displayID, desktopID: desk.desktopID, stageID: desk.activeStageID)
+        if returnTo != nil {
+            _ = StageCommandService(service: service, store: store, events: events).switchTo(request.stage.stageID.rawValue, displayID: request.stage.displayID)
+        }
+        activePreview = ActivePreview(request: request, returnTo: returnTo)
+        previewToken += 1
+        let token = previewToken
+        Task { @MainActor in
+            // Stage basculée : la passe suivante montre ses fenêtres avant que l'aperçu ne se pose.
+            if returnTo != nil { try? await Task.sleep(for: .milliseconds(300)) }
+            guard self.previewToken == token, self.activePreview != nil else { return }
+            LayoutPreviewHold.shared.hold()
+            self.previewLease?.invalidate()
+            let lease = Timer(timeInterval: 0.5, repeats: true) { _ in LayoutPreviewHold.shared.hold() }
+            RunLoop.main.add(lease, forMode: .common)
+            self.previewLease = lease
+            let snapshot = self.service.snapshot(followFocus: false)
+            let phantom = SnapshotService.previewPhantomID
+            let placements = self.service.previewPlacements(scope: request.stage, incoming: request.incoming ?? phantom, in: snapshot)
+            let windows = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+            var saved: [WindowID: Rect] = [:]
+            var commands: [ApplyCommand] = []
+            for (id, frame) in placements where id != phantom {
+                guard let window = windows[id] else { continue }
+                saved[id] = window.frame
+                commands.append(ApplyCommand(window: window, frame: Rect(frame)))
+            }
+            self.activePreview?.saved = saved
+            _ = self.service.apply(ApplyPlan(commands: commands))
+            self.events.append(RoadieEvent(type: "launcher.preview", details: [
+                "stage": request.stage.description, "windows": String(commands.count),
+                "phantom": String(request.incoming == nil), "switched": String(returnTo != nil)]))
+            guard request.incoming == nil, let frame = placements[phantom] else { ghost(nil); return }
+            ghost(LauncherGhost(frame: RoadieScreenCoordinate.axRectToNS(frame),
+                                icon: request.appPath.map { NSWorkspace.shared.icon(forFile: $0) }))
+        }
+    }
+
+    /// Fin de l'aperçu. Sans validation : chaque fenêtre reprend le cadre relevé avant, la stage de
+    /// départ revient. Puis la disposition reprend.
+    private func endPreview(commit: Bool) {
+        previewToken += 1
+        previewLease?.invalidate()
+        previewLease = nil
+        guard let preview = activePreview else { return }
+        activePreview = nil
+        if !commit {
+            let windows = Dictionary(uniqueKeysWithValues: service.snapshot(followFocus: false).windows.map { ($0.window.id, $0.window) })
+            let commands = preview.saved.compactMap { id, frame in windows[id].map { ApplyCommand(window: $0, frame: frame) } }
+            _ = service.apply(ApplyPlan(commands: commands))
+            if let back = preview.returnTo {
+                _ = StageCommandService(service: service, store: service.effectiveStageStore, events: events)
+                    .switchTo(back.stageID.rawValue, displayID: back.displayID)
+            }
+        }
+        LayoutPreviewHold.shared.release()
+        events.append(RoadieEvent(type: "launcher.preview_end", details: ["commit": String(commit), "restored": String(commit ? 0 : preview.saved.count)]))
+    }
+
     // MARK: - Fichiers (SPEC-077)
 
     /// `roadie launch CHEMIN [--stage NOM | --new-stage]` : comme Retour dans la barre, ou comme « Ouvrir
@@ -701,6 +789,9 @@ public final class TargetModeRuntimeController: NSObject {
                 return
             }
             destination = LauncherDestination(kind: .stage(scope), title: name, detail: "")
+        } else if command.bool("here") {
+            guard let scope = activeStageScope() else { _ = refused("launcher launch", "stage"); return }
+            destination = LauncherDestination(kind: .stage(scope), title: "Stage active", detail: "")
         } else if command.bool("newStage") {
             let display = state.activeDisplayID ?? service.snapshot(followFocus: false).displays.first?.id ?? DisplayID(rawValue: "none")
             destination = LauncherDestination(kind: .newStage(name: nil, display, state.currentDesktopID(for: display)), title: "Nouvelle stage", detail: "")
@@ -715,7 +806,18 @@ public final class TargetModeRuntimeController: NSObject {
             FileManager.default.fileExists(atPath: path, isDirectory: &isFolder)
             subject = .file(LauncherFile(path: path, name: url.lastPathComponent, isFolder: isFolder.boolValue, lastUsed: nil))
         }
-        let result = perform(LauncherAction(subject: subject, verb: destination == nil ? .open : .openIn, destination: destination))
+        let action = LauncherAction(subject: subject, verb: destination == nil ? .open : .openIn, destination: destination)
+        if command.bool("previewOnly") {
+            // Diagnostic SPEC-078 : la disposition future 2 s, puis tout revient ; rien n'est ouvert.
+            guard let request = LauncherPreviewRequest.of(action) else { _ = refused("launcher launch", "preview"); return }
+            preview(request) { _ in }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                self.endPreview(commit: false)
+            }
+            return
+        }
+        let result = perform(action)
         events.append(RoadieEvent(type: "launcher.launch", details: ["changed": String(result.changed), "message": result.message]))
     }
 

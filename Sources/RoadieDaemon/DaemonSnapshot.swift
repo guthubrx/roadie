@@ -2814,3 +2814,59 @@ final class SnapshotProcessState: @unchecked Sendable {
         }
     }
 }
+
+// MARK: - Aperçu actif du lanceur (SPEC-078)
+
+extension SnapshotService {
+    /// Identifiant qui tient la place d'une fenêtre à venir dans la disposition future.
+    static let previewPhantomID = WindowID(rawValue: 0xFFFF_FFF0)
+
+    /// Disposition de `scope` si `incoming` y arrivait, insérée comme la réconciliation insère une
+    /// nouvelle fenêtre : même ancre (focus global, de la stage, précédent), même côté
+    /// (`new_window_side`), même moteur que la stage. `incoming` peut être une vraie fenêtre (venue
+    /// d'ailleurs) ou `previewPhantomID`. Ne lit ni n'écrit aucun état persistant. O(n log n).
+    func previewPlacements(scope: StageScope, incoming: WindowID, in snapshot: DaemonSnapshot) -> [WindowID: CGRect] {
+        guard let stage = snapshot.state.stage(scope: scope),
+              let display = snapshot.displays.first(where: { $0.id == scope.displayID }) else { return [:] }
+        let container = display.visibleFrame.cgRect
+        let ordered = orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode).filter { $0 != incoming }
+        if stage.mode.usesTreeEngine {
+            let placed = treePlacedWindowIDs(ordered, in: snapshot)
+            let persistent = stageStore.state().scopes
+                .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+                .stages.first { $0.id == scope.stageID }
+            let tree = (persistent?.bspTree ?? .empty).removing(incoming)
+            let leaves = Set(tree.windowIDs)
+            let anchor = persistent.flatMap {
+                Self.bspInsertionAnchor(leaves: leaves, live: Set(placed), globalFocus: snapshot.focusedWindowID, stage: $0)
+            }
+            let side: BSPInsertionSide = config.windowPlacement.newWindowSide == "left" ? .left : .right
+            let next = tree.inserting(incoming, at: anchor, side: side, in: container,
+                                      innerGap: CGFloat(config.tiling.gapsInner), excluding: leaves.subtracting(placed))
+            return LayoutPlanner.plan(LayoutRequest(
+                scope: scope,
+                mode: .spatialBsp,
+                container: container,
+                windowIDs: placed + [incoming],
+                bspTree: next,
+                outerGaps: outerGaps(windowCount: placed.count + 1, display: display),
+                innerGap: config.tiling.gapsInner
+            )).placements
+        }
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let live = ordered.filter { windowsByID[$0] != nil }
+        let currentFrames = Dictionary(uniqueKeysWithValues: live.compactMap { id in windowsByID[id].map { (id, $0.frame.cgRect) } })
+        return LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: stage.mode,
+            container: container,
+            windowIDs: live + [incoming],
+            currentFrames: currentFrames,
+            newWindowIDs: [incoming],
+            splitPolicy: config.tiling.splitPolicy,
+            outerGaps: outerGaps(windowCount: live.count + 1, display: display),
+            innerGap: config.tiling.gapsInner,
+            masterRatio: config.tiling.masterRatio
+        )).placements
+    }
+}

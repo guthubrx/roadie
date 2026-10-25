@@ -278,7 +278,9 @@ actions return structured errors instead of silently falling back.
 `targets search` opens search mode (input bar, every visible window), like the
 configurable `search_hotkey` shortcut. `targets actions` opens it directly on the
 verbs of the active window, like `actions_hotkey`. `launch PATH` opens a file, folder or
-app like Return in the bar, or in a stage with `--stage NAME` or `--new-stage`. See `docs/en/features.md`,
+app like Return in the bar, or in a stage with `--stage NAME`, `--here` (active stage) or
+`--new-stage`; `--preview-only` shows the live preview for 2 s without opening anything
+(diagnostic). See `docs/en/features.md`,
 Search mode section.
 
 In this bar, a `/` as the first character opens command mode. Its commands

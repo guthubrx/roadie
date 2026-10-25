@@ -481,6 +481,13 @@ qu'on tape un nom à l'étape des verbes, les destinations correspondantes
 apparaissent : `fire`, Tab, `perso`, Retour ouvre une fenêtre Firefox dans la stage
 Perso et y va. Échap, ou l'effacement dans un champ vide, revient d'une étape.
 
+**Aperçu actif** : quand la ligne choisie se pose sur une stage de destination (Ouvrir
+dans…, Envoyer vers…, Amener ici), les vraies fenêtres de cette stage prennent leur future
+place ; la fenêtre envoyée y va aussi, et une fenêtre à ouvrir est marquée par un fantôme
+translucide avec l'icône de son application. Une stage cachée du bureau affiché s'affiche
+pendant le choix. Échap, une autre ligne ou la fermeture remettent tout comme avant ;
+Retour garde la disposition. Pas d'aperçu vers un autre bureau ou une nouvelle stage.
+
 **Variantes de Retour** : tenir ⌘, ⌥ ou ⌃ change ce que fait Retour, et le détail de
 la ligne choisie l'annonce. ⌘ Retour ouvre l'application dans une nouvelle stage du
 bureau affiché, ou y envoie la fenêtre, puis Roadie y va. ⌥ Retour amène la fenêtre

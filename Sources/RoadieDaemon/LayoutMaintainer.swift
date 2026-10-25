@@ -50,6 +50,9 @@ public final class LayoutMaintainer {
     /// Dernière détection de Mission Control et début de la pause en cours.
     private var missionControlLastSeen: Date?
     private var missionControlPausedAt: Date?
+    /// Maintien de l'aperçu actif du lanceur (SPEC-078) ; injectable par les tests.
+    private let previewHold: LayoutPreviewHold
+    private var previewPausedAt: Date?
     /// Délai après la dernière détection : l'animation de fermeture rapporte encore des cadres réduits.
     static let missionControlSettle: TimeInterval = 0.4
     /// Mémoire des frames écrites : écho, réponse de l'application, refus (R6, A4, A14).
@@ -170,6 +173,7 @@ public final class LayoutMaintainer {
         commandActivity: LayoutCommandActivity = .shared,
         mouseButtonsPressed: (() -> Bool)? = nil,
         missionControlActive: (() -> Bool)? = nil,
+        previewHold: LayoutPreviewHold = .shared,
         writtenFrames: WrittenFrameRegistry? = nil,
         generations: PlacementGeneration? = nil,
         takeGesture: (() -> GestureSession?)? = nil,
@@ -197,6 +201,7 @@ public final class LayoutMaintainer {
                 UserInputActivity.shared.blocksLayout(mouseButtonsPressed: NSEvent.pressedMouseButtons != 0)
             })
         self.missionControlActive = missionControlActive ?? (testing ? { false } : { MissionControlProbe.isActive() })
+        self.previewHold = previewHold
         // Sous les tests, registre et génération propres à l'instance : les suites tournent en
         // parallèle avec les mêmes identifiants de fenêtre.
         self.writtenFrames = writtenFrames ?? (testing ? WrittenFrameRegistry() : .shared)
@@ -250,6 +255,21 @@ public final class LayoutMaintainer {
         // SPEC-062 : pendant Mission Control, macOS rapporte des cadres réduits et déplacés. Aucun relevé
         // (il enregistrerait ces cadres), aucune écriture (elle rétrécirait les fenêtres masquées), aucune
         // adoption de déplacement. La référence d'observation reste celle d'avant ; reprise après l'animation.
+        // SPEC-078 : aperçu actif du lanceur ; ses cadres restent jusqu'à sa fin (ou son échéance).
+        if previewHold.isHeld(at: observationStartedAt) {
+            if previewPausedAt == nil {
+                previewPausedAt = observationStartedAt
+                events.append(RoadieEvent(type: "layout_paused_preview", details: ["cause": cause]))
+            }
+            globalSuspensionUntil = observationStartedAt.addingTimeInterval(0.1)
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }
+        if let pausedAt = previewPausedAt {
+            previewPausedAt = nil
+            events.append(RoadieEvent(type: "layout_resumed_preview", details: [
+                "durationMs": String(format: "%.0f", observationStartedAt.timeIntervalSince(pausedAt) * 1000)
+            ]))
+        }
         if missionControlActive() { missionControlLastSeen = observationStartedAt }
         if let lastSeen = missionControlLastSeen,
            observationStartedAt.timeIntervalSince(lastSeen) < Self.missionControlSettle {

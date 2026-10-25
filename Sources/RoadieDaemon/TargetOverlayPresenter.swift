@@ -915,6 +915,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var filesChanged = false
     /// Ligne copiée par ⌘C : son détail le dit jusqu'à la frappe suivante.
     private var copiedRowID: String?
+    /// Aperçu actif (SPEC-078) : demande envoyée au contrôleur, attente de 150 ms, fantôme rendu.
+    private var sentPreview: LauncherPreviewRequest?
+    private var pendingPreview: LauncherPreviewRequest?
+    private var previewWork: DispatchWorkItem?
+    private var ghost: LauncherGhost?
 
     init(
         targets: [RoadieTarget],
@@ -1305,6 +1310,46 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         render()
     }
 
+    // MARK: - Aperçu actif (SPEC-078)
+
+    /// Destination de la ligne choisie, si elle se prête à l'aperçu. O(1).
+    private var desiredPreview: LauncherPreviewRequest? {
+        guard let subject = stepSubject, case .destination(let verb, let destination)? = actionList.row(for: actionSelection) else { return nil }
+        return LauncherPreviewRequest.of(LauncherAction(subject: subject, verb: verb, destination: destination))
+    }
+
+    /// La ligne se pose 150 ms sur une destination : l'aperçu s'y pose. Elle la quitte : l'aperçu
+    /// précédent est défait tout de suite. Rappelée à chaque rendu ; sans effet si rien ne change.
+    private func schedulePreview() {
+        let desired = desiredPreview
+        guard desired != pendingPreview else { return }
+        pendingPreview = desired
+        previewWork?.cancel()
+        previewWork = nil
+        guard let desired else {
+            ghost = nil
+            if sentPreview != nil {
+                sentPreview = nil
+                launcher.preview(nil) { _ in }
+            }
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.finished, self.pendingPreview == desired else { return }
+                self.ghost = nil
+                self.sentPreview = desired
+                self.launcher.preview(desired) { [weak self] ghost in
+                    guard let self, !self.finished, self.sentPreview == desired else { return }
+                    self.ghost = ghost
+                    self.render()
+                }
+            }
+        }
+        previewWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
     // MARK: - Touches du lanceur (SPEC-075)
 
     /// Une seule touche tenue choisit la variante ; deux à la fois, aucune. O(1).
@@ -1399,6 +1444,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         guard !finished else { return }
         finished = true
         let query = model.query
+        // Retour sur la destination de l'aperçu : la disposition reste ; sur une autre, elle est restaurée.
+        if sentPreview != nil {
+            launcher.endPreview(sentPreview == LauncherPreviewRequest.of(action))
+            sentPreview = nil
+        }
         cleanup()
         launcher.recordVisit(action.subject.rankingKey, query)
         onFinish?(launcher.perform(action))
@@ -1487,6 +1537,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func render() {
+        schedulePreview()
         if step != .objects {
             let subjectID = model.highlighted?.id
             let badges: [TargetOverlayBadge] = model.matches.compactMap { target in
@@ -1623,7 +1674,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 font: SearchBarRenderer.font(family: style.searchFontFamily, size: style.searchTextFontSize))
         }
         for window in windows {
-            window.update(badges: badges, searchBar: window === barWindow ? bar : nil)
+            window.update(badges: badges, searchBar: window === barWindow ? bar : nil, ghost: ghost)
         }
     }
 
@@ -1645,6 +1696,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     private func cleanup() {
         fileSearch.cancel()
+        previewWork?.cancel()
+        previewWork = nil
+        pendingPreview = nil
+        if sentPreview != nil {
+            sentPreview = nil
+            launcher.preview(nil) { _ in }
+        }
         model.cancelPendingReturn()
         searchBarLayout = nil
         timer?.invalidate()
@@ -2030,10 +2088,11 @@ private final class TargetOverlayWindow: NSPanel {
     }
 
     /// Mode recherche : nouvelles étiquettes et barre de saisie (nil = pas de barre sur cet écran).
-    func update(badges: [TargetOverlayBadge], searchBar: TargetSearchBar?) {
+    func update(badges: [TargetOverlayBadge], searchBar: TargetSearchBar?, ghost: LauncherGhost? = nil) {
         guard let view = contentView as? TargetOverlayView else { return }
         view.badges = badges
         view.searchBar = searchBar
+        view.ghost = ghost
         view.needsDisplay = true
     }
 }
@@ -2041,6 +2100,8 @@ private final class TargetOverlayWindow: NSPanel {
 private final class TargetOverlayView: NSView {
     fileprivate var badges: [TargetOverlayBadge]
     fileprivate var searchBar: TargetSearchBar?
+    /// Place de la fenêtre à venir pendant l'aperçu actif (SPEC-078), en coordonnées d'écran.
+    fileprivate var ghost: LauncherGhost?
     private let screenOrigin: CGPoint
     private var style: TargetOverlayStyle
     // Réutilisés pour mesurer et dessiner chaque badge : aucune allocation de police dans la boucle.
@@ -2080,8 +2141,28 @@ private final class TargetOverlayView: NSView {
 
     override var isOpaque: Bool { false }
 
+    /// Fantôme : rectangle translucide en couleur d'accent et icône de l'application, à la place que
+    /// prendra la fenêtre ; dessiné sous les étiquettes et la barre.
+    private func drawGhost(_ ghost: LauncherGhost) {
+        let local = ghost.frame.offsetBy(dx: -screenOrigin.x, dy: -screenOrigin.y)
+        guard local.intersects(bounds) else { return }
+        let path = NSBezierPath(roundedRect: local.insetBy(dx: 2, dy: 2), xRadius: 12, yRadius: 12)
+        NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
+        path.fill()
+        NSColor.controlAccentColor.withAlphaComponent(0.85).setStroke()
+        path.lineWidth = 2
+        path.setLineDash([10, 6], count: 2, phase: 0)
+        path.stroke()
+        if let icon = ghost.icon {
+            let side = min(96, local.width * 0.4, local.height * 0.4)
+            icon.draw(in: CGRect(x: local.midX - side / 2, y: local.midY - side / 2, width: side, height: side),
+                      from: .zero, operation: .sourceOver, fraction: 0.85)
+        }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        if let ghost { drawGhost(ghost) }
         var occupied: [CGRect] = []
         for badge in badges {
             guard let placement = placement(for: badge, avoiding: occupied) else { continue }

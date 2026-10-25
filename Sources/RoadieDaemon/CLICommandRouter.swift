@@ -221,7 +221,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
         CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|actions|hide ..."),
         CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
-        CLICommandSpec(usage: "launch PATH [--stage NAME | --new-stage]"),
+        CLICommandSpec(usage: "launch PATH [--stage NAME | --here | --new-stage] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
         CLICommandSpec(usage: "record start NAME [--duration S] [--stop-file PATH]"),
@@ -626,6 +626,9 @@ public final class CLICommandRouter {
             var payload = ["path": path]
             if let stage = value(after: "--stage", in: args) { payload["stage"] = stage }
             if args.contains("--new-stage") { payload["newStage"] = "true" }
+            if args.contains("--here") { payload["here"] = "true" }
+            // SPEC-078 : aperçu actif seul, 2 s, puis restauration ; rien n'est ouvert (diagnostic).
+            if args.contains("--preview-only") { payload["previewOnly"] = "true" }
             return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "launcher.launch", arguments: payload), json: args.contains("--json"))
         case "overview":
             guard let command = OverviewController.command(Array(args.dropFirst())) else { return usageError() }
