@@ -19,7 +19,9 @@ jour et les limites connues ; les README décrivent la version courante.
   dans la stage Perso.
 - Liste du lanceur plus lisible, à la manière d'Alfred : grandes icônes, nom puis
   détail sur deux niveaux (emplacement pour une application fermée), sélection en
-  couleur d'accent avec le rappel des touches.
+  couleur d'accent avec le rappel des touches. L'icône suit la taille du texte
+  (deux fois la hauteur du nom), le nom est en graisse normale, les fenêtres
+  montrent l'icône de leur application et les symboles sont posés sur une tuile.
 - Maj + étiquette choisit de nouveau une cible à l'écran dans la barre de recherche ;
   le champ natif écrivait une majuscule.
 

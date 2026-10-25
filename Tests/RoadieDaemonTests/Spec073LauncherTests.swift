@@ -158,4 +158,13 @@ struct Spec073RichLayoutTests {
         #expect(bottom.suggestionIndex(at: CGPoint(x: last.midX, y: last.midY), count: 13, selected: 12) == 12)
         #expect((top.panel?.maxY ?? 0) <= bounds.maxY)
     }
+
+    @Test func theIconStaysAboutTwiceTheNameAtAnyTextSize() {
+        for size: CGFloat in [13, 17, 22, 30] {
+            let metrics = LauncherRowMetrics(fontSize: size)
+            #expect(metrics.icon >= 1.7 * metrics.title)
+            #expect(metrics.detail < 0.7 * metrics.title + 1)
+            #expect(metrics.icon < metrics.row)
+        }
+    }
 }

@@ -1384,9 +1384,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 isSearchResult: true
             )
         }
+        // Icône d'une fenêtre : celle de son application, retrouvée par son nom. O(a).
+        let appPaths = Dictionary(launcher.apps.map { ($0.name, $0.path) }, uniquingKeysWith: { first, _ in first })
         show(badges: badges, bar: TargetSearchBar(
             query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading,
-            suggestions: launcherList.rows.map(Self.suggestion), selectedSuggestion: selectedLauncherRow,
+            suggestions: launcherList.rows.map { Self.suggestion($0, appPaths: appPaths) }, selectedSuggestion: selectedLauncherRow,
             richRows: true))
     }
 
@@ -1411,7 +1413,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     /// Ligne du lanceur dessinée par la barre : en-tête, application avec son icône, ou cible.
-    private static func suggestion(_ row: LauncherList.Row) -> SlashSuggestion {
+    private static func suggestion(_ row: LauncherList.Row, appPaths: [String: String]) -> SlashSuggestion {
         switch row {
         case .header(let title):
             return SlashSuggestion(text: title, kind: .header)
@@ -1427,7 +1429,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .appElement, .gridCell: "cursorarrow.rays"
             }
             let label = target.label.isEmpty ? "" : "\(target.label)  "
-            return SlashSuggestion(text: label + target.title, detail: target.subtitle, kind: .result, icon: .symbol(symbol))
+            let icon: SlashSuggestion.Icon = if target.kind == .window, let path = appPaths[target.title] { .file(path) } else { .symbol(symbol) }
+            return SlashSuggestion(text: label + target.title, detail: target.subtitle, kind: .result, icon: icon)
         }
     }
 

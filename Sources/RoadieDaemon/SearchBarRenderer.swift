@@ -135,14 +135,32 @@ struct TargetSearchBar {
     /// Même géométrie pour le dessin et les clics, y compris après un réglage de police.
     func layout(in bounds: CGRect, style: TargetOverlayStyle) -> SearchBarLayout {
         if richRows {
-            let scale = min(48, max(8, style.commandTextFontSize)) / 13
-            let heights = suggestions.map { $0.kind == .header ? 24 * scale : 46 * scale }
+            let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
+            let heights = suggestions.map { $0.kind == .header ? metrics.header : metrics.row }
             return SearchBarLayout.makeRich(bounds: bounds, heights: heights, selected: selectedSuggestion,
                                             searchTextFontSize: style.searchTextFontSize)
         }
         return SearchBarLayout.make(bounds: bounds, suggestions: suggestions.count,
                                     messageLines: messageTextLines.count, searchTextFontSize: style.searchTextFontSize,
                                     commandTextFontSize: style.commandTextFontSize)
+    }
+}
+
+/// Proportions d'une ligne du lanceur, communes à la géométrie et au dessin : comme chez Alfred,
+/// l'icône fait environ deux fois la hauteur du nom et le chemin reste nettement plus petit.
+struct LauncherRowMetrics: Equatable {
+    let title: CGFloat
+    let detail: CGFloat
+    let row: CGFloat
+    let header: CGFloat
+    let icon: CGFloat
+
+    init(fontSize: CGFloat) {
+        title = min(48, max(8, fontSize))
+        detail = max(10, (title * 0.62).rounded())
+        row = max(40, (title * 2.5).rounded())
+        header = max(20, (title * 1.25).rounded())
+        icon = row - 8
     }
 }
 
@@ -221,8 +239,9 @@ enum SearchBarRenderer {
         drawSurface(panel)
         let shown = layout.visibleRange(count: state.suggestions.count, selected: state.selectedSuggestion)
         if state.richRows {
+            let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
             for (row, index) in zip(layout.suggestionRows, shown) {
-                drawRich(state.suggestions[index], in: row, selected: index == state.selectedSuggestion, font: commandFont)
+                drawRich(state.suggestions[index], in: row, selected: index == state.selectedSuggestion, font: commandFont, metrics: metrics)
             }
             return
         }
@@ -271,42 +290,62 @@ enum SearchBarRenderer {
         ])
     }
 
-    /// Ligne du lanceur à la manière d'Alfred : icône de 32 points, nom puis détail plus petit dessous,
-    /// sélection pleine largeur en couleur d'accent avec le rappel des touches à droite.
-    private static func drawRich(_ suggestion: SlashSuggestion, in row: CGRect, selected: Bool, font: NSFont) {
+    /// Ligne du lanceur à la manière d'Alfred : grande icône, nom en graisse normale et chemin plus
+    /// petit serrés l'un sous l'autre, sélection pleine largeur en couleur d'accent, rappel des touches.
+    private static func drawRich(_ suggestion: SlashSuggestion, in row: CGRect, selected: Bool, font: NSFont, metrics: LauncherRowMetrics) {
+        let fonts = NSFontManager.shared
+        let iconX = row.minX + 4
+        let textX = iconX + metrics.icon + 10
         if suggestion.kind == .header {
-            let small = NSFontManager.shared.convert(NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 2.5)), toHaveTrait: .boldFontMask)
-            let text = line(suggestion.text.uppercased(), font: small, color: NSColor(calibratedWhite: 0.5, alpha: 1))
-            draw(text, in: CGRect(x: row.minX + 6, y: row.minY, width: row.width - 12, height: row.height * 0.8))
+            let small = fonts.convert(fonts.convert(font, toSize: max(9, metrics.detail - 1)), toHaveTrait: .boldFontMask)
+            let text = NSMutableAttributedString(attributedString: line(suggestion.text.uppercased(), font: small,
+                                                                        color: NSColor(calibratedWhite: 0.52, alpha: 1)))
+            text.addAttribute(.kern, value: 0.8, range: NSRange(location: 0, length: text.length))
+            let height = text.size().height
+            draw(text, in: CGRect(x: iconX + 2, y: row.minY + 2, width: row.width - 8, height: height + 2))
             return
         }
         if selected {
-            NSColor.controlAccentColor.withAlphaComponent(0.88).setFill()
-            NSBezierPath(roundedRect: row.insetBy(dx: -4, dy: 1.5), xRadius: 8, yRadius: 8).fill()
+            NSColor.controlAccentColor.withAlphaComponent(0.9).setFill()
+            NSBezierPath(roundedRect: row.insetBy(dx: -4, dy: 1), xRadius: 9, yRadius: 9).fill()
         }
-        let side = min(32, row.height - 10)
-        var textX = row.minX + 8
-        if let image = icon(suggestion.icon) {
-            let isSymbol = if case .symbol = suggestion.icon { true } else { false }
-            let drawn = isSymbol ? side * 0.7 : side
-            image.draw(in: CGRect(x: textX + (side - drawn) / 2, y: row.midY - drawn / 2, width: drawn, height: drawn))
-            textX += side + 12
+        let side = metrics.icon
+        let iconRect = CGRect(x: iconX, y: row.midY - side / 2, width: side, height: side)
+        switch suggestion.icon {
+        case .file?:
+            icon(suggestion.icon)?.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1,
+                                        respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        case .symbol?:
+            // Tuile de la taille d'une icône d'application : même poids visuel dans la liste.
+            let tile = iconRect.insetBy(dx: side * 0.06, dy: side * 0.06)
+            NSColor.white.withAlphaComponent(selected ? 0.2 : 0.1).setFill()
+            NSBezierPath(roundedRect: tile, xRadius: tile.width * 0.24, yRadius: tile.width * 0.24).fill()
+            if let image = icon(suggestion.icon) {
+                let box = side * 0.5
+                let scale = min(box / max(1, image.size.width), box / max(1, image.size.height))
+                let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+                image.draw(in: CGRect(x: tile.midX - size.width / 2, y: tile.midY - size.height / 2, width: size.width, height: size.height))
+            }
+        case nil:
+            break
         }
-        let hint = selected ? line("⇥ actions   ↩", font: NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 2)),
-                                   color: NSColor.white.withAlphaComponent(0.7)) : nil
-        let hintWidth = hint.map { $0.size().width + 8 } ?? 0
+        let hint = selected ? line("⇥ actions   ↩", font: fonts.convert(font, toSize: metrics.detail),
+                                   color: NSColor.white.withAlphaComponent(0.75)) : nil
+        let hintWidth = hint.map { $0.size().width + 12 } ?? 0
         let width = max(0, row.maxX - 8 - hintWidth - textX)
-        let titleFont = NSFontManager.shared.convert(NSFontManager.shared.convert(font, toSize: font.pointSize + 2.5), toHaveTrait: .boldFontMask)
-        let detailFont = NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 1.5))
-        let title = line(suggestion.text.trimmingCharacters(in: .whitespaces), font: titleFont, color: .white)
+        let title = line(suggestion.text.trimmingCharacters(in: .whitespaces), font: fonts.convert(font, toSize: metrics.title),
+                         color: NSColor(calibratedWhite: 0.97, alpha: 1))
         if suggestion.detail.isEmpty {
             draw(title, in: CGRect(x: textX, y: row.minY, width: width, height: row.height))
         } else {
-            let detail = line(suggestion.detail, font: detailFont,
-                              color: selected ? NSColor.white.withAlphaComponent(0.8) : NSColor(calibratedWhite: 0.6, alpha: 1),
+            let detail = line(suggestion.detail, font: fonts.convert(font, toSize: metrics.detail),
+                              color: selected ? NSColor.white.withAlphaComponent(0.78) : NSColor(calibratedWhite: 0.58, alpha: 1),
                               truncation: .byTruncatingMiddle)
-            draw(title, in: CGRect(x: textX, y: row.midY, width: width, height: row.height / 2 - 2))
-            draw(detail, in: CGRect(x: textX, y: row.minY + 3, width: width, height: row.height / 2 - 3))
+            // Les deux lignes forment un bloc centré, sans espace entre elles.
+            let titleHeight = title.size().height, detailHeight = detail.size().height
+            let bottom = row.midY - (titleHeight + detailHeight) / 2
+            draw(detail, in: CGRect(x: textX, y: bottom, width: width, height: detailHeight))
+            draw(title, in: CGRect(x: textX, y: bottom + detailHeight, width: width, height: titleHeight))
         }
         if let hint { draw(hint, in: CGRect(x: row.maxX - hintWidth, y: row.minY, width: hintWidth, height: row.height)) }
     }
@@ -318,9 +357,11 @@ enum SearchBarRenderer {
         guard let icon else { return nil }
         if let cached = icons[icon] { return cached }
         let image: NSImage? = switch icon {
-        case .file(let path): NSWorkspace.shared.icon(forFile: path)
+        // Lien résolu : sans la flèche d'alias (Safari est un lien vers le système).
+        case .file(let path): NSWorkspace.shared.icon(forFile: URL(fileURLWithPath: path).resolvingSymlinksInPath().path)
         case .symbol(let name): NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(paletteColors: [NSColor(calibratedWhite: 0.8, alpha: 1)]))
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
+                .applying(.init(paletteColors: [NSColor(calibratedWhite: 0.9, alpha: 1)])))
         }
         icons[icon] = image
         return image
