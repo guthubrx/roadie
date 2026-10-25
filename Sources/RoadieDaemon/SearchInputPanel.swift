@@ -89,6 +89,12 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     override func sendEvent(_ event: NSEvent) {
+        // Effacement dans un champ vide : rien ne change pour AppKit, la barre revient d'une étape (SPEC-074).
+        if event.type == .keyDown, event.keyCode == 51, field.stringValue.isEmpty,
+           event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+            onKey?(SearchKeyInput(kind: .delete))
+            return
+        }
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
            let input = Self.navigation(event, labels: labelsEnabled) {

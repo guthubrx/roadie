@@ -413,8 +413,194 @@ public final class TargetModeRuntimeController: NSObject {
             ranking: rankingStore.load(),
             refreshApps: { done in catalog.refresh(done: done) },
             launch: { [weak self] app in self?.launch(app) ?? TargetActionResult(changed: false, message: "launcher_unavailable") },
-            recordVisit: { key, query in rankingStore.recordVisit(key, query: query) }
+            recordVisit: { key, query in rankingStore.recordVisit(key, query: query) },
+            destinations: LauncherPlacement.destinations(state: state, displays: snapshot.displays, stageNames: names),
+            newStageHome: {
+                let display = state.activeDisplayID ?? snapshot.displays.first?.id ?? DisplayID(rawValue: "none")
+                return (display, state.currentDesktopID(for: display))
+            }(),
+            perform: { [weak self] action in
+                self?.perform(action) ?? TargetActionResult(changed: false, message: "launcher_unavailable")
+            }
         )
+    }
+
+    // MARK: - Verbes du lanceur (SPEC-074)
+
+    /// Exécute un verbe. Les effets qui attendent une application ou une fenêtre partent en tâche ;
+    /// le résultat rendu décrit ce qui a été demandé. Chaque issue est journalisée.
+    private func perform(_ action: LauncherAction) -> TargetActionResult {
+        let label = "launcher \(action.verb.rawValue)"
+        switch action.subject {
+        case .app(let app):
+            switch action.verb {
+            case .open:
+                return launch(app)
+            case .newWindow:
+                openWindow(app, into: nil)
+            case .openIn:
+                guard let scope = action.destination.flatMap(stageScope) else { return refused(label, "destination") }
+                openWindow(app, into: scope)
+            case .gatherIn:
+                guard let scope = action.destination.flatMap(stageScope) else { return refused(label, "destination") }
+                gather(app, into: scope)
+            case .hide:
+                NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).forEach { $0.hide() }
+            case .quit:
+                NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).forEach { $0.terminate() }
+            default:
+                return refused(label, "verb")
+            }
+            return TargetActionResult(changed: true, message: "\(label): \(app.bundleID)")
+        case .target(let target):
+            return perform(action.verb, on: target, destination: action.destination, label: label)
+        }
+    }
+
+    private func perform(_ verb: LauncherVerb, on target: RoadieTarget, destination: LauncherDestination?, label: String) -> TargetActionResult {
+        let store = service.effectiveStageStore
+        let scope = target.scope
+        switch (target.kind, verb) {
+        case (.window, .sendTo):
+            guard let window = scope.windowId.map(WindowID.init(rawValue:)), let destination else { return refused(label, "window") }
+            let message: String
+            switch destination.kind {
+            case .stage, .newStage:
+                guard let stage = stageScope(for: destination) else { return refused(label, "destination") }
+                message = WindowContextActions(snapshotService: service, stageStore: store, eventLog: events)
+                    .assign(windowID: window, to: stage.stageID, desktopID: stage.desktopID, displayID: stage.displayID).message
+            case .desktop(let display, let desktop):
+                message = DesktopCommandService(service: service, store: store, events: events)
+                    .assign(windowID: window, to: desktop, displayID: display).message
+            case .display(let display):
+                message = WindowCommandService(service: service, stageStore: store, events: events)
+                    .send(windowID: window, toDisplayID: display, focusMovedWindow: false).message
+            }
+            return TargetActionResult(changed: true, message: message)
+        case (.window, .float):
+            guard let window = scope.windowId.map(WindowID.init(rawValue:)) else { return refused(label, "window") }
+            let result = WindowContextActions(snapshotService: service, stageStore: store, eventLog: events).toggleFloating(windowID: window)
+            return TargetActionResult(changed: result.changed, message: result.message)
+        case (.window, .fullscreen), (.window, .minimize), (.window, .close):
+            guard let window = scope.windowId.map(WindowID.init(rawValue:)) else { return refused(label, "window") }
+            let switcherAction: WindowSwitcherAction = verb == .fullscreen ? .fullscreen : verb == .minimize ? .minimize : .close
+            let switcher = WindowSwitcherService(service: service)
+            let events = events
+            Task { @MainActor in
+                guard let entry = await switcher.load().entries.first(where: { $0.id == window }) else { return }
+                let result = switcher.perform(switcherAction, on: entry)
+                events.append(RoadieEvent(type: "launcher.window", details: ["verb": verb.rawValue, "message": result.message]))
+            }
+            return TargetActionResult(changed: true, message: label)
+        case (.stage, .moveTo):
+            guard let displayID = scope.displayId.map(DisplayID.init(rawValue:)), let desktop = scope.desktopId.map(DesktopID.init(rawValue:)),
+                  let stage = scope.stageId.map(StageID.init(rawValue:)), let destination else { return refused(label, "stage") }
+            let (targetDisplay, targetDesktop): (DisplayID, DesktopID)
+            switch destination.kind {
+            case .desktop(let display, let number): (targetDisplay, targetDesktop) = (display, number)
+            case .display(let display): (targetDisplay, targetDesktop) = (display, store.state().currentDesktopID(for: display))
+            default: return refused(label, "destination")
+            }
+            let result = StageCommandService(service: service, store: store, events: events)
+                .moveStage(stage, displayID: displayID, from: desktop, to: targetDesktop, before: nil, targetDisplay: targetDisplay)
+            return TargetActionResult(changed: result.changed, message: result.message)
+        case (.desktop, .moveTo):
+            guard let displayID = scope.displayId.map(DisplayID.init(rawValue:)), let desktop = scope.desktopId.map(DesktopID.init(rawValue:)),
+                  case .display(let targetDisplay)? = destination?.kind else { return refused(label, "desktop") }
+            // En dernier sur l'autre écran : après son plus grand numéro connu.
+            let state = store.state()
+            let last = state.scopes.filter { $0.displayID == targetDisplay }.map(\.desktopID.rawValue).max() ?? 0
+            let result = DesktopCommandService(service: service, store: store, events: events)
+                .move(desktop, from: displayID, toDisplay: targetDisplay, position: DesktopID(rawValue: max(last, state.currentDesktopID(for: targetDisplay).rawValue) + 1))
+            return TargetActionResult(changed: result.changed, message: result.message)
+        default:
+            return refused(label, "verb")
+        }
+    }
+
+    private func refused(_ label: String, _ reason: String) -> TargetActionResult {
+        events.append(RoadieEvent(type: "launcher.refused", details: ["action": label, "reason": reason]))
+        return TargetActionResult(changed: false, message: "\(label): \(reason) unavailable", error: reason)
+    }
+
+    /// Stage visée par une destination ; une « Nouvelle stage » est créée dans son bureau. O(S).
+    private func stageScope(for destination: LauncherDestination) -> StageScope? {
+        switch destination.kind {
+        case .stage(let scope):
+            return scope
+        case .newStage(let name, let display, let desktop):
+            let (result, scope) = StageCommandService(service: service, store: service.effectiveStageStore, events: events)
+                .createStage(named: name, displayID: display, desktopID: desktop)
+            events.append(RoadieEvent(type: "launcher.stage_created", details: ["message": result.message]))
+            return scope
+        case .desktop, .display:
+            return nil
+        }
+    }
+
+    /// Nouvelle fenêtre de l'application, rangée dans `scope` si demandé (intention de placement F5).
+    /// Application ouverte avec des fenêtres : ⌘N après activation ; sinon macOS l'ouvre ou la rouvre.
+    /// La première fenêtre inconnue de ce paquet apparue en 10 s rejoint la stage, une seule fois, puis
+    /// Roadie y va. Sans nouvelle fenêtre dans ce délai : rien n'est déplacé.
+    private func openWindow(_ app: LauncherApp, into scope: StageScope?) {
+        let service = service
+        let events = events
+        let switcher = WindowSwitcherService(service: service)
+        Task { @MainActor in
+            let known = Set(await switcher.load().entries.filter { $0.window.bundleID == app.bundleID }.map(\.id))
+            let running = NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).first
+            if let running, !known.isEmpty {
+                running.activate()
+                try? await Task.sleep(for: .milliseconds(300))
+                Self.postNewWindowShortcut(to: running.processIdentifier)
+            } else {
+                let configuration = NSWorkspace.OpenConfiguration()
+                configuration.activates = true
+                _ = try? await NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: app.path), configuration: configuration)
+            }
+            guard let scope else { return }
+            for _ in 0..<50 {
+                try? await Task.sleep(for: .milliseconds(200))
+                let entries = await switcher.load().entries
+                guard let fresh = entries.first(where: { $0.window.bundleID == app.bundleID && !known.contains($0.id) }) else { continue }
+                let result = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
+                    .assign(windowID: fresh.id, to: scope.stageID, desktopID: scope.desktopID, displayID: scope.displayID)
+                events.append(RoadieEvent(type: "launcher.placed", details: [
+                    "bundleID": app.bundleID, "windowID": String(fresh.id.rawValue), "stage": scope.description, "message": result.message]))
+                if let placed = await switcher.load().entries.first(where: { $0.id == fresh.id }) { _ = switcher.activate(placed) }
+                return
+            }
+            events.append(RoadieEvent(type: "launcher.placement_expired", details: ["bundleID": app.bundleID, "stage": scope.description]))
+        }
+    }
+
+    /// Toutes les fenêtres gérées de l'application rejoignent la stage, puis Roadie y va.
+    private func gather(_ app: LauncherApp, into scope: StageScope) {
+        let service = service
+        let events = events
+        let switcher = WindowSwitcherService(service: service)
+        Task { @MainActor in
+            let windows = await switcher.load().entries.filter { $0.window.bundleID == app.bundleID && $0.scope != scope }
+            let actions = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
+            for window in windows {
+                _ = actions.assign(windowID: window.id, to: scope.stageID, desktopID: scope.desktopID, displayID: scope.displayID)
+            }
+            events.append(RoadieEvent(type: "launcher.gathered", details: [
+                "bundleID": app.bundleID, "windows": String(windows.count), "stage": scope.description]))
+            if let first = windows.first, let placed = await switcher.load().entries.first(where: { $0.id == first.id }) {
+                _ = switcher.activate(placed)
+            }
+        }
+    }
+
+    /// ⌘N envoyé à l'application seule, jamais à celle qui a le focus par erreur.
+    private static func postNewWindowShortcut(to pid: pid_t) {
+        let source = CGEventSource(stateID: .hidSystemState)
+        for down in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: 45, keyDown: down) else { continue }
+            event.flags = .maskCommand
+            event.postToPid(pid)
+        }
     }
 
     /// Application déjà ouverte avec une fenêtre gérée : Roadie y va, dans sa stage et son bureau.

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import RoadieAX
 import RoadieCore
 
 /// Ce que la barre de recherche reçoit pour jouer le rôle de lanceur (SPEC-073).
@@ -14,6 +15,14 @@ struct LauncherSearchContext {
     var launch: @MainActor (LauncherApp) -> TargetActionResult
     /// Mémorise un choix : clé de classement, requête tapée.
     var recordVisit: @MainActor (String, String) -> Void
+    /// Stages, bureaux et écrans proposés comme destinations (SPEC-074).
+    var destinations: [LauncherDestination] = []
+    /// Bureau affiché de l'écran actif : là où « Nouvelle stage » crée la stage.
+    var newStageHome = (DisplayID(rawValue: "none"), DesktopID(rawValue: 1))
+    /// Exécute un verbe ; appelé après la fermeture de la barre.
+    var perform: @MainActor (LauncherAction) -> TargetActionResult = { _ in
+        TargetActionResult(changed: false, message: "launcher_disabled")
+    }
 
     /// Sans lanceur : la barre garde le seul mode recherche (tests, configuration désactivée).
     static var disabled: LauncherSearchContext { LauncherSearchContext(
@@ -65,5 +74,33 @@ enum LauncherPlacement {
             result[bundleID] = LauncherList.detail(running: true, location: locations[bundleID]?.text)
         }
         return result
+    }
+
+    /// Destinations proposées : stages visibles au rail (nommées ou occupées), bureaux occupés, nommés
+    /// ou affichés, puis écrans ; écrans dans leur ordre, bureaux par numéro. O(S + d).
+    static func destinations(state: PersistentStageState, displays: [DisplaySnapshot],
+                             stageNames: [StageScope: String]) -> [LauncherDestination] {
+        var stages: [LauncherDestination] = [], desktops: [LauncherDestination] = [], screens: [LauncherDestination] = []
+        for display in displays.sorted(by: { $0.index < $1.index }) {
+            let current = state.currentDesktopID(for: display.id)
+            let scopes = state.scopes.filter { $0.displayID == display.id }.sorted { $0.desktopID < $1.desktopID }
+            for scope in scopes {
+                let label = state.label(displayID: display.id, desktopID: scope.desktopID)
+                let occupied = scope.stages.contains { !$0.members.isEmpty }
+                if occupied || label != nil || scope.desktopID == current {
+                    desktops.append(LauncherDestination(kind: .desktop(display.id, scope.desktopID),
+                                                        title: "Bureau \(scope.desktopID.rawValue)" + (label.map { " · \($0)" } ?? ""),
+                                                        detail: display.name))
+                }
+                for stage in scope.stages {
+                    let key = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stage.id)
+                    guard let name = stageNames[key] else { continue }
+                    stages.append(LauncherDestination(kind: .stage(key), title: name,
+                                                      detail: "bureau \(scope.desktopID.rawValue) · \(display.name)"))
+                }
+            }
+            screens.append(LauncherDestination(kind: .display(display.id), title: display.name, detail: "écran"))
+        }
+        return stages + desktops + screens
     }
 }

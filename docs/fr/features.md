@@ -454,10 +454,21 @@ application déjà ouverte va à sa fenêtre, dans sa stage et son bureau ; sur 
 application fermée, l'ouvre dans la stage active de l'écran actif, sauf règle
 `assign_stage`. Les flèches parcourent la liste ; un clic sur une ligne l'active.
 
+**Verbes et destinations** : Tab sur la ligne choisie ouvre ses verbes. Application :
+ouvrir ou aller à sa fenêtre, ouvrir dans…, nouvelle fenêtre ici, réunir ses fenêtres
+dans…, masquer, quitter. Fenêtre : aller à, envoyer vers…, faire flotter, plein
+écran, réduire, fermer. Stage : afficher, déplacer vers un bureau ou un écran.
+Bureau : afficher, déplacer vers un écran. Cible à l'écran : clic, double-clic, clic
+droit, Cmd-clic. Un verbe suivi de « … » demande une destination : stage, bureau,
+écran, ou « Nouvelle stage » (nommée d'après la saisie si ce nom est libre). Dès
+qu'on tape un nom à l'étape des verbes, les destinations correspondantes
+apparaissent : `fire`, Tab, `perso`, Retour ouvre une fenêtre Firefox dans la stage
+Perso et y va. Échap, ou l'effacement dans un champ vide, revient d'une étape.
+
 | Touche | Effet |
 |--------|-------|
 | lettres, chiffres, espace | filtrer |
-| Tab | completer le titre du resultat choisi (ou le nom de l'application), sans clic |
+| Tab | verbes de la ligne choisie ; sur un verbe à « … », ses destinations |
 | Fleche bas, Ctrl-N | resultat suivant |
 | Maj-Tab, Fleche haut, Ctrl-P | resultat precedent |
 | Maj + etiquette | choisir ce resultat (`Maj+S` avec peu de resultats) |

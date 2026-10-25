@@ -438,10 +438,20 @@ app that is already open goes to its window, in its stage and desktop; on a clos
 app, opens it in the active stage of the active display, unless an `assign_stage`
 rule applies. Arrow keys move through the list; clicking a row activates it.
 
+**Verbs and destinations**: Tab on the selected row opens its verbs. App: open or go
+to its window, open in…, new window here, gather its windows in…, hide, quit.
+Window: go to, send to…, float, fullscreen, minimize, close. Stage: show, move to a
+desktop or display. Desktop: show, move to a display. On-screen target: click,
+double-click, right-click, Cmd-click. A verb ending with "…" asks for a destination:
+a stage, desktop, display, or "New stage" (named after the input if that name is
+free). As soon as you type a name at the verb step, matching destinations appear:
+`fire`, Tab, `perso`, Return opens a Firefox window in the Perso stage and goes
+there. Escape, or deleting in an empty field, goes back one step.
+
 | Key | Effect |
 |-----|--------|
 | letters, digits, space | filter |
-| Tab | complete the selected result's title (or the app name) without clicking |
+| Tab | verbs of the selected row; on a verb ending with "…", its destinations |
 | Down, Ctrl-N | next result |
 | Shift-Tab, Up, Ctrl-P | previous result |
 | Shift + label | select that result (`Shift+S` with few results) |

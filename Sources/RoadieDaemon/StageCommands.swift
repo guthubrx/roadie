@@ -792,6 +792,30 @@ public struct StageCommandService {
         )
     }
 
+    /// Crée une stage dans un bureau précis, nommée ou anonyme, en dernier (SPEC-074). Un nom déjà
+    /// porté par une autre stage est refusé (SPEC-067). Renvoie son scope. O(S).
+    public func createStage(named rawName: String?, displayID: DisplayID, desktopID: DesktopID) -> (StageCommandResult, StageScope?) {
+        let trimmed = rawName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = trimmed?.isEmpty == false ? trimmed : nil
+        let label = "stage create \(name ?? "-") \(displayID.rawValue)/\(desktopID.rawValue)"
+        do {
+            let scope = try store.mutateChecked { state -> StageScope? in
+                if let name, state.namedStageKeys().contains(StageNameUniqueness.key(name)) { return nil }
+                var scope = state.scope(displayID: displayID, desktopID: desktopID)
+                let id = nextAvailableStageID(preferred: StageID(rawValue: String((scope.stages.compactMap { Int($0.id.rawValue) }.max() ?? 0) + 1)), in: scope)
+                guard scope.createStage(id, name: name, mode: config.tiling.defaultStrategy) else { return nil }
+                state.update(scope)
+                return StageScope(displayID: displayID, desktopID: desktopID, stageID: id)
+            }
+            guard let scope else {
+                return (StageCommandResult(message: "\(label): name already used by another stage", changed: false, outcome: .failed), nil)
+            }
+            return (StageCommandResult(message: "\(label): stage=\(scope.stageID.rawValue)", changed: true), scope)
+        } catch {
+            return (.persistenceFailure(label, error), nil)
+        }
+    }
+
     /// Déplace une stage à une place d'un bureau (SPEC-067), sur le même écran ou sur `targetDisplay`
     /// (SPEC-070) : avant `anchor`, ou en dernier si nil. Même bureau : réordonnancement seul. Ailleurs :
     /// la stage arrive inactive ; si elle était affichée, l'écran bascule d'abord sur une autre stage de

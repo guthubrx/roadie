@@ -893,6 +893,17 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var launcherTargetIDs: [String] = []
     /// Lignes de liste au plus pour le lanceur, en-têtes compris.
     private static let launcherRows = 12
+    /// Étapes du lanceur (SPEC-074) : objet, puis verbe, puis destination si le verbe en demande une.
+    private enum LauncherStep: Equatable {
+        case objects
+        case verbs(LauncherSubject)
+        case destinations(LauncherSubject, LauncherVerb)
+    }
+    private var step = LauncherStep.objects
+    private var actionList = LauncherActionList()
+    private var actionSelection: String?
+    /// Saisie des deuxième et troisième étapes ; la requête de l'objet reste dans `model`.
+    private var stepQuery = ""
 
     init(
         targets: [RoadieTarget],
@@ -986,7 +997,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             lastInputAt = Date()
             model.cancelPendingReturn()
             if let panel = layout.panel, panel.contains(nsPoint) {
-                if type == .leftMouseDown, commandModel == nil,
+                if type == .leftMouseDown, step != .objects,
+                   let index = layout.suggestionIndex(at: nsPoint, count: actionList.rows.count,
+                                                      selected: actionList.rows.firstIndex { $0.id == actionSelection && $0.id != nil }),
+                   let id = actionList.rows[index].id {
+                    actionSelection = id
+                    confirmStep()
+                    return true
+                }
+                if type == .leftMouseDown, commandModel == nil, step == .objects,
                    let index = layout.suggestionIndex(at: nsPoint, count: launcherList.rows.count, selected: selectedLauncherRow),
                    let id = launcherList.rows[index].id {
                     launcherSelection = id
@@ -1013,6 +1032,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         guard !finished else { return }
         lastInputAt = Date()
         model.cancelPendingReturn()
+        if step != .objects {
+            stepQuery = text
+            refreshActions()
+            render()
+            return
+        }
         if text.hasPrefix("/") {
             if commandModel == nil {
                 model.replaceQuery("/")
@@ -1032,6 +1057,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     fileprivate func handleSearch(_ input: SearchKeyInput) {
         guard !finished else { return }
         lastInputAt = Date()
+        if step != .objects {
+            handleStep(input)
+            return
+        }
         // Mode commande (SPEC-023 R3) : aiguillage avant le modèle de recherche.
         if model.isCommandMode {
             handleCommand(input)
@@ -1076,10 +1105,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func navigate(_ input: SearchKeyInput) {
         guard !launcherList.rows.isEmpty else { model.handleNavigation(input); return }
         if input.navigationSource == .tab, case .next = input.kind {
-            if case .app(let app, _)? = launcherList.row(for: launcherSelection) {
-                model.replaceQuery(app.name)
-            } else {
-                model.handleNavigation(input)
+            switch launcherList.row(for: launcherSelection) {
+            case .app(let app, _): enterVerbs(.app(app))
+            case .target(let target): enterVerbs(.target(target))
+            case .header, nil: model.handleNavigation(input)
             }
             return
         }
@@ -1123,6 +1152,119 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .app(let app, _): finishLaunching(app)
         case .target(let target): finishActivating(target, target.source == .app ? .click : (target.actions.first ?? .focus))
         case .header, nil: break
+        }
+    }
+
+    // MARK: - Verbes et destinations (SPEC-074)
+
+    private func enterVerbs(_ subject: LauncherSubject) {
+        step = .verbs(subject)
+        stepQuery = ""
+        model.highlight(targetID: { if case .target(let target) = subject { return target.id } else { return nil } }())
+        refreshActions()
+    }
+
+    private func enterDestinations(_ subject: LauncherSubject, _ verb: LauncherVerb) {
+        step = .destinations(subject, verb)
+        stepQuery = ""
+        refreshActions()
+    }
+
+    /// Échap ou effacement dans un champ vide : une étape en arrière.
+    private func stepBack() {
+        switch step {
+        case .objects: break
+        case .verbs:
+            step = .objects
+            stepQuery = ""
+            launcherQuery = nil
+        case .destinations(let subject, _):
+            enterVerbs(subject)
+        }
+    }
+
+    private func refreshActions() {
+        switch step {
+        case .objects: return
+        case .verbs(let subject):
+            actionList = .verbs(for: subject, query: stepQuery, destinations: launcher.destinations, newStageHome: launcher.newStageHome)
+        case .destinations(let subject, let verb):
+            actionList = .destinations(for: subject, verb: verb, query: stepQuery, destinations: launcher.destinations,
+                                       newStageHome: launcher.newStageHome)
+        }
+        actionSelection = actionList.best
+    }
+
+    private func handleStep(_ input: SearchKeyInput) {
+        switch input.kind {
+        case .escape:
+            stepBack()
+        case .delete:
+            if stepQuery.isEmpty { stepBack() }
+        case .next where input.navigationSource == .tab:
+            // Tab sur un verbe qui demande une destination : la troisième étape.
+            if case .verb(let verb)? = actionList.row(for: actionSelection), verb.needsDestination, case .verbs(let subject) = step {
+                enterDestinations(subject, verb)
+            }
+        case .next:
+            actionSelection = actionList.neighbour(of: actionSelection, step: 1)
+        case .previous:
+            actionSelection = actionList.neighbour(of: actionSelection, step: -1)
+        case .confirm(_, _, let isRepeat):
+            guard !isRepeat else { return }
+            confirmStep()
+            return
+        case .text, .labelCharacter, .ignored:
+            break
+        }
+        render()
+    }
+
+    private func confirmStep() {
+        let subject: LauncherSubject
+        switch step {
+        case .objects: return
+        case .verbs(let current): subject = current
+        case .destinations(let current, _): subject = current
+        }
+        switch actionList.row(for: actionSelection) {
+        case .verb(let verb):
+            if verb.needsDestination {
+                enterDestinations(subject, verb)
+                render()
+            } else {
+                finishAction(LauncherAction(subject: subject, verb: verb, destination: nil))
+            }
+        case .destination(let verb, let destination):
+            finishAction(LauncherAction(subject: subject, verb: verb, destination: destination))
+        case .header, nil:
+            break
+        }
+    }
+
+    /// Verbes d'une cible déjà connus du mode recherche : exécutés comme avant (clics, aller à).
+    /// Les autres passent au lanceur, après la fermeture de la barre.
+    private func finishAction(_ action: LauncherAction) {
+        if case .target(let target) = action.subject, let verb = Self.searchVerb(action.verb, for: target) {
+            finishActivating(target, verb)
+            return
+        }
+        guard !finished else { return }
+        finished = true
+        let query = model.query
+        cleanup()
+        launcher.recordVisit(action.subject.rankingKey, query)
+        onFinish?(launcher.perform(action))
+    }
+
+    private static func searchVerb(_ verb: LauncherVerb, for target: RoadieTarget) -> TargetActionVerb? {
+        switch verb {
+        case .click: .click
+        case .doubleClick: .doubleClick
+        case .rightClick: .rightClick
+        case .commandClick: .commandClick
+        case .focus, .show: target.actions.first ?? .focus
+        default: nil
         }
     }
 
@@ -1198,6 +1340,20 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func render() {
+        if step != .objects {
+            let subjectID = model.highlighted?.id
+            let badges: [TargetOverlayBadge] = model.matches.compactMap { target in
+                guard target.id == subjectID, let frame = target.frame?.cgRect else { return nil }
+                return TargetOverlayBadge(label: target.label, title: target.title, kind: target.kind, isActive: target.isActive,
+                                          frame: RoadieScreenCoordinate.axRectToNS(frame), isHighlighted: true, isFramed: true, isSearchResult: true)
+            }
+            show(badges: badges, bar: TargetSearchBar(
+                query: stepQuery, matchCount: actionList.rows.filter { $0.id != nil }.count, properties: nil, isLoading: false,
+                suggestions: actionList.rows.map(Self.suggestion),
+                selectedSuggestion: actionList.rows.firstIndex { $0.id == actionSelection && $0.id != nil },
+                maxRows: Self.launcherRows))
+            return
+        }
         if let command = commandModel {
             // Mode commande : la saisie, la liste et le message, sans aucune cible.
             show(badges: [], bar: TargetSearchBar(
@@ -1236,6 +1392,26 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             maxRows: Self.launcherRows))
     }
 
+    /// Ligne des étapes verbe et destination.
+    private static func suggestion(_ row: LauncherActionList.Row) -> SlashSuggestion {
+        switch row {
+        case .header(let title):
+            return SlashSuggestion(text: title, kind: .header)
+        case .verb(let verb):
+            return SlashSuggestion(text: verb.title, detail: verb.needsDestination ? "Tab ou Retour : choisir" : "",
+                                   kind: .result, icon: .symbol(verb.needsDestination ? "arrow.right.circle" : "play.circle"))
+        case .destination(let verb, let destination):
+            let symbol = switch destination.kind {
+            case .stage: "square.stack.3d.up"
+            case .desktop: "rectangle.on.rectangle"
+            case .display: "display"
+            case .newStage: "plus.square.on.square"
+            }
+            return SlashSuggestion(text: "\(verb.destinationPrefix) \(destination.title)", detail: destination.detail,
+                                   kind: .result, icon: .symbol(symbol))
+        }
+    }
+
     /// Ligne du lanceur dessinée par la barre : en-tête, application avec son icône, ou cible.
     private static func suggestion(_ row: LauncherList.Row) -> SlashSuggestion {
         switch row {
@@ -1262,9 +1438,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         bar.usesNativeInput = true
         let barWindow = pointerScreen.flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
         searchBarLayout = barWindow.map { bar.layout(in: $0.frame, style: style) }
-        inputPanel?.labelsEnabled = commandModel == nil && !model.query.isEmpty
+        inputPanel?.labelsEnabled = step == .objects && commandModel == nil && !model.query.isEmpty
+        inputPanel?.field.placeholderString = switch step {
+        case .objects: "Rechercher ou saisir /commande"
+        case .verbs: "Verbe ou destination…"
+        case .destinations: "Stage, bureau ou écran…"
+        }
         if let layout = searchBarLayout {
-            inputPanel?.update(text: commandModel.map { "/" + $0.input } ?? model.query,
+            let text = step != .objects ? stepQuery : commandModel.map { "/" + $0.input } ?? model.query
+            inputPanel?.update(text: text,
                 frame: SearchBarRenderer.inputFrame(bar, bar: layout.bar, style: style),
                 font: SearchBarRenderer.font(family: style.searchFontFamily, size: style.searchTextFontSize))
         }

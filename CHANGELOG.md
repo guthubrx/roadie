@@ -12,6 +12,13 @@ jour et les limites connues ; les README décrivent la version courante.
   avec leur icône. Correspondance par initiales, classement qui apprend vos choix.
   Retour va à la fenêtre d'une application déjà ouverte, dans sa stage et son bureau,
   ou ouvre l'application.
+- Verbes et destinations du lanceur : Tab sur une ligne ouvre ses verbes (ouvrir dans
+  une stage, envoyer une fenêtre vers une stage, un bureau ou un écran, déplacer une
+  stage ou un bureau, réunir les fenêtres d'une application, masquer, quitter…).
+  « Nouvelle stage » crée la stage visée. `fire`, Tab, `perso`, Retour ouvre Firefox
+  dans la stage Perso.
+- Maj + étiquette choisit de nouveau une cible à l'écran dans la barre de recherche ;
+  le champ natif écrivait une majuscule.
 
 ## 0.10.0 - 2026-10-25
 
