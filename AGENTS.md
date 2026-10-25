@@ -242,6 +242,10 @@ Session 077 installée : fichiers dans le lanceur (Spotlight), fichier déjà ou
 stage du dossier, Finder, Quick Look, ⌘C, `roadie launch`. 1 997 tests, santé 5/5.
 Session 078 installée : aperçu actif du lanceur (vraies fenêtres déplacées, fantôme, Échap
 restaure, disposition suspendue au plus 1,5 s sans renouvellement). 2 001 tests, santé 5/5.
+Session 083 installée : fenêtre neuve gardée sur l'écran actif (rattachement physique après
+5 s seulement), refus de taille répété durable (T3 Code), écriture annulée deux fois retenue
+(émulateur), fenêtres retirées par leur application marquées fermées (AlDente 781).
+2 006 tests / 269 suites, santé 5/5. Reçu : specs/083-stabilite-placement/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

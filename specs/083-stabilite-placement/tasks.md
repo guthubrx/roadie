@@ -9,4 +9,4 @@
   `acceptedThenRevertedFrameIsNotRewrittenByEverySafetyPass` (12 écritures sans, au plus 3 avec).
 - [x] T4 Membres retirés marqués fermés (`closeRetiredMembers`,
   `WindowSwitcherService.retiredWindows(pids:)`) ; `Spec083RetiredMembersTests`.
-- [ ] T5 Suite complète, installation, contrôle réel, intégration.
+- [x] T5 Suite complète, installation, contrôle réel, intégration.
