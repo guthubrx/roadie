@@ -240,6 +240,8 @@ Session 076 installée : classement du lanceur selon la stage active, vignettes 
 fenêtres avec pastille. 1 989 tests, santé 5/5.
 Session 077 installée : fichiers dans le lanceur (Spotlight), fichier déjà ouvert → sa fenêtre,
 stage du dossier, Finder, Quick Look, ⌘C, `roadie launch`. 1 997 tests, santé 5/5.
+Session 078 installée : aperçu actif du lanceur (vraies fenêtres déplacées, fantôme, Échap
+restaure, disposition suspendue au plus 1,5 s sans renouvellement). 2 001 tests, santé 5/5.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
