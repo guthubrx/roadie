@@ -246,6 +246,8 @@ Session 083 installée : fenêtre neuve gardée sur l'écran actif (rattachement
 5 s seulement), refus de taille répété durable (T3 Code), écriture annulée deux fois retenue
 (émulateur), fenêtres retirées par leur application marquées fermées (AlDente 781).
 2 006 tests / 269 suites, santé 5/5. Reçu : specs/083-stabilite-placement/validation.md.
+Session 079 installée : phrase complète FR/EN (`fire perso gauche`), ⌘S garde une action
+(abréviation, commande `roadie launch … --position …`). 2 008 tests, santé 5/5.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
