@@ -1321,7 +1321,8 @@ public final class TargetModeRuntimeController: NSObject {
     }
 
     private func rememberFolder(_ file: LauncherFile, in scope: StageScope?) {
-        guard let scope else { return }
+        // Dossiers de l'utilisateur seulement : un fichier temporaire ne crée pas d'habitude (audit V15 F4).
+        guard let scope, LauncherFileRules.isShown(file.path) else { return }
         let stage = service.effectiveStageStore.state().scopes.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
             .stages.first { $0.id == scope.stageID }
         LauncherRankingStore().recordVisit("folder:\(file.folder)", query: "", context: LauncherSearchContext.rankingContext(scope, stage: stage))

@@ -20,6 +20,8 @@ struct Spec077FileRulesTests {
         #expect(!LauncherFileRules.isShown("/Users/x/projet/.build/a.txt", home: home))
         #expect(!LauncherFileRules.isShown("/Users/x/projet/node_modules/a/readme.md", home: home))
         #expect(!LauncherFileRules.isShown("/Applications/A.app", home: home))
+        // Même règle pour la stage d'un dossier : un fichier temporaire n'en crée pas (audit V15 F4).
+        #expect(!LauncherFileRules.isShown("/private/tmp/roadie-077/essai.txt", home: home))
     }
 
     @Test func mostRecentlyUsedFirst() {
