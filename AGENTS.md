@@ -250,6 +250,8 @@ Session 079 installée : phrase complète FR/EN (`fire perso gauche`), ⌘S gard
 (abréviation, commande `roadie launch … --position …`). 2 008 tests, santé 5/5.
 Session 080 installée : projets de stage (enregistrer, rouvrir aux mêmes cadres, même après
 redémarrage), `roadie project save|open|list|delete`. 2 017 tests, santé 5/5.
+Session 081 installée : barre vide utile, `roadie undo`, règles proposées avec chip. Les
+fichiers du lanceur suivent `TestEnvironment.launcherFile`. 2 024 tests, santé 5/5.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
