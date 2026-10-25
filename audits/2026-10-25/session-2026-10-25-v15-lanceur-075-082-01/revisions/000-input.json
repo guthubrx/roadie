@@ -1,0 +1,595 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261025T212556835406Z/run.json",
+          "sha256": "c2fb1071003d3e6ef7caf6389f1c1a7bc21b8abb7d9e30a6fe430a363a738621"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261025T212600735155Z/run.json",
+          "sha256": "64b13b90810de155e9c5d17256543fa2e51b3f5d6bf8bcf008824a5089aab893"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s).  Historique limité à 410ed34ac5959d650802d074ed2d757a53dd7ea0..5400a7bc167b0d96777c7603738441997367102b; les commits antérieurs sont hors périmètre.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261025T212601614952Z/run.json",
+          "sha256": "623eb3983d86f41046d0433caf31d57b58d0816d61647a6ab7e1a6fd6a9abbfc"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "unknown",
+      "rationale": "error, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261025T212601042448Z/run.json",
+          "sha256": "aef0f257f2315228943a42a9504f6dbccefcd334149dd246f332fcbc37ce966e"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "spec082.tabs-on-open",
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "symbol": "TargetModeRuntimeController.openItems",
+      "instance": "browser-tabs-read-at-bar-open",
+      "line": 1,
+      "category": "quality",
+      "title": "Onglets lus à chaque ouverture de la barre : demande d'automatisation sans geste lié",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "openItems interroge chaque navigateur scriptable ouvert dès l'ouverture de la barre ; la première fois macOS demande l'automatisation par navigateur, ensuite un osascript par navigateur à chaque ouverture (2 s au plus, en fond).",
+      "remediation": "Décision de conception : lire les onglets à la première frappe ou derrière un réglage.",
+      "requirements": [
+        "FR-002"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Motifs et sites recensés dans notes/variantes.md.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "3a0ddb5f7dcc15480eded9d491540327301a96ab24e955e1cdac709f6682a95a"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "da06d9e547fa36a8876ddceda72557fe1cb501a92e2477da9a58bb62f876d1da"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "sha256": "0203ffeb37c1b4670317b573d945a093dcef7048471f58152b97c7b283e24041"
+        }
+      ]
+    },
+    {
+      "rule_id": "spec081.sync-move-write",
+      "file": "Sources/RoadieDaemon/LauncherMemory.swift",
+      "symbol": "LauncherMemoryStore.record",
+      "instance": "json-rewrite-per-move",
+      "line": 1,
+      "category": "performance",
+      "title": "Relecture et réécriture du journal des déplacements à chaque affectation",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "record lit puis écrit un JSON de 200 entrées au plus sur le fil principal à chaque déplacement ; événement rare et borné.",
+      "remediation": "Cache mémoire et écriture différée si un coût est mesuré.",
+      "requirements": [
+        "FR-001"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Motifs et sites recensés dans notes/variantes.md.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "3a0ddb5f7dcc15480eded9d491540327301a96ab24e955e1cdac709f6682a95a"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "da06d9e547fa36a8876ddceda72557fe1cb501a92e2477da9a58bb62f876d1da"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/LauncherMemory.swift",
+          "sha256": "a6ad65f6622bfb6541593651e6835d871782e19754dfcc7bb06b3f6d45121148"
+        }
+      ]
+    },
+    {
+      "rule_id": "spec077.first-unknown-window",
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "symbol": "TargetModeRuntimeController.placeNewWindow",
+      "instance": "first-new-window-of-bundle",
+      "line": 1,
+      "category": "correctness",
+      "title": "Première fenêtre nouvelle du paquet prise comme fenêtre ouverte par le lanceur",
+      "severity": "LOW",
+      "confidence": "medium",
+      "status": "confirmed",
+      "rationale": "Une fenêtre ouverte par l'utilisateur dans les 10 s serait rangée à la place ; limite connue depuis 074, reprise par 077 et 080.",
+      "remediation": "Accepter la limite documentée ou relier la fenêtre au document ouvert (AXDocument) quand il est exposé.",
+      "requirements": [
+        "FR-004"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Motifs et sites recensés dans notes/variantes.md.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "3a0ddb5f7dcc15480eded9d491540327301a96ab24e955e1cdac709f6682a95a"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "da06d9e547fa36a8876ddceda72557fe1cb501a92e2477da9a58bb62f876d1da"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "sha256": "0203ffeb37c1b4670317b573d945a093dcef7048471f58152b97c7b283e24041"
+        }
+      ]
+    },
+    {
+      "rule_id": "spec077.folder-stage-temp",
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "symbol": "TargetModeRuntimeController.rememberFolder",
+      "instance": "folder-outside-home-recorded",
+      "line": 1,
+      "category": "correctness",
+      "title": "Stage mémorisée pour des dossiers hors du dossier personnel",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "rememberFolder enregistrait folder:<dossier> pour tout fichier, dont /tmp : 4 entrées observées dans le classement réel.",
+      "remediation": "Même règle que la recherche : LauncherFileRules.isShown.",
+      "requirements": [
+        "FR-004"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Motifs et sites recensés dans notes/variantes.md.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "3a0ddb5f7dcc15480eded9d491540327301a96ab24e955e1cdac709f6682a95a"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "da06d9e547fa36a8876ddceda72557fe1cb501a92e2477da9a58bb62f876d1da"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F4-rememberFolder.swift.txt",
+          "sha256": "747a7fdb3f9572d517f330a473298e4748d3283f7794400291b447bc2fb8825a"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "sha256": "0203ffeb37c1b4670317b573d945a093dcef7048471f58152b97c7b283e24041"
+        }
+      ]
+    }
+  ],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Analyse statique et validation des entrées",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Protection des secrets courants",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Maîtrise des secrets historiques",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Authentification et séparation des droits",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Maîtrise des dépendances vulnérables",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "À examiner : Confidentialité et pseudonymisation",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "À examiner : Permissions des appels externes",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "À examiner : Résistance aux instructions malveillantes",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Conservation et rotation des sauvegardes",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Reprise des traitements interrompus",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Continuité pendant une bascule",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Restauration après sinistre",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Typage des sources et des tests",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Analyse de style et erreurs statiques",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Régressions et cas limites",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Qualification du runtime livré",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Tests interface et intégration des données",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Admission et saturation des demandes",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Budget mémoire",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Délais, annulation et libération",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Mesures représentatives de latence et charge",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "À examiner : Complexité des points d’entrée",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "À examiner : Bornes des parcours et allocations",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "À examiner : Coût des accès et écritures de données",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "À examiner : Gestion des refus et messages utilisateur",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "À examiner : Gestion des erreurs partielles",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "À examiner : Ergonomie des parcours concernés",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Frontières et résolution des dépendances",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Maîtrise des cycles",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Séparation construction et exécution",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Assemblages et dépendances dynamiques",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "À examiner : Invariants et compromis expliqués",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "À examiner : Périmètre et maintenabilité du changement",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "À examiner : Revue contradictoire et responsabilité",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "À examiner : Dépendances nécessaires en exploitation",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "À examiner : Poids et ressources justifiés",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "À examiner : Code mort et simplifications possibles",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "À examiner : Fidélité des données lues",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "À examiner : Cohérence et idempotence des versions",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "À examiner : Conformité aux règles et données de référence",
+      "evidence": []
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pending",
+      "rationale": "À examiner : Lien constats, corrections et preuves",
+      "evidence": []
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pending",
+      "rationale": "À examiner : Couverture des exigences obligatoires",
+      "evidence": []
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : non mesuré.",
+  "responsibility": "Vertus LLM et responsabilité future : non vérifiées."
+}

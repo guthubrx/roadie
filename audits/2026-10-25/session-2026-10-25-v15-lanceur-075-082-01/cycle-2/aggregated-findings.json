@@ -1,0 +1,210 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": true,
+    "decision": "inconclusive"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 1,
+    "low": 2,
+    "info": 0,
+    "total": 3,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "spec082.tabs-on-open",
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "symbol": "TargetModeRuntimeController.openItems",
+      "instance": "browser-tabs-read-at-bar-open",
+      "line": 1,
+      "category": "quality",
+      "title": "Onglets lus à chaque ouverture de la barre : demande d'automatisation sans geste lié",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "openItems interroge chaque navigateur scriptable ouvert dès l'ouverture de la barre ; la première fois macOS demande l'automatisation par navigateur, ensuite un osascript par navigateur à chaque ouverture (2 s au plus, en fond).",
+      "remediation": "Décision de conception : lire les onglets à la première frappe ou derrière un réglage.",
+      "requirements": [
+        "FR-002"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Motifs et sites recensés dans notes/variantes.md.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "3a0ddb5f7dcc15480eded9d491540327301a96ab24e955e1cdac709f6682a95a"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "da06d9e547fa36a8876ddceda72557fe1cb501a92e2477da9a58bb62f876d1da"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "sha256": "a5bc044c079c63a34def4d9819db363ac246075e3452577f6521253538a07f75"
+        }
+      ],
+      "fingerprint": "6c2f280f713e8268dccf"
+    },
+    {
+      "rule_id": "spec081.sync-move-write",
+      "file": "Sources/RoadieDaemon/LauncherMemory.swift",
+      "symbol": "LauncherMemoryStore.record",
+      "instance": "json-rewrite-per-move",
+      "line": 1,
+      "category": "performance",
+      "title": "Relecture et réécriture du journal des déplacements à chaque affectation",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "record lit puis écrit un JSON de 200 entrées au plus sur le fil principal à chaque déplacement ; événement rare et borné.",
+      "remediation": "Cache mémoire et écriture différée si un coût est mesuré.",
+      "requirements": [
+        "FR-001"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Motifs et sites recensés dans notes/variantes.md.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "3a0ddb5f7dcc15480eded9d491540327301a96ab24e955e1cdac709f6682a95a"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "da06d9e547fa36a8876ddceda72557fe1cb501a92e2477da9a58bb62f876d1da"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/LauncherMemory.swift",
+          "sha256": "a6ad65f6622bfb6541593651e6835d871782e19754dfcc7bb06b3f6d45121148"
+        }
+      ],
+      "fingerprint": "56e14d0ca2dd44b94be5"
+    },
+    {
+      "rule_id": "spec077.first-unknown-window",
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "symbol": "TargetModeRuntimeController.placeNewWindow",
+      "instance": "first-new-window-of-bundle",
+      "line": 1,
+      "category": "correctness",
+      "title": "Première fenêtre nouvelle du paquet prise comme fenêtre ouverte par le lanceur",
+      "severity": "LOW",
+      "confidence": "medium",
+      "status": "confirmed",
+      "rationale": "Une fenêtre ouverte par l'utilisateur dans les 10 s serait rangée à la place ; limite connue depuis 074, reprise par 077 et 080.",
+      "remediation": "Accepter la limite documentée ou relier la fenêtre au document ouvert (AXDocument) quand il est exposé.",
+      "requirements": [
+        "FR-004"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Motifs et sites recensés dans notes/variantes.md.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "3a0ddb5f7dcc15480eded9d491540327301a96ab24e955e1cdac709f6682a95a"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "da06d9e547fa36a8876ddceda72557fe1cb501a92e2477da9a58bb62f876d1da"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "sha256": "a5bc044c079c63a34def4d9819db363ac246075e3452577f6521253538a07f75"
+        }
+      ],
+      "fingerprint": "e934ab814bd6eca2f45a"
+    },
+    {
+      "rule_id": "spec077.folder-stage-temp",
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "symbol": "TargetModeRuntimeController.rememberFolder",
+      "instance": "folder-outside-home-recorded",
+      "line": 1,
+      "category": "correctness",
+      "title": "Stage mémorisée pour des dossiers hors du dossier personnel",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "rememberFolder enregistrait folder:<dossier> pour tout fichier, dont /tmp : 4 entrées observées dans le classement réel.",
+      "remediation": "Même règle que la recherche : LauncherFileRules.isShown.",
+      "requirements": [
+        "FR-004"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Motifs et sites recensés dans notes/variantes.md.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "3a0ddb5f7dcc15480eded9d491540327301a96ab24e955e1cdac709f6682a95a"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "da06d9e547fa36a8876ddceda72557fe1cb501a92e2477da9a58bb62f876d1da"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F4-rememberFolder.swift.txt",
+          "sha256": "747a7fdb3f9572d517f330a473298e4748d3283f7794400291b447bc2fb8825a"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "sha256": "a5bc044c079c63a34def4d9819db363ac246075e3452577f6521253538a07f75"
+        }
+      ],
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Règle isShown appliquée à rememberFolder ; test Spec077FileRulesTests (chemin /private/tmp refusé) ; suite complète réussie en révision 1.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261025T213047425423Z/run.json",
+            "sha256": "11a59f4ef699006b09fe01a3fc466783a00abc05fd5be4c42c874c9d8a498580"
+          },
+          {
+            "kind": "source",
+            "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+            "sha256": "a5bc044c079c63a34def4d9819db363ac246075e3452577f6521253538a07f75"
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/Spec077FilesTests.swift",
+            "sha256": "f49807733661f1e556457a29b6be93315b4339e11de910b0ac38797945fd2887"
+          }
+        ]
+      },
+      "fingerprint": "e7d13c65f45b5aacae8c"
+    }
+  ],
+  "suppressed": []
+}

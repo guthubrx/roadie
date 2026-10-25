@@ -1,0 +1,31 @@
+{
+  "protocol": "15.0.0",
+  "grade": "N/A",
+  "score": 95,
+  "date": "2026-10-25",
+  "spec": "non précisée",
+  "scope": "Lanceur Capslock+F, sessions 075 à 082",
+  "decision": "inconclusive",
+  "release_blocked": true,
+  "coverage_percent": 92.86,
+  "controls_verified": 13,
+  "controls_applicable": 14,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 1,
+    "low": 2,
+    "info": 0,
+    "total": 3,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [
+    "contrôle non vérifié : security.dependencies",
+    "outil osv-scanner: error"
+  ],
+  "source_drift": [],
+  "input_sha256": "409c2a81c69f4b61b675e88719b06b7107a850839d5a971c0d2a2378919eb74c",
+  "manifest_sha256": "5b2edbfd386927a6b18c49c17816d4b70fcf824e224d30d4b84bcbb2cb34365f",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}
