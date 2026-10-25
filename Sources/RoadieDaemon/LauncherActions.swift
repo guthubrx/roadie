@@ -7,11 +7,14 @@ import RoadieCore
 enum LauncherSubject: Equatable, Sendable {
     case app(LauncherApp)
     case target(RoadieTarget)
+    /// Fichier ou dossier trouvé par Spotlight (SPEC-077).
+    case file(LauncherFile)
 
     var title: String {
         switch self {
         case .app(let app): app.name
         case .target(let target): target.subtitle.isEmpty ? target.title : "\(target.title) · \(target.subtitle)"
+        case .file(let file): file.name
         }
     }
 
@@ -19,14 +22,16 @@ enum LauncherSubject: Equatable, Sendable {
         switch self {
         case .app(let app): app.rankingKey
         case .target(let target): LauncherList.rankingKey(target)
+        case .file(let file): file.rankingKey
         }
     }
 
-    /// Nom de l'application : celui de l'application, ou celui que porte une fenêtre.
+    /// Nom de l'application : celui de l'application, ou celui que porte une fenêtre ; d'un fichier, son nom.
     var appName: String {
         switch self {
         case .app(let app): app.name
         case .target(let target): target.title
+        case .file(let file): file.name
         }
     }
 }
@@ -51,6 +56,8 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     case focus, sendTo, float, fullscreen, minimize, close
     // Fenêtre : tuilage de cette fenêtre ou de toute son application (SPEC-075).
     case tileWindow, floatAlways, tileAlways, clearTilingRule
+    // Fichier (SPEC-077).
+    case reveal, quickLook, copyPath
     // Stage, bureau
     case show, moveTo
     // Cible à l'écran
@@ -72,6 +79,9 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .floatAlways: "Toujours faire flotter l'application"
         case .tileAlways: "Toujours tuiler l'application"
         case .clearTilingRule: "Retirer la règle de flottement"
+        case .reveal: "Montrer dans le Finder"
+        case .quickLook: "Aperçu (Quick Look)"
+        case .copyPath: "Copier le chemin"
         case .fullscreen: "Plein écran"
         case .minimize: "Réduire"
         case .close: "Fermer la fenêtre"
@@ -112,6 +122,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     static func verbs(for subject: LauncherSubject, tiling: LauncherTilingState? = nil) -> [LauncherVerb] {
         switch subject {
         case .app: return [.open, .openIn, .bringHere, .newWindow, .gatherIn, .hide, .quit]
+        case .file: return [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath]
         case .target(let target):
             switch target.kind {
             case .window: return [.focus, .sendTo, .bringHere] + tilingVerbs(tiling) + [.fullscreen, .minimize, .close]
@@ -218,7 +229,11 @@ struct LauncherVariant: Equatable, Sendable {
     static func of(_ subject: LauncherSubject, modifier: LauncherModifier, query: String,
                    newStageHome: (DisplayID, DesktopID), activeStage: StageScope?) -> LauncherVariant? {
         let window: RoadieTarget? = if case .target(let target) = subject, target.kind == .window { target } else { nil }
-        let isApp = if case .app = subject { true } else { false }
+        // Un fichier se comporte comme une application : il s'ouvre, dans une stage ou ici.
+        let isApp = switch subject {
+        case .app, .file: true
+        case .target: false
+        }
         switch modifier {
         case .control:
             let text = query.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -908,6 +908,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var heldModifier: LauncherModifier?
     /// Rangs ⌘1 à ⌘9 : index des lignes montrées, dans l'ordre, calculés avec la géométrie.
     private var pickRows: [Int] = []
+    /// Fichiers de Spotlight pour la saisie `filesQuery` (SPEC-077) ; `filesChanged` force la liste.
+    private let fileSearch = LauncherFileSearch()
+    private var files: [LauncherFile] = []
+    private var filesQuery: String?
+    private var filesChanged = false
+    /// Ligne copiée par ⌘C : son détail le dit jusqu'à la frappe suivante.
+    private var copiedRowID: String?
 
     init(
         targets: [RoadieTarget],
@@ -1088,6 +1095,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 finishLaunching(app)
                 return
             }
+            if case .file(let file)? = launcherList.row(for: launcherSelection) {
+                finishAction(LauncherAction(subject: .file(file), verb: .open, destination: nil))
+                return
+            }
             guard let target = model.highlighted else { return }
             if let verb = model.pressReturn(shift: shift, command: command, at: Date()) {
                 finishActivating(target, verb)
@@ -1111,6 +1122,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .pick(let rank):
             pick(rank)
             return
+        case .copy:
+            copySelection()
+        case .preview:
+            if case .file(let file)? = launcherList.row(for: launcherSelection) {
+                finishAction(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil))
+                return
+            }
         case .escape, .confirm, .ignored:
             break
         }
@@ -1124,6 +1142,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             switch launcherList.row(for: launcherSelection) {
             case .app(let app, _): enterVerbs(.app(app))
             case .target(let target): enterVerbs(.target(target))
+            case .file(let file): enterVerbs(.file(file))
             case .header, nil: model.handleNavigation(input)
             }
             return
@@ -1141,7 +1160,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func syncHighlight() {
         switch launcherList.row(for: launcherSelection) {
         case .target(let target): model.highlight(targetID: target.id)
-        case .app: model.highlight(targetID: nil)
+        case .app, .file: model.highlight(targetID: nil)
         case .header, nil: break
         }
     }
@@ -1149,15 +1168,49 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Recalcule la liste si la requête ou les cibles ont changé. Nouvelle requête : la meilleure
     /// ligne est choisie ; nouvelles cibles seulement : la ligne choisie est gardée si elle reste. O(a + n).
     private func refreshLauncher() {
+        refreshFiles()
         let ids = model.matches.map(\.id)
-        guard model.query != launcherQuery || ids != launcherTargetIDs else { return }
+        guard model.query != launcherQuery || ids != launcherTargetIDs || filesChanged else { return }
         let queryChanged = model.query != launcherQuery
+        if queryChanged { copiedRowID = nil }
         launcherQuery = model.query
         launcherTargetIDs = ids
+        filesChanged = false
         launcherList = LauncherList(query: model.query, apps: launcher.apps, details: launcher.details,
-                                    targets: model.matches, ranking: launcher.ranking, now: Date(), context: launcher.rankingContext)
+                                    targets: model.matches, ranking: launcher.ranking, now: Date(), context: launcher.rankingContext,
+                                    files: files)
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
         syncHighlight()
+    }
+
+    /// Nouvelle saisie : les fichiers qui la contiennent encore restent affichés pendant que Spotlight
+    /// cherche ; sa réponse ne sert que si la saisie n'a pas changé entre-temps. O(f).
+    private func refreshFiles() {
+        guard model.query != filesQuery else { return }
+        let query = model.query
+        filesQuery = query
+        let needle = LauncherMatch.fold(LauncherFileRules.needle(query))
+        files = needle.isEmpty ? [] : files.filter { LauncherMatch.fold($0.name).contains(needle) }
+        fileSearch.search(query) { [weak self] found in
+            guard let self, !self.finished, self.model.query == query, self.step == .objects else { return }
+            self.files = found
+            self.filesChanged = true
+            self.render()
+        }
+    }
+
+    /// ⌘C : chemin d'un fichier ou d'une application, titre d'une fenêtre ou d'une cible (SPEC-077).
+    private func copySelection() {
+        let text: String? = switch launcherList.row(for: launcherSelection) {
+        case .app(let app, _): app.path
+        case .file(let file): file.path
+        case .target(let target): target.subtitle.isEmpty ? target.title : "\(target.title) - \(target.subtitle)"
+        case .header, nil: nil
+        }
+        guard let text else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copiedRowID = launcherSelection
     }
 
     private var selectedLauncherRow: Int? { launcherList.rows.firstIndex { $0.id == launcherSelection && $0.id != nil } }
@@ -1167,6 +1220,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch launcherList.row(for: launcherSelection) {
         case .app(let app, _): finishLaunching(app)
         case .target(let target): finishActivating(target, target.source == .app ? .click : (target.actions.first ?? .focus))
+        case .file(let file): finishAction(LauncherAction(subject: .file(file), verb: .open, destination: nil))
         case .header, nil: break
         }
     }
@@ -1245,7 +1299,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             guard !isRepeat else { return }
             confirmStep()
             return
-        case .text, .labelCharacter, .ignored:
+        case .text, .labelCharacter, .ignored, .copy, .preview:
             break
         }
         render()
@@ -1278,6 +1332,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch launcherList.row(for: launcherSelection) {
         case .app(let app, _): subject = .app(app)
         case .target(let target): subject = .target(target)
+        case .file(let file): subject = .file(file)
         case .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
@@ -1485,6 +1540,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         if let modifier = heldModifier, let index = selectedLauncherRow, let variant = currentVariant(modifier) {
             suggestions[index].detail = variant.title
         }
+        if let copied = copiedRowID, let index = launcherList.rows.firstIndex(where: { $0.id == copied }) {
+            suggestions[index].detail = "Copié dans le presse-papiers"
+        }
         show(badges: badges, bar: TargetSearchBar(
             query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading,
             suggestions: suggestions, selectedSuggestion: selectedLauncherRow,
@@ -1533,6 +1591,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 .window(id, app: appPaths[target.title])
             } else { .symbol(symbol) }
             return SlashSuggestion(text: label + target.title, detail: target.subtitle, kind: .result, icon: icon)
+        case .file(let file):
+            return SlashSuggestion(text: file.name, detail: file.location, kind: .result, icon: .file(file.path))
         }
     }
 
@@ -1584,6 +1644,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func cleanup() {
+        fileSearch.cancel()
         model.cancelPendingReturn()
         searchBarLayout = nil
         timer?.invalidate()
@@ -1670,7 +1731,7 @@ extension SlashCommandModel {
             }
         case .escape:
             return .close
-        case .ignored, .pick, .actions:
+        case .ignored, .pick, .actions, .copy, .preview:
             break
         }
         return .update
@@ -1705,6 +1766,9 @@ public struct SearchKeyInput: Sendable, Equatable {
         case pick(Int)
         /// → en fin de saisie : verbes de la ligne choisie, comme Tab (SPEC-075).
         case actions
+        /// ⌘C sans texte sélectionné : copier la ligne choisie ; ⌘Y : son aperçu (SPEC-077).
+        case copy
+        case preview
         case ignored
     }
 

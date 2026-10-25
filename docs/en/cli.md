@@ -262,6 +262,8 @@ roadie targets activate TARGET_ID_OR_LABEL --action right-click
 roadie targets activate TARGET_ID_OR_LABEL --action command-click
 roadie targets search
 roadie targets actions
+roadie launch ~/Documents/report.pdf --stage Perso
+roadie launch /Applications/Firefox.app --new-stage
 roadie targets show --json --labels-only
 roadie targets hide
 ```
@@ -275,7 +277,8 @@ actions return structured errors instead of silently falling back.
 
 `targets search` opens search mode (input bar, every visible window), like the
 configurable `search_hotkey` shortcut. `targets actions` opens it directly on the
-verbs of the active window, like `actions_hotkey`. See `docs/en/features.md`,
+verbs of the active window, like `actions_hotkey`. `launch PATH` opens a file, folder or
+app like Return in the bar, or in a stage with `--stage NAME` or `--new-stage`. See `docs/en/features.md`,
 Search mode section.
 
 In this bar, a `/` as the first character opens command mode. Its commands

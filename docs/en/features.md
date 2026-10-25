@@ -439,7 +439,15 @@ app, opens it in the active stage of the active display, unless an `assign_stage
 rule applies. Arrow keys move through the list; clicking a row activates it.
 The ranking also remembers the stage active when you choose: in "Com", `o` first offers
 what you usually pick there, in "Dev" something else. A named stage is known by its name,
-even after moving; at most six stages per item. Windows show their real thumbnail
+even after moving; at most six stages per item. **Files**: from 3 letters, Spotlight searches the home folder (outside `~/Library`,
+hidden items and `node_modules`) for folders, documents, text, images, PDFs, spreadsheets
+and presentations; a "Files" section shows icon and folder. A leading space or apostrophe
+searches files only (from 2 letters). Return goes to the window already showing the file
+(apps that expose their document: TextEdit, Preview, Pages…), otherwise opens it in the
+stage where you usually open files from that folder, or in the active stage. Verbs: open
+in…, bring here, reveal in Finder, preview, copy path. ⌘C with no text selected copies the
+selected row (path, title); ⌘Y shows the Quick Look preview.
+Windows show their real thumbnail
 (already captured by the rail, switcher or overview) with their app icon as a badge;
 without a thumbnail, the icon alone.
 

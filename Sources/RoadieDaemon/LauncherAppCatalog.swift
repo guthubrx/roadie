@@ -25,6 +25,9 @@ final class LauncherAppCatalog: @unchecked Sendable {
         "/System/Volumes/Preboot/Cryptexes/App/System/Applications",
         "~/Applications",
         "/System/Library/CoreServices/Finder.app",
+        // Utilitaires système (Échange de fichiers Bluetooth…) et outils de Xcode (SPEC-077).
+        "/System/Library/CoreServices/Applications",
+        "/Applications/Xcode.app/Contents/Applications",
     ]
 
     private let lock = NSLock()

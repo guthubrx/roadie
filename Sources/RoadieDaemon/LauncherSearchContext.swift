@@ -119,11 +119,26 @@ enum LauncherPlacement {
 
 /// Recherche web de ⌃ Retour (SPEC-075), reprise par le repli de la session 077.
 extension LauncherSearchContext {
-    /// Stage nommée : son nom, unique dans tout Roadie et stable quand elle change de bureau.
-    /// Stage anonyme : sa place. O(1).
+    /// Stage nommée (règle SPEC-067, hors « Stage N ») : son nom, unique dans tout Roadie et stable quand
+    /// elle change de bureau. Stage anonyme : sa place. O(1).
+    static func rankingContext(_ scope: StageScope, stage: PersistentStage?) -> String {
+        rankingContext(scope, name: stage.flatMap { StagePresentationOrder.isNamed($0) ? $0.name : nil })
+    }
+
     static func rankingContext(_ scope: StageScope, name: String?) -> String {
         let folded = name.map(LauncherMatch.fold) ?? ""
         return folded.isEmpty ? "scope:\(scope.description)" : "stage:\(folded)"
+    }
+
+    /// Stage qui porte cette identité de classement aujourd'hui (inverse de `rankingContext`). O(S).
+    static func stage(for context: String, in state: PersistentStageState) -> StageScope? {
+        for scope in state.scopes {
+            for stage in scope.stages {
+                let key = StageScope(displayID: scope.displayID, desktopID: scope.desktopID, stageID: stage.id)
+                if rankingContext(key, stage: stage) == context { return key }
+            }
+        }
+        return nil
     }
 }
 

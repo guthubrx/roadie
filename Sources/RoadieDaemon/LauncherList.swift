@@ -9,6 +9,7 @@ struct LauncherList: Equatable, Sendable {
         case header(String)
         case app(LauncherApp, detail: String)
         case target(RoadieTarget)
+        case file(LauncherFile)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -16,6 +17,7 @@ struct LauncherList: Equatable, Sendable {
             case .header: nil
             case .app(let app, _): app.rankingKey
             case .target(let target): "target:\(target.id)"
+            case .file(let file): file.rankingKey
             }
         }
 
@@ -25,24 +27,32 @@ struct LauncherList: Equatable, Sendable {
             case .header: nil
             case .app(let app, _): app.rankingKey
             case .target(let target): LauncherList.rankingKey(target)
+            case .file(let file): file.rankingKey
             }
         }
     }
 
     enum Section: Int, CaseIterable, Sendable {
-        case applications, windows, places, screen
+        case applications, windows, files, places, screen
 
         var title: String {
             switch self {
             case .applications: "Applications"
             case .windows: "Fenêtres"
+            case .files: "Fichiers"
             case .places: "Stages et bureaux"
             case .screen: "À l'écran"
             }
         }
 
         /// Lignes montrées au plus : la barre garde une hauteur raisonnable.
-        var limit: Int { self == .applications || self == .windows ? 4 : 3 }
+        var limit: Int {
+            switch self {
+            case .applications, .windows: 4
+            case .files: 5
+            case .places, .screen: 3
+            }
+        }
 
         static func of(_ kind: TargetKind) -> Section {
             switch kind {
@@ -73,20 +83,29 @@ struct LauncherList: Equatable, Sendable {
 
     /// `targets` : correspondances du mode recherche, déjà filtrées et ordonnées. `details` : état des
     /// applications par identifiant. O(a × q × t + n log n), a applications, n lignes retenues.
-    /// `context` : stage active (SPEC-076) ; ses choix passent avant ceux faits ailleurs.
-    init(query: String, apps: [LauncherApp], details: [String: String], targets: [RoadieTarget],
-         ranking: LauncherRanking, now: Date, context: String? = nil) {
+    /// `context` : stage active (SPEC-076) ; ses choix passent avant ceux faits ailleurs. `files` : réponses de
+    /// Spotlight, les plus récentes d'abord (SPEC-077) ; une espace en tête ne garde qu'elles.
+    init(query rawQuery: String, apps: [LauncherApp], details: [String: String], targets: [RoadieTarget],
+         ranking: LauncherRanking, now: Date, context: String? = nil, files: [LauncherFile] = []) {
+        let filesOnly = LauncherFileRules.filesOnly(rawQuery)
+        let query = filesOnly ? LauncherFileRules.needle(rawQuery) : rawQuery
         guard !LauncherMatch.fold(query).isEmpty else { return }
-        struct Candidate { let row: Row; let id: String; let key: String; let section: Section; let score: Int; let name: String }
+        struct Candidate { let row: Row; let id: String; let key: String; let section: Section; let score: Int; let name: String; var order = 0 }
         var candidates: [Candidate] = []
-        for app in apps {
+        for (order, file) in files.enumerated() {
+            // Spotlight a trouvé le nom par « contient » : retenu même si l'appariement est faible.
+            let score = LauncherMatch.score(query, in: file.name) ?? 1
+            candidates.append(Candidate(row: .file(file), id: file.rankingKey, key: file.rankingKey, section: .files,
+                                        score: score, name: file.name, order: order))
+        }
+        for app in filesOnly ? [] : apps {
             let score = ([app.name] + app.alternateNames).compactMap { LauncherMatch.score(query, in: $0) }.max()
                 ?? (ranking.exactUses(app.rankingKey, query: query) > 0 ? 1 : nil)
             guard let score else { continue }
             candidates.append(Candidate(row: .app(app, detail: details[app.bundleID] ?? Self.shortPath(app.path)), id: app.rankingKey, key: app.rankingKey,
                                         section: .applications, score: score, name: app.name))
         }
-        for target in targets {
+        for target in filesOnly ? [] : targets {
             // Trouvée par le texte de ses enfants seulement (lien web) : retenue, en dernier.
             let score = [target.title, target.subtitle].compactMap { LauncherMatch.score(query, in: $0) }.max() ?? 1
             candidates.append(Candidate(row: .target(target), id: "target:\(target.id)", key: Self.rankingKey(target),
@@ -107,6 +126,8 @@ struct LauncherList: Equatable, Sendable {
             if here.0 != here.1 { return here.0 > here.1 }
             let used = (ranking.frecency(a.key, at: now), ranking.frecency(b.key, at: now))
             if used.0 != used.1 { return used.0 > used.1 }
+            // Fichiers : l'ordre de Spotlight, du plus récemment utilisé au plus ancien.
+            if a.order != b.order { return a.order < b.order }
             if a.section != b.section { return a.section.rawValue < b.section.rawValue }
             return a.name.localizedStandardCompare(b.name) == .orderedAscending
         }

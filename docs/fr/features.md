@@ -456,6 +456,15 @@ application fermée, l'ouvre dans la stage active de l'écran actif, sauf règle
 Le classement retient aussi la stage active au moment du choix : dans « Com », `o`
 propose d'abord ce que vous y choisissez d'habitude, dans « Dev » autre chose. Une
 stage nommée est reconnue par son nom, même déplacée ; six stages au plus par objet.
+**Fichiers** : dès 3 lettres, Spotlight cherche dans le dossier personnel (hors
+`~/Library`, éléments cachés et `node_modules`) les dossiers, documents, textes, images,
+PDF, tableurs et présentations ; section « Fichiers » avec icône et dossier. Une espace
+ou une apostrophe en tête ne cherche que des fichiers (dès 2 lettres). Retour va à la
+fenêtre qui affiche déjà le fichier (applications qui exposent leur document : TextEdit,
+Aperçu, Pages…), sinon l'ouvre dans la stage où vous ouvrez d'habitude les fichiers de
+ce dossier, ou dans la stage active. Verbes : ouvrir dans…, amener ici, montrer dans le
+Finder, aperçu, copier le chemin. ⌘C sans texte sélectionné copie la ligne choisie
+(chemin, titre) ; ⌘Y montre l'aperçu Quick Look.
 Les fenêtres montrent leur vignette réelle (déjà capturée par le rail, le sélecteur ou
 la vue d'ensemble) avec l'icône de leur application en pastille ; sans vignette,
 l'icône seule.

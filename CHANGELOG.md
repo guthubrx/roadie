@@ -22,6 +22,9 @@ jour et les limites connues ; les README décrivent la version courante.
   couleur d'accent avec le rappel des touches. L'icône suit la taille du texte
   (deux fois la hauteur du nom), le nom est en graisse normale, les fenêtres
   montrent l'icône de leur application et les symboles sont posés sur une tuile.
+- Fichiers et dossiers dans le lanceur (Spotlight), recherche rapide avec une espace, un
+  fichier déjà ouvert mène à sa fenêtre, sinon il s'ouvre dans la stage de son dossier ;
+  Montrer dans le Finder, Quick Look (⌘Y), copie (⌘C) ; `roadie launch CHEMIN`.
 - Le classement du lanceur tient compte de la stage active ; les fenêtres montrent leur
   vignette réelle avec la pastille de leur application.
 - Touches du lanceur : ⌘, ⌥ et ⌃ + Retour ouvrent dans une nouvelle stage, amènent ici

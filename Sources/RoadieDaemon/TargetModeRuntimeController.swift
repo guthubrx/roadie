@@ -238,6 +238,11 @@ public final class TargetModeRuntimeController: NSObject {
             events.append(RoadieEvent(type: "target_mode.command_rejected", details: ["reason": "invalid_payload"]))
             return
         }
+        // `roadie launch` (SPEC-077) : aucune barre, la session ouverte n'est pas touchée.
+        if command.name == "launcher.launch" {
+            launch(command)
+            return
+        }
         // Raccourci de recherche maintenu ou répété : la recherche ouverte reste ouverte.
         if command.name == "targets.search", currentCommand == "targets.search", currentSession != nil {
             return
@@ -427,8 +432,8 @@ public final class TargetModeRuntimeController: NSObject {
             .map { StageScope(displayID: homeDisplay, desktopID: homeDesktop, stageID: $0.activeStageID) }
         let affinity = WindowRuleAffinityService(eventLog: events)
         let rankingContext = activeStage.map { scope in
-            LauncherSearchContext.rankingContext(scope, name: state.scopes.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
-                .stages.first { $0.id == scope.stageID }?.name)
+            LauncherSearchContext.rankingContext(scope, stage: state.scopes.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+                .stages.first { $0.id == scope.stageID })
         }
         let webSearchURL = service.effectiveConfig.experimental.targetMode.webSearchURL
         var context = LauncherSearchContext(
@@ -492,6 +497,8 @@ public final class TargetModeRuntimeController: NSObject {
                 return refused(label, "verb")
             }
             return TargetActionResult(changed: true, message: "\(label): \(app.bundleID)")
+        case .file(let file):
+            return performFile(action, file: file, label: label)
         case .target(let target):
             let result = perform(action.verb, on: target, destination: action.destination, label: label)
             // ⌘ Retour : Roadie va à la fenêtre envoyée dans sa nouvelle stage.
@@ -657,19 +664,161 @@ public final class TargetModeRuntimeController: NSObject {
                 _ = try? await NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: app.path), configuration: configuration)
             }
             guard let scope else { return }
-            for _ in 0..<50 {
-                try? await Task.sleep(for: .milliseconds(200))
-                let entries = await switcher.load().entries
-                guard let fresh = entries.first(where: { $0.window.bundleID == app.bundleID && !known.contains($0.id) }) else { continue }
-                let result = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
-                    .assign(windowID: fresh.id, to: scope.stageID, desktopID: scope.desktopID, displayID: scope.displayID)
-                events.append(RoadieEvent(type: "launcher.placed", details: [
-                    "bundleID": app.bundleID, "windowID": String(fresh.id.rawValue), "stage": scope.description, "message": result.message]))
-                if let placed = await switcher.load().entries.first(where: { $0.id == fresh.id }) { _ = switcher.activate(placed) }
+            await Self.placeNewWindow(bundleID: app.bundleID, known: known, into: scope, service: service, events: events)
+        }
+    }
+
+    /// Première fenêtre inconnue de ce paquet apparue en 10 s : elle rejoint la stage, une seule fois, puis
+    /// Roadie y va (intention de placement F5). Sans nouvelle fenêtre dans ce délai : rien n'est déplacé.
+    private static func placeNewWindow(bundleID: String, known: Set<WindowID>, into scope: StageScope,
+                                       service: SnapshotService, events: EventLog) async {
+        let switcher = WindowSwitcherService(service: service)
+        for _ in 0..<50 {
+            try? await Task.sleep(for: .milliseconds(200))
+            let entries = await switcher.load().entries
+            guard let fresh = entries.first(where: { $0.window.bundleID == bundleID && !known.contains($0.id) }) else { continue }
+            let result = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
+                .assign(windowID: fresh.id, to: scope.stageID, desktopID: scope.desktopID, displayID: scope.displayID)
+            events.append(RoadieEvent(type: "launcher.placed", details: [
+                "bundleID": bundleID, "windowID": String(fresh.id.rawValue), "stage": scope.description, "message": result.message]))
+            if let placed = await switcher.load().entries.first(where: { $0.id == fresh.id }) { _ = switcher.activate(placed) }
+            return
+        }
+        events.append(RoadieEvent(type: "launcher.placement_expired", details: ["bundleID": bundleID, "stage": scope.description]))
+    }
+
+    // MARK: - Fichiers (SPEC-077)
+
+    /// `roadie launch CHEMIN [--stage NOM | --new-stage]` : comme Retour dans la barre, ou comme « Ouvrir
+    /// dans… » avec une destination. Une stage inconnue refuse sans rien ouvrir.
+    private func launch(_ command: TargetModeRuntimeCommand) {
+        guard let path = command.string("path") else { return }
+        let state = service.effectiveStageStore.state()
+        var destination: LauncherDestination?
+        if let name = command.string("stage") {
+            guard let scope = LauncherSearchContext.stage(for: "stage:\(LauncherMatch.fold(name))", in: state) else {
+                _ = refused("launcher launch", "stage")
                 return
             }
-            events.append(RoadieEvent(type: "launcher.placement_expired", details: ["bundleID": app.bundleID, "stage": scope.description]))
+            destination = LauncherDestination(kind: .stage(scope), title: name, detail: "")
+        } else if command.bool("newStage") {
+            let display = state.activeDisplayID ?? service.snapshot(followFocus: false).displays.first?.id ?? DisplayID(rawValue: "none")
+            destination = LauncherDestination(kind: .newStage(name: nil, display, state.currentDesktopID(for: display)), title: "Nouvelle stage", detail: "")
         }
+        let url = URL(fileURLWithPath: path)
+        let subject: LauncherSubject
+        if url.pathExtension == "app", let bundle = Bundle(url: url), let id = bundle.bundleIdentifier {
+            let name = FileManager.default.displayName(atPath: path).replacingOccurrences(of: ".app", with: "")
+            subject = .app(LauncherApp(bundleID: id, path: path, name: name, alternateNames: []))
+        } else {
+            var isFolder: ObjCBool = false
+            FileManager.default.fileExists(atPath: path, isDirectory: &isFolder)
+            subject = .file(LauncherFile(path: path, name: url.lastPathComponent, isFolder: isFolder.boolValue, lastUsed: nil))
+        }
+        let result = perform(LauncherAction(subject: subject, verb: destination == nil ? .open : .openIn, destination: destination))
+        events.append(RoadieEvent(type: "launcher.launch", details: ["changed": String(result.changed), "message": result.message]))
+    }
+
+    /// Fichier : aller à la fenêtre qui l'affiche déjà, sinon l'ouvrir dans la stage voulue ; Finder,
+    /// Quick Look et copie du chemin. Aucun chemin n'est journalisé.
+    private func performFile(_ action: LauncherAction, file: LauncherFile, label: String) -> TargetActionResult {
+        let url = URL(fileURLWithPath: file.path)
+        switch action.verb {
+        case .reveal:
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        case .quickLook:
+            // `qlmanage -p` montre l'aperçu dans son propre processus, sans activer Roadie (research R4).
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/qlmanage")
+            process.arguments = ["-p", file.path]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try? process.run()
+        case .copyPath:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(file.path, forType: .string)
+        case .open, .openIn, .bringHere:
+            let explicit: StageScope? = switch action.verb {
+            case .openIn: action.destination.flatMap(stageScope)
+            case .bringHere: action.destination.flatMap(stageScope) ?? activeStageScope()
+            default: nil
+            }
+            if action.verb == .openIn, explicit == nil { return refused(label, "destination") }
+            openFile(file, verb: action.verb, into: explicit)
+        default:
+            return refused(label, "verb")
+        }
+        return TargetActionResult(changed: true, message: "\(label): file")
+    }
+
+    /// Fenêtre qui affiche déjà le fichier : Roadie y va (et l'amène dans `explicit` si donnée). Sinon,
+    /// le fichier s'ouvre avec son application par défaut ; sa nouvelle fenêtre rejoint `explicit`, ou la
+    /// stage de son dossier, ou la stage active (règle des nouvelles fenêtres).
+    private func openFile(_ file: LauncherFile, verb: LauncherVerb, into explicit: StageScope?) {
+        let service = service
+        let events = events
+        let url = URL(fileURLWithPath: file.path)
+        Task { @MainActor in
+            let switcher = WindowSwitcherService(service: service)
+            let entries = await switcher.load().entries
+            let appURL = NSWorkspace.shared.urlForApplication(toOpen: url)
+            let bundle = appURL.flatMap { Bundle(url: $0)?.bundleIdentifier }
+            let found = await LauncherDocuments.window(showing: file.path, in: entries, preferredBundle: bundle)
+            if let window = found.window {
+                if let explicit, window.scope != explicit {
+                    _ = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
+                        .assign(windowID: window.id, to: explicit.stageID, desktopID: explicit.desktopID, displayID: explicit.displayID)
+                }
+                if let placed = await switcher.load().entries.first(where: { $0.id == window.id }) { _ = switcher.activate(placed) }
+                self.rememberFolder(file, in: explicit ?? window.scope)
+                events.append(RoadieEvent(type: "launcher.file", details: [
+                    "verb": verb.rawValue, "outcome": "focused", "bundleID": window.window.bundleID,
+                    "documentApps": found.exposing.joined(separator: ","), "scanned": found.scanned]))
+                return
+            }
+            let scope = explicit ?? (verb == .open ? self.folderStage(file) : nil)
+            let known = Set(entries.filter { $0.window.bundleID == bundle }.map(\.id))
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            if let appURL {
+                _ = try? await NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration)
+            } else {
+                NSWorkspace.shared.open(url)
+            }
+            self.rememberFolder(file, in: scope ?? self.activeStageScope())
+            events.append(RoadieEvent(type: "launcher.file", details: [
+                "verb": verb.rawValue, "outcome": scope == nil ? "opened" : "placing", "bundleID": bundle ?? "",
+                "documentApps": found.exposing.joined(separator: ","), "scanned": found.scanned]))
+            if let scope, let bundle {
+                await Self.placeNewWindow(bundleID: bundle, known: known, into: scope, service: service, events: events)
+            }
+        }
+    }
+
+    /// Stage où s'ouvrent le plus souvent les fichiers de ce dossier ou d'un parent (trois niveaux au
+    /// plus), d'après le classement par stage (076, clé `folder:`). O(4 × c + S).
+    private func folderStage(_ file: LauncherFile) -> StageScope? {
+        let ranking = LauncherRankingStore().load()
+        let state = service.effectiveStageStore.state()
+        var folder = file.folder
+        for _ in 0..<4 {
+            if let contexts = ranking.entries["folder:\(folder)"]?.contexts,
+               let best = contexts.max(by: { $0.value.anchor < $1.value.anchor }),
+               let scope = LauncherSearchContext.stage(for: best.key, in: state) {
+                return scope
+            }
+            let parent = (folder as NSString).deletingLastPathComponent
+            guard parent != folder, parent.count > 1, parent != NSHomeDirectory() else { break }
+            folder = parent
+        }
+        return nil
+    }
+
+    private func rememberFolder(_ file: LauncherFile, in scope: StageScope?) {
+        guard let scope else { return }
+        let stage = service.effectiveStageStore.state().scopes.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+            .stages.first { $0.id == scope.stageID }
+        LauncherRankingStore().recordVisit("folder:\(file.folder)", query: "", context: LauncherSearchContext.rankingContext(scope, stage: stage))
     }
 
     /// Toutes les fenêtres gérées de l'application rejoignent la stage, puis Roadie y va.

@@ -132,6 +132,9 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         }
         guard flags == .command else { return super.performKeyEquivalent(with: event) }
         if key == "w" { onCancel?(); return true }
+        // ⌘C sans texte sélectionné copie la ligne choisie ; ⌘Y montre son aperçu (SPEC-077).
+        if key == "c", editor.selectedRange().length == 0 { onKey?(SearchKeyInput(kind: .copy)); return true }
+        if key == "y" { onKey?(SearchKeyInput(kind: .preview)); return true }
         let action: Selector? = switch key {
         case "a": #selector(NSText.selectAll(_:))
         case "c": #selector(NSText.copy(_:))
