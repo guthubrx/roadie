@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import RoadieAX
@@ -92,6 +93,7 @@ protocol TargetModeOverlayPresenting {
             _ done: @escaping @MainActor @Sendable () -> Void
         ) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        launcher: LauncherSearchContext,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle?
 }
@@ -144,6 +146,7 @@ struct LiveTargetModeOverlayPresenter: TargetModeOverlayPresenting {
             _ done: @escaping @MainActor @Sendable () -> Void
         ) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        launcher: LauncherSearchContext,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
         TargetOverlayPresenter.startSearch(
@@ -155,6 +158,7 @@ struct LiveTargetModeOverlayPresenter: TargetModeOverlayPresenting {
             openSettings: openSettings,
             load: load,
             activate: activate,
+            launcher: launcher,
             onFinish: onFinish
         )
     }
@@ -191,6 +195,8 @@ public final class TargetModeRuntimeController: NSObject {
     }
 
     public func start() {
+        // Index des applications prêt avant la première ouverture de la barre (SPEC-073).
+        LauncherAppCatalog.shared.refresh()
         guard observer == nil else { return }
         observer = DistributedNotificationCenter.default().addObserver(
             forName: TargetModeRuntimeNotification.name,
@@ -384,10 +390,56 @@ public final class TargetModeRuntimeController: NSObject {
             activate: { target, verb in
                 targets.activate(target: target, action: verb)
             },
+            launcher: launcherContext(),
             onFinish: { [weak self] result in
                 self?.finish(result, command: command.name)
             }
         )
+    }
+
+    /// Lanceur de la barre (SPEC-073) : index des applications gardé en mémoire et rafraîchi à chaque
+    /// ouverture, état des applications ouvertes, classement appris lu une fois par session.
+    private func launcherContext() -> LauncherSearchContext {
+        let catalog = LauncherAppCatalog.shared
+        let rankingStore = LauncherRankingStore()
+        let state = service.effectiveStageStore.state()
+        let running = Set(NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }.compactMap(\.bundleIdentifier))
+        let snapshot = service.snapshot(followFocus: false)
+        let names = WindowSwitcherService.stageLabels(in: state, liveWindowIDs: Set(snapshot.windows.map(\.window.id)))
+        return LauncherSearchContext(
+            apps: catalog.current,
+            details: LauncherPlacement.details(runningBundleIDs: running, state: state, stageNames: names),
+            ranking: rankingStore.load(),
+            refreshApps: { done in catalog.refresh(done: done) },
+            launch: { [weak self] app in self?.launch(app) ?? TargetActionResult(changed: false, message: "launcher_unavailable") },
+            recordVisit: { key, query in rankingStore.recordVisit(key, query: query) }
+        )
+    }
+
+    /// Application déjà ouverte avec une fenêtre gérée : Roadie y va, dans sa stage et son bureau.
+    /// Sinon macOS l'ouvre (ou la rouvre) ; sa nouvelle fenêtre suit la règle de placement des nouvelles
+    /// fenêtres (stage active de l'écran actif) ou une règle `assign_stage`.
+    private func launch(_ app: LauncherApp) -> TargetActionResult {
+        let switcher = WindowSwitcherService(service: service)
+        let events = events
+        Task { @MainActor in
+            let loaded = await switcher.load()
+            let windows = loaded.entries.filter { $0.window.bundleID == app.bundleID }
+            if let entry = LauncherPlacement.preferredWindow(windows, state: loaded.persisted) {
+                let result = switcher.activate(entry)
+                events.append(RoadieEvent(type: "launcher.focus", details: [
+                    "bundleID": app.bundleID, "windowID": String(entry.id.rawValue), "message": result.message]))
+                if result.outcome != .failed { return }
+            }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: app.path), configuration: configuration) { _, error in
+                events.append(RoadieEvent(type: "launcher.open", details: [
+                    "bundleID": app.bundleID, "error": error.map { String(describing: $0) } ?? ""]))
+            }
+        }
+        return TargetActionResult(changed: true, message: "launcher: \(app.bundleID)")
     }
 
     private func startGridInteractive(_ command: TargetModeRuntimeCommand) {

@@ -2,18 +2,23 @@ import Foundation
 
 /// Ligne proposée sous la boîte de commandes (SPEC-023).
 public struct SlashSuggestion: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case command, argument, setting }
+    /// `header` : titre de section du lanceur, non choisissable ; `result` : ligne du lanceur (SPEC-073).
+    public enum Kind: Equatable, Sendable { case command, argument, setting, header, result }
+    /// Icône d'une ligne du lanceur : celle d'un fichier (application) ou un symbole système.
+    public enum Icon: Hashable, Sendable { case file(String), symbol(String) }
 
     /// Texte à insérer à la place du mot courant (`stage `, `target_grid.rows`).
     public var text: String
     /// Description courte affichée à côté du texte.
     public var detail: String
     public var kind: Kind
+    public var icon: Icon?
 
-    public init(text: String, detail: String = "", kind: Kind) {
+    public init(text: String, detail: String = "", kind: Kind, icon: Icon? = nil) {
         self.text = text
         self.detail = detail
         self.kind = kind
+        self.icon = icon
     }
 }
 

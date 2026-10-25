@@ -153,6 +153,13 @@ public struct TargetSearchModel: Equatable, Sendable {
         highlightedIndex = matches.firstIndex { $0.id == target.id }
     }
 
+    /// Ligne choisie dans la liste du lanceur (SPEC-073) : met en avant cette cible, ou aucune cible
+    /// quand la ligne est une application (rien à l'écran ne doit sembler sélectionné). O(n).
+    public mutating func highlight(targetID: String?) {
+        pendingReturnAt = nil
+        highlightedIndex = targetID.flatMap { id in matches.firstIndex { $0.id == id } }
+    }
+
     /// Tab complète ; les autres touches de navigation gardent leur rôle. Sans action ni clic.
     mutating func handleNavigation(_ input: SearchKeyInput) {
         switch input.kind {

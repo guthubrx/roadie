@@ -370,6 +370,7 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
             _ done: @escaping @MainActor @Sendable () -> Void
         ) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        launcher: LauncherSearchContext,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
         searchStyle = style

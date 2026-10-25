@@ -429,14 +429,23 @@ letter filters the targets; Return clicks the green target.
 - **Validating in another window**: Roadie focuses the window, waits until its
   app is active (at most 0.5 s), then clicks.
 
+**Launcher**: above the bar, a list groups results into sections: **Applications**
+(every installed app), **Windows**, **Stages and desktops**, then **On screen** (the
+labeled targets). Matching accepts initials (`vsc` for Visual Studio Code). Roadie
+remembers your choices: the row picked after the same input comes first next time
+(local ranking, `~/.roadies/launcher-ranking.json`, safe to delete). Return on an
+app that is already open goes to its window, in its stage and desktop; on a closed
+app, opens it in the active stage of the active display, unless an `assign_stage`
+rule applies. Arrow keys move through the list; clicking a row activates it.
+
 | Key | Effect |
 |-----|--------|
 | letters, digits, space | filter |
-| Tab | complete the selected result's title without clicking |
+| Tab | complete the selected result's title (or the app name) without clicking |
 | Down, Ctrl-N | next result |
 | Shift-Tab, Up, Ctrl-P | previous result |
 | Shift + label | select that result (`Shift+S` with few results) |
-| Return | click |
+| Return | click; on an app: go to its window or open it |
 | Return twice (under 0.35 s) | double-click |
 | Shift-Return | right-click |
 | Cmd-Return | Cmd-click (new tab) |

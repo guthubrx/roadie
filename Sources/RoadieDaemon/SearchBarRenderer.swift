@@ -34,7 +34,7 @@ struct SearchBarLayout: Equatable {
     /// place au message. Complexité : O(s + m), s ≤ 8 et m ≤ 12.
     static func make(
         bounds: CGRect, suggestions: Int, messageLines: Int,
-        searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13
+        searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13, maxSuggestions: Int = maxSuggestions
     ) -> SearchBarLayout {
         let lineHeight = Self.lineHeight * min(48, max(8, commandTextFontSize)) / 13
         let barHeight = 40 * min(48, max(8, searchTextFontSize)) / 15
@@ -77,6 +77,8 @@ struct TargetSearchBar {
     var suggestions: [SlashSuggestion] = []
     var selectedSuggestion: Int? = nil
     var message: SlashMessage? = nil
+    /// Lignes de liste au plus : 8 pour les commandes, davantage pour les sections du lanceur.
+    var maxRows = SearchBarLayout.maxSuggestions
     /// Le champ AppKit affiche le texte à l'exécution ; les rendus hors écran le dessinent encore.
     var usesNativeInput = false
 
@@ -101,7 +103,7 @@ struct TargetSearchBar {
     func layout(in bounds: CGRect, style: TargetOverlayStyle) -> SearchBarLayout {
         return SearchBarLayout.make(bounds: bounds, suggestions: suggestions.count,
                                     messageLines: messageTextLines.count, searchTextFontSize: style.searchTextFontSize,
-                                    commandTextFontSize: style.commandTextFontSize)
+                                    commandTextFontSize: style.commandTextFontSize, maxSuggestions: maxRows)
     }
 }
 
@@ -185,7 +187,14 @@ enum SearchBarRenderer {
                 NSColor.white.withAlphaComponent(0.08).setFill()
                 NSBezierPath(roundedRect: row.insetBy(dx: -6, dy: 1), xRadius: 6, yRadius: 6).fill()
             }
-            draw(suggestionLine(state.suggestions[index], font: commandFont), in: row)
+            let suggestion = state.suggestions[index]
+            var textRow = row
+            if let image = icon(suggestion.icon) {
+                let side = min(row.height - 4, 18)
+                image.draw(in: CGRect(x: row.minX, y: row.midY - side / 2, width: side, height: side))
+                textRow = CGRect(x: row.minX + side + 8, y: row.minY, width: max(0, row.width - side - 8), height: row.height)
+            }
+            draw(suggestionLine(suggestion, font: commandFont), in: textRow)
         }
         for (row, message) in zip(layout.messageRows, messages) { draw(message, in: row) }
     }
@@ -218,7 +227,27 @@ enum SearchBarRenderer {
         ])
     }
 
+    /// Icônes des lignes du lanceur, gardées pendant la vie du processus. O(1) après la première lecture.
+    private static var icons: [SlashSuggestion.Icon: NSImage] = [:]
+
+    private static func icon(_ icon: SlashSuggestion.Icon?) -> NSImage? {
+        guard let icon else { return nil }
+        if let cached = icons[icon] { return cached }
+        let image: NSImage? = switch icon {
+        case .file(let path): NSWorkspace.shared.icon(forFile: path)
+        case .symbol(let name): NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(paletteColors: [NSColor(calibratedWhite: 0.8, alpha: 1)]))
+        }
+        icons[icon] = image
+        return image
+    }
+
     private static func suggestionLine(_ suggestion: SlashSuggestion, font: NSFont) -> NSAttributedString {
+        if suggestion.kind == .header {
+            let small = NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 2))
+            return line(suggestion.text.uppercased(), font: NSFontManager.shared.convert(small, toHaveTrait: .boldFontMask),
+                        color: NSColor(calibratedWhite: 0.5, alpha: 1))
+        }
         let name = (suggestion.kind == .command ? "/" : "") + suggestion.text.trimmingCharacters(in: .whitespaces)
         let result = NSMutableAttributedString(attributedString: line(name, font: font, color: NSColor(calibratedWhite: 0.94, alpha: 1)))
         if !suggestion.detail.isEmpty {

@@ -207,7 +207,7 @@ public enum TargetOverlayPresenter {
     /// arrière-plan. Il appelle `deliver(cibles, rang de fenêtre)` pour chaque fenêtre lue, puis `done`.
     /// Mode commande (SPEC-023) : `commands` exécute la saisie qui suit `/` ; `runDeferred` et
     /// `openSettings` partent après la fin de la session (research R2).
-    public static func startSearch(
+    static func startSearch(
         targets: [RoadieTarget],
         alphabet: String,
         style: TargetOverlayStyle = .labels,
@@ -219,6 +219,7 @@ public enum TargetOverlayPresenter {
             _ done: @escaping @MainActor @Sendable () -> Void
         ) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        launcher: LauncherSearchContext = .disabled,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
         let session = TargetSearchSession(
@@ -229,6 +230,7 @@ public enum TargetOverlayPresenter {
             runDeferred: runDeferred,
             openSettings: openSettings,
             activate: activate,
+            launcher: launcher,
             onFinish: onFinish
         )
         if let immediate = session.start() {
@@ -882,6 +884,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private let pointerScreen: CGRect?
     /// Des fenêtres sont encore en cours de lecture.
     private var isLoading = true
+    /// Lanceur (SPEC-073) : liste en sections au-dessus de la barre, et ligne choisie.
+    private var launcher: LauncherSearchContext
+    private var launcherList = LauncherList.empty
+    private var launcherSelection: String?
+    /// Requête et cibles de la dernière liste : elle n'est recalculée que si l'une change.
+    private var launcherQuery: String?
+    private var launcherTargetIDs: [String] = []
+    /// Lignes de liste au plus pour le lanceur, en-têtes compris.
+    private static let launcherRows = 12
 
     init(
         targets: [RoadieTarget],
@@ -891,8 +902,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         runDeferred: @escaping @MainActor ([String]) -> Void,
         openSettings: @escaping @MainActor (SettingCategory?) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        launcher: LauncherSearchContext,
         onFinish: (@MainActor (TargetActionResult) -> Void)?
     ) {
+        self.launcher = launcher
         let mouse = NSEvent.mouseLocation
         let pointerScreen = NSScreen.screens.first { $0.frame.contains(mouse) }?.frame
         self.pointerScreen = pointerScreen
@@ -940,6 +953,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         inputPanel = input
         render()
         input.beginEditing()
+        launcher.refreshApps { [weak self] apps in
+            guard let self, !self.finished else { return }
+            self.launcher.apps = apps
+            self.launcherQuery = nil
+            self.render()
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
@@ -967,6 +986,14 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             lastInputAt = Date()
             model.cancelPendingReturn()
             if let panel = layout.panel, panel.contains(nsPoint) {
+                if type == .leftMouseDown, commandModel == nil,
+                   let index = layout.suggestionIndex(at: nsPoint, count: launcherList.rows.count, selected: selectedLauncherRow),
+                   let id = launcherList.rows[index].id {
+                    launcherSelection = id
+                    syncHighlight()
+                    activateSelection(immediate: true)
+                    return true
+                }
                 if type == .leftMouseDown, var command = commandModel,
                    let index = layout.suggestionIndex(at: nsPoint, count: command.suggestions.count, selected: command.selected) {
                     command.selectSuggestion(at: index)
@@ -1016,7 +1043,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return
         }
         if case .confirm(let shift, let command, let isRepeat) = input.kind {
-            guard !isRepeat, let target = model.highlighted else { return }
+            guard !isRepeat else { return }
+            if case .app(let app, _)? = launcherList.row(for: launcherSelection) {
+                finishLaunching(app)
+                return
+            }
+            guard let target = model.highlighted else { return }
             if let verb = model.pressReturn(shift: shift, command: command, at: Date()) {
                 finishActivating(target, verb)
             }
@@ -1029,15 +1061,78 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             model.type(value)
             if model.isCommandMode { enterCommandMode() }
         case .labelCharacter(let value):
-            _ = model.typeLabel(value)
+            if model.typeLabel(value) { launcherSelection = model.highlighted.map { "target:\($0.id)" } }
         case .delete:
             model.deleteBackward()
         case .next, .previous:
-            model.handleNavigation(input)
+            navigate(input)
         case .escape, .confirm, .ignored:
             break
         }
         render()
+    }
+
+    /// Flèches et Ctrl-N/P parcourent la liste du lanceur ; Tab complète la ligne choisie.
+    private func navigate(_ input: SearchKeyInput) {
+        guard !launcherList.rows.isEmpty else { model.handleNavigation(input); return }
+        if input.navigationSource == .tab, case .next = input.kind {
+            if case .app(let app, _)? = launcherList.row(for: launcherSelection) {
+                model.replaceQuery(app.name)
+            } else {
+                model.handleNavigation(input)
+            }
+            return
+        }
+        guard case .next = input.kind else {
+            launcherSelection = launcherList.neighbour(of: launcherSelection, step: -1)
+            syncHighlight()
+            return
+        }
+        launcherSelection = launcherList.neighbour(of: launcherSelection, step: 1)
+        syncHighlight()
+    }
+
+    /// La ligne choisie et le cadre épais à l'écran désignent la même cible. O(n).
+    private func syncHighlight() {
+        switch launcherList.row(for: launcherSelection) {
+        case .target(let target): model.highlight(targetID: target.id)
+        case .app: model.highlight(targetID: nil)
+        case .header, nil: break
+        }
+    }
+
+    /// Recalcule la liste si la requête ou les cibles ont changé. Nouvelle requête : la meilleure
+    /// ligne est choisie ; nouvelles cibles seulement : la ligne choisie est gardée si elle reste. O(a + n).
+    private func refreshLauncher() {
+        let ids = model.matches.map(\.id)
+        guard model.query != launcherQuery || ids != launcherTargetIDs else { return }
+        let queryChanged = model.query != launcherQuery
+        launcherQuery = model.query
+        launcherTargetIDs = ids
+        launcherList = LauncherList(query: model.query, apps: launcher.apps, details: launcher.details,
+                                    targets: model.matches, ranking: launcher.ranking, now: Date())
+        if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
+        syncHighlight()
+    }
+
+    private var selectedLauncherRow: Int? { launcherList.rows.firstIndex { $0.id == launcherSelection && $0.id != nil } }
+
+    /// Clic sur une ligne : action immédiate, sans attendre un éventuel double Retour.
+    private func activateSelection(immediate: Bool) {
+        switch launcherList.row(for: launcherSelection) {
+        case .app(let app, _): finishLaunching(app)
+        case .target(let target): finishActivating(target, target.source == .app ? .click : (target.actions.first ?? .focus))
+        case .header, nil: break
+        }
+    }
+
+    private func finishLaunching(_ app: LauncherApp) {
+        guard !finished else { return }
+        finished = true
+        let query = model.query
+        cleanup()
+        launcher.recordVisit(app.rankingKey, query)
+        onFinish?(launcher.launch(app))
     }
 
     /// Premier `/` d'une requête vide : la boîte de commandes prend la main. Le contexte (stages,
@@ -1117,6 +1212,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             ))
             return
         }
+        refreshLauncher()
         let highlightedID = model.highlighted?.id
         // Barre vide : aucune étiquette (`*` les montre toutes). Étiquettes d'une lettre : chacun encadré.
         let shown = model.query.isEmpty ? [] : model.matches
@@ -1134,7 +1230,31 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 isSearchResult: true
             )
         }
-        show(badges: badges, bar: TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading))
+        show(badges: badges, bar: TargetSearchBar(
+            query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading,
+            suggestions: launcherList.rows.map(Self.suggestion), selectedSuggestion: selectedLauncherRow,
+            maxRows: Self.launcherRows))
+    }
+
+    /// Ligne du lanceur dessinée par la barre : en-tête, application avec son icône, ou cible.
+    private static func suggestion(_ row: LauncherList.Row) -> SlashSuggestion {
+        switch row {
+        case .header(let title):
+            return SlashSuggestion(text: title, kind: .header)
+        case .app(let app, let detail):
+            return SlashSuggestion(text: app.name, detail: detail, kind: .result, icon: .file(app.path))
+        case .target(let target):
+            let symbol = switch target.kind {
+            case .window: "macwindow"
+            case .stage: "square.stack.3d.up"
+            case .desktop: "rectangle.on.rectangle"
+            case .display: "display"
+            case .bookmark: "bookmark"
+            case .appElement, .gridCell: "cursorarrow.rays"
+            }
+            let label = target.label.isEmpty ? "" : "\(target.label)  "
+            return SlashSuggestion(text: label + target.title, detail: target.subtitle, kind: .result, icon: .symbol(symbol))
+        }
     }
 
     private func show(badges: [TargetOverlayBadge], bar: TargetSearchBar) {
@@ -1162,7 +1282,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func finishActivating(_ target: RoadieTarget, _ verb: TargetActionVerb) {
         guard !finished else { return }
         finished = true
+        let query = model.query
         cleanup()
+        launcher.recordVisit(LauncherList.rankingKey(target), query)
         onFinish?(activate(target, verb))
     }
 

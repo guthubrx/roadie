@@ -3,6 +3,16 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
+## Non publié
+
+### Nouveautés
+
+- Lanceur dans la barre de recherche (Capslock + F) : les applications installées
+  rejoignent les fenêtres, stages, bureaux et cibles à l'écran, groupées en sections
+  avec leur icône. Correspondance par initiales, classement qui apprend vos choix.
+  Retour va à la fenêtre d'une application déjà ouverte, dans sa stage et son bureau,
+  ou ouvre l'application.
+
 ## 0.10.0 - 2026-10-25
 
 ### Nouveautés

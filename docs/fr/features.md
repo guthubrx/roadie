@@ -444,14 +444,24 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
 - **Valider sur une autre fenetre** : Roadie focalise la fenetre, attend que
   son application soit active (0,5 s au plus), puis clique.
 
+**Lanceur** : au-dessus de la barre, une liste groupe les résultats en sections :
+**Applications** (toutes les applications installées), **Fenêtres**, **Stages et
+bureaux**, puis **À l'écran** (les cibles étiquetées). La correspondance tolère les
+initiales (`vsc` pour Visual Studio Code). Roadie retient vos choix : la ligne
+choisie après une même saisie remonte en tête la fois suivante (classement local,
+`~/.roadies/launcher-ranking.json`, effaçable sans dommage). Retour sur une
+application déjà ouverte va à sa fenêtre, dans sa stage et son bureau ; sur une
+application fermée, l'ouvre dans la stage active de l'écran actif, sauf règle
+`assign_stage`. Les flèches parcourent la liste ; un clic sur une ligne l'active.
+
 | Touche | Effet |
 |--------|-------|
 | lettres, chiffres, espace | filtrer |
-| Tab | completer le titre du resultat choisi, sans clic |
+| Tab | completer le titre du resultat choisi (ou le nom de l'application), sans clic |
 | Fleche bas, Ctrl-N | resultat suivant |
 | Maj-Tab, Fleche haut, Ctrl-P | resultat precedent |
 | Maj + etiquette | choisir ce resultat (`Maj+S` avec peu de resultats) |
-| Retour | clic |
+| Retour | clic ; sur une application : aller à sa fenêtre ou l'ouvrir |
 | Retour deux fois (moins de 0,35 s) | double-clic |
 | Maj-Retour | clic droit |
 | Cmd-Retour | Cmd-clic (nouvel onglet) |
