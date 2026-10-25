@@ -238,6 +238,8 @@ les verbes, Capslock + Maj + F et `roadie targets actions`, flotter ou tuiler ce
 toujours l'application (règle `affinity-app-…` unique). 1 983 tests, santé 5/5.
 Session 076 installée : classement du lanceur selon la stage active, vignettes réelles des
 fenêtres avec pastille. 1 989 tests, santé 5/5.
+Session 077 installée : fichiers dans le lanceur (Spotlight), fichier déjà ouvert → sa fenêtre,
+stage du dossier, Finder, Quick Look, ⌘C, `roadie launch`. 1 997 tests, santé 5/5.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
