@@ -233,6 +233,9 @@ Reçus : specs/071-apercu-direct/, 072-release-0100/validation.md.
 Sessions 073 et 074 installées : lanceur dans la barre Capslock+F (applications, fenêtres,
 stages, bureaux, cibles), classement appris, verbes et destinations par Tab, liste à la
 manière d'Alfred. 1 976 tests, santé 5/5. Référence : docs/analyses/2026-10-25-reference-alfred.html.
+Session 075 installée : variantes ⌘/⌥/⌃ + Retour annoncées sur la ligne, ⌘1 à ⌘9, → pour
+les verbes, Capslock + Maj + F et `roadie targets actions`, flotter ou tuiler cette fenêtre ou
+toujours l'application (règle `affinity-app-…` unique). 1 983 tests, santé 5/5.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
