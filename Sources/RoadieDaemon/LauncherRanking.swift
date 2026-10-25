@@ -105,7 +105,7 @@ struct LauncherRanking: Codable, Equatable, Sendable {
 struct LauncherRankingStore: Sendable {
     let url: URL
 
-    init(path: String = "~/.roadies/launcher-ranking.json") {
+    init(path: String = TestEnvironment.launcherFile("launcher-ranking.json")) {
         url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
     }
 

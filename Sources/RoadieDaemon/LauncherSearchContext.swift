@@ -39,6 +39,12 @@ struct LauncherSearchContext {
     var aliases = LauncherAliasBook()
     /// Projets gardés (SPEC-080).
     var projects: [StageProject] = []
+    /// Liste de la barre vide, règles à proposer (chip) et choix d'une règle (SPEC-081).
+    var idleRows: [LauncherList.Row] = []
+    var pendingRules = 0
+    var ruleChoice: @MainActor (RuleSuggestion, RuleChoice) -> TargetActionResult = { _, _ in
+        TargetActionResult(changed: false, message: "launcher_disabled")
+    }
     var aliasAction: @MainActor (LauncherAlias) -> LauncherAction? = { _ in nil }
     var stageName: @MainActor (StageScope) -> String? = { _ in nil }
     var saveAlias: @MainActor (LauncherAlias, String) -> LauncherAlias? = { _, _ in nil }

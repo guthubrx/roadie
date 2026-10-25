@@ -107,7 +107,7 @@ struct LauncherAliasBook: Codable, Equatable, Sendable {
 struct LauncherAliasStore: Sendable {
     let url: URL
 
-    init(path: String = "~/.roadies/launcher-aliases.json") {
+    init(path: String = TestEnvironment.launcherFile("launcher-aliases.json")) {
         url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
     }
 

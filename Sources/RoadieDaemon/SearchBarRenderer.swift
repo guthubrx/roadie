@@ -113,6 +113,8 @@ struct TargetSearchBar {
     var message: SlashMessage? = nil
     /// Lanceur : icône grande, nom et détail sur deux niveaux, sélection en couleur d'accent.
     var richRows = false
+    /// Signal d'une règle à proposer, devant le compteur (« 💡 1 », SPEC-081).
+    var chip: String?
     /// Le champ AppKit affiche le texte à l'exécution ; les rendus hors écran le dessinent encore.
     var usesNativeInput = false
 
@@ -122,7 +124,10 @@ struct TargetSearchBar {
         return query.isEmpty ? "Rechercher ou saisir /commande" : "\(query)▏"
     }
 
-    var counterText: String? { commandInput == nil ? String(max(0, matchCount)) : nil }
+    var counterText: String? {
+        guard commandInput == nil else { return nil }
+        return chip.map { "\($0)   \(max(0, matchCount))" } ?? String(max(0, matchCount))
+    }
 
     /// Contenu commun au dessin et à la géométrie du panneau.
     var messageTextLines: [String] {

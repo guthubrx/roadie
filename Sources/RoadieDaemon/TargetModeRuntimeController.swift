@@ -263,6 +263,9 @@ public final class TargetModeRuntimeController: NSObject {
             let result = command.string("name").map(openProject) ?? refused("project open", "name")
             events.append(RoadieEvent(type: "project.command", details: ["command": "open", "message": result.message]))
             return
+        case "launcher.undo":
+            _ = undoLastMove()
+            return
         case "project.delete":
             let deleted = command.string("name").map { StageProjectStore().delete($0) } ?? false
             events.append(RoadieEvent(type: "project.command", details: ["command": "delete", "deleted": String(deleted)]))
@@ -436,7 +439,7 @@ public final class TargetModeRuntimeController: NSObject {
             activate: { target, verb in
                 targets.activate(target: target, action: verb)
             },
-            launcher: launcherContext(initialSubject: initialSubject),
+            launcher: launcherContext(initialSubject: initialSubject, targets: roadieTargets),
             onFinish: { [weak self] result in
                 self?.finish(result, command: command.name)
             }
@@ -445,7 +448,7 @@ public final class TargetModeRuntimeController: NSObject {
 
     /// Lanceur de la barre (SPEC-073) : index des applications gardé en mémoire et rafraîchi à chaque
     /// ouverture, état des applications ouvertes, classement appris lu une fois par session.
-    private func launcherContext(initialSubject: LauncherSubject? = nil) -> LauncherSearchContext {
+    private func launcherContext(initialSubject: LauncherSubject? = nil, targets: [RoadieTarget] = []) -> LauncherSearchContext {
         let catalog = LauncherAppCatalog.shared
         let rankingStore = LauncherRankingStore()
         let state = service.effectiveStageStore.state()
@@ -488,6 +491,64 @@ public final class TargetModeRuntimeController: NSObject {
         let aliasStore = LauncherAliasStore()
         context.aliases = aliasStore.load()
         context.projects = StageProjectStore().load().projects.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        // Liste de la barre vide (SPEC-081).
+        let now = Date()
+        let memory = LauncherMemoryStore().load()
+        let rules = service.effectiveConfig.rules
+        let stageInfo: (StageScope) -> (key: String, title: String)? = { scope in
+            guard let stage = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
+                .stages.first(where: { $0.id == scope.stageID }) else { return nil }
+            return (LauncherSearchContext.rankingContext(scope, stage: stage), names[scope] ?? stage.name)
+        }
+        let suggestions = memory.suggestions(at: now, identity: stageInfo, hasRule: { appName, scope in
+            rules.contains { $0.enabled && $0.match.app == appName && $0.action.assignStage == scope.stageID.rawValue
+                && $0.action.assignDesktop == String(scope.desktopID.rawValue) }
+        })
+        context.pendingRules = suggestions.count
+        var idle: [LauncherList.Row] = []
+        if let first = suggestions.first {
+            idle += [.header("Règle proposée"), .rule(first, .create), .rule(first, .later), .rule(first, .never)]
+        }
+        let windowTargets = Dictionary(targets.filter { $0.kind == .window }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let focused = snapshot.focusedWindowID
+        if let previous = WindowSwitcherFocusHistory.shared.recentIDs.lazy.filter({ $0 != focused })
+            .compactMap({ windowTargets["window:\($0.rawValue)"] }).first {
+            idle += [.header("Revenir"), .target(previous)]
+        }
+        if let move = memory.undoable(at: now, currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope }),
+           let from = move.from, let info = stageInfo(from) {
+            let target = windowTargets["window:\(move.windowID.rawValue)"]
+                ?? RoadieTarget(id: "window:\(move.windowID.rawValue)", kind: .window, title: move.appName, source: .roadie,
+                                scope: TargetScopeSnapshot(scope: move.to, windowId: move.windowID), actions: [.focus])
+            let action = LauncherAction(subject: .target(target), verb: .sendTo,
+                                        destination: LauncherDestination(kind: .stage(from), title: info.title, detail: ""))
+            idle += [.header("Annuler"), .action("undo", action, "Remettre \(move.appName) dans \(info.title)",
+                                                 "déplacée \(ClosedWindow.ago(move.at, now: now))")]
+        }
+        let closedRows = ClosedWindow.recent(in: state, at: now).compactMap { closed -> LauncherList.Row? in
+            guard let app = catalog.current.first(where: { $0.bundleID == closed.bundleID }) ?? Self.app(bundleID: closed.bundleID),
+                  let info = stageInfo(closed.stage) else { return nil }
+            let action = LauncherAction(subject: .app(app), verb: .openIn,
+                                        destination: LauncherDestination(kind: .stage(closed.stage), title: info.title, detail: ""))
+            return .action("closed:\(closed.bundleID):\(closed.title)", action,
+                           "Rouvrir \(app.name)" + (closed.title.isEmpty ? "" : " · \(closed.title)"),
+                           "fermée \(ClosedWindow.ago(closed.closedAt, now: now)) · \(info.title)")
+        }
+        if !closedRows.isEmpty { idle += [.header("Fermées récemment")] + closedRows }
+        if let rankingContext {
+            let ranking = context.ranking
+            let focusedBundle = snapshot.windows.first { $0.window.id == focused }?.window.bundleID
+            let habits = ranking.entries.filter { $0.key.hasPrefix("app:") && $0.value.contexts?[rankingContext] != nil }
+                .sorted { ranking.frecency($0.key, at: now, context: rankingContext) > ranking.frecency($1.key, at: now, context: rankingContext) }
+                .compactMap { entry in catalog.current.first { $0.rankingKey == entry.key } }
+                .filter { $0.bundleID != focusedBundle }
+                .prefix(3)
+            if !habits.isEmpty { idle += [.header("Souvent ici")] + habits.map { .app($0, detail: "souvent dans cette stage") } }
+        }
+        context.idleRows = idle
+        context.ruleChoice = { [weak self] suggestion, choice in
+            self?.chooseRule(suggestion, choice) ?? TargetActionResult(changed: false, message: "launcher_unavailable")
+        }
         context.aliasAction = { alias in alias.action(state: state, activeStage: activeStage, home: (homeDisplay, homeDesktop)) }
         context.stageName = { scope in
             state.scopes.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
@@ -859,6 +920,43 @@ public final class TargetModeRuntimeController: NSObject {
         } else {
             _ = try? await NSWorkspace.shared.openApplication(at: appURL, configuration: configuration)
         }
+    }
+
+    // MARK: - Mémoire (SPEC-081)
+
+    /// Application d'un identifiant, hors catalogue (utilitaire rare). O(1).
+    private static func app(bundleID: String) -> LauncherApp? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        let name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+        return LauncherApp(bundleID: bundleID, path: url.path, name: name, alternateNames: [])
+    }
+
+    /// Créer écrit l'affinité « Toujours ouvrir cette app ici » (fichier généré, relu avant écriture) ;
+    /// Plus tard reporte d'un jour ; Jamais retire la proposition pour cette application et cette stage.
+    private func chooseRule(_ suggestion: RuleSuggestion, _ choice: RuleChoice) -> TargetActionResult {
+        let now = Date()
+        LauncherMemoryStore().update { $0.decline(suggestion, choice, at: now) }
+        events.append(RoadieEvent(type: "launcher.rule_choice", details: ["choice": choice.rawValue, "bundleID": suggestion.bundleID]))
+        guard choice == .create else { return TargetActionResult(changed: true, message: "rule suggestion: \(choice.rawValue)") }
+        let snapshot = service.snapshot(followFocus: false)
+        guard let display = snapshot.displays.first(where: { $0.id == suggestion.stage.displayID }) else { return refused("rule create", "display") }
+        let window = snapshot.windows.first { $0.window.bundleID == suggestion.bundleID }?.window
+            ?? WindowSnapshot(id: WindowID(rawValue: 1), pid: 0, appName: suggestion.appName, bundleID: suggestion.bundleID, title: "",
+                              frame: Rect(x: 0, y: 0, width: 1, height: 1), isOnScreen: false, isTileCandidate: true)
+        let result = WindowRuleAffinityService(eventLog: events).saveAffinity(kind: .app, window: window, scope: suggestion.stage, display: display)
+        return TargetActionResult(changed: result.changed, message: result.message)
+    }
+
+    /// `roadie undo` et la ligne Annuler : la fenêtre du dernier déplacement revient dans sa stage
+    /// d'origine (10 minutes au plus, si elle n'a pas bougé depuis).
+    private func undoLastMove() -> TargetActionResult {
+        let snapshot = service.snapshot(followFocus: false)
+        guard let move = LauncherMemoryStore().load().undoable(at: Date(), currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope }),
+              let from = move.from else { return refused("launcher undo", "nothing") }
+        let result = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
+            .assign(windowID: move.windowID, to: from.stageID, desktopID: from.desktopID, displayID: from.displayID)
+        events.append(RoadieEvent(type: "launcher.undo", details: ["changed": String(result.changed), "message": result.message]))
+        return TargetActionResult(changed: result.changed, message: result.message)
     }
 
     // MARK: - Position (SPEC-079)

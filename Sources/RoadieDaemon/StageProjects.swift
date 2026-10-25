@@ -63,7 +63,7 @@ struct StageProjectBook: Codable, Equatable, Sendable {
 struct StageProjectStore: Sendable {
     let url: URL
 
-    init(path: String = "~/.roadies/projects.json") {
+    init(path: String = TestEnvironment.launcherFile("projects.json")) {
         url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
     }
 

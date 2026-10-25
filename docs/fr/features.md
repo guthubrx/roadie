@@ -481,6 +481,16 @@ qu'on tape un nom à l'étape des verbes, les destinations correspondantes
 apparaissent : `fire`, Tab, `perso`, Retour ouvre une fenêtre Firefox dans la stage
 Perso et y va. Échap, ou l'effacement dans un champ vide, revient d'une étape.
 
+**Barre vide** : avant de taper, la barre propose ce qui sert maintenant : une règle
+proposée, Revenir (fenêtre précédente), Annuler (remettre la fenêtre du dernier
+déplacement, 10 minutes au plus ; aussi `roadie undo`), Fermées récemment (rouvrir dans
+sa stage une fenêtre fermée depuis moins de 12 h), Souvent ici (applications choisies le
+plus souvent dans cette stage). **Règles proposées** : trois déplacements au moins d'une
+application vers une même stage en une semaine font proposer « Créer la règle »
+(affinité d'ouverture), « Plus tard » ou « Jamais ». Pendant une recherche, la capsule du
+compteur affiche « 💡 1 » ; ⌘R montre la proposition. Déplacements notés :
+`~/.roadies/launcher-moves.json` (200 au plus).
+
 **Projets** : une stage nommée se garde comme projet (verbe « Enregistrer comme projet »
 d'une stage, ou `roadie project save NOM`) : ses fenêtres dans l'ordre, le document ou
 l'adresse de chacune quand l'application les expose (TextEdit, Aperçu, Pages, Chrome…), et

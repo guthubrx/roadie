@@ -222,6 +222,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|actions|hide ..."),
         CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
         CLICommandSpec(usage: "project save [NAME] | open NAME | list [--json] | delete NAME"),
+        CLICommandSpec(usage: "undo"),
         CLICommandSpec(usage: "launch PATH [--stage NAME | --here | --new-stage] [--position left|right|full|float] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
@@ -614,6 +615,9 @@ public final class CLICommandRouter {
             return try runQueryCommand(Array(args.dropFirst()))
         case "targets":
             return try runTargetsCommand(Array(args.dropFirst()))
+        case "undo":
+            // SPEC-081 : remettre la fenêtre du dernier déplacement dans sa stage d'origine.
+            return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "launcher.undo"), json: args.contains("--json"))
         case "project":
             // SPEC-080 : enregistrer et rouvrir passent par le démon (lecture AX) ; la liste se lit ici.
             let sub = args.count >= 2 ? args[1] : ""

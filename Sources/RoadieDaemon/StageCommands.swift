@@ -259,6 +259,8 @@ public struct StageCommandService {
         }
         let (scope, removedPin) = assigned
         let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
+        // SPEC-081 : déplacement noté pour l'annulation et les règles proposées (rien si même stage).
+        LauncherMemoryStore().record(window: window, from: entry.scope, to: targetScope)
 
         var visibilityRepairFrame: CGRect?
         // Plan unique (A15, T212) : fenêtre masquée ou rendue visible, scope d'origine et stage

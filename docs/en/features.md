@@ -463,6 +463,14 @@ free). As soon as you type a name at the verb step, matching destinations appear
 `fire`, Tab, `perso`, Return opens a Firefox window in the Perso stage and goes
 there. Escape, or deleting in an empty field, goes back one step.
 
+**Empty bar**: before you type, the bar offers what is useful now: a proposed rule, Back
+(previous window), Undo (put the window of the last move back, within 10 minutes; also
+`roadie undo`), Recently closed (reopen in its stage a window closed less than 12 h ago),
+Often here (apps chosen most often in this stage). **Proposed rules**: three or more moves of
+an app to the same stage in a week propose "Create the rule" (open affinity), "Later" or
+"Never". While searching, the counter capsule shows "💡 1"; ⌘R shows the proposal. Recorded
+moves: `~/.roadies/launcher-moves.json` (200 at most).
+
 **Projects**: a named stage can be kept as a project (the stage verb "Save as project", or
 `roadie project save NAME`): its windows in order, each one's document or address when the app
 exposes it (TextEdit, Preview, Pages, Chrome…), and the shape of its layout. Reopening the

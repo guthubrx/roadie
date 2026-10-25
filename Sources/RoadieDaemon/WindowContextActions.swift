@@ -403,6 +403,8 @@ public struct WindowContextActions {
             placement.hiding[windowID] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
         }
         let result = snapshotService.applyCommandPlacement(placement, cause: "window.assign", generation: generation, events: eventLog).result
+        // SPEC-081 : déplacement noté pour l'annulation et les règles proposées (rien si même stage).
+        LauncherMemoryStore().record(window: window, from: sourceScope, to: targetStageScope)
         eventLog.append(RoadieEvent(
             type: "stage_assign_window",
             scope: targetStageScope,

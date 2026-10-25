@@ -22,6 +22,9 @@ jour et les limites connues ; les README décrivent la version courante.
   couleur d'accent avec le rappel des touches. L'icône suit la taille du texte
   (deux fois la hauteur du nom), le nom est en graisse normale, les fenêtres
   montrent l'icône de leur application et les symboles sont posés sur une tuile.
+- Barre vide utile : revenir, annuler le dernier déplacement (`roadie undo`), rouvrir une
+  fenêtre fermée dans sa stage, applications souvent choisies ici ; règles proposées après
+  trois déplacements semblables, signalées par « 💡 » dans la barre (⌘R).
 - Projets : une stage nommée se garde (fenêtres, documents, adresses, disposition) et se
   rouvre telle quelle, même après un redémarrage ; `roadie project save|open|list|delete`.
 - Phrase complète en français ou en anglais (`fire perso gauche`) ; ⌘S garde une action en

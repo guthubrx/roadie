@@ -16,6 +16,10 @@ struct LauncherList: Equatable, Sendable {
         case alias(String, LauncherAction, String)
         /// Projet gardé (SPEC-080).
         case project(StageProject)
+        /// Proposition de la liste vide (SPEC-081) : clé, action, titre, détail.
+        case action(String, LauncherAction, String, String)
+        /// Règle proposée et le choix de cette ligne (SPEC-081).
+        case rule(RuleSuggestion, RuleChoice)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -27,6 +31,8 @@ struct LauncherList: Equatable, Sendable {
             case .phrase: "phrase"
             case .alias(let name, _, _): "alias:\(name)"
             case .project(let project): "project:\(LauncherMatch.fold(project.name))"
+            case .action(let key, _, _, _): "action:\(key)"
+            case .rule(let suggestion, let choice): "rule:\(suggestion.declineKey):\(choice.rawValue)"
             }
         }
 
@@ -39,6 +45,8 @@ struct LauncherList: Equatable, Sendable {
             case .file(let file): file.rankingKey
             case .phrase(let action, _), .alias(_, let action, _): action.subject.rankingKey
             case .project(let project): "project:\(LauncherMatch.fold(project.name))"
+            case .action(_, let action, _, _): action.subject.rankingKey
+            case .rule: nil
             }
         }
     }
@@ -179,6 +187,14 @@ struct LauncherList: Equatable, Sendable {
     }
 
     func row(for id: String?) -> Row? { id.flatMap { id in rows.first { $0.id == id } } }
+
+    /// Liste de la barre vide (SPEC-081) : les propositions telles quelles, la première choisie. O(n).
+    static func idle(_ rows: [Row]) -> LauncherList {
+        var list = LauncherList.empty
+        list.rows = rows
+        list.best = rows.lazy.compactMap(\.id).first
+        return list
+    }
 
     /// Phrase ou abréviation en tête, sous son titre, et choisie par défaut (SPEC-079). O(n).
     mutating func prepend(_ row: Row, header: String) {

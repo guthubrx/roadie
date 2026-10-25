@@ -262,6 +262,7 @@ roadie targets activate TARGET_ID_OR_LABEL --action right-click
 roadie targets activate TARGET_ID_OR_LABEL --action command-click
 roadie targets search
 roadie targets actions
+roadie undo
 roadie project save Perso
 roadie project open Perso
 roadie project list --json

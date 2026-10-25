@@ -137,6 +137,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         if key == "y" { onKey?(SearchKeyInput(kind: .preview)); return true }
         // ⌘S : garder l'action choisie (SPEC-079).
         if key == "s" { onKey?(SearchKeyInput(kind: .save)); return true }
+        // ⌘R : la règle proposée (SPEC-081).
+        if key == "r" { onKey?(SearchKeyInput(kind: .showRules)); return true }
         let action: Selector? = switch key {
         case "a": #selector(NSText.selectAll(_:))
         case "c": #selector(NSText.copy(_:))
