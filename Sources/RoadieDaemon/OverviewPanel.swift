@@ -136,7 +136,12 @@ final class OverviewCanvas: NSView {
     var appIcons: [Int32: NSImage] = [:]
     var notice: String?
     var onOpen: ((WindowSwitcherEntry) -> Void)?
+    /// Puce lâchée sur un autre bureau du même écran : écran, bureau déplacé, place visée (SPEC-066).
+    var onMoveDesktop: ((DisplayID, DesktopID, DesktopID) -> Void)?
     private(set) var plan = OverviewLayout()
+    /// Glisser d’une puce de bureau : actif au-delà de 4 points, pour qu’un simple clic reste sans effet.
+    private struct DesktopDrag { let source: OverviewDesktopID; let start: CGPoint; var point: CGPoint; var active = false }
+    private var desktopDrag: DesktopDrag?
     private var tracking: NSTrackingArea?
     private var hover = OverviewHoverState()
     private var hoverWork: DispatchWorkItem?
@@ -212,9 +217,43 @@ final class OverviewCanvas: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if let card = plan.cards.first(where: { $0.frame.contains(point) }) {
+        if let item = plan.desktops.first(where: { chipFrame(for: $0).contains(point) }) {
+            desktopDrag = DesktopDrag(source: item.desktop.id, start: point, point: point)
+        } else if let card = plan.cards.first(where: { $0.frame.contains(point) }) {
             selectedID = card.entry.id; needsDisplay = true; onOpen?(card.entry)
         }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard var drag = desktopDrag else { return }
+        drag.point = convert(event.locationInWindow, from: nil)
+        drag.active = drag.active || hypot(drag.point.x - drag.start.x, drag.point.y - drag.start.y) > 4
+        desktopDrag = drag
+        if drag.active { needsDisplay = true }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let drag = desktopDrag else { return }
+        desktopDrag = nil
+        needsDisplay = true
+        guard drag.active, let target = dropTarget(for: drag), target != drag.source else { return }
+        onMoveDesktop?(drag.source.displayID, drag.source.desktopID, target.desktopID)
+    }
+
+    /// Bureau du même écran sous le pointeur ; les autres écrans ne reçoivent pas la puce. O(b).
+    private func dropTarget(for drag: DesktopDrag) -> OverviewDesktopID? {
+        plan.desktops.first { $0.desktop.id.displayID == drag.source.displayID && $0.frame.contains(drag.point) }?.desktop.id
+    }
+
+    /// Puce du nom de bureau, en coordonnées de la vue : la même pour le dessin et le clic.
+    func chipFrame(for item: OverviewLayout.Desktop) -> CGRect {
+        let s = plan.scale
+        let r = CGRect(x: item.frame.minX / s, y: item.frame.minY / s, width: item.frame.width / s, height: item.frame.height / s)
+        let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        let dot: CGFloat = item.desktop.isActive ? 12 : 0
+        let width = min(r.width - 2 * OverviewLayout.side, ceil((item.desktop.name as NSString).size(withAttributes: [.font: font]).width) + 22 + dot)
+        let chip = CGRect(x: r.minX + OverviewLayout.side, y: r.minY + OverviewLayout.top(bays: config.presentation == "bays"), width: width, height: 24)
+        return CGRect(x: chip.minX * s, y: chip.minY * s, width: chip.width * s, height: chip.height * s)
     }
 
     func select(_ id: WindowID) {
@@ -262,30 +301,42 @@ final class OverviewCanvas: NSView {
         }
         // Bureaux sans fond : seul leur nom, en puce rectangulaire arrondie. Point vert = bureau actif,
         // puce bleue = bureau agrandi par la loupe.
-        let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        let drag = desktopDrag.flatMap { $0.active ? $0 : nil }
+        let target = drag.flatMap(dropTarget(for:))
         for item in plan.desktops {
-            let r = u(item.frame)
             let focused = config.loupe && magnifiedID != nil && item.desktop.entries.contains { $0.id == magnifiedID }
-            let dot: CGFloat = item.desktop.isActive ? 12 : 0
-            let width = min(r.width - 2 * OverviewLayout.side, ceil((item.desktop.name as NSString).size(withAttributes: [.font: font]).width) + 22 + dot)
-            let chip = CGRect(x: r.minX + OverviewLayout.side, y: r.minY + OverviewLayout.top(bays: bays), width: width, height: 24)
-            box(chip, fill: focused ? palette(0.18, 0.38, 0.52, 0.9) : palette(0.08, 0.13, 0.17, 0.55),
-                stroke: focused ? palette(0.48, 0.80, 0.97, 0.9) : palette(0.75, 0.85, 0.90, 0.22), radius: 6, line: 1)
-            if item.desktop.isActive {
-                box(CGRect(x: chip.minX + 10, y: chip.midY - 3, width: 6, height: 6), fill: palette(0.55, 0.85, 0.66), stroke: .clear, radius: 3)
+            if let target, item.desktop.id == target, target != drag?.source {
+                // Place visée : contour bleu du bureau entier, là où la puce sera posée.
+                box(u(item.frame).insetBy(dx: 4, dy: 4), fill: palette(0.40, 0.76, 0.97, 0.08), stroke: palette(0.48, 0.80, 0.97, 0.85), radius: 10, line: 1.5)
             }
-            text(item.desktop.name, in: CGRect(x: chip.minX + 11 + dot, y: chip.minY + 4, width: chip.width - 20 - dot, height: 17), size: 13, weight: .semibold,
-                 color: palette(0.93, 0.97, 0.99))
+            let dragged = item.desktop.id == drag?.source
+            drawChip(item.desktop, in: u(chipFrame(for: item)), focused: focused, alpha: dragged ? 0.35 : 1)
         }
         // Stage de la fenêtre sélectionnée : ses puces passent en bleu pour montrer ses voisines.
         let chosenStage = plan.cards.first { $0.entry.id == selectedID }?.entry.scope
         for item in plan.cards where u(item.frame).insetBy(dx: -8, dy: -8).intersects(dirtyRect) {
             drawCard(item, in: u(item.frame), sameStage: chosenStage != nil && item.entry.scope == chosenStage)
         }
+        if let drag, let item = plan.desktops.first(where: { $0.desktop.id == drag.source }) {
+            // La puce suit le pointeur, au-dessus des cartes, décalée comme au moment de la prise.
+            let chip = chipFrame(for: item).offsetBy(dx: drag.point.x - drag.start.x, dy: drag.point.y - drag.start.y)
+            drawChip(item.desktop, in: u(chip), focused: true, alpha: 1)
+        }
         if let notice {
             let visible = u(visibleRect)
             text(notice, in: CGRect(x: visible.minX + 35, y: visible.midY - 20, width: visible.width - 70, height: 30), size: 14)
         }
+    }
+
+    private func drawChip(_ desktop: OverviewDesktop, in chip: CGRect, focused: Bool, alpha: CGFloat) {
+        let dot: CGFloat = desktop.isActive ? 12 : 0
+        box(chip, fill: focused ? palette(0.18, 0.38, 0.52, 0.9 * alpha) : palette(0.08, 0.13, 0.17, 0.55 * alpha),
+            stroke: focused ? palette(0.48, 0.80, 0.97, 0.9 * alpha) : palette(0.75, 0.85, 0.90, 0.22 * alpha), radius: 6, line: 1)
+        if desktop.isActive {
+            box(CGRect(x: chip.minX + 10, y: chip.midY - 3, width: 6, height: 6), fill: palette(0.55, 0.85, 0.66, alpha), stroke: .clear, radius: 3)
+        }
+        text(desktop.name, in: CGRect(x: chip.minX + 11 + dot, y: chip.minY + 4, width: chip.width - 20 - dot, height: 17), size: 13, weight: .semibold,
+             color: palette(0.93, 0.97, 0.99, alpha))
     }
 
     /// Carte minimaliste : l’aperçu seul, coins arrondis et ombre, puis icône et titre dessous, sans fond ni cadre.

@@ -254,6 +254,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "desktop next|prev|last|back|back-and-forth"),
         CLICommandSpec(usage: "desktop summon N"),
         CLICommandSpec(usage: "desktop label N NAME"),
+        CLICommandSpec(usage: "desktop move N POSITION"),
         CLICommandSpec(usage: "stage list"),
         CLICommandSpec(usage: "stage create|delete N"),
         CLICommandSpec(usage: "stage rename N NAME"),
@@ -1072,6 +1073,13 @@ public final class CLICommandRouter {
                 return 64
             }
             let result = DesktopCommandService(service: service).summon(DesktopID(rawValue: id))
+            return finish(result)
+        case "move":
+            guard args.count == 3, let source = Int(args[1]), let target = Int(args[2]), source > 0, target > 0 else {
+                err("roadie: desktop move requires N POSITION (positive numbers)")
+                return 64
+            }
+            let result = DesktopCommandService(service: service).move(DesktopID(rawValue: source), to: DesktopID(rawValue: target))
             return finish(result)
         default:
             return usageError()

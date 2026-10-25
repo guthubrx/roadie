@@ -3,6 +3,21 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
+## Non publié
+
+### Nouveautés
+
+- Réordonnancement des bureaux dans la vue d’ensemble : glisser la puce d’un bureau
+  sur un autre bureau du même écran les renumérote comme dans Mission Control.
+  Stages, fenêtres, nom, épinglages et historique suivent le bureau ; aucune fenêtre
+  ne bouge. Même opération en CLI : `roadie desktop move N POSITION`.
+
+### Corrections
+
+- Le sélecteur et la vue d’ensemble ne proposent plus une fenêtre fermée que son
+  application garde en mémoire sans l’afficher (par exemple les réglages d’AlDente).
+  Son choix affichait « Action refusée par l’application ».
+
 ## 0.8.0 - 2026-10-24
 
 ### Nouveautés

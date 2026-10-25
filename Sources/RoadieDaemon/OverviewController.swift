@@ -6,6 +6,7 @@ import RoadieCore
 public final class OverviewController {
     nonisolated public static let notificationName = Notification.Name("com.roadie.overview.command")
     private let service: WindowSwitcherService
+    private let snapshots: SnapshotService
     private let thumbnails: RailThumbnailStore
     private let componentLock = ComponentLockFile(component: "overview")
     private let events: EventLog
@@ -30,6 +31,7 @@ public final class OverviewController {
 
     public init(service: SnapshotService = SnapshotService(), events: EventLog = EventLog()) {
         self.service = WindowSwitcherService(service: service)
+        self.snapshots = service
         self.thumbnails = .shared
         self.events = events
     }
@@ -91,6 +93,7 @@ public final class OverviewController {
         p.onClose = { [weak self] in self?.hide() }
         p.onKey = { [weak self] code, shift in self?.key(code, backwards: shift) }
         p.canvas.onOpen = { [weak self] entry in self?.activate(entry) }
+        p.canvas.onMoveDesktop = { [weak self] displayID, source, target in self?.moveDesktop(displayID, source, to: target) }
         p.present(on: screen, config: config)
         p.showMessage("Chargement des bureaux et stages…")
         loadTask = Task { [weak self] in
@@ -219,6 +222,31 @@ public final class OverviewController {
                 panel.showMessage("Impossible d’ouvrir cette fenêtre. Elle a peut-être été fermée. Échap pour quitter.")
                 self.events.append(RoadieEvent(type: "overview.activation_failed", details: ["windowID": String(entry.id.rawValue), "message": result.message]))
             } else { self.hide() }
+        }
+    }
+
+    /// Renumérote puis recharge la vue ouverte : les cartes gardent leurs captures, seuls les bureaux changent.
+    private func moveDesktop(_ displayID: DisplayID, _ source: DesktopID, to target: DesktopID) {
+        guard let panel else { return }
+        let commands = DesktopCommandService(service: snapshots, store: snapshots.effectiveStageStore, events: events)
+        let result = commands.move(source, to: target, displayID: displayID)
+        guard result.changed else {
+            if result.outcome == .failed { panel.showMessage("Impossible de déplacer ce bureau. Échap pour quitter.") }
+            return
+        }
+        let id = sessionID
+        loadTask?.cancel()
+        loadTask = Task { [weak self] in
+            guard let self else { return }
+            let loaded = await self.service.load()
+            guard !Task.isCancelled, self.sessionID == id, self.panel === panel, let snapshot = loaded.snapshot else { return }
+            panel.canvas.model = OverviewModel(entries: loaded.entries, displays: snapshot.displays, state: loaded.persisted)
+            panel.canvas.focusedDesktop = panel.canvas.focusedDesktop.map { desktop in
+                guard desktop.displayID == displayID else { return desktop }
+                let moved = DesktopReorder.mapping(from: source, to: target)[desktop.desktopID] ?? desktop.desktopID
+                return OverviewDesktopID(displayID: displayID, desktopID: moved)
+            }
+            panel.canvas.rebuild()
         }
     }
 

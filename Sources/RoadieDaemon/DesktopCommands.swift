@@ -131,6 +131,57 @@ public struct DesktopCommandService {
         return switchDisplay(display, to: desktopID, snapshot: snapshot)
     }
 
+    /// Déplace le bureau `source` à la place `target` sur l'écran donné, ou l'écran actif (SPEC-066).
+    /// Aucune fenêtre ne bouge : le bureau affiché garde son contenu et change seulement de numéro.
+    /// Intentions réécrites après l'état ; si elles échouent, l'état revient (même règle que REL-021).
+    public func move(_ source: DesktopID, to target: DesktopID, displayID requested: DisplayID? = nil) -> StageCommandResult {
+        let label = "desktop move \(source.rawValue) \(target.rawValue)"
+        let displayID: DisplayID
+        if let requested {
+            displayID = requested
+        } else if let display = activeDisplay(in: service.snapshot(followFocus: false)) {
+            displayID = display.id
+        } else {
+            return StageCommandResult(message: "\(label): no display", changed: false, outcome: .noOp)
+        }
+        let state = store.state()
+        let highest = max(ConfigReloadService.shared.currentConfig().desktops.count,
+                          state.scopes.filter { $0.displayID == displayID }.map(\.desktopID.rawValue).max() ?? 1)
+        guard (1...highest).contains(source.rawValue), (1...highest).contains(target.rawValue) else {
+            return StageCommandResult(message: "\(label): desktops are numbered 1 to \(highest)", changed: false, outcome: .failed)
+        }
+        let mapping = DesktopReorder.mapping(from: source, to: target)
+        guard !mapping.isEmpty else {
+            return StageCommandResult(message: "\(label): already in place", changed: false, outcome: .noOp)
+        }
+        var before: PersistentStageState?
+        var after: PersistentStageState?
+        do {
+            try store.mutateChecked { state in
+                before = state
+                state.renumberDesktops(on: displayID, mapping)
+                after = state
+            }
+            do {
+                try service.effectiveIntentStore.mutateChecked { DesktopReorder.remap(intents: &$0, on: displayID, mapping) }
+            } catch {
+                if let before, let after {
+                    try store.mutateChecked { state in
+                        guard state == after else { throw StageStateChangedError() }
+                        state = before
+                    }
+                }
+                throw error
+            }
+        } catch {
+            return .persistenceFailure(label, error)
+        }
+        events.append(RoadieEvent(type: "desktop_reordered", details: [
+            "displayID": displayID.rawValue, "from": String(source.rawValue), "to": String(target.rawValue)
+        ]))
+        return StageCommandResult(message: label, changed: true)
+    }
+
     public func assignActiveWindow(to desktopID: DesktopID, follow: Bool = false) -> StageCommandResult {
         beginLayoutCommand("desktop.assign_active_window")
         defer { finishLayoutCommand("desktop.assign_active_window") }

@@ -484,6 +484,7 @@ roadie desktop focus back
 roadie desktop back-and-forth
 roadie desktop summon 3
 roadie desktop label 2 DeepWork
+roadie desktop move 2 1
 ```
 
 ## Power-User Layout Commands

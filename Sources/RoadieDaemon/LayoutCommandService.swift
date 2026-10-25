@@ -455,7 +455,7 @@ struct PartialCommitError: Error, CustomStringConvertible {
 }
 
 /// L'état des stages a changé depuis l'écriture à annuler : l'annuler écraserait ce changement.
-private struct StageStateChangedError: Error, CustomStringConvertible {
+struct StageStateChangedError: Error, CustomStringConvertible {
     var description: String { "stage state changed since the command wrote it" }
 }
 
