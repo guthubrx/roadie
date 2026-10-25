@@ -236,6 +236,8 @@ manière d'Alfred. 1 976 tests, santé 5/5. Référence : docs/analyses/2026-10-
 Session 075 installée : variantes ⌘/⌥/⌃ + Retour annoncées sur la ligne, ⌘1 à ⌘9, → pour
 les verbes, Capslock + Maj + F et `roadie targets actions`, flotter ou tuiler cette fenêtre ou
 toujours l'application (règle `affinity-app-…` unique). 1 983 tests, santé 5/5.
+Session 076 installée : classement du lanceur selon la stage active, vignettes réelles des
+fenêtres avec pastille. 1 989 tests, santé 5/5.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
