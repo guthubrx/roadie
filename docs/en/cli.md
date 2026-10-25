@@ -26,7 +26,7 @@ Typical use:
 - `doctor`: full report on the daemon (running or not), the Accessibility and Screen Recording permissions, and the validity of the configuration. It reads `~/.roadies/daemon-status.json`, which the daemon updates regularly.
 - `--version`: prints the version. `roadied --version` does the same for the daemon binary.
 - `state audit`: detect duplicates, stale references, or broken scopes.
-- `state heal`: repair conservative state inconsistencies.
+- `state heal`: repair conservative state inconsistencies, including duplicate stage names.
 - `metrics --json`: feed a script or dashboard.
 - `performance ...`: read recent interactions from the event log without active daemon instrumentation.
 
@@ -174,6 +174,11 @@ first visible stage, even when its internal ID is different.
 `stage switch-visible prev|next` cycles through non-empty stages only, matching
 the nav rail order. `stage assign-empty` sends the active window to the next
 unnamed empty stage, creating one if needed.
+
+`desktop move N POSITION` places desktop N of the active display at POSITION and
+renumbers desktops, like dragging in the overview; its stages, windows, name and
+pins follow it. `stage rename` refuses a name already used by another stage: a stage
+name is unique across Roadie.
 
 `stage move-to-display` accepts a display index or a direction
 `left|right|up|down`. Without a flag, Roadie uses this TOML preference:

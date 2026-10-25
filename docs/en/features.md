@@ -7,6 +7,14 @@ thumbnail grid beside a larger preview, icons or list, independent profiles and
 targeted actions. Shortcut tools call the CLI; settings live in **Sélecteur**.
 [Guide and commands](window-switcher.md).
 
+## Overview
+
+Shows every display, desktop, stage and window on a single page, in Archipelago or
+Bays layout. Drag a desktop chip, a stage chip or a window card to rearrange your
+workspaces, on one display or across displays: a live preview shows the result
+before you release. Drop a window or a stage into empty space to create a stage or a
+desktop. [Overview guide](overview.md).
+
 ## Tiling
 
 Roadie tiles the visible windows in the active stage.
@@ -111,6 +119,10 @@ for user shortcuts such as Alt-1, Alt-2, Alt-3.
 `stage switch-visible prev|next` cycles through non-empty stages in nav rail
 order. `stage assign-empty` sends the active window to the next unnamed empty
 stage, creating one if needed.
+
+A stage name is unique across Roadie, all displays and desktops: `stage rename`
+refuses a name already used by another stage, and `roadie state heal` fixes
+inherited duplicates. The overview also moves a stage or a window by drag and drop.
 
 A stage can also be sent to another display from the nav rail context menu. The
 focus behavior is controlled by `[focus].stage_move_follows_focus` and can be
@@ -321,7 +333,12 @@ roadie desktop focus 2
 roadie desktop back-and-forth
 roadie desktop summon 3
 roadie desktop label 2 DeepWork
+roadie desktop move 2 1
 ```
+
+`desktop move` moves a desktop to another place and renumbers desktops, as in
+Mission Control; its stages, windows and name follow it. The overview does the same
+by drag and drop, including to another display.
 
 Use cases:
 

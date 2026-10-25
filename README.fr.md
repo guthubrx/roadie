@@ -455,7 +455,7 @@ roadie stage prev
 roadie stage next
 ```
 
-`stage switch` et `stage assign` ciblent les identifiants stables. `stage switch-position` et `stage assign-position` ciblent l’ordre visible du nav rail. `stage switch-visible prev|next` parcourt uniquement les stages non vides. `stage assign-empty` envoie la fenêtre active vers le prochain stage vide sans nom et le crée si nécessaire.
+`stage switch` et `stage assign` ciblent les identifiants stables. `stage switch-position` et `stage assign-position` ciblent l’ordre visible du nav rail. `stage switch-visible prev|next` parcourt uniquement les stages non vides. `stage assign-empty` envoie la fenêtre active vers le prochain stage vide sans nom et le crée si nécessaire. Un nom de stage est unique dans tout Roadie : `stage rename` refuse un nom déjà porté par une autre stage, et `roadie state heal` corrige les doublons hérités.
 
 Ramener dans la stage active une fenêtre d’une stage inactive :
 
@@ -489,6 +489,8 @@ roadie desktop summon 3
 roadie desktop label 2 DeepWork
 roadie desktop move 2 1
 ```
+
+`desktop move` place un bureau à une autre place et renumérote les bureaux, comme Mission Control. La vue d’ensemble fait de même par glisser-déposer, y compris vers un autre écran.
 
 ## Commandes Layout Power-User
 

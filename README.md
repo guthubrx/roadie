@@ -451,7 +451,9 @@ and `stage assign-position` target the visible order in the nav rail, so positio
 1 is the first visible stage even if its internal ID is different.
 `stage switch-visible prev|next` cycles through non-empty stages only, matching
 the nav rail order. `stage assign-empty` sends the active window to the next
-unnamed empty stage, creating one if needed.
+unnamed empty stage, creating one if needed. A stage name is unique across Roadie:
+`stage rename` refuses a name already used by another stage, and
+`roadie state heal` fixes inherited duplicates.
 
 Bring an inactive-stage window back into the active stage:
 
@@ -487,6 +489,10 @@ roadie desktop summon 3
 roadie desktop label 2 DeepWork
 roadie desktop move 2 1
 ```
+
+`desktop move` places a desktop at another position and renumbers desktops, as in
+Mission Control. The overview does the same by drag and drop, including to another
+display.
 
 ## Power-User Layout Commands
 

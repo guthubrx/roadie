@@ -8,6 +8,15 @@ indépendants et actions ciblées. Les outils de raccourcis appellent la CLI ;
 les réglages se trouvent dans **Réglages Roadie > Sélecteur**.
 [Guide et commandes](window-switcher.md).
 
+## Vue d’ensemble
+
+Montre tous les écrans, bureaux, stages et fenêtres sur une seule page, en Archipel
+ou en Baies. Glissez la puce d'un bureau, la puce d'une stage ou la carte d'une
+fenêtre pour réorganiser vos espaces, sur un écran ou d'un écran à l'autre : un
+aperçu en direct montre le résultat avant le relâchement. Déposez une fenêtre ou une
+stage dans le vide pour créer une stage ou un bureau.
+[Guide de la vue d’ensemble](overview.md).
+
 ## Tiling
 
 Roadie tile les fenetres visibles d'une stage active.
@@ -116,6 +125,11 @@ pour les raccourcis utilisateur de type Alt-1, Alt-2, Alt-3.
 `stage switch-visible prev|next` parcourt les stages non vides dans l'ordre du
 navrail. `stage assign-empty` envoie la fenetre active vers la prochaine stage
 vide non nommee, ou en cree une si necessaire.
+
+Un nom de stage est unique dans tout Roadie, tous écrans et bureaux confondus :
+`stage rename` refuse un nom déjà porté par une autre stage, et `roadie state heal`
+corrige les doublons hérités. La vue d'ensemble déplace aussi une stage ou une
+fenêtre par glisser-déposer.
 
 Une stage peut aussi etre envoyee vers un autre ecran depuis le menu contextuel
 du navrail. Le comportement de focus est controle par `[focus].stage_move_follows_focus`
@@ -328,7 +342,12 @@ roadie desktop focus 2
 roadie desktop back-and-forth
 roadie desktop summon 3
 roadie desktop label 2 DeepWork
+roadie desktop move 2 1
 ```
+
+`desktop move` déplace un bureau à une autre place et renumérote les bureaux, comme
+Mission Control ; ses stages, fenêtres et nom le suivent. La vue d'ensemble fait de
+même par glisser-déposer, y compris vers un autre écran.
 
 Cas d'usage :
 
