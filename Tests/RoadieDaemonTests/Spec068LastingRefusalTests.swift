@@ -26,12 +26,22 @@ struct Spec068LastingRefusalTests {
         #expect(!registry.refusesLastingly(windowID: 7, target: wide, observed: phone.insetBy(dx: 50, dy: 0)))
     }
 
-    @Test func anAcceptedWriteClearsTheLastingRefusal() {
+    @Test func aWriteReadBackAtTheTargetThenUndoneStaysRefused() {
+        let registry = WrittenFrameRegistry()
+        refuse(registry, generation: 1)
+        refuse(registry, generation: 2)
+        // L'application accepte un instant la cible, puis revient d'elle-même à sa taille.
+        registry.record(windowID: 7, requested: wide, readBack: wide, generation: 3, at: Date())
+        registry.accept(windowID: 7, frame: phone)
+        #expect(registry.refusesLastingly(windowID: 7, target: wide, observed: phone))
+    }
+
+    @Test func anAnswerKeepingTheTargetClearsTheLastingRefusal() {
         let registry = WrittenFrameRegistry()
         refuse(registry, generation: 1)
         refuse(registry, generation: 2)
         registry.record(windowID: 7, requested: wide, readBack: wide, generation: 3, at: Date())
-        #expect(!registry.refusesLastingly(windowID: 7, target: wide, observed: phone))
+        registry.accept(windowID: 7, frame: wide)
         #expect(registry.entry(for: 7)?.lastingRefusal == nil)
     }
 

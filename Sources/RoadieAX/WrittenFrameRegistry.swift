@@ -75,8 +75,10 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
                 axResultCodes: axResultCodes, nativeFullscreenReading: nativeFullscreenReading
             )
             if let previous = entries[windowID] {
-                // Une écriture appliquée telle quelle efface le refus durable ; sinon il est conservé.
-                entry.lastingRefusal = readBack.map { Self.matches($0, requested) } == true ? nil : previous.lastingRefusal
+                // Conservé même si la relecture rejoint la cible : une application peut l'accepter un
+                // instant puis revenir d'elle-même à sa taille (émulateur Android). Seule une réponse
+                // qui garde la cible l'efface (`accept`).
+                entry.lastingRefusal = previous.lastingRefusal
                 if previous.generation == generation {
                     entry.accepted = previous.accepted
                     entry.writesInGeneration = previous.writesInGeneration + 1
