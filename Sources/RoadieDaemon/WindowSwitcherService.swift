@@ -199,6 +199,16 @@ struct WindowSwitcherService {
         return withoutSpace(unlisted)?.intersection(unlisted) ?? []
     }
 
+    /// Fenêtres retirées parmi des fenêtres vivantes absentes du relevé (SPEC-083), mêmes critères
+    /// que le sélecteur. Une lecture AX par application, puis une requête SkyLight. O(k).
+    static func retiredWindows(pids: [WindowID: Int32]) -> Set<WindowID> {
+        var states: [WindowID: WindowSwitcherAXState] = [:]
+        for (pid, ids) in Dictionary(grouping: pids.keys, by: { pids[$0] ?? 0 }) where pid > 0 {
+            states.merge(WindowSwitcherWindowAccess.states(pid: pid, windowIDs: Set(ids))) { _, new in new }
+        }
+        return retiredWindows(states, withoutSpace: SpaceProbe.windowsWithoutSpace)
+    }
+
     /// Toutes les applications sont consultées, avec au plus quatre lectures AX simultanées.
     /// Chaque pid n'est visité qu'une fois ; l'annulation empêche de lancer les suivants.
     static func loadAccessibilityStates(

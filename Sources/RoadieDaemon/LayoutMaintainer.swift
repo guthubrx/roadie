@@ -86,12 +86,21 @@ public final class LayoutMaintainer {
     /// Règles du moteur en cache ; nil = jamais lues.
     private var cachedRules: [WindowRule]?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
+    /// Refus expirés gardés jusqu'à la demande suivante : un refus identique qui revient devient
+    /// durable, sinon la fenêtre et ses voisines bougent toutes les 30 s (SPEC-083).
+    private var expiredClamps: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
     /// Échecs des placements directs : attendre une nouvelle géométrie ou intention explicite.
     private var failedRestorations: [WindowID: FailedRestoration] = [:]
     private var lastRestorationActivationWindowID: WindowID?
     /// Transfert échoué : attend avant de refaire la même réparation (même PID et même cadre).
     private var failedDriftWindows: [WindowID: (window: WindowSnapshot, retryAt: Date)] = [:]
+    /// Fenêtres neuves que le placement doit encore poser sur leur écran : macOS les ouvre souvent
+    /// ailleurs, le rattachement physique attend la fin du délai (SPEC-083).
+    private var newWindowDriftGraceUntil: [WindowID: Date] = [:]
+    /// Fenêtres fermées que leur application garde en mémoire (SPEC-083, critères SPEC-065).
+    private let retiredWindowProbe: ([WindowID: Int32]) -> Set<WindowID>
+    private var nextRetiredCheckAt: Date?
     /// Écritures réussies que l'application a annulées (modes sans arbre seulement, A3).
     private var revertedAppliedFrames: [UInt32: RevertedAppliedFrame] = [:]
     /// Référence d'observation des modes sans arbre (A3) : un changement s'y lit par différence.
@@ -179,6 +188,7 @@ public final class LayoutMaintainer {
         takeGesture: (() -> GestureSession?)? = nil,
         spaceProbe: ((String) -> Bool?)? = nil,
         readFrame: ((WindowSnapshot) -> CGRect?)? = nil,
+        retiredWindowProbe: (([WindowID: Int32]) -> Set<WindowID>)? = nil,
         episodes: EpisodeContext = .shared,
         configService: ConfigReloadService = .shared,
         now: @escaping () -> Date = Date.init
@@ -209,6 +219,7 @@ public final class LayoutMaintainer {
         self.takeGesture = takeGesture ?? (testing ? { nil } : { UserInputActivity.shared.takeGesture() })
         self.spaceProbe = spaceProbe ?? (testing ? { _ in true } : { SpaceProbe.isUserSpaceActive(displayUUID: $0) })
         self.readFrame = readFrame ?? { [service] in service.readFrame(of: $0) }
+        self.retiredWindowProbe = retiredWindowProbe ?? (testing ? { _ in [] } : { WindowSwitcherService.retiredWindows(pids: $0) })
         self.episodes = episodes
         self.now = now
     }
@@ -236,6 +247,7 @@ public final class LayoutMaintainer {
         settingsFrameStates.removeAll()
         _ = generations.next()
         clampedFrames.removeAll()
+        expiredClamps.removeAll()
         failedFrames.removeAll()
         revertedAppliedFrames.removeAll()
     }
@@ -310,6 +322,7 @@ public final class LayoutMaintainer {
             displayTopologySettlesUntil = tickNow.addingTimeInterval(LayoutTolerance.displayTopologySettle)
             lastObservedFrames = scopedFrames(in: snapshot)
             clampedFrames.removeAll()
+            expiredClamps.removeAll()
             failedFrames.removeAll()
             failedRestorations.removeAll()
             failedDriftWindows.removeAll()
@@ -342,8 +355,19 @@ public final class LayoutMaintainer {
             failedRestorations.removeAll()
         }
         failedDriftWindows = failedDriftWindows.filter { tickNow < $0.value.retryAt }
+        // Seules les fenêtres neuves ouvertes hors de l'écran de leur scope attendent : pas de passe
+        // supplémentaire pour les autres, ni pour une fenêtre déjà fermée.
+        let liveIDs = Set(snapshot.windows.map(\.window.id))
+        newWindowDriftGraceUntil = newWindowDriftGraceUntil.filter { tickNow < $0.value && liveIDs.contains($0.key) }
+        for entry in snapshot.windows where entry.isNewlyScoped {
+            guard let scope = entry.scope,
+                  let display = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
+                  display.id != scope.displayID else { continue }
+            newWindowDriftGraceUntil[entry.window.id] = tickNow.addingTimeInterval(LayoutTolerance.newWindowDriftGrace)
+        }
         let cause = cause == "deadline" ? "deadline:\(dueDeadlineName(now: tickNow))" : cause
         forgetGoneWindows(liveWindowIDs: Set(snapshot.windows.map(\.window.id.rawValue)), now: tickNow)
+        closeRetiredMembers(in: snapshot, now: tickNow)
         let currentWindowsByID = Dictionary(snapshot.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { first, _ in first })
         for (id, failed) in failedRestorations {
             guard let window = currentWindowsByID[id],
@@ -480,6 +504,7 @@ public final class LayoutMaintainer {
             }
             for entry in snapshot.windows where entry.scope == scope {
                 clampedFrames[entry.window.id.rawValue] = nil
+                expiredClamps[entry.window.id.rawValue] = nil
                 failedFrames[entry.window.id.rawValue] = nil
                 revertedAppliedFrames[entry.window.id.rawValue] = nil
             }
@@ -742,6 +767,7 @@ public final class LayoutMaintainer {
         ].compactMap { name, at in at.map { (name, $0, false) } }
         due += membershipActivity.values.compactMap(\.burstEnd).map { ("burst", $0, true) }
         due += failedDriftWindows.values.map { ("drift_retry", $0.retryAt, false) }
+        if let graceEnd = newWindowDriftGraceUntil.values.min() { due.append(("new_window_grace", graceEnd, false)) }
         due += settingsRetryAt.compactMap { scope, at in
             settingsRetryRunnableScopes.contains(scope) ? ("settings_retry", at, true) : nil
         }
@@ -2075,11 +2101,17 @@ public final class LayoutMaintainer {
         events.append(RoadieEvent(type: focusRestore.isFullscreen ? "stage_focus_fullscreen_restore" : "stage_focus_restore", details: details))
     }
 
-    /// Oublie les refus de taille et les échecs de plus de 30 s, et la mémoire des fenêtres
-    /// disparues (FR-004). O(r) - r entrées mémorisées.
+    /// Oublie les refus de taille et les échecs de plus de 30 s, sauf les refus durables, et la
+    /// mémoire des fenêtres disparues (FR-004, SPEC-083). O(r) - r entrées mémorisées.
     private func forgetGoneWindows(liveWindowIDs: Set<UInt32>, now: Date) {
         let oldest = now.addingTimeInterval(-LayoutTolerance.refusalMemorySeconds)
-        clampedFrames = clampedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
+        for (id, clamp) in clampedFrames where !clamp.lasting && clamp.recordedAt < oldest {
+            expiredClamps[id] = clamp
+        }
+        clampedFrames = clampedFrames.filter {
+            liveWindowIDs.contains($0.key) && ($0.value.lasting || $0.value.recordedAt >= oldest)
+        }
+        expiredClamps = expiredClamps.filter { liveWindowIDs.contains($0.key) && clampedFrames[$0.key] == nil }
         failedFrames = failedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
         failedRestorations = failedRestorations.filter { liveWindowIDs.contains($0.key.rawValue) }
         revertedAppliedFrames = revertedAppliedFrames.filter { liveWindowIDs.contains($0.key) }
@@ -2089,6 +2121,31 @@ public final class LayoutMaintainer {
         reportedEchoWrites = reportedEchoWrites.filter { liveWindowIDs.contains($0.key) }
         refusalReadRetryAt = refusalReadRetryAt.filter { liveWindowIDs.contains($0.key) }
         treeMinimums = treeMinimums.filter { liveWindowIDs.contains($0.key.rawValue) }
+    }
+
+    /// Toutes les 30 s : un membre gardé seulement par l'inventaire (absent du relevé, même pid) et
+    /// retiré par son application est marqué fermé ; l'absence ordinaire le retire ensuite de sa
+    /// stage. Sinon la stage paraît occupée et ses bascules et restaurations l'attendent en vain.
+    /// O(m) membres, plus une lecture AX par application concernée.
+    private func closeRetiredMembers(in snapshot: DaemonSnapshot, now: Date) {
+        guard nextRetiredCheckAt.map({ now >= $0 }) ?? true, let inventory = snapshot.existingWindowPIDs else { return }
+        nextRetiredCheckAt = now.addingTimeInterval(LayoutTolerance.refusalMemorySeconds)
+        let observed = Set(snapshot.windows.map(\.window.id))
+        var candidates: [WindowID: Int32] = [:]
+        for scope in store.state().scopes {
+            for stage in scope.stages {
+                for member in stage.members where !observed.contains(member.windowID) && member.confirmedClosedAt == nil {
+                    if let pid = member.pid, inventory[member.windowID] == pid { candidates[member.windowID] = pid }
+                }
+            }
+        }
+        guard !candidates.isEmpty else { return }
+        let retired = retiredWindowProbe(candidates)
+        guard !retired.isEmpty else { return }
+        store.mutate { $0.markConfirmedClosed(windowIDs: retired, at: now) }
+        events.append(RoadieEvent(type: "window.retired_members_closed", details: [
+            "windowIDs": retired.map { String($0.rawValue) }.sorted().joined(separator: ",")
+        ]))
     }
 
     /// Égalité de deux frames à `LayoutTolerance.frameMatch` près : la tolérance unique (R9).
@@ -2883,7 +2940,7 @@ public final class LayoutMaintainer {
                 return nil
             }
             if let known = revertedAppliedFrames[command.window.id.rawValue],
-               known.appliedAt >= cutoff,
+               known.appliedAt >= cutoff || known.isLasting,
                known.matches(command: command) {
                 return nil
             }
@@ -3057,22 +3114,41 @@ public final class LayoutMaintainer {
             switch item.status {
             case .clamped:
                 if let actual = item.actual {
-                    clampedFrames[item.windowID.rawValue] = ClampedFrame(
+                    let id = item.windowID.rawValue
+                    let previous = clampedFrames[id] ?? expiredClamps[id]
+                    let repeated = previous.map {
+                        $0.requested.isClose(to: item.requested, tolerance: LayoutTolerance.frameNear)
+                            && $0.actual.isClose(to: actual, tolerance: LayoutTolerance.frameNear)
+                    } == true
+                    clampedFrames[id] = ClampedFrame(
                         requested: item.requested,
                         actual: actual,
-                        recordedAt: now()
+                        recordedAt: now(),
+                        lasting: repeated || previous?.lasting == true
                     )
+                    expiredClamps[id] = nil
                 }
                 revertedAppliedFrames.removeValue(forKey: item.windowID.rawValue)
             case .applied:
-                clampedFrames.removeValue(forKey: item.windowID.rawValue)
+                // Un simple déplacement à la taille refusée garde un refus durable (SPEC-083).
+                let movedAtRefusedSize = clampedFrames[item.windowID.rawValue].map {
+                    $0.lasting && abs(item.requested.width - $0.actual.width) <= LayoutTolerance.frameNear
+                        && abs(item.requested.height - $0.actual.height) <= LayoutTolerance.frameNear
+                } == true
+                if !movedAtRefusedSize { clampedFrames.removeValue(forKey: item.windowID.rawValue) }
+                expiredClamps.removeValue(forKey: item.windowID.rawValue)
                 failedFrames.removeValue(forKey: item.windowID.rawValue)
                 if let command = commandsByID[item.windowID],
                    !command.window.frame.isClose(to: item.requested, tolerance: LayoutTolerance.frameMatch) {
+                    // La même écriture refaite depuis le même cadre : l'application est revenue
+                    // d'elle-même à sa taille après la précédente (SPEC-083).
+                    let previous = revertedAppliedFrames[item.windowID.rawValue]
+                    let reverts = previous?.matches(command: command) == true ? (previous?.reverts ?? 0) + 1 : 0
                     revertedAppliedFrames[item.windowID.rawValue] = RevertedAppliedFrame(
                         requested: item.requested,
                         observedBeforeApply: command.window.frame,
-                        appliedAt: now()
+                        appliedAt: now(),
+                        reverts: reverts
                     )
                 } else {
                     revertedAppliedFrames.removeValue(forKey: item.windowID.rawValue)
@@ -3767,6 +3843,7 @@ public final class LayoutMaintainer {
             for entry in snapshot.windows {
                 guard let sourceScope = entry.scope,
                       !defersFailedDrift(entry.window, now: tickNow),
+                      newWindowDriftGraceUntil[entry.window.id].map({ tickNow >= $0 }) ?? true,
                       !excludedScopes.contains(sourceScope),
                       entry.pin == nil,
                       entry.window.isOnScreen,
@@ -3995,11 +4072,13 @@ private struct RulePlacementDestination {
 }
 
 /// Refus de taille mémorisé : l'application a gardé `actual` quand Roadie demandait `requested`.
-/// Expire après `LayoutTolerance.refusalMemorySeconds` (FR-004).
+/// Expire après `LayoutTolerance.refusalMemorySeconds` (FR-004), sauf s'il s'est répété à
+/// l'identique après expiration : il dure alors jusqu'à une autre demande acceptée (SPEC-083).
 private struct ClampedFrame {
     var requested: Rect
     var actual: Rect
     var recordedAt: Date
+    var lasting = false
 
     func matches(command: ApplyCommand) -> Bool {
         if command.window.frame.isClose(to: actual, tolerance: LayoutTolerance.frameNear),
@@ -4163,6 +4242,12 @@ private struct RevertedAppliedFrame {
     var requested: Rect
     var observedBeforeApply: Rect
     var appliedAt: Date
+    /// Retours de l'application à `observedBeforeApply` après cette même écriture.
+    var reverts = 0
+
+    /// Annulée deux fois de suite : la demande n'est plus refaite, quel que soit le délai, tant
+    /// que la cible et le cadre observé restent les mêmes (SPEC-083).
+    var isLasting: Bool { reverts >= 2 }
 
     func matches(command: ApplyCommand) -> Bool {
         requested.isClose(to: command.frame, tolerance: LayoutTolerance.sameRequest)

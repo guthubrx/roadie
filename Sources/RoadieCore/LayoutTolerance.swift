@@ -64,6 +64,9 @@ public enum LayoutTolerance {
     public static let manualResizeDebounce: Double = 0.35
     /// Attente après un changement d'écrans avant de rattacher une fenêtre à son écran physique.
     public static let displayDriftReconcileHold: Double = 8
+    /// Délai laissé au placement d'une fenêtre neuve sur l'écran choisi avant de la rattacher à
+    /// l'écran où macOS l'a ouverte (SPEC-083).
+    public static let newWindowDriftGrace: Double = 5
     /// Pause du maintien pendant qu'une topologie d'écrans se stabilise.
     public static let displayTopologySettle: Double = 1.5
     /// Mémoire courte d'un cadre refusé ou échoué, pour ne pas le redemander en boucle.

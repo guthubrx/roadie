@@ -38,6 +38,17 @@ jour et les limites connues ; les README décrivent la version courante.
 - Maj + étiquette choisit de nouveau une cible à l'écran dans la barre de recherche ;
   le champ natif écrivait une majuscule.
 
+### Corrections
+
+- Une fenêtre qui s'ouvre reste sur l'écran actif, même quand macOS l'affiche d'abord
+  sur l'autre écran (stages en mode bsp).
+- Une fenêtre qui refuse une largeur trop petite (T3 Code, 840 points au minimum) et ses
+  voisines ne bougent plus toutes les 30 secondes.
+- Une fenêtre qui accepte une taille puis revient d'elle-même à la sienne (émulateur
+  Android) n'est plus réécrite à chaque passe de contrôle.
+- Une fenêtre fermée que son application garde en mémoire (réglages d'AlDente) quitte
+  sa stage ; la stage ne paraît plus occupée et ses bascules ne l'attendent plus.
+
 ## 0.10.0 - 2026-10-25
 
 ### Nouveautés

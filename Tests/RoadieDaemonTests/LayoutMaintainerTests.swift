@@ -335,6 +335,17 @@ private final class FocusedSystemSnapshotProvider: SystemSnapshotProviding, @unc
     }
 }
 
+/// L'application accepte chaque cadre, puis revient d'elle-même à sa taille : les relevés
+/// suivants la montrent toujours à son cadre naturel (émulateur Android, SPEC-083).
+private final class AcceptThenRevertWriter: WindowFrameWriting, @unchecked Sendable {
+    private(set) var attempts = 0
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        attempts += 1
+        return frame
+    }
+}
+
 /// L'application refuse toute taille : chaque demande renvoie le même cadre (« clampé »).
 private final class AlwaysClampedWriter: WindowFrameWriting, @unchecked Sendable {
     private let actual: Rect
@@ -1914,6 +1925,76 @@ struct LayoutMaintainerTests {
         #expect(events.contains("\"reason\":\"stable_visible_frame_on_different_display\""))
     }
 
+    /// SPEC-083 : macOS ouvre une fenêtre neuve sur un autre écran que l'écran actif ; elle reste
+    /// rangée sur l'écran actif, qui la reçoit, au lieu d'être rattachée à l'écran de macOS.
+    @Test
+    func newWindowOpenedOnAnotherDisplayStaysOnTheFocusedDisplay() throws {
+        let leftDisplay = powerDisplay("display-a", index: 1, x: 0)
+        let rightDisplay = powerDisplay("display-b", index: 2, x: 1000)
+        let resident = powerWindow(5, x: 8, y: 0, width: 992, height: 792, app: "Terminal")
+        let opened = powerWindow(9, x: 1200, y: 100, width: 300, height: 300, app: "Finder")
+        let placed = powerWindow(9, x: 500, y: 0, width: 500, height: 800, app: "Finder")
+        let fixture = try newWindowDriftFixture("placed", left: leftDisplay, right: rightDisplay, resident: resident,
+                                                windows: [[resident], [resident, opened], [resident, placed]],
+                                                writer: RecordingWriter())
+        defer { fixture.cleanup() }
+
+        // Le maintien tourne déjà quand la fenêtre apparaît.
+        _ = fixture.maintainer.tick()
+        fixture.clock.advance(1)
+        _ = fixture.maintainer.tick(cause: "ax:AXWindowCreated")
+        for _ in 0..<12 {
+            fixture.clock.advance(0.5)
+            _ = fixture.maintainer.tick(cause: "deadline")
+        }
+        var state = fixture.store.state()
+        let events = try String(contentsOfFile: fixture.eventPath, encoding: .utf8)
+
+        #expect(state.scope(displayID: leftDisplay.id).memberIDs(in: StageID(rawValue: "1")).contains(opened.id))
+        #expect(!events.contains("\"type\":\"window.scope_reconciled_to_physical_display\""))
+    }
+
+    private struct NewWindowDriftFixture {
+        let store: StageStore
+        let maintainer: LayoutMaintainer
+        let clock: TestClock
+        let stagePath: String
+        let eventPath: String
+        func cleanup() {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+        }
+    }
+
+    private func newWindowDriftFixture(
+        _ name: String, left: DisplaySnapshot, right: DisplaySnapshot, resident: WindowSnapshot,
+        windows: [[WindowSnapshot]], writer: WindowFrameWriting
+    ) throws -> NewWindowDriftFixture {
+        let stagePath = tempPath("layout-maintainer-new-window-\(name)")
+        let eventPath = tempPath("layout-maintainer-new-window-\(name)-events")
+        let store = StageStore(path: stagePath)
+        store.save(PersistentStageState(scopes: [
+            // Mode sans arbre, seul concerné par le rattachement physique (stage restaurée en bsp,
+            // occupée : une stage bsp vide prendrait le mode par défaut).
+            PersistentStageScope(displayID: left.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .bsp, members: [
+                    PersistentStageMember(windowID: resident.id, bundleID: resident.bundleID, title: resident.title, frame: resident.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: right.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .bsp),
+            ]),
+        ], activeDisplayID: left.id))
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(displaySnapshots: [left, right], windowSnapshots: windows),
+            frameWriter: writer,
+            stageStore: store
+        )
+        let clock = TestClock()
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: store, now: { clock.now })
+        return NewWindowDriftFixture(store: store, maintainer: maintainer, clock: clock, stagePath: stagePath, eventPath: eventPath)
+    }
+
     @Test
     func failedStableVisibleDisplayDriftDoesNotCommitMembership() throws {
         let leftDisplay = powerDisplay("display-a", index: 1, x: 0)
@@ -3361,6 +3442,57 @@ extension LayoutMaintainerTests {
         #expect(requestsWhileRemembered == requestsAfterFirst)
         #expect(retried.commands == 1)
         #expect(writer.attempts > requestsWhileRemembered)
+    }
+
+    /// SPEC-083 : le même refus revenu après l'expiration devient durable. Sans cela, la fenêtre
+    /// (T3 Code, 840 points au minimum) et ses voisines bougeaient toutes les 30 s.
+    @Test
+    func identicalClampAfterExpiryBecomesLasting() {
+        let display = lotCDisplay()
+        let initial = Rect(x: 80, y: 80, width: 320, height: 240)
+        let writer = AlwaysClampedWriter(actual: initial)
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[initial]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0))
+        )
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
+
+        _ = maintainer.tick()
+        currentTime = currentTime.addingTimeInterval(31)
+        let retried = maintainer.tick()
+        let attemptsAfterRetry = writer.attempts
+        for _ in 0..<4 {
+            currentTime = currentTime.addingTimeInterval(31)
+            _ = maintainer.tick()
+        }
+
+        #expect(retried.clamped == 1)
+        #expect(writer.attempts == attemptsAfterRetry)
+    }
+
+    /// SPEC-083 : une fenêtre accepte la cible puis revient d'elle-même à sa taille. Les passes de
+    /// contrôle, plus espacées que la mémoire courte de 3 s, la réécrivaient sans fin.
+    @Test
+    func acceptedThenRevertedFrameIsNotRewrittenByEverySafetyPass() {
+        let display = lotCDisplay()
+        let natural = Rect(x: 0, y: 0, width: 230, height: 500)
+        let writer = AcceptThenRevertWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[natural]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0))
+        )
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
+
+        for _ in 0..<12 {
+            _ = maintainer.tick()
+            currentTime = currentTime.addingTimeInterval(4)
+        }
+
+        #expect(writer.attempts <= 3)
     }
 
     /// FR-010 : aucun plan n'est appliqué tant qu'un bouton de souris est enfoncé.
