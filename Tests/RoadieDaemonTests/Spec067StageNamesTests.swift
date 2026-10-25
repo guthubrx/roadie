@@ -169,9 +169,9 @@ struct Spec067OverviewDragTests {
         window.orderFront(nil)
         defer { window.orderOut(nil) }
         var opened: [WindowID] = []
-        var moved: [(WindowID, StageScope)] = []
+        var drops: [OverviewDropIntent] = []
         canvas.onOpen = { opened.append($0.id) }
-        canvas.onMoveWindow = { moved.append(($0.id, $1)) }
+        canvas.onDrop = { drops.append($0) }
         let source = try card(canvas, 1), target = try card(canvas, 4)
         func send(_ type: NSEvent.EventType, _ point: CGPoint) throws {
             let location = canvas.convert(point, to: nil)
@@ -193,7 +193,6 @@ struct Spec067OverviewDragTests {
         try send(.leftMouseDragged, end)
         try send(.leftMouseUp, end)
         #expect(opened.count == 1)
-        #expect(moved.map(\.0) == [WindowID(rawValue: 1)])
-        #expect(moved.first?.1 == scope(2, "c"))
+        #expect(drops == [.window(WindowID(rawValue: 1), target: scope(2, "c"))])
     }
 }

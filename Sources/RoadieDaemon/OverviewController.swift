@@ -93,9 +93,7 @@ public final class OverviewController {
         p.onClose = { [weak self] in self?.hide() }
         p.onKey = { [weak self] code, shift in self?.key(code, backwards: shift) }
         p.canvas.onOpen = { [weak self] entry in self?.activate(entry) }
-        p.canvas.onMoveDesktop = { [weak self] source, display, target in self?.moveDesktop(source, to: display, target) }
-        p.canvas.onMoveStage = { [weak self] scope, display, desktop, before in self?.moveStage(scope, to: display, desktop, before: before) }
-        p.canvas.onMoveWindow = { [weak self] entry, target in self?.moveWindow(entry, to: target) }
+        p.canvas.onDrop = { [weak self] intent in self?.drop(intent) }
         p.present(on: screen, config: config)
         p.showMessage("Chargement des bureaux et stages…")
         loadTask = Task { [weak self] in
@@ -228,6 +226,49 @@ public final class OverviewController {
     }
 
     /// Renumérote puis recharge la vue ouverte : les cartes gardent leurs captures, seuls les bureaux changent.
+    /// Exécute le dépôt montré par l’aperçu (SPEC-066, 067, 070, 071).
+    private func drop(_ intent: OverviewDropIntent) {
+        guard let panel else { return }
+        let entries = Dictionary(panel.canvas.model.entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        switch intent {
+        case .desktop(let source, let display, let target):
+            moveDesktop(source, to: display, target)
+        case .stage(let source, let display, let desktop, let before):
+            moveStage(source, to: display, desktop, before: before)
+        case .stageToNewDesktop(let source, let display):
+            moveStage(source, to: display, newDesktopID(on: display), before: nil)
+        case .window(let id, let target):
+            guard let entry = entries[id] else { return panel.canvas.cancelPreview() }
+            moveWindow(entry, to: target)
+        case .windowToNewStage(let id, let display, let desktop):
+            guard let entry = entries[id] else { return panel.canvas.cancelPreview() }
+            moveWindow(entry, to: StageScope(displayID: display, desktopID: desktop, stageID: newStageID(on: display, desktop)))
+        case .windowToNewDesktop(let id, let display):
+            guard let entry = entries[id] else { return panel.canvas.cancelPreview() }
+            let desktop = newDesktopID(on: display)
+            moveWindow(entry, to: StageScope(displayID: display, desktopID: desktop, stageID: newStageID(on: display, desktop)))
+        }
+    }
+
+    /// Nouveau bureau d’un écran : le premier numéro après le dernier bureau montré qui ne contient
+    /// aucune fenêtre ni aucun nom (un bureau vide déjà créé est réutilisé). O(s).
+    private func newDesktopID(on display: DisplayID) -> DesktopID {
+        let state = snapshots.effectiveStageStore.state()
+        let shown = panel?.canvas.model.displays.first { $0.id == display }?.desktops.map(\.id.desktopID.rawValue).max() ?? 0
+        var candidate = shown + 1
+        while state.scopes.contains(where: { $0.displayID == display && $0.desktopID.rawValue == candidate && $0.stages.contains { !$0.members.isEmpty } })
+                || state.label(displayID: display, desktopID: DesktopID(rawValue: candidate)) != nil {
+            candidate += 1
+        }
+        return DesktopID(rawValue: candidate)
+    }
+
+    /// Nouvelle stage d’un bureau : numéro suivant, ajoutée en dernier comme le montre l’aperçu. O(s).
+    private func newStageID(on display: DisplayID, _ desktop: DesktopID) -> StageID {
+        let stages = snapshots.effectiveStageStore.state().scopes.first { $0.displayID == display && $0.desktopID == desktop }?.stages ?? []
+        return StageID(rawValue: String((stages.compactMap { Int($0.id.rawValue) }.max() ?? 0) + 1))
+    }
+
     private func moveDesktop(_ source: OverviewDesktopID, to display: DisplayID, _ target: DesktopID) {
         let commands = DesktopCommandService(service: snapshots, store: snapshots.effectiveStageStore, events: events)
         guard display == source.displayID else {
@@ -273,6 +314,7 @@ public final class OverviewController {
                         focus remap: @escaping (OverviewDesktopID) -> OverviewDesktopID = { $0 }) {
         guard let panel else { return }
         guard result.changed else {
+            panel.canvas.cancelPreview()
             if result.outcome == .failed { panel.showMessage(failure + " Échap pour quitter.") }
             return
         }

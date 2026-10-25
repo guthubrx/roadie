@@ -168,7 +168,10 @@ struct Spec061OverviewGeometryTests {
         #expect(plan.cards.count == 32)
         let first = try #require(plan.desktops.first?.frame)
         #expect(abs(first.minX - 28) < 0.1)
-        #expect(abs(first.minY - 48) < 0.1)
+        // Maquette : bureau à 33 points sous le titre d’écran ; centrage vertical (SPEC-071) du reste.
+        let top = try #require(plan.displays.map(\.frame.minY).min())
+        #expect(abs(first.minY - top - 33) < 0.1)
+        #expect(abs(top - (773 - (plan.desktops.map(\.frame.maxY).max() ?? 0))) < 0.5)
         // Largeur des écrans selon leur besoin : les trois colonnes remplissent la largeur utile.
         #expect(abs((plan.displays.last?.frame.maxX ?? 0) - (1440 - 28)) < 0.5)
         // Même taille de carte partout ; la hauteur d’un bureau suit sa grille.

@@ -273,6 +273,20 @@ struct OverviewLayout {
                 }
             }
         }
+        // Centrage vertical (SPEC-071) : le vide sous le contenu se partage entre le haut et le bas.
+        // En Archipel, la colonne d’un écran garde son bas pour ne pas déplacer les traits de séparation.
+        let contentTop = result.displays.map(\.frame.minY).min() ?? 0
+        let contentBottom = max(result.desktops.map(\.frame.maxY).max() ?? 0, result.cards.map(\.frame.maxY).max() ?? 0)
+        let dy = max(0, (size.height - contentBottom - contentTop) / 2)
+        if dy > 0 {
+            result.displays = result.displays.map { item in
+                let frame = item.frame
+                return Display(display: item.display, frame: bays ? frame.offsetBy(dx: 0, dy: dy)
+                               : CGRect(x: frame.minX, y: frame.minY + dy, width: frame.width, height: max(0, frame.height - dy)))
+            }
+            result.desktops = result.desktops.map { Desktop(desktop: $0.desktop, frame: $0.frame.offsetBy(dx: 0, dy: dy)) }
+            result.cards = result.cards.map { Card(entry: $0.entry, stageName: $0.stageName, frame: $0.frame.offsetBy(dx: 0, dy: dy)) }
+        }
         result.size = size
         return result
     }

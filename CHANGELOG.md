@@ -3,6 +3,23 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
+## Non publié
+
+### Nouveautés
+
+- Aperçu en direct des déplacements dans la vue d’ensemble : bureaux, stages et
+  cartes glissent pour faire de la place, l’élément déplacé apparaît en fantôme à sa
+  future place. Le trait d’insertion disparaît.
+- Déposer dans le vide crée le contenant : une fenêtre lâchée dans la zone vide d’un
+  bureau crée une stage ; une fenêtre ou une stage lâchée sous le dernier bureau d’un
+  écran crée un bureau.
+- La vue d’ensemble est centrée en hauteur.
+
+### Corrections
+
+- Une fenêtre qui accepte un instant la taille demandée puis revient d’elle-même à la
+  sienne (émulateur Android) ne change plus de taille en boucle.
+
 ## 0.9.0 - 2026-10-25
 
 ### Nouveautés
