@@ -100,7 +100,7 @@ public struct StateAuditService {
                 }
                 repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs, isProcessAlive: isProcessAlive)
                 // Après le retrait des membres fermés : une copie vidée redevient anonyme (SPEC-067).
-                repaired += state.makeStageNamesUnique()
+                repaired += state.makeStageNamesUnique(liveDisplays: liveDisplayIDs)
                 return repaired
             }
             return StateHealReport(repaired: repaired, audit: run())

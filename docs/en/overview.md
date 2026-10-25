@@ -20,6 +20,12 @@ Each desktop is a grid of equally sized 16:10 cards in stage order. The desktop 
 
 To reorder a display's desktops, drag a desktop chip to the gap where it should go: above the first desktop, between two desktops or after the last one, on the same display. While dragging, the chip follows the pointer and a thin blue line marks the nearest gap. The two gaps touching the moved desktop show nothing, since dropping there would change nothing. On release, desktops are renumbered as in Mission Control: the moved desktop takes the number of its new place and those in between shift by one. Its stages, windows, name, pins and place in the history follow it. No window moves on screen. Shortcuts stay bound to numbers: after dropping "Desktop 2" first, `roadie desktop focus 1` opens that desktop. An `assign_desktop` rule also targets a number, hence the new place. The same operation exists on the command line: `roadie desktop move 2 1`.
 
+To move a stage, drag the stage chip of one of its cards. A thin vertical line marks the target gap between two groups of cards, in the same desktop or another desktop of the same display. On release, the stage is inserted there with its windows and name. In a desktop without cards, the line appears under the desktop chip. A displayed stage that leaves for another desktop makes way for another stage of its desktop: the displayed desktop does not change.
+
+To move a single window, drag its card onto any card of another stage on the same display. The cards of the target stage get a blue outline; on release, the window joins that stage. A simple click still opens the window. A minimized window or one on another Space cannot be moved this way.
+
+A stage name is unique across Roadie, all displays and desktops. Renaming to a name already used by another stage is refused. `roadie state heal` fixes inherited duplicates: the copy with the most windows keeps the name, other occupied copies become "Name 2", "Name 3", and empty copies become anonymous again. No window changes stage. A configured workspace names a single stage.
+
 Occupied, named and active desktops are represented. Empty stages are not shown. Unused desktops are not added merely because their number is allowed in configuration. Dense layouts scroll to keep targets usable. A capture fills its card, cropped from the top; it is taken at the card's resolution and stays unchanged while the view is open. An application icon stands in when a capture is unavailable.
 
 ```toml

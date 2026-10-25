@@ -138,10 +138,17 @@ final class OverviewCanvas: NSView {
     var onOpen: ((WindowSwitcherEntry) -> Void)?
     /// Puce lâchée sur un autre bureau du même écran : écran, bureau déplacé, place visée (SPEC-066).
     var onMoveDesktop: ((DisplayID, DesktopID, DesktopID) -> Void)?
+    /// Puce de stage lâchée dans un espace entre stages : stage, bureau visé, stage devant laquelle
+    /// elle s’insère (nil = en dernier) (SPEC-067).
+    var onMoveStage: ((StageScope, DesktopID, StageID?) -> Void)?
+    /// Carte lâchée sur une carte d’une autre stage : la fenêtre rejoint cette stage (SPEC-067).
+    var onMoveWindow: ((WindowSwitcherEntry, StageScope) -> Void)?
     private(set) var plan = OverviewLayout()
-    /// Glisser d’une puce de bureau : actif au-delà de 4 points, pour qu’un simple clic reste sans effet.
-    private struct DesktopDrag { let source: OverviewDesktopID; let start: CGPoint; var point: CGPoint; var active = false }
-    private var desktopDrag: DesktopDrag?
+    /// Ce que l’on déplace : un bureau par sa puce, une stage par la puce de stage d’une carte, une fenêtre par sa carte.
+    private enum DragSubject { case desktop(OverviewDesktopID), stage(StageScope, String), window(WindowSwitcherEntry) }
+    /// Glisser actif au-delà de 4 points : en dessous, c’est un clic (une carte s’ouvre au relâchement).
+    private struct Drag { let subject: DragSubject; let start: CGPoint; var point: CGPoint; var active = false }
+    private var drag: Drag?
     private var tracking: NSTrackingArea?
     private var hover = OverviewHoverState()
     private var hoverWork: DispatchWorkItem?
@@ -218,26 +225,43 @@ final class OverviewCanvas: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if let item = plan.desktops.first(where: { chipFrame(for: $0).contains(point) }) {
-            desktopDrag = DesktopDrag(source: item.desktop.id, start: point, point: point)
+            drag = Drag(subject: .desktop(item.desktop.id), start: point, point: point)
+        } else if let card = plan.cards.first(where: { stageChipFrame(for: $0)?.contains(point) == true }), let scope = card.entry.scope {
+            drag = Drag(subject: .stage(scope, card.stageName), start: point, point: point)
         } else if let card = plan.cards.first(where: { $0.frame.contains(point) }) {
-            selectedID = card.entry.id; needsDisplay = true; onOpen?(card.entry)
+            drag = Drag(subject: .window(card.entry), start: point, point: point)
         }
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard var drag = desktopDrag else { return }
-        drag.point = convert(event.locationInWindow, from: nil)
-        drag.active = drag.active || hypot(drag.point.x - drag.start.x, drag.point.y - drag.start.y) > 4
-        desktopDrag = drag
-        if drag.active { needsDisplay = true }
+        guard var current = drag else { return }
+        current.point = convert(event.locationInWindow, from: nil)
+        // Une fenêtre absente du relevé (réduite, autre Space) ne se déplace pas : elle reste cliquable.
+        if case .window(let entry) = current.subject, !entry.window.isOnScreen { drag = current; return }
+        if !current.active, hypot(current.point.x - current.start.x, current.point.y - current.start.y) > 4 {
+            current.active = true
+            cancelHover()
+        }
+        drag = current
+        if current.active { needsDisplay = true }
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard let drag = desktopDrag else { return }
-        desktopDrag = nil
+        guard let current = drag else { return }
+        drag = nil
         needsDisplay = true
-        guard drag.active, let slot = dropSlot(source: drag.source, point: drag.point) else { return }
-        onMoveDesktop?(drag.source.displayID, drag.source.desktopID, slot.target)
+        guard current.active else {
+            if case .window(let entry) = current.subject { selectedID = entry.id; onOpen?(entry) }
+            return
+        }
+        switch current.subject {
+        case .desktop(let source):
+            if let slot = dropSlot(source: source, point: current.point) { onMoveDesktop?(source.displayID, source.desktopID, slot.target) }
+        case .stage(let scope, _):
+            if let slot = stageSlot(source: scope, point: current.point) { onMoveStage?(scope, slot.desktop, slot.before) }
+        case .window(let entry):
+            if let target = windowTarget(for: entry, point: current.point) { onMoveWindow?(entry, target) }
+        }
     }
 
     /// Espace d’insertion : numéro que prendra le bureau et trait à dessiner, en coordonnées de la vue.
@@ -279,6 +303,61 @@ final class OverviewCanvas: NSView {
         let width = min(r.width - 2 * OverviewLayout.side, ceil((item.desktop.name as NSString).size(withAttributes: [.font: font]).width) + 22 + dot)
         let chip = CGRect(x: r.minX + OverviewLayout.side, y: r.minY + OverviewLayout.top(bays: config.presentation == "bays"), width: width, height: 24)
         return CGRect(x: chip.minX * s, y: chip.minY * s, width: chip.width * s, height: chip.height * s)
+    }
+
+    /// Puce de stage d’une carte, en coordonnées de la vue : la même pour le dessin et la prise.
+    func stageChipFrame(for card: OverviewLayout.Card) -> CGRect? {
+        guard !card.stageName.isEmpty else { return nil }
+        let s = plan.scale
+        let frame = CGRect(x: card.frame.minX / s, y: card.frame.minY / s, width: card.frame.width / s, height: card.frame.height / s)
+        let font = NSFont.systemFont(ofSize: 8.5, weight: .medium)
+        let width = min(frame.width * 0.45, ceil((card.stageName as NSString).size(withAttributes: [.font: font]).width) + 16)
+        let chip = CGRect(x: frame.maxX - width, y: frame.maxY - OverviewLayout.caption + 5, width: width, height: 14)
+        return CGRect(x: chip.minX * s, y: chip.minY * s, width: chip.width * s, height: chip.height * s)
+    }
+
+    /// Place d’une stage : bureau visé, stage devant laquelle elle s’insère (nil = en dernier) et trait.
+    struct StageSlot: Equatable { let desktop: DesktopID; let before: StageID?; let line: CGRect }
+
+    /// Espace entre deux groupes de cartes d’une stage, dans le bureau du même écran sous le pointeur ;
+    /// trait vertical devant la première carte du groupe suivant, ou après la dernière carte. Bureau sans
+    /// carte : trait sous sa puce. Les espaces qui touchent la stage déplacée ne changent rien. O(c).
+    func stageSlot(source: StageScope, point: CGPoint) -> StageSlot? {
+        guard let item = plan.desktops.first(where: { $0.desktop.id.displayID == source.displayID && $0.frame.contains(point) }) else { return nil }
+        let desktopID = item.desktop.id.desktopID
+        let s = plan.scale
+        var groups: [(stage: StageID, first: CGRect, last: CGRect)] = []
+        for card in plan.cards where card.entry.scope?.displayID == source.displayID && card.entry.scope?.desktopID == desktopID {
+            guard let stage = card.entry.scope?.stageID else { continue }
+            if groups.last?.stage == stage { groups[groups.count - 1].last = card.frame } else { groups.append((stage, card.frame, card.frame)) }
+        }
+        guard !groups.isEmpty else {
+            guard desktopID != source.desktopID else { return nil }
+            let chip = chipFrame(for: item)
+            let side = OverviewLayout.side * s
+            return StageSlot(desktop: desktopID, before: nil,
+                             line: CGRect(x: item.frame.minX + side, y: chip.maxY + 10 * s, width: item.frame.width - 2 * side, height: 0))
+        }
+        let gap = 5 * s, imageHeight = max(1, groups[0].first.height - OverviewLayout.caption * s)
+        let lines = (0...groups.count).map { k -> CGRect in
+            let card = k < groups.count ? groups[k].first : groups[k - 1].last
+            return CGRect(x: k < groups.count ? card.minX - gap : card.maxX + gap, y: card.minY, width: 0, height: imageHeight)
+        }
+        func distance(_ line: CGRect) -> CGFloat {
+            hypot(point.x - line.minX, point.y - min(max(point.y, line.minY), line.maxY))
+        }
+        guard let k = lines.indices.min(by: { distance(lines[$0]) < distance(lines[$1]) }) else { return nil }
+        if desktopID == source.desktopID, let from = groups.firstIndex(where: { $0.stage == source.stageID }), k == from || k == from + 1 {
+            return nil
+        }
+        return StageSlot(desktop: desktopID, before: k < groups.count ? groups[k].stage : nil, line: lines[k])
+    }
+
+    /// Stage de la carte sous le pointeur, sur le même écran et différente de celle de la fenêtre. O(c).
+    func windowTarget(for entry: WindowSwitcherEntry, point: CGPoint) -> StageScope? {
+        guard let scope = plan.cards.first(where: { $0.frame.contains(point) })?.entry.scope,
+              scope != entry.scope, scope.displayID == entry.scope?.displayID else { return nil }
+        return scope
     }
 
     func select(_ id: WindowID) {
@@ -326,22 +405,47 @@ final class OverviewCanvas: NSView {
         }
         // Bureaux sans fond : seul leur nom, en puce rectangulaire arrondie. Point vert = bureau actif,
         // puce bleue = bureau agrandi par la loupe.
-        let drag = desktopDrag.flatMap { $0.active ? $0 : nil }
+        let active = drag.flatMap { $0.active ? $0 : nil }
+        var draggedDesktop: OverviewDesktopID?, draggedStage: StageScope?, draggedWindow: WindowID?, droppedWindowStage: StageScope?
+        switch active?.subject {
+        case .desktop(let id): draggedDesktop = id
+        case .stage(let scope, _): draggedStage = scope
+        case .window(let entry):
+            draggedWindow = entry.id
+            droppedWindowStage = active.flatMap { windowTarget(for: entry, point: $0.point) }
+        case nil: break
+        }
         for item in plan.desktops {
             let focused = config.loupe && magnifiedID != nil && item.desktop.entries.contains { $0.id == magnifiedID }
-            let dragged = item.desktop.id == drag?.source
-            drawChip(item.desktop, in: u(chipFrame(for: item)), focused: focused, alpha: dragged ? 0.35 : 1)
+            drawChip(item.desktop, in: u(chipFrame(for: item)), focused: focused, alpha: item.desktop.id == draggedDesktop ? 0.35 : 1)
         }
         // Stage de la fenêtre sélectionnée : ses puces passent en bleu pour montrer ses voisines.
         let chosenStage = plan.cards.first { $0.entry.id == selectedID }?.entry.scope
         for item in plan.cards where u(item.frame).insetBy(dx: -8, dy: -8).intersects(dirtyRect) {
-            drawCard(item, in: u(item.frame), sameStage: chosenStage != nil && item.entry.scope == chosenStage)
+            let target = droppedWindowStage != nil && item.entry.scope == droppedWindowStage
+            let faded = (draggedStage != nil && item.entry.scope == draggedStage) || item.entry.id == draggedWindow
+            if faded { NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current?.cgContext.setAlpha(0.45) }
+            drawCard(item, in: u(item.frame), sameStage: target || (chosenStage != nil && item.entry.scope == chosenStage))
+            if faded { NSGraphicsContext.restoreGraphicsState() }
+            if target { drawDropRing(u(item.frame)) }
         }
-        if let drag, let slot = dropSlot(source: drag.source, point: drag.point) { drawInsertion(u(slot.line)) }
-        if let drag, let item = plan.desktops.first(where: { $0.desktop.id == drag.source }) {
-            // La puce suit le pointeur, au-dessus des cartes, décalée comme au moment de la prise.
-            let chip = chipFrame(for: item).offsetBy(dx: drag.point.x - drag.start.x, dy: drag.point.y - drag.start.y)
-            drawChip(item.desktop, in: u(chip), focused: true, alpha: 1)
+        if let active {
+            let offset = CGPoint(x: active.point.x - active.start.x, y: active.point.y - active.start.y)
+            switch active.subject {
+            case .desktop(let source):
+                if let slot = dropSlot(source: source, point: active.point) { drawInsertion(u(slot.line)) }
+                if let item = plan.desktops.first(where: { $0.desktop.id == source }) {
+                    // La puce suit le pointeur, au-dessus des cartes, décalée comme au moment de la prise.
+                    drawChip(item.desktop, in: u(chipFrame(for: item).offsetBy(dx: offset.x, dy: offset.y)), focused: true, alpha: 1)
+                }
+            case .stage(let scope, let name):
+                if let slot = stageSlot(source: scope, point: active.point) { drawInsertion(u(slot.line)) }
+                drawStageGhost(name, at: u(CGRect(origin: active.point, size: .zero)).origin)
+            case .window(let entry):
+                if let card = plan.cards.first(where: { $0.entry.id == entry.id }) {
+                    drawWindowGhost(entry, card: u(card.frame), at: u(CGRect(origin: active.point, size: .zero)).origin)
+                }
+            }
         }
         if let notice {
             let visible = u(visibleRect)
@@ -369,6 +473,51 @@ final class OverviewCanvas: NSView {
         NSGraphicsContext.restoreGraphicsState()
         let center = CGPoint(x: bar.midX, y: bar.midY)
         box(CGRect(x: center.x - 3, y: center.y - 3, width: 6, height: 6), fill: palette(0.85, 0.95, 1), stroke: blue.withAlphaComponent(0.6), radius: 3, line: 1)
+    }
+
+    /// Contour des cartes de la stage visée par une fenêtre glissée.
+    private func drawDropRing(_ frame: CGRect) {
+        let image = CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: max(1, frame.height - OverviewLayout.caption))
+        NSGraphicsContext.saveGraphicsState()
+        let glow = NSShadow(); glow.shadowColor = palette(0.48, 0.80, 0.97, 0.6); glow.shadowBlurRadius = 8; glow.shadowOffset = .zero; glow.set()
+        palette(0.48, 0.80, 0.97, 0.95).setStroke()
+        let ring = NSBezierPath(roundedRect: image.insetBy(dx: -2.5, dy: -2.5), xRadius: 8, yRadius: 8)
+        ring.lineWidth = 1.5; ring.stroke()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    /// Puce de stage portée par le pointeur pendant le glisser.
+    private func drawStageGhost(_ name: String, at point: CGPoint) {
+        let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        let width = ceil((name as NSString).size(withAttributes: [.font: font]).width) + 20
+        let chip = CGRect(x: point.x + 8, y: point.y + 6, width: width, height: 20)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow(); shadow.shadowColor = NSColor.black.withAlphaComponent(0.35); shadow.shadowBlurRadius = 10; shadow.shadowOffset = CGSize(width: 0, height: -3); shadow.set()
+        box(chip, fill: palette(0.17, 0.36, 0.48, 0.95), stroke: palette(0.45, 0.78, 0.95, 0.9), radius: 5, line: 1)
+        NSGraphicsContext.restoreGraphicsState()
+        text(name, in: CGRect(x: chip.minX + 10, y: chip.minY + 3, width: width - 14, height: 15), size: 11, weight: .semibold, color: palette(0.85, 0.95, 1))
+    }
+
+    /// Aperçu réduit de la fenêtre portée par le pointeur.
+    private func drawWindowGhost(_ entry: WindowSwitcherEntry, card: CGRect, at point: CGPoint) {
+        let width = min(150, card.width * 0.6)
+        let ratio = max(0.4, min(1.2, (card.height - OverviewLayout.caption) / max(1, card.width)))
+        let rect = CGRect(x: point.x + 10, y: point.y + 8, width: width, height: width * ratio)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow(); shadow.shadowColor = NSColor.black.withAlphaComponent(0.4); shadow.shadowBlurRadius = 14; shadow.shadowOffset = CGSize(width: 0, height: -4); shadow.set()
+        palette(16.0/255, 27.0/255, 36.0/255, 0.92).setFill(); path.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        NSGraphicsContext.saveGraphicsState(); path.addClip()
+        if let image = images[entry.id], image.size.width > 0, image.size.height > 0 {
+            image.draw(in: rect, from: WindowSwitcherThumbnailView.sourceRect(image: image.size, target: rect.size), operation: .sourceOver,
+                       fraction: 0.9, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
+        } else if let icon = icons[entry.id] ?? appIcons[entry.window.pid] {
+            let side = min(40, rect.height * 0.6)
+            icon.draw(in: CGRect(x: rect.midX - side / 2, y: rect.midY - side / 2, width: side, height: side), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        palette(0.48, 0.80, 0.97, 0.8).setStroke(); path.lineWidth = 1; path.stroke()
     }
 
     private func drawChip(_ desktop: OverviewDesktop, in chip: CGRect, focused: Bool, alpha: CGFloat) {

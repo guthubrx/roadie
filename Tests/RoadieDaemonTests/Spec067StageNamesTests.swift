@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import AppKit
 import RoadieAX
 import RoadieCore
 @testable import RoadieDaemon
@@ -33,6 +34,16 @@ struct Spec067StageNamesTests {
         #expect(state.duplicateStageNameCount == 0)
         #expect(state.scopes.flatMap { $0.stages.flatMap(\.members) }.count == 3)
         #expect(state.makeStageNamesUnique() == 0)
+    }
+
+    @Test func aConnectedDisplayKeepsTheNameBeforeAnAbsentOne() {
+        var state = PersistentStageState(scopes: [
+            PersistentStageScope(displayID: b, desktopID: d(1), stages: [PersistentStage(id: s("3"), name: "Com", members: [member(1), member(2), member(3)])]),
+            PersistentStageScope(displayID: a, desktopID: d(1), stages: [PersistentStage(id: s("3"), name: "Com", members: [member(4)])]),
+        ])
+        #expect(state.makeStageNamesUnique(liveDisplays: [a]) == 1)
+        #expect(names(state, a, 1) == ["Com"])
+        #expect(names(state, b, 1) == ["Com 2"])
     }
 
     @Test func configuredWorkspaceNamesOnlyOneStage() {
@@ -89,5 +100,100 @@ struct Spec067StageNamesTests {
         #expect(commands.moveStage(s("4"), displayID: a, from: d(2), to: d(2), before: s("1")).changed)
         #expect(names(store.state(), a, 2) == ["Quatre", "Un", "Trois", "Com"])
         #expect(commands.moveStage(s("4"), displayID: a, from: d(2), to: d(2), before: s("1")).outcome == .noOp)
+    }
+}
+
+@MainActor
+struct Spec067OverviewDragTests {
+    private let display = DisplayID(rawValue: "A")
+    private func scope(_ desktop: Int, _ stage: String) -> StageScope {
+        StageScope(displayID: display, desktopID: DesktopID(rawValue: desktop), stageID: StageID(rawValue: stage))
+    }
+
+    private func canvas() -> (OverviewCanvas, NSWindow) {
+        let layout: [(UInt32, Int, String)] = [(1, 1, "a"), (2, 1, "a"), (3, 1, "b"), (4, 2, "c")]
+        let entries = layout.map { id, desktop, stage in
+            WindowSwitcherEntry(window: WindowSnapshot(id: WindowID(rawValue: id), pid: 1, appName: "App", bundleID: "fixture", title: "F\(id)",
+                                                       frame: Rect(x: 0, y: 0, width: 900, height: 600), isOnScreen: true, isTileCandidate: true),
+                                scope: scope(desktop, stage), stageName: stage.uppercased())
+        }
+        let screen = DisplaySnapshot(id: display, index: 0, name: "A", frame: Rect(x: 0, y: 0, width: 1728, height: 1117),
+                                     visibleFrame: Rect(x: 0, y: 0, width: 1728, height: 1080), isMain: true)
+        let canvas = OverviewCanvas(frame: CGRect(x: 0, y: 0, width: 1400, height: 1000))
+        let window = NSWindow(contentRect: CGRect(x: -10000, y: -10000, width: 1400, height: 1000), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = canvas
+        var config = OverviewConfig()
+        config.loupe = false
+        canvas.config = config
+        canvas.model = OverviewModel(entries: entries, displays: [screen], state: PersistentStageState())
+        canvas.viewport = CGSize(width: 1400, height: 1000)
+        canvas.rebuild()
+        return (canvas, window)
+    }
+
+    private func card(_ canvas: OverviewCanvas, _ id: UInt32) throws -> OverviewLayout.Card {
+        try #require(canvas.plan.cards.first { $0.entry.id == WindowID(rawValue: id) })
+    }
+
+    @Test func stageGapsGiveThePlaceInTheTargetDesktop() throws {
+        let (canvas, _) = canvas()
+        let a1 = try card(canvas, 1), b = try card(canvas, 3), c = try card(canvas, 4)
+        func left(_ card: OverviewLayout.Card) -> CGPoint { CGPoint(x: card.frame.minX - 2, y: card.frame.minY + 20) }
+        func right(_ card: OverviewLayout.Card) -> CGPoint { CGPoint(x: card.frame.maxX + 2, y: card.frame.minY + 20) }
+        // Espaces voisins de la stage déplacée : rien ne changerait.
+        #expect(canvas.stageSlot(source: scope(1, "a"), point: left(b)) == nil)
+        #expect(canvas.stageSlot(source: scope(1, "a"), point: left(a1)) == nil)
+        // Après la dernière stage du même bureau.
+        let end = canvas.stageSlot(source: scope(1, "a"), point: right(b))
+        #expect(end?.desktop == DesktopID(rawValue: 1) && end?.before == nil)
+        // Devant la première stage.
+        #expect(canvas.stageSlot(source: scope(1, "b"), point: left(a1))?.before == StageID(rawValue: "a"))
+        // Autre bureau du même écran.
+        let other = canvas.stageSlot(source: scope(1, "a"), point: left(c))
+        #expect(other?.desktop == DesktopID(rawValue: 2) && other?.before == StageID(rawValue: "c"))
+    }
+
+    @Test func windowTargetsAnotherStageOnly() throws {
+        let (canvas, _) = canvas()
+        let a2 = try card(canvas, 2), c = try card(canvas, 4)
+        let entry = canvas.plan.cards[0].entry
+        #expect(canvas.windowTarget(for: entry, point: CGPoint(x: c.frame.midX, y: c.frame.midY)) == scope(2, "c"))
+        #expect(canvas.windowTarget(for: entry, point: CGPoint(x: a2.frame.midX, y: a2.frame.midY)) == nil)
+        let chip = try #require(canvas.stageChipFrame(for: c))
+        #expect(c.frame.contains(CGPoint(x: chip.midX, y: chip.midY)))
+    }
+
+    @Test func nativeClickOpensAndDragMovesTheWindow() throws {
+        let (canvas, window) = canvas()
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        var opened: [WindowID] = []
+        var moved: [(WindowID, StageScope)] = []
+        canvas.onOpen = { opened.append($0.id) }
+        canvas.onMoveWindow = { moved.append(($0.id, $1)) }
+        let source = try card(canvas, 1), target = try card(canvas, 4)
+        func send(_ type: NSEvent.EventType, _ point: CGPoint) throws {
+            let location = canvas.convert(point, to: nil)
+            let event = try #require(NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+            switch type {
+            case .leftMouseDown: canvas.mouseDown(with: event)
+            case .leftMouseDragged: canvas.mouseDragged(with: event)
+            default: canvas.mouseUp(with: event)
+            }
+        }
+        let start = CGPoint(x: source.frame.midX, y: source.frame.midY)
+        try send(.leftMouseDown, start)
+        try send(.leftMouseUp, start)
+        #expect(opened == [WindowID(rawValue: 1)])
+        let end = CGPoint(x: target.frame.midX, y: target.frame.midY)
+        try send(.leftMouseDown, start)
+        try send(.leftMouseDragged, CGPoint(x: start.x + 30, y: start.y))
+        try send(.leftMouseDragged, end)
+        try send(.leftMouseUp, end)
+        #expect(opened.count == 1)
+        #expect(moved.map(\.0) == [WindowID(rawValue: 1)])
+        #expect(moved.first?.1 == scope(2, "c"))
     }
 }

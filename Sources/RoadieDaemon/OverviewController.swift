@@ -94,6 +94,8 @@ public final class OverviewController {
         p.onKey = { [weak self] code, shift in self?.key(code, backwards: shift) }
         p.canvas.onOpen = { [weak self] entry in self?.activate(entry) }
         p.canvas.onMoveDesktop = { [weak self] displayID, source, target in self?.moveDesktop(displayID, source, to: target) }
+        p.canvas.onMoveStage = { [weak self] scope, desktop, before in self?.moveStage(scope, to: desktop, before: before) }
+        p.canvas.onMoveWindow = { [weak self] entry, target in self?.moveWindow(entry, to: target) }
         p.present(on: screen, config: config)
         p.showMessage("Chargement des bureaux et stages…")
         loadTask = Task { [weak self] in
@@ -227,19 +229,41 @@ public final class OverviewController {
 
     /// Renumérote puis recharge la vue ouverte : les cartes gardent leurs captures, seuls les bureaux changent.
     private func moveDesktop(_ displayID: DisplayID, _ source: DesktopID, to target: DesktopID) {
-        guard let panel else { return }
         let commands = DesktopCommandService(service: snapshots, store: snapshots.effectiveStageStore, events: events)
-        let result = commands.move(source, to: target, displayID: displayID)
+        let mapping = DesktopReorder.mapping(from: source, to: target)
+        reload(after: commands.move(source, to: target, displayID: displayID), failure: "Impossible de déplacer ce bureau.") { desktop in
+            guard desktop.displayID == displayID, let moved = mapping[desktop.desktopID] else { return desktop }
+            return OverviewDesktopID(displayID: displayID, desktopID: moved)
+        }
+    }
+
+    /// Stage glissée entre deux stages, dans son bureau ou un autre du même écran (SPEC-067).
+    private func moveStage(_ scope: StageScope, to desktop: DesktopID, before: StageID?) {
+        let commands = StageCommandService(service: snapshots, store: snapshots.effectiveStageStore, events: events)
+        let result = commands.moveStage(scope.stageID, displayID: scope.displayID, from: scope.desktopID, to: desktop, before: before)
+        reload(after: result, failure: "Impossible de déplacer cette stage.")
+    }
+
+    /// Fenêtre déposée sur une carte d’une autre stage : elle rejoint cette stage (SPEC-067).
+    private func moveWindow(_ entry: WindowSwitcherEntry, to target: StageScope) {
+        let actions = WindowContextActions(snapshotService: snapshots, stageStore: snapshots.effectiveStageStore, eventLog: events)
+        let result = actions.assign(windowID: entry.id, to: target.stageID, desktopID: target.desktopID, displayID: target.displayID)
+        reload(after: result, failure: "Impossible de déplacer cette fenêtre.")
+    }
+
+    /// Recharge la vue ouverte après une modification réussie. Le relevé est refusé si l’état des stages
+    /// change pendant la lecture, ce qui suit souvent la modification : relire au lieu de garder l’ancien affichage.
+    private func reload(after result: StageCommandResult, failure: String,
+                        focus remap: @escaping (OverviewDesktopID) -> OverviewDesktopID = { $0 }) {
+        guard let panel else { return }
         guard result.changed else {
-            if result.outcome == .failed { panel.showMessage("Impossible de déplacer ce bureau. Échap pour quitter.") }
+            if result.outcome == .failed { panel.showMessage(failure + " Échap pour quitter.") }
             return
         }
         let id = sessionID
         loadTask?.cancel()
         loadTask = Task { [weak self] in
             guard let self else { return }
-            // Le relevé est refusé si l’état des stages change pendant la lecture, ce qui suit souvent
-            // la renumérotation : relire au lieu de garder l’ancien affichage.
             var loaded = await self.service.load()
             var attempts = 1
             while loaded.snapshot == nil, attempts < 6, !Task.isCancelled {
@@ -247,15 +271,12 @@ public final class OverviewController {
                 loaded = await self.service.load()
                 attempts += 1
             }
-            self.events.append(RoadieEvent(type: "overview.desktops_reloaded", details: [
+            self.events.append(RoadieEvent(type: "overview.reloaded", details: [
                 "attempts": String(attempts), "loaded": String(loaded.snapshot != nil)]))
             guard !Task.isCancelled, self.sessionID == id, self.panel === panel, let snapshot = loaded.snapshot else { return }
             panel.canvas.model = OverviewModel(entries: loaded.entries, displays: snapshot.displays, state: loaded.persisted)
-            panel.canvas.focusedDesktop = panel.canvas.focusedDesktop.map { desktop in
-                guard desktop.displayID == displayID else { return desktop }
-                let moved = DesktopReorder.mapping(from: source, to: target)[desktop.desktopID] ?? desktop.desktopID
-                return OverviewDesktopID(displayID: displayID, desktopID: moved)
-            }
+            panel.canvas.focusedDesktop = panel.canvas.focusedDesktop.map(remap)
+            panel.canvas.notice = nil
             panel.canvas.rebuild()
         }
     }

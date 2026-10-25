@@ -25,12 +25,14 @@ extension PersistentStageState {
         return keys
     }
 
-    /// Doublons existants : la copie qui a le plus de fenêtres garde le nom ; les autres copies
-    /// occupées deviennent « Nom 2 », « Nom 3 »… ; les copies vides redeviennent anonymes. Sans copie
-    /// occupée, le plus petit numéro de bureau garde le nom, écran actif d'abord. Aucune stage n'est
-    /// supprimée et aucune fenêtre ne change de stage. Renvoie le nombre de stages modifiées. O(S log S).
-    mutating func makeStageNamesUnique() -> Int {
-        struct Copy { let scope: Int; let stage: Int; let members: Int; let desktop: Int; let activeDisplay: Bool }
+    /// Doublons existants : une copie sur un écran branché passe avant une copie d'écran absent (ses
+    /// membres mémorisés peuvent être fermés depuis longtemps), puis la copie qui a le plus de fenêtres
+    /// garde le nom ; les autres copies occupées deviennent « Nom 2 », « Nom 3 »… ; les copies vides
+    /// redeviennent anonymes. À égalité, le plus petit numéro de bureau, écran actif d'abord. Aucune
+    /// stage n'est supprimée et aucune fenêtre ne change de stage. `liveDisplays` vide : aucun écran
+    /// n'est privilégié. Renvoie le nombre de stages modifiées. O(S log S).
+    mutating func makeStageNamesUnique(liveDisplays: Set<DisplayID> = []) -> Int {
+        struct Copy { let scope: Int; let stage: Int; let members: Int; let desktop: Int; let activeDisplay: Bool; let live: Bool }
         var groups: [String: [Copy]] = [:]
         var order: [String] = []
         for (scopeIndex, scope) in scopes.enumerated() {
@@ -38,7 +40,8 @@ extension PersistentStageState {
                 let key = StageNameUniqueness.key(stage.name)
                 if groups[key] == nil { order.append(key) }
                 groups[key, default: []].append(Copy(scope: scopeIndex, stage: stageIndex, members: stage.members.count,
-                                                     desktop: scope.desktopID.rawValue, activeDisplay: scope.displayID == activeDisplayID))
+                                                     desktop: scope.desktopID.rawValue, activeDisplay: scope.displayID == activeDisplayID,
+                                                     live: liveDisplays.contains(scope.displayID)))
             }
         }
         var taken = Set(order)
@@ -46,6 +49,7 @@ extension PersistentStageState {
         for key in order {
             guard let copies = groups[key], copies.count > 1 else { continue }
             let ranked = copies.sorted { a, b in
+                if a.live != b.live { return a.live }
                 if a.members != b.members { return a.members > b.members }
                 if a.desktop != b.desktop { return a.desktop < b.desktop }
                 if a.activeDisplay != b.activeDisplay { return a.activeDisplay }

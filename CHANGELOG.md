@@ -13,6 +13,13 @@ jour et les limites connues ; les README décrivent la version courante.
   Stages, fenêtres, nom, épinglages et historique suivent le bureau ; aucune fenêtre
   ne bouge. Même opération en CLI : `roadie desktop move N POSITION`.
 
+- Déplacement des stages et des fenêtres dans la vue d’ensemble : la puce de stage
+  d’une carte se glisse entre deux stages, dans son bureau ou un autre bureau du même
+  écran ; une carte se glisse sur une autre stage pour y envoyer sa fenêtre.
+- Noms de stage uniques dans tout Roadie : un renommage vers un nom déjà pris est
+  refusé, un workspace configuré ne nomme qu’une stage, et `roadie state heal`
+  corrige les doublons hérités sans déplacer de fenêtre.
+
 ### Corrections
 
 - Le sélecteur et la vue d’ensemble ne proposent plus une fenêtre fermée que son
