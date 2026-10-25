@@ -238,7 +238,17 @@ public final class OverviewController {
         loadTask?.cancel()
         loadTask = Task { [weak self] in
             guard let self else { return }
-            let loaded = await self.service.load()
+            // Le relevé est refusé si l’état des stages change pendant la lecture, ce qui suit souvent
+            // la renumérotation : relire au lieu de garder l’ancien affichage.
+            var loaded = await self.service.load()
+            var attempts = 1
+            while loaded.snapshot == nil, attempts < 6, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(80))
+                loaded = await self.service.load()
+                attempts += 1
+            }
+            self.events.append(RoadieEvent(type: "overview.desktops_reloaded", details: [
+                "attempts": String(attempts), "loaded": String(loaded.snapshot != nil)]))
             guard !Task.isCancelled, self.sessionID == id, self.panel === panel, let snapshot = loaded.snapshot else { return }
             panel.canvas.model = OverviewModel(entries: loaded.entries, displays: snapshot.displays, state: loaded.persisted)
             panel.canvas.focusedDesktop = panel.canvas.focusedDesktop.map { desktop in
