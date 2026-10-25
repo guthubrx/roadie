@@ -8,7 +8,8 @@ jour et les limites connues ; les README décrivent la version courante.
 ### Nouveautés
 
 - Réordonnancement des bureaux dans la vue d’ensemble : glisser la puce d’un bureau
-  sur un autre bureau du même écran les renumérote comme dans Mission Control.
+  entre deux autres bureaux du même écran, ou avant le premier, l’insère à cette
+  place et renumérote les bureaux comme dans Mission Control.
   Stages, fenêtres, nom, épinglages et historique suivent le bureau ; aucune fenêtre
   ne bouge. Même opération en CLI : `roadie desktop move N POSITION`.
 

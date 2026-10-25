@@ -1,5 +1,7 @@
 import Foundation
 import Testing
+import AppKit
+import RoadieAX
 import RoadieCore
 @testable import RoadieDaemon
 
@@ -99,5 +101,54 @@ struct Spec066DesktopReorderTests {
         #expect(intents.intent(for: scope(main, 2)) == nil)
         #expect(commands.move(d(1), to: d(1), displayID: main).outcome == .noOp)
         #expect(commands.move(d(1), to: d(40), displayID: main).outcome == .failed)
+    }
+}
+
+@MainActor
+struct Spec066OverviewDropSlotTests {
+    private func canvas(presentation: String) -> OverviewCanvas {
+        let display = DisplayID(rawValue: "A")
+        let entries = (1...3).map { i in
+            WindowSwitcherEntry(window: WindowSnapshot(id: WindowID(rawValue: UInt32(i)), pid: 1, appName: "App", bundleID: "fixture", title: "F\(i)",
+                                                       frame: Rect(x: 0, y: 0, width: 900, height: 600), isOnScreen: true, isTileCandidate: true),
+                                scope: StageScope(displayID: display, desktopID: DesktopID(rawValue: i), stageID: StageID(rawValue: "1")))
+        }
+        let screen = DisplaySnapshot(id: display, index: 0, name: "A", frame: Rect(x: 0, y: 0, width: 1728, height: 1117),
+                                     visibleFrame: Rect(x: 0, y: 0, width: 1728, height: 1080), isMain: true)
+        let canvas = OverviewCanvas(frame: CGRect(x: 0, y: 0, width: 1400, height: 1000))
+        var config = OverviewConfig()
+        config.presentation = presentation
+        config.loupe = false
+        canvas.config = config
+        canvas.model = OverviewModel(entries: entries, displays: [screen], state: PersistentStageState())
+        canvas.viewport = CGSize(width: 1400, height: 1000)
+        canvas.rebuild()
+        return canvas
+    }
+
+    @Test(arguments: ["archipelago", "bays"])
+    func gapsGiveTheNumberOfTheNewPlace(presentation: String) throws {
+        let canvas = canvas(presentation: presentation)
+        let vertical = presentation != "bays"
+        let frames = canvas.plan.desktops.map(\.frame)
+        try #require(frames.count == 3)
+        func point(_ along: CGFloat) -> CGPoint {
+            vertical ? CGPoint(x: frames[0].midX, y: along) : CGPoint(x: along, y: frames[0].midY)
+        }
+        func lead(_ r: CGRect) -> CGFloat { vertical ? r.minY : r.minX }
+        func trail(_ r: CGRect) -> CGFloat { vertical ? r.maxY : r.maxX }
+        let third = OverviewDesktopID(displayID: DisplayID(rawValue: "A"), desktopID: DesktopID(rawValue: 3))
+        let first = OverviewDesktopID(displayID: DisplayID(rawValue: "A"), desktopID: DesktopID(rawValue: 1))
+        // Avant le premier bureau : le troisième devient le numéro 1.
+        #expect(canvas.dropSlot(source: third, point: point(lead(frames[0]) + 2))?.target == DesktopID(rawValue: 1))
+        // Entre le premier et le deuxième : il devient le numéro 2.
+        #expect(canvas.dropSlot(source: third, point: point((trail(frames[0]) + lead(frames[1])) / 2))?.target == DesktopID(rawValue: 2))
+        // Espaces qui touchent le bureau déplacé : aucun changement, aucun trait.
+        #expect(canvas.dropSlot(source: third, point: point((trail(frames[1]) + lead(frames[2])) / 2)) == nil)
+        #expect(canvas.dropSlot(source: third, point: point(trail(frames[2]) - 2)) == nil)
+        // Après le dernier : le premier devient le numéro 3.
+        #expect(canvas.dropSlot(source: first, point: point(trail(frames[2]) - 2))?.target == DesktopID(rawValue: 3))
+        // Hors de l'écran : rien.
+        #expect(canvas.dropSlot(source: first, point: CGPoint(x: -500, y: -500)) == nil)
     }
 }

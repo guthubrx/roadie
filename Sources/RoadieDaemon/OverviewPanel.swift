@@ -236,13 +236,38 @@ final class OverviewCanvas: NSView {
         guard let drag = desktopDrag else { return }
         desktopDrag = nil
         needsDisplay = true
-        guard drag.active, let target = dropTarget(for: drag), target != drag.source else { return }
-        onMoveDesktop?(drag.source.displayID, drag.source.desktopID, target.desktopID)
+        guard drag.active, let slot = dropSlot(source: drag.source, point: drag.point) else { return }
+        onMoveDesktop?(drag.source.displayID, drag.source.desktopID, slot.target)
     }
 
-    /// Bureau du même écran sous le pointeur ; les autres écrans ne reçoivent pas la puce. O(b).
-    private func dropTarget(for drag: DesktopDrag) -> OverviewDesktopID? {
-        plan.desktops.first { $0.desktop.id.displayID == drag.source.displayID && $0.frame.contains(drag.point) }?.desktop.id
+    /// Espace d’insertion : numéro que prendra le bureau et trait à dessiner, en coordonnées de la vue.
+    struct DropSlot: Equatable { let target: DesktopID; let line: CGRect }
+
+    /// Espace entre deux bureaux du même écran le plus proche du pointeur, y compris avant le premier
+    /// et après le dernier. Bureaux empilés en Archipel, côte à côte en Baies. nil hors de l’écran
+    /// ou si l’espace touche le bureau déplacé (rien ne changerait). O(b).
+    func dropSlot(source: OverviewDesktopID, point: CGPoint) -> DropSlot? {
+        guard let region = plan.displays.first(where: { $0.display.id == source.displayID })?.frame,
+              region.insetBy(dx: -24, dy: -24).contains(point) else { return nil }
+        let desktops = plan.desktops.filter { $0.desktop.id.displayID == source.displayID }
+        guard let from = desktops.firstIndex(where: { $0.desktop.id == source }) else { return nil }
+        let vertical = config.presentation != "bays"
+        func lead(_ r: CGRect) -> CGFloat { vertical ? r.minY : r.minX }
+        func trail(_ r: CGRect) -> CGFloat { vertical ? r.maxY : r.maxX }
+        let gaps = (0...desktops.count).map { k -> CGFloat in
+            if k == 0 { return lead(desktops[0].frame) }
+            if k == desktops.count { return trail(desktops[k - 1].frame) }
+            return (trail(desktops[k - 1].frame) + lead(desktops[k].frame)) / 2
+        }
+        let along = vertical ? point.y : point.x
+        guard let k = gaps.indices.min(by: { abs(gaps[$0] - along) < abs(gaps[$1] - along) }), k != from, k != from + 1 else { return nil }
+        // Vers le haut, il prend le numéro du bureau devant lequel il s’insère ; vers le bas, celui d’avant l’espace.
+        let target = k < from ? desktops[k].desktop.id.desktopID : desktops[k - 1].desktop.id.desktopID
+        let frames = desktops.map(\.frame)
+        let line = vertical
+            ? CGRect(x: frames.map(\.minX).min() ?? 0, y: gaps[k], width: (frames.map(\.maxX).max() ?? 0) - (frames.map(\.minX).min() ?? 0), height: 0)
+            : CGRect(x: gaps[k], y: frames.map(\.minY).min() ?? 0, width: 0, height: (frames.map(\.maxY).max() ?? 0) - (frames.map(\.minY).min() ?? 0))
+        return DropSlot(target: target, line: line)
     }
 
     /// Puce du nom de bureau, en coordonnées de la vue : la même pour le dessin et le clic.
@@ -302,13 +327,8 @@ final class OverviewCanvas: NSView {
         // Bureaux sans fond : seul leur nom, en puce rectangulaire arrondie. Point vert = bureau actif,
         // puce bleue = bureau agrandi par la loupe.
         let drag = desktopDrag.flatMap { $0.active ? $0 : nil }
-        let target = drag.flatMap(dropTarget(for:))
         for item in plan.desktops {
             let focused = config.loupe && magnifiedID != nil && item.desktop.entries.contains { $0.id == magnifiedID }
-            if let target, item.desktop.id == target, target != drag?.source {
-                // Place visée : contour bleu du bureau entier, là où la puce sera posée.
-                box(u(item.frame).insetBy(dx: 4, dy: 4), fill: palette(0.40, 0.76, 0.97, 0.08), stroke: palette(0.48, 0.80, 0.97, 0.85), radius: 10, line: 1.5)
-            }
             let dragged = item.desktop.id == drag?.source
             drawChip(item.desktop, in: u(chipFrame(for: item)), focused: focused, alpha: dragged ? 0.35 : 1)
         }
@@ -317,6 +337,7 @@ final class OverviewCanvas: NSView {
         for item in plan.cards where u(item.frame).insetBy(dx: -8, dy: -8).intersects(dirtyRect) {
             drawCard(item, in: u(item.frame), sameStage: chosenStage != nil && item.entry.scope == chosenStage)
         }
+        if let drag, let slot = dropSlot(source: drag.source, point: drag.point) { drawInsertion(u(slot.line)) }
         if let drag, let item = plan.desktops.first(where: { $0.desktop.id == drag.source }) {
             // La puce suit le pointeur, au-dessus des cartes, décalée comme au moment de la prise.
             let chip = chipFrame(for: item).offsetBy(dx: drag.point.x - drag.start.x, dy: drag.point.y - drag.start.y)
@@ -326,6 +347,28 @@ final class OverviewCanvas: NSView {
             let visible = u(visibleRect)
             text(notice, in: CGRect(x: visible.minX + 35, y: visible.midY - 20, width: visible.width - 70, height: 30), size: 14)
         }
+    }
+
+    /// Trait d’insertion fin : dégradé qui s’efface aux deux bouts, léger halo et petit point central.
+    private func drawInsertion(_ line: CGRect) {
+        let vertical = line.height == 0
+        let length = vertical ? line.width : line.height
+        let inset = min(18, length * 0.08)
+        let bar = vertical
+            ? CGRect(x: line.minX + inset, y: line.minY - 1, width: max(0, line.width - 2 * inset), height: 2)
+            : CGRect(x: line.minX - 1, y: line.minY + inset, width: 2, height: max(0, line.height - 2 * inset))
+        let blue = palette(0.48, 0.80, 0.97)
+        let fade = palette(0.48, 0.80, 0.97, 0)
+        NSGraphicsContext.saveGraphicsState()
+        let glow = NSShadow()
+        glow.shadowColor = blue.withAlphaComponent(0.55); glow.shadowBlurRadius = 7; glow.shadowOffset = .zero
+        glow.set()
+        let gradient = NSGradient(colors: [fade, blue.withAlphaComponent(0.9), palette(0.85, 0.95, 1), blue.withAlphaComponent(0.9), fade],
+                                  atLocations: [0, 0.22, 0.5, 0.78, 1], colorSpace: .sRGB)
+        gradient?.draw(in: NSBezierPath(roundedRect: bar, xRadius: 1, yRadius: 1), angle: vertical ? 0 : 90)
+        NSGraphicsContext.restoreGraphicsState()
+        let center = CGPoint(x: bar.midX, y: bar.midY)
+        box(CGRect(x: center.x - 3, y: center.y - 3, width: 6, height: 6), fill: palette(0.85, 0.95, 1), stroke: blue.withAlphaComponent(0.6), radius: 3, line: 1)
     }
 
     private func drawChip(_ desktop: OverviewDesktop, in chip: CGRect, focused: Bool, alpha: CGFloat) {
