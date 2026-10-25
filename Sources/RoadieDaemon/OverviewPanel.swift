@@ -148,6 +148,8 @@ final class OverviewCanvas: NSView {
     /// Les cibles se calculent toujours sur `plan`, figé pendant le geste, jamais sur l’aperçu qui bouge.
     private struct Preview { let intent: OverviewDropIntent; let plan: OverviewLayout; let ghostWindows: Set<WindowID>; let ghostDesktops: Set<OverviewDesktopID> }
     private var preview: Preview?
+    /// Disposition affichée une fois l’animation terminée : celle que le pointeur vise.
+    var displayedPlan: OverviewLayout { preview?.plan ?? plan }
     /// Glissement doux de 0,15 s des cadres affichés vers ceux de l’aperçu (ou du plan au retour).
     private enum FrameKey: Hashable { case display(DisplayID), desktop(OverviewDesktopID), card(WindowID) }
     private var animationFrom: [FrameKey: CGRect] = [:]
@@ -264,71 +266,112 @@ final class OverviewCanvas: NSView {
             if case .window(let entry) = current.subject { selectedID = entry.id; needsDisplay = true; onOpen?(entry) }
             return
         }
-        guard let intent = dropIntent(for: current) else { cancelPreview(); return }
+        // Ce qui est montré est ce qui est fait : l’intention de l’aperçu affiché, sans nouveau calcul.
         // L’aperçu reste affiché jusqu’au rechargement de la vue (ou `cancelPreview` en cas d’échec).
-        showPreview(for: intent)
+        guard let intent = preview?.intent else { cancelPreview(); return }
         onDrop?(intent)
     }
 
-    /// Intention de dépôt au point courant, calculée sur le plan figé du début du geste. O(b + c).
+    /// Disposition visée par le pointeur : celle affichée (aperçu, ou plan sans aperçu) et ses fantômes.
+    /// Sans aperçu, l’élément saisi est encore à sa place : il compte comme fantôme.
+    private struct HitContext { let layout: OverviewLayout; let ghostWindows: Set<WindowID>; let ghostDesktops: Set<OverviewDesktopID> }
+
+    private func hitContext(for subject: DragSubject) -> HitContext {
+        if let preview { return HitContext(layout: preview.plan, ghostWindows: preview.ghostWindows, ghostDesktops: preview.ghostDesktops) }
+        let ghosts = ghosts(of: subject)
+        return HitContext(layout: plan, ghostWindows: ghosts.windows, ghostDesktops: ghosts.desktops)
+    }
+
+    private func ghosts(of subject: DragSubject) -> (windows: Set<WindowID>, desktops: Set<OverviewDesktopID>) {
+        let desktops = model.displays.flatMap(\.desktops)
+        switch subject {
+        case .desktop(let source):
+            return (Set(desktops.first { $0.id == source }?.entries.map(\.id) ?? []), [source])
+        case .stage(let source):
+            return (Set(desktops.flatMap(\.stages).first { $0.scope == source }?.entries.map(\.id) ?? []), [])
+        case .window(let entry):
+            return ([entry.id], [])
+        }
+    }
+
+    /// Intention de dépôt sous le pointeur, calculée sur ce qui est affiché. Sur un fantôme, l’intention
+    /// en cours est gardée : l’aperçu qui bouge sous un pointeur immobile ne change jamais la cible. O(b + c).
     private func dropIntent(for drag: Drag) -> OverviewDropIntent? {
+        let context = hitContext(for: drag.subject), point = drag.point
+        if context.layout.cards.contains(where: { context.ghostWindows.contains($0.entry.id) && $0.frame.contains(point) })
+            || context.layout.desktops.contains(where: { context.ghostDesktops.contains($0.desktop.id) && $0.frame.contains(point) }) {
+            return preview?.intent
+        }
         switch drag.subject {
         case .desktop(let source):
-            return dropSlot(source: source, point: drag.point).map { .desktop(source: source, display: $0.display, target: $0.target) }
+            return dropSlot(source: source, point: point, in: context).map { .desktop(source: source, display: $0.display, target: $0.target) }
         case .stage(let scope):
-            if let slot = stageSlot(source: scope, point: drag.point) {
+            if let slot = stageSlot(source: scope, point: point, in: context) {
                 return .stage(source: scope, display: slot.display, desktop: slot.desktop, before: slot.before)
             }
-            return newDesktopZone(at: drag.point).map { .stageToNewDesktop(source: scope, display: $0) }
+            return newDesktopZone(at: point, in: context).map { .stageToNewDesktop(source: scope, display: $0) }
         case .window(let entry):
-            if let target = windowTarget(for: entry, point: drag.point) { return .window(entry.id, target: target) }
-            if let desktop = plan.desktops.first(where: { $0.frame.contains(drag.point) })?.desktop {
+            if let card = context.layout.cards.first(where: { $0.frame.contains(point) }) {
+                guard let scope = card.entry.scope, scope != entry.scope else { return nil }
+                return .window(entry.id, target: scope)
+            }
+            if let desktop = context.layout.desktops.first(where: { $0.frame.contains(point) })?.desktop {
                 // Seule fenêtre de sa stage, dans son propre bureau : une nouvelle stage n’apporterait rien.
-                let alone = entry.scope.map { scope in desktop.entries.filter { $0.scope == scope }.count <= 1 } ?? false
+                let alone = entry.scope.map { scope in model.entries.filter { $0.scope == scope }.count <= 1 } ?? false
                 let home = entry.scope.map { $0.displayID == desktop.id.displayID && $0.desktopID == desktop.id.desktopID } ?? false
                 return alone && home ? nil : .windowToNewStage(entry.id, display: desktop.id.displayID, desktop: desktop.id.desktopID)
             }
-            return newDesktopZone(at: drag.point).map { .windowToNewDesktop(entry.id, display: $0) }
+            return newDesktopZone(at: point, in: context).map { .windowToNewDesktop(entry.id, display: $0) }
         }
     }
 
     /// Écran dont le vide après le dernier bureau est sous le pointeur : sous les bureaux en Archipel,
-    /// à leur droite en Baies. O(b).
+    /// à leur droite en Baies. Les bureaux fantômes ne comptent pas. O(b).
     func newDesktopZone(at point: CGPoint) -> DisplayID? {
-        guard let region = plan.displays.first(where: { $0.frame.insetBy(dx: -24, dy: -24).contains(point) }),
-              let last = plan.desktops.last(where: { $0.desktop.id.displayID == region.display.id })?.frame else { return nil }
+        newDesktopZone(at: point, in: HitContext(layout: plan, ghostWindows: [], ghostDesktops: []))
+    }
+
+    private func newDesktopZone(at point: CGPoint, in context: HitContext) -> DisplayID? {
+        guard let region = context.layout.displays.first(where: { $0.frame.insetBy(dx: -24, dy: -24).contains(point) }),
+              let last = context.layout.desktops.last(where: {
+                  $0.desktop.id.displayID == region.display.id && !context.ghostDesktops.contains($0.desktop.id)
+              })?.frame else { return nil }
         return (config.presentation == "bays" ? point.x > last.maxX : point.y > last.maxY) ? region.display.id : nil
     }
 
     /// Place d’un bureau : écran visé et numéro que prendra le bureau.
     struct DropSlot: Equatable { let display: DisplayID; let target: DesktopID }
 
-    /// Espace entre deux bureaux de l’écran sous le pointeur le plus proche, y compris avant le premier
-    /// et après le dernier. Bureaux empilés en Archipel, côte à côte en Baies. Sur l’écran d’origine,
-    /// les espaces qui touchent le bureau déplacé ne changent rien ; sur un autre écran, le bureau prend
-    /// le numéro de celui devant lequel il s’insère, ou suit le dernier. nil hors des écrans. O(b).
     func dropSlot(source: OverviewDesktopID, point: CGPoint) -> DropSlot? {
-        guard let region = plan.displays.first(where: { $0.frame.insetBy(dx: -24, dy: -24).contains(point) }) else { return nil }
+        dropSlot(source: source, point: point, in: hitContext(for: .desktop(source)))
+    }
+
+    /// Espace le plus proche entre deux bureaux non fantômes de l’écran sous le pointeur, y compris
+    /// avant le premier et après le dernier. Bureaux empilés en Archipel, côte à côte en Baies. Sur
+    /// l’écran d’origine, le bureau prend le numéro de la place k parmi tous les numéros montrés (nil
+    /// si c’est le sien) ; sur un autre écran, celui du bureau devant lequel il s’insère, ou suit le
+    /// dernier. nil hors des écrans. O(b log b).
+    private func dropSlot(source: OverviewDesktopID, point: CGPoint, in context: HitContext) -> DropSlot? {
+        guard let region = context.layout.displays.first(where: { $0.frame.insetBy(dx: -24, dy: -24).contains(point) }) else { return nil }
         let displayID = region.display.id
-        let desktops = plan.desktops.filter { $0.desktop.id.displayID == displayID }
-        guard !desktops.isEmpty else { return nil }
+        let others = context.layout.desktops.filter { $0.desktop.id.displayID == displayID && !context.ghostDesktops.contains($0.desktop.id) }
+        guard !others.isEmpty else { return nil }
         let vertical = config.presentation != "bays"
         func lead(_ r: CGRect) -> CGFloat { vertical ? r.minY : r.minX }
         func trail(_ r: CGRect) -> CGFloat { vertical ? r.maxY : r.maxX }
-        let gaps = (0...desktops.count).map { k -> CGFloat in
-            if k == 0 { return lead(desktops[0].frame) }
-            if k == desktops.count { return trail(desktops[k - 1].frame) }
-            return (trail(desktops[k - 1].frame) + lead(desktops[k].frame)) / 2
+        let gaps = (0...others.count).map { k -> CGFloat in
+            if k == 0 { return lead(others[0].frame) }
+            if k == others.count { return trail(others[k - 1].frame) }
+            return (trail(others[k - 1].frame) + lead(others[k].frame)) / 2
         }
         let along = vertical ? point.y : point.x
         guard let k = gaps.indices.min(by: { abs(gaps[$0] - along) < abs(gaps[$1] - along) }) else { return nil }
         if displayID == source.displayID {
-            guard let from = desktops.firstIndex(where: { $0.desktop.id == source }), k != from, k != from + 1 else { return nil }
-            // Vers le haut, il prend le numéro du bureau devant lequel il s’insère ; vers le bas, celui d’avant l’espace.
-            return DropSlot(display: displayID, target: k < from ? desktops[k].desktop.id.desktopID : desktops[k - 1].desktop.id.desktopID)
+            let numbers = (others.map(\.desktop.id.desktopID) + [source.desktopID]).sorted()
+            return numbers[k] == source.desktopID ? nil : DropSlot(display: displayID, target: numbers[k])
         }
-        return DropSlot(display: displayID, target: k < desktops.count ? desktops[k].desktop.id.desktopID
-                            : DesktopID(rawValue: desktops[k - 1].desktop.id.desktopID.rawValue + 1))
+        return DropSlot(display: displayID, target: k < others.count ? others[k].desktop.id.desktopID
+                            : DesktopID(rawValue: others[k - 1].desktop.id.desktopID.rawValue + 1))
     }
 
     /// Puce du nom de bureau, en coordonnées de la vue : la même pour le dessin et le clic.
@@ -356,34 +399,47 @@ final class OverviewCanvas: NSView {
     /// Place d’une stage : écran et bureau visés, stage devant laquelle elle s’insère (nil = en dernier).
     struct StageSlot: Equatable { let display: DisplayID; let desktop: DesktopID; let before: StageID? }
 
-    /// Espace entre deux groupes de cartes d’une stage, dans le bureau sous le pointeur, sur tout écran :
-    /// devant la première carte du groupe suivant, ou après la dernière carte. Bureau sans carte : en
-    /// dernier. Les espaces qui touchent la stage déplacée ne changent rien. O(c).
     func stageSlot(source: StageScope, point: CGPoint) -> StageSlot? {
-        guard let item = plan.desktops.first(where: { $0.frame.contains(point) }) else { return nil }
+        stageSlot(source: source, point: point, in: hitContext(for: .stage(source)))
+    }
+
+    /// Espace entre deux groupes de cartes non fantômes, dans le bureau sous le pointeur, sur tout écran :
+    /// devant la première carte du groupe suivant, ou après la dernière. Bureau sans carte : en dernier.
+    /// nil si la stage retrouverait sa propre place. O(c).
+    private func stageSlot(source: StageScope, point: CGPoint, in context: HitContext) -> StageSlot? {
+        guard let item = context.layout.desktops.first(where: { $0.frame.contains(point) }) else { return nil }
         let desktopID = item.desktop.id.desktopID, displayID = item.desktop.id.displayID
-        let sameDesktop = displayID == source.displayID && desktopID == source.desktopID
         var groups: [(stage: StageID, first: CGRect, last: CGRect)] = []
-        for card in plan.cards where card.entry.scope?.displayID == displayID && card.entry.scope?.desktopID == desktopID {
+        for card in context.layout.cards where card.entry.scope?.displayID == displayID && card.entry.scope?.desktopID == desktopID
+            && !context.ghostWindows.contains(card.entry.id) {
             guard let stage = card.entry.scope?.stageID else { continue }
             if groups.last?.stage == stage { groups[groups.count - 1].last = card.frame } else { groups.append((stage, card.frame, card.frame)) }
         }
-        guard !groups.isEmpty else { return sameDesktop ? nil : StageSlot(display: displayID, desktop: desktopID, before: nil) }
-        let imageHeight = max(1, groups[0].first.height - OverviewLayout.caption * plan.scale)
-        let edges = (0...groups.count).map { k -> CGRect in
-            let card = k < groups.count ? groups[k].first : groups[k - 1].last
-            return CGRect(x: k < groups.count ? card.minX : card.maxX, y: card.minY, width: 0, height: imageHeight)
+        var before: StageID?
+        if !groups.isEmpty {
+            let imageHeight = max(1, groups[0].first.height - OverviewLayout.caption * plan.scale)
+            let edges = (0...groups.count).map { k -> CGRect in
+                let card = k < groups.count ? groups[k].first : groups[k - 1].last
+                return CGRect(x: k < groups.count ? card.minX : card.maxX, y: card.minY, width: 0, height: imageHeight)
+            }
+            func distance(_ edge: CGRect) -> CGFloat { hypot(point.x - edge.minX, point.y - min(max(point.y, edge.minY), edge.maxY)) }
+            guard let k = edges.indices.min(by: { distance(edges[$0]) < distance(edges[$1]) }) else { return nil }
+            before = k < groups.count ? groups[k].stage : nil
         }
-        func distance(_ edge: CGRect) -> CGFloat { hypot(point.x - edge.minX, point.y - min(max(point.y, edge.minY), edge.maxY)) }
-        guard let k = edges.indices.min(by: { distance(edges[$0]) < distance(edges[$1]) }) else { return nil }
-        if sameDesktop, let from = groups.firstIndex(where: { $0.stage == source.stageID }), k == from || k == from + 1 { return nil }
-        return StageSlot(display: displayID, desktop: desktopID, before: k < groups.count ? groups[k].stage : nil)
+        // Sa propre place : même bureau, devant la stage qui la suivait déjà.
+        if displayID == source.displayID, desktopID == source.desktopID {
+            let order = model.displays.first { $0.id == displayID }?.desktops.first { $0.id.desktopID == desktopID }?
+                .stages.filter { !$0.entries.isEmpty }.map(\.scope.stageID) ?? []
+            let next = order.firstIndex(of: source.stageID).flatMap { $0 + 1 < order.count ? order[$0 + 1] : nil }
+            if before == next { return nil }
+        }
+        return StageSlot(display: displayID, desktop: desktopID, before: before)
     }
 
-    /// Stage de la carte sous le pointeur, sur tout écran, différente de celle de la fenêtre. O(c).
+    /// Stage de la carte affichée sous le pointeur, sur tout écran, différente de celle de la fenêtre. O(c).
     func windowTarget(for entry: WindowSwitcherEntry, point: CGPoint) -> StageScope? {
-        guard let scope = plan.cards.first(where: { $0.frame.contains(point) })?.entry.scope, scope != entry.scope else { return nil }
-        return scope
+        guard case .window(_, let target)? = dropIntent(for: Drag(subject: .window(entry), start: point, point: point, active: true)) else { return nil }
+        return target
     }
 
     // MARK: - Aperçu en direct (SPEC-071)
@@ -395,16 +451,8 @@ final class OverviewCanvas: NSView {
         let from = shownFrames()
         if let intent {
             let next = model.previewing(intent)
-            var ghostWindows = Set<WindowID>(), ghostDesktops = Set<OverviewDesktopID>()
-            switch intent {
-            case .desktop(let source, _, _):
-                ghostDesktops.insert(source)
-                ghostWindows = Set(model.displays.flatMap(\.desktops).first { $0.id == source }?.entries.map(\.id) ?? [])
-            case .stage(let source, _, _, _), .stageToNewDesktop(let source, _):
-                ghostWindows = Set(model.displays.flatMap(\.desktops).flatMap(\.stages).first { $0.scope == source }?.entries.map(\.id) ?? [])
-            case .window(let id, _), .windowToNewStage(let id, _, _), .windowToNewDesktop(let id, _):
-                ghostWindows = [id]
-            }
+            guard let subject = drag?.subject else { return }
+            var (ghostWindows, ghostDesktops) = ghosts(of: subject)
             // Contenant créé par le dépôt : son bureau d’aperçu est lui aussi un fantôme.
             let known = Set(model.displays.flatMap(\.desktops).map(\.id))
             ghostDesktops.formUnion(next.displays.flatMap(\.desktops).map(\.id).filter { !known.contains($0) })

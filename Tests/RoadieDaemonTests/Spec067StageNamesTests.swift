@@ -164,6 +164,36 @@ struct Spec067OverviewDragTests {
         #expect(c.frame.contains(CGPoint(x: chip.midX, y: chip.midY)))
     }
 
+    /// Régression 071 : la carte visée bouge dans l’aperçu ; lâcher sur le fantôme de la fenêtre, là où
+    /// l’ancienne disposition était vide, doit la faire rejoindre la stage, pas créer une stage.
+    @Test func droppingOnTheGhostKeepsTheTargetStage() throws {
+        let (canvas, window) = canvas()
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        var drops: [OverviewDropIntent] = []
+        canvas.onDrop = { drops.append($0) }
+        func send(_ type: NSEvent.EventType, _ point: CGPoint) throws {
+            let event = try #require(NSEvent.mouseEvent(with: type, location: canvas.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+            switch type {
+            case .leftMouseDown: canvas.mouseDown(with: event)
+            case .leftMouseDragged: canvas.mouseDragged(with: event)
+            default: canvas.mouseUp(with: event)
+            }
+        }
+        let source = try card(canvas, 1), target = try card(canvas, 4)
+        let start = CGPoint(x: source.frame.midX, y: source.frame.midY)
+        try send(.leftMouseDown, start)
+        try send(.leftMouseDragged, CGPoint(x: start.x + 30, y: start.y))
+        try send(.leftMouseDragged, CGPoint(x: target.frame.midX, y: target.frame.midY))
+        let ghost = try #require(canvas.displayedPlan.cards.first { $0.entry.id == WindowID(rawValue: 1) }?.frame)
+        // Dans la disposition d’avant le geste, cet endroit n’est sur aucune carte.
+        #expect(!canvas.plan.cards.contains { $0.frame.contains(CGPoint(x: ghost.midX, y: ghost.midY)) })
+        try send(.leftMouseDragged, CGPoint(x: ghost.midX, y: ghost.midY))
+        try send(.leftMouseUp, CGPoint(x: ghost.midX, y: ghost.midY))
+        #expect(drops == [.window(WindowID(rawValue: 1), target: scope(2, "c"))])
+    }
+
     @Test func nativeClickOpensAndDragMovesTheWindow() throws {
         let (canvas, window) = canvas()
         window.orderFront(nil)
