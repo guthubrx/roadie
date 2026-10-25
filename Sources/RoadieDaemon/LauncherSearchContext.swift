@@ -37,6 +37,8 @@ struct LauncherSearchContext {
     /// Abréviations de l'utilisateur (SPEC-079), l'action d'une abréviation aujourd'hui, le nom réel
     /// d'une stage (nil si anonyme) et l'enregistrement d'une abréviation.
     var aliases = LauncherAliasBook()
+    /// Projets gardés (SPEC-080).
+    var projects: [StageProject] = []
     var aliasAction: @MainActor (LauncherAlias) -> LauncherAction? = { _ in nil }
     var stageName: @MainActor (StageScope) -> String? = { _ in nil }
     var saveAlias: @MainActor (LauncherAlias, String) -> LauncherAlias? = { _, _ in nil }
@@ -148,6 +150,8 @@ struct LauncherPreviewRequest: Equatable, Sendable {
             guard target.kind == .window, let id = target.scope.windowId,
                   LauncherActionList.ownStage(of: action.subject) != stage else { return nil }
             return LauncherPreviewRequest(stage: stage, incoming: WindowID(rawValue: id), appPath: nil)
+        case .project:
+            return nil
         }
     }
 }

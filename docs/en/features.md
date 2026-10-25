@@ -463,6 +463,14 @@ free). As soon as you type a name at the verb step, matching destinations appear
 `fire`, Tab, `perso`, Return opens a Firefox window in the Perso stage and goes
 there. Escape, or deleting in an empty field, goes back one step.
 
+**Projects**: a named stage can be kept as a project (the stage verb "Save as project", or
+`roadie project save NAME`): its windows in order, each one's document or address when the app
+exposes it (TextEdit, Preview, Pages, Chrome…), and the shape of its layout. Reopening the
+project (the bar's "Projects" section, or `roadie project open NAME`) shows the stage if it
+still lives; otherwise recreates it on the shown desktop, reopens each window in turn and puts
+the layout back, even after a restart. An app that does not expose its document (Firefox,
+iTerm2) comes back as a new empty window. Projects: `~/.roadies/projects.json`.
+
 **Phrase**: several words whose last ones name a destination and a position, in French or
 English: `fire perso gauche` or `fire perso left` opens Firefox in the Perso stage, on the
 left. Recognized words: a stage name (exact, or a unique 3-letter start), `ici`/`here`,

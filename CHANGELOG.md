@@ -22,6 +22,8 @@ jour et les limites connues ; les README décrivent la version courante.
   couleur d'accent avec le rappel des touches. L'icône suit la taille du texte
   (deux fois la hauteur du nom), le nom est en graisse normale, les fenêtres
   montrent l'icône de leur application et les symboles sont posés sur une tuile.
+- Projets : une stage nommée se garde (fenêtres, documents, adresses, disposition) et se
+  rouvre telle quelle, même après un redémarrage ; `roadie project save|open|list|delete`.
 - Phrase complète en français ou en anglais (`fire perso gauche`) ; ⌘S garde une action en
   abréviation et donne la commande `roadie launch … --position …` pour BetterTouchTool.
 - Aperçu actif du lanceur : pendant le choix d'une stage, les vraies fenêtres prennent leur

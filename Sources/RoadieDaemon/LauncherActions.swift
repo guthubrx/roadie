@@ -9,12 +9,15 @@ enum LauncherSubject: Equatable, Sendable {
     case target(RoadieTarget)
     /// Fichier ou dossier trouvé par Spotlight (SPEC-077).
     case file(LauncherFile)
+    /// Projet gardé (SPEC-080), par son nom.
+    case project(String)
 
     var title: String {
         switch self {
         case .app(let app): app.name
         case .target(let target): target.subtitle.isEmpty ? target.title : "\(target.title) · \(target.subtitle)"
         case .file(let file): file.name
+        case .project(let name): name
         }
     }
 
@@ -23,6 +26,7 @@ enum LauncherSubject: Equatable, Sendable {
         case .app(let app): app.rankingKey
         case .target(let target): LauncherList.rankingKey(target)
         case .file(let file): file.rankingKey
+        case .project(let name): "project:\(LauncherMatch.fold(name))"
         }
     }
 
@@ -32,6 +36,7 @@ enum LauncherSubject: Equatable, Sendable {
         case .app(let app): app.name
         case .target(let target): target.title
         case .file(let file): file.name
+        case .project(let name): name
         }
     }
 }
@@ -58,6 +63,8 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     case tileWindow, floatAlways, tileAlways, clearTilingRule
     // Fichier (SPEC-077).
     case reveal, quickLook, copyPath
+    // Projets (SPEC-080) : stage gardée, rouverte, supprimée.
+    case saveProject, reopenProject, deleteProject
     // Stage, bureau
     case show, moveTo
     // Cible à l'écran
@@ -82,6 +89,9 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .reveal: "Montrer dans le Finder"
         case .quickLook: "Aperçu (Quick Look)"
         case .copyPath: "Copier le chemin"
+        case .saveProject: "Enregistrer comme projet"
+        case .reopenProject: "Rouvrir le projet"
+        case .deleteProject: "Supprimer le projet"
         case .fullscreen: "Plein écran"
         case .minimize: "Réduire"
         case .close: "Fermer la fenêtre"
@@ -123,10 +133,11 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         switch subject {
         case .app: return [.open, .openIn, .bringHere, .newWindow, .gatherIn, .hide, .quit]
         case .file: return [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath]
+        case .project: return [.reopenProject, .deleteProject]
         case .target(let target):
             switch target.kind {
             case .window: return [.focus, .sendTo, .bringHere] + tilingVerbs(tiling) + [.fullscreen, .minimize, .close]
-            case .stage: return [.show, .moveTo]
+            case .stage: return [.show, .moveTo, .saveProject]
             case .desktop: return [.show, .moveTo]
             case .display, .bookmark: return [.show]
             case .appElement, .gridCell: return [.click, .doubleClick, .rightClick, .commandClick]
@@ -244,7 +255,7 @@ struct LauncherVariant: Equatable, Sendable {
         // Un fichier se comporte comme une application : il s'ouvre, dans une stage ou ici.
         let isApp = switch subject {
         case .app, .file: true
-        case .target: false
+        case .target, .project: false
         }
         switch modifier {
         case .control:

@@ -253,6 +253,23 @@ public final class TargetModeRuntimeController: NSObject {
             launch(command)
             return
         }
+        // `roadie project …` (SPEC-080) : de même.
+        switch command.name {
+        case "project.save":
+            let result = saveProject(named: command.string("name"))
+            events.append(RoadieEvent(type: "project.command", details: ["command": "save", "message": result.message]))
+            return
+        case "project.open":
+            let result = command.string("name").map(openProject) ?? refused("project open", "name")
+            events.append(RoadieEvent(type: "project.command", details: ["command": "open", "message": result.message]))
+            return
+        case "project.delete":
+            let deleted = command.string("name").map { StageProjectStore().delete($0) } ?? false
+            events.append(RoadieEvent(type: "project.command", details: ["command": "delete", "deleted": String(deleted)]))
+            return
+        default:
+            break
+        }
         // Raccourci de recherche maintenu ou répété : la recherche ouverte reste ouverte.
         if command.name == "targets.search", currentCommand == "targets.search", currentSession != nil {
             return
@@ -470,6 +487,7 @@ public final class TargetModeRuntimeController: NSObject {
         context.preview = { [weak self] request, done in self?.preview(request, ghost: done) ?? done(nil) }
         let aliasStore = LauncherAliasStore()
         context.aliases = aliasStore.load()
+        context.projects = StageProjectStore().load().projects.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         context.aliasAction = { alias in alias.action(state: state, activeStage: activeStage, home: (homeDisplay, homeDesktop)) }
         context.stageName = { scope in
             state.scopes.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
@@ -525,6 +543,14 @@ public final class TargetModeRuntimeController: NSObject {
             return TargetActionResult(changed: true, message: "\(label): \(app.bundleID)")
         case .file(let file):
             return performFile(action, file: file, label: label)
+        case .project(let name):
+            switch action.verb {
+            case .reopenProject: return openProject(named: name)
+            case .deleteProject:
+                let deleted = StageProjectStore().delete(name)
+                return TargetActionResult(changed: deleted, message: "project delete: \(deleted)")
+            default: return refused(label, "verb")
+            }
         case .target(let target):
             let result = perform(action.verb, on: target, destination: action.destination, label: label)
             // ⌘ Retour : Roadie va à la fenêtre envoyée dans sa nouvelle stage.
@@ -628,6 +654,13 @@ public final class TargetModeRuntimeController: NSObject {
                 events.append(RoadieEvent(type: "launcher.window", details: ["verb": verb.rawValue, "message": result.message]))
             }
             return TargetActionResult(changed: true, message: label)
+        case (.stage, .saveProject):
+            guard let display = scope.displayId, let desktop = scope.desktopId, let stage = scope.stageId else { return refused(label, "stage") }
+            let state = service.effectiveStageStore.state()
+            let key = StageScope(displayID: DisplayID(rawValue: display), desktopID: DesktopID(rawValue: desktop), stageID: StageID(rawValue: stage))
+            guard let named = state.scopes.first(where: { $0.displayID == key.displayID && $0.desktopID == key.desktopID })?
+                .stages.first(where: { $0.id == key.stageID }), StagePresentationOrder.isNamed(named) else { return refused(label, "anonymous") }
+            return saveProject(named: named.name)
         case (.stage, .moveTo):
             guard let displayID = scope.displayId.map(DisplayID.init(rawValue:)), let desktop = scope.desktopId.map(DesktopID.init(rawValue:)),
                   let stage = scope.stageId.map(StageID.init(rawValue:)), let destination else { return refused(label, "stage") }
@@ -701,8 +734,9 @@ public final class TargetModeRuntimeController: NSObject {
 
     /// Première fenêtre inconnue de ce paquet apparue en 10 s : elle rejoint la stage, une seule fois, puis
     /// Roadie y va (intention de placement F5). Sans nouvelle fenêtre dans ce délai : rien n'est déplacé.
+    @discardableResult
     private static func placeNewWindow(bundleID: String, known: Set<WindowID>, into scope: StageScope,
-                                       service: SnapshotService, events: EventLog) async {
+                                       service: SnapshotService, events: EventLog) async -> WindowID? {
         let switcher = WindowSwitcherService(service: service)
         for _ in 0..<50 {
             try? await Task.sleep(for: .milliseconds(200))
@@ -713,9 +747,118 @@ public final class TargetModeRuntimeController: NSObject {
             events.append(RoadieEvent(type: "launcher.placed", details: [
                 "bundleID": bundleID, "windowID": String(fresh.id.rawValue), "stage": scope.description, "message": result.message]))
             if let placed = await switcher.load().entries.first(where: { $0.id == fresh.id }) { _ = switcher.activate(placed) }
-            return
+            return fresh.id
         }
         events.append(RoadieEvent(type: "launcher.placement_expired", details: ["bundleID": bundleID, "stage": scope.description]))
+        return nil
+    }
+
+    // MARK: - Projets (SPEC-080)
+
+    /// Garde la stage nommée `name` (défaut : stage active) comme projet : fenêtres vivantes, document ou
+    /// adresse lus par l'accessibilité, forme de la disposition. Une stage anonyme est refusée.
+    private func saveProject(named name: String?) -> TargetActionResult {
+        let state = service.effectiveStageStore.state()
+        guard let scope = name.map({ LauncherSearchContext.stage(for: "stage:\(LauncherMatch.fold($0))", in: state) }) ?? activeStageScope(),
+              let stage = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
+                .stages.first(where: { $0.id == scope.stageID }) else { return refused("project save", "stage") }
+        guard StagePresentationOrder.isNamed(stage) else { return refused("project save", "anonymous") }
+        let service = service
+        let events = events
+        Task { @MainActor in
+            let entries = await WindowSwitcherService(service: service).load().entries.filter { $0.scope == scope }
+            let windows = await Self.projectWindows(entries)
+            let project = StageProject.capture(name: stage.name, members: stage.members.map(\.windowID), windows: windows,
+                                               tree: stage.bspTree, at: Date())
+            StageProjectStore().save(project)
+            events.append(RoadieEvent(type: "project.saved", details: [
+                "windows": String(project.windows.count),
+                "documents": String(project.windows.filter { $0.document != nil || $0.url != nil }.count),
+                "tree": String(project.tree != nil)]))
+        }
+        return TargetActionResult(changed: true, message: "project saved: \(stage.name)")
+    }
+
+    /// De quoi rouvrir chaque fenêtre : application, document ou adresse, lus hors du fil principal. O(w).
+    private static func projectWindows(_ entries: [WindowSwitcherEntry]) async -> [WindowID: ProjectWindow] {
+        let groups = Dictionary(grouping: entries, by: \.window.pid)
+        return await Task.detached(priority: .userInitiated) {
+            var result: [WindowID: ProjectWindow] = [:]
+            for (pid, group) in groups {
+                guard let appPath = NSRunningApplication(processIdentifier: pid)?.bundleURL?.path else { continue }
+                let elements = axWindowElements(pid: pid)
+                for entry in group {
+                    let read = elements[CGWindowID(entry.id.rawValue)].map(axDocumentRead)
+                    result[entry.id] = ProjectWindow(bundleID: entry.window.bundleID, appPath: appPath, document: read?.path,
+                                                     url: read?.web?.absoluteString, title: entry.window.title)
+                }
+            }
+            return result
+        }.value
+    }
+
+    /// Stage du projet vivante : Roadie y va. Sinon la stage (vide, ou créée sur le bureau affiché de
+    /// l'écran actif) reçoit chaque fenêtre à son tour, puis la disposition gardée si toutes sont revenues.
+    private func openProject(named name: String) -> TargetActionResult {
+        guard let project = StageProjectStore().load().project(named: name) else { return refused("project open", "unknown") }
+        let service = service
+        let events = events
+        let store = service.effectiveStageStore
+        Task { @MainActor in
+            let switcher = WindowSwitcherService(service: service)
+            let context = "stage:\(LauncherMatch.fold(project.name))"
+            if let scope = LauncherSearchContext.stage(for: context, in: store.state()),
+               let entry = await switcher.load().entries.first(where: { $0.scope == scope }) {
+                _ = switcher.activate(entry)
+                events.append(RoadieEvent(type: "project.opened", details: ["outcome": "shown"]))
+                return
+            }
+            var scope = LauncherSearchContext.stage(for: context, in: store.state())
+            if scope == nil, let home = self.activeStageScope() {
+                scope = StageCommandService(service: service, store: store, events: events)
+                    .createStage(named: project.name, displayID: home.displayID, desktopID: home.desktopID).1
+            }
+            guard let scope else {
+                events.append(RoadieEvent(type: "project.opened", details: ["outcome": "no_stage"]))
+                return
+            }
+            if store.state().currentDesktopID(for: scope.displayID) == scope.desktopID {
+                _ = StageCommandService(service: service, store: store, events: events).switchTo(scope.stageID.rawValue, displayID: scope.displayID)
+            }
+            var reopened: [WindowID] = []
+            for window in project.windows {
+                let known = Set(await switcher.load().entries.filter { $0.window.bundleID == window.bundleID }.map(\.id))
+                await Self.reopen(window)
+                if let placed = await Self.placeNewWindow(bundleID: window.bundleID, known: known, into: scope, service: service, events: events) {
+                    reopened.append(placed)
+                }
+            }
+            let tree = project.tree(for: reopened)
+            if let tree { store.mutate { $0.setBSPTree(tree, for: scope) } }
+            events.append(RoadieEvent(type: "project.opened", details: [
+                "outcome": "reopened", "windows": String(project.windows.count), "reopened": String(reopened.count), "tree": String(tree != nil)]))
+        }
+        return TargetActionResult(changed: true, message: "project open: \(project.name)")
+    }
+
+    /// Document ou adresse avec leur application ; sinon une nouvelle fenêtre de l'application.
+    private static func reopen(_ window: ProjectWindow) async {
+        let appURL = URL(fileURLWithPath: window.appPath)
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        let item: URL? = window.document.flatMap { FileManager.default.fileExists(atPath: $0) ? URL(fileURLWithPath: $0) : nil }
+            ?? window.url.flatMap(URL.init(string:))
+        if let item {
+            _ = try? await NSWorkspace.shared.open([item], withApplicationAt: appURL, configuration: configuration)
+            return
+        }
+        if let running = NSRunningApplication.runningApplications(withBundleIdentifier: window.bundleID).first {
+            running.activate()
+            try? await Task.sleep(for: .milliseconds(300))
+            postNewWindowShortcut(to: running.processIdentifier)
+        } else {
+            _ = try? await NSWorkspace.shared.openApplication(at: appURL, configuration: configuration)
+        }
     }
 
     // MARK: - Position (SPEC-079)
@@ -741,6 +884,8 @@ public final class TargetModeRuntimeController: NSObject {
         case .target(let window):
             let id = window.scope.windowId
             expected = { $0.window.id.rawValue == id }
+        case .project:
+            return
         }
         let service = service
         let events = events

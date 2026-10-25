@@ -481,6 +481,15 @@ qu'on tape un nom à l'étape des verbes, les destinations correspondantes
 apparaissent : `fire`, Tab, `perso`, Retour ouvre une fenêtre Firefox dans la stage
 Perso et y va. Échap, ou l'effacement dans un champ vide, revient d'une étape.
 
+**Projets** : une stage nommée se garde comme projet (verbe « Enregistrer comme projet »
+d'une stage, ou `roadie project save NOM`) : ses fenêtres dans l'ordre, le document ou
+l'adresse de chacune quand l'application les expose (TextEdit, Aperçu, Pages, Chrome…), et
+la forme de sa disposition. Rouvrir le projet (section « Projets » de la barre, ou
+`roadie project open NOM`) montre la stage si elle vit encore ; sinon la recrée sur le
+bureau affiché, rouvre chaque fenêtre à son tour et remet la disposition, même après un
+redémarrage. Une application qui n'expose pas son document (Firefox, iTerm2) revient en
+nouvelle fenêtre vide. Projets : `~/.roadies/projects.json`.
+
 **Phrase** : plusieurs mots dont les derniers désignent une destination et une position,
 en français ou en anglais : `fire perso gauche` ou `fire perso left` ouvre Firefox dans la
 stage Perso, à gauche. Mots reconnus : un nom de stage (exact, ou début unique de 3 lettres),

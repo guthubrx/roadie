@@ -137,6 +137,8 @@ struct LauncherPhrase: Equatable, Sendable {
             default:
                 return nil
             }
+        case .project:
+            return nil
         }
     }
 

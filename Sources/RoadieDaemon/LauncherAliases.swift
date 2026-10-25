@@ -29,6 +29,7 @@ struct LauncherAlias: Codable, Equatable, Sendable {
         case .app(let app): (path, isApp, bundleID, name) = (app.path, true, app.bundleID, app.name)
         case .file(let file): (path, isApp, bundleID, name) = (file.path, false, nil, file.name)
         case .target: return .failure(.notDurable)
+        case .project: return .failure(.unsupportedVerb)
         }
         var stage: String?, here = false, newStage = false
         switch (action.verb, action.destination?.kind) {

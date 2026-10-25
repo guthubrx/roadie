@@ -221,6 +221,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
         CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|actions|hide ..."),
         CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
+        CLICommandSpec(usage: "project save [NAME] | open NAME | list [--json] | delete NAME"),
         CLICommandSpec(usage: "launch PATH [--stage NAME | --here | --new-stage] [--position left|right|full|float] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
@@ -613,6 +614,30 @@ public final class CLICommandRouter {
             return try runQueryCommand(Array(args.dropFirst()))
         case "targets":
             return try runTargetsCommand(Array(args.dropFirst()))
+        case "project":
+            // SPEC-080 : enregistrer et rouvrir passent par le démon (lecture AX) ; la liste se lit ici.
+            let sub = args.count >= 2 ? args[1] : ""
+            let name = args.count >= 3 && !args[2].hasPrefix("--") ? args[2] : nil
+            switch sub {
+            case "list":
+                let projects = StageProjectStore().load().projects.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                if args.contains("--json") {
+                    let rows = projects.map { ["name": $0.name, "windows": String($0.windows.count), "savedAt": ISO8601DateFormatter().string(from: $0.savedAt)] }
+                    out(String(data: try JSONSerialization.data(withJSONObject: rows, options: [.sortedKeys, .prettyPrinted]), encoding: .utf8) ?? "[]")
+                } else {
+                    out(projects.isEmpty ? "aucun projet" : projects.map { "\($0.name)\t\($0.windows.count) fenêtre(s)" }.joined(separator: "\n"))
+                }
+                return 0
+            case "save":
+                return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "project.save", arguments: name.map { ["name": $0] } ?? [:]),
+                                                         json: args.contains("--json"))
+            case "open", "delete":
+                guard let name else { return usageError() }
+                return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "project.\(sub)", arguments: ["name": name]),
+                                                         json: args.contains("--json"))
+            default:
+                return usageError()
+            }
         case "launch":
             // SPEC-077 : fichier, dossier ou application ouvert comme Retour dans la barre.
             guard args.count >= 2, !args[1].hasPrefix("--") else { return usageError() }

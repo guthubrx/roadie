@@ -1112,6 +1112,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .phrase(let action, _)?, .alias(_, let action, _)?:
                 finishAction(action)
                 return
+            case .project(let project)?:
+                finishAction(LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil))
+                return
             default: break
             }
             guard let target = model.highlighted else { return }
@@ -1161,6 +1164,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .target(let target): enterVerbs(.target(target))
             case .file(let file): enterVerbs(.file(file))
             case .phrase(let action, _), .alias(_, let action, _): enterVerbs(action.subject)
+            case .project(let project): enterVerbs(.project(project.name))
             case .header, nil: model.handleNavigation(input)
             }
             return
@@ -1178,7 +1182,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func syncHighlight() {
         switch launcherList.row(for: launcherSelection) {
         case .target(let target): model.highlight(targetID: target.id)
-        case .app, .file, .phrase, .alias: model.highlight(targetID: nil)
+        case .app, .file, .phrase, .alias, .project: model.highlight(targetID: nil)
         case .header, nil: break
         }
     }
@@ -1198,7 +1202,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let phrase = LauncherPhrase.parse(model.query, destinations: launcher.destinations, newStageHome: launcher.newStageHome)
         launcherList = LauncherList(query: phrase?.objectQuery ?? model.query, apps: launcher.apps, details: launcher.details,
                                     targets: model.matches, ranking: launcher.ranking, now: Date(), context: launcher.rankingContext,
-                                    files: phrase == nil ? files : [])
+                                    files: phrase == nil ? files : [], projects: launcher.projects)
         if let phrase, let subject = Self.subject(of: launcherList.row(for: launcherList.best)),
            let action = phrase.action(for: subject, activeStage: launcher.activeStage) {
             launcherList.prepend(.phrase(action, LauncherPhrase.title(action)), header: "Phrase")
@@ -1233,6 +1237,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .target(let target): .target(target)
         case .file(let file): .file(file)
         case .phrase(let action, _), .alias(_, let action, _): action.subject
+        case .project(let project): .project(project.name)
         case .header, nil: nil
         }
     }
@@ -1244,6 +1249,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .file(let file): file.path
         case .target(let target): target.subtitle.isEmpty ? target.title : "\(target.title) - \(target.subtitle)"
         case .phrase(_, let title), .alias(_, _, let title): title
+        case .project(let project): project.name
         case .header, nil: nil
         }
         guard let text else { return }
@@ -1261,6 +1267,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .target(let target): finishActivating(target, target.source == .app ? .click : (target.actions.first ?? .focus))
         case .file(let file): finishAction(LauncherAction(subject: .file(file), verb: .open, destination: nil))
         case .phrase(let action, _), .alias(_, let action, _): finishAction(action)
+        case .project(let project): finishAction(LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil))
         case .header, nil: break
         }
     }
@@ -1295,6 +1302,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .file(let file): LauncherAction(subject: .file(file), verb: .open, destination: nil)
         case .target(let target): LauncherAction(subject: .target(target), verb: .focus, destination: nil)
         case .phrase(let action, _), .alias(_, let action, _): action
+        case .project(let project): LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil)
         case .header, nil: nil
         }
     }
@@ -1496,7 +1504,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .app(let app, _): subject = .app(app)
         case .target(let target): subject = .target(target)
         case .file(let file): subject = .file(file)
-        case .phrase, .alias, .header, nil: return nil
+        case .phrase, .alias, .project, .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
                                   newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
@@ -1772,6 +1780,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return SlashSuggestion(text: title, detail: "Retour fait l'action · ⌘S la garde", kind: .result, icon: icon(of: action, appPaths: appPaths))
         case .alias(let name, let action, let title):
             return SlashSuggestion(text: title, detail: "Abréviation « \(name) »", kind: .result, icon: icon(of: action, appPaths: appPaths))
+        case .project(let project):
+            return SlashSuggestion(text: project.name, detail: "Projet · \(project.windows.count) fenêtre\(project.windows.count > 1 ? "s" : "")",
+                                   kind: .result, icon: .symbol("square.stack.3d.down.right"))
         }
     }
 
@@ -1781,6 +1792,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .app(let app): .file(app.path)
         case .file(let file): .file(file.path)
         case .target(let target): appPaths[target.title].map(SlashSuggestion.Icon.file) ?? .symbol("macwindow")
+        case .project: .symbol("square.stack.3d.down.right")
         }
     }
 

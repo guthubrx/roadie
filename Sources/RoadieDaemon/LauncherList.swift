@@ -14,6 +14,8 @@ struct LauncherList: Equatable, Sendable {
         case phrase(LauncherAction, String)
         /// Abréviation tapée (SPEC-079) : son nom, l'action, ce qu'elle annonce.
         case alias(String, LauncherAction, String)
+        /// Projet gardé (SPEC-080).
+        case project(StageProject)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -24,6 +26,7 @@ struct LauncherList: Equatable, Sendable {
             case .file(let file): file.rankingKey
             case .phrase: "phrase"
             case .alias(let name, _, _): "alias:\(name)"
+            case .project(let project): "project:\(LauncherMatch.fold(project.name))"
             }
         }
 
@@ -35,16 +38,18 @@ struct LauncherList: Equatable, Sendable {
             case .target(let target): LauncherList.rankingKey(target)
             case .file(let file): file.rankingKey
             case .phrase(let action, _), .alias(_, let action, _): action.subject.rankingKey
+            case .project(let project): "project:\(LauncherMatch.fold(project.name))"
             }
         }
     }
 
     enum Section: Int, CaseIterable, Sendable {
-        case applications, windows, files, places, screen
+        case applications, projects, windows, files, places, screen
 
         var title: String {
             switch self {
             case .applications: "Applications"
+            case .projects: "Projets"
             case .windows: "Fenêtres"
             case .files: "Fichiers"
             case .places: "Stages et bureaux"
@@ -56,7 +61,7 @@ struct LauncherList: Equatable, Sendable {
         var limit: Int {
             switch self {
             case .applications, .windows: 4
-            case .files: 5
+            case .projects, .files: 5
             case .places, .screen: 3
             }
         }
@@ -93,7 +98,7 @@ struct LauncherList: Equatable, Sendable {
     /// `context` : stage active (SPEC-076) ; ses choix passent avant ceux faits ailleurs. `files` : réponses de
     /// Spotlight, les plus récentes d'abord (SPEC-077) ; une espace en tête ne garde qu'elles.
     init(query rawQuery: String, apps: [LauncherApp], details: [String: String], targets: [RoadieTarget],
-         ranking: LauncherRanking, now: Date, context: String? = nil, files: [LauncherFile] = []) {
+         ranking: LauncherRanking, now: Date, context: String? = nil, files: [LauncherFile] = [], projects: [StageProject] = []) {
         let filesOnly = LauncherFileRules.filesOnly(rawQuery)
         let query = filesOnly ? LauncherFileRules.needle(rawQuery) : rawQuery
         guard !LauncherMatch.fold(query).isEmpty else { return }
@@ -104,6 +109,11 @@ struct LauncherList: Equatable, Sendable {
             let score = LauncherMatch.score(query, in: file.name) ?? 1
             candidates.append(Candidate(row: .file(file), id: file.rankingKey, key: file.rankingKey, section: .files,
                                         score: score, name: file.name, order: order))
+        }
+        for project in filesOnly ? [] : projects {
+            guard let score = LauncherMatch.score(query, in: project.name) else { continue }
+            let key = "project:\(LauncherMatch.fold(project.name))"
+            candidates.append(Candidate(row: .project(project), id: key, key: key, section: .projects, score: score, name: project.name))
         }
         for app in filesOnly ? [] : apps {
             let score = ([app.name] + app.alternateNames).compactMap { LauncherMatch.score(query, in: $0) }.max()

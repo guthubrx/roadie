@@ -262,6 +262,10 @@ roadie targets activate TARGET_ID_OR_LABEL --action right-click
 roadie targets activate TARGET_ID_OR_LABEL --action command-click
 roadie targets search
 roadie targets actions
+roadie project save Perso
+roadie project open Perso
+roadie project list --json
+roadie project delete Perso
 roadie launch ~/Documents/report.pdf --stage Perso
 roadie launch /Applications/Firefox.app --new-stage
 roadie targets show --json --labels-only
