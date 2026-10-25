@@ -1070,14 +1070,22 @@ public final class TargetModeRuntimeController: NSObject {
         Task { @MainActor in
             let start = Date()
             var seen = "none"
+            var checked: WindowID?
+            var checkedAt = Date.distantPast
             while Date().timeIntervalSince(start) < 20 {
                 try? await Task.sleep(for: .milliseconds(300))
-                // Relevé normal, comme `warp` : celui sans suivi du focus garde un focus ancien.
-                let snapshot = service.snapshot()
-                let entry = snapshot.focusedWindowID.flatMap { focused in snapshot.windows.first { $0.window.id == focused } }
+                // Focus lu en direct (le focus d'un relevé sans suivi peut être ancien). Relevé sans effet de
+                // bord quand le focus change, et au moins toutes les 1,2 s : la fenêtre au focus peut
+                // n'arriver dans sa stage qu'un peu après.
+                guard let focused = service.focusedWindowID(),
+                      focused != checked || Date().timeIntervalSince(checkedAt) >= 1.2 else { continue }
+                checked = focused
+                checkedAt = Date()
+                let snapshot = service.snapshot(followFocus: false)
+                let entry = snapshot.windows.first { $0.window.id == focused }
                 seen = entry.map { "\($0.window.id.rawValue) \($0.window.bundleID) \($0.scope?.description ?? "sans stage")" }
-                    ?? "focus \(snapshot.focusedWindowID.map { String($0.rawValue) } ?? "nil")"
-                guard let entry, let focused = snapshot.focusedWindowID, expected(entry) else { continue }
+                    ?? "focus \(focused.rawValue)"
+                guard let entry, expected(entry) else { continue }
                 let message: String = switch position {
                 case .left: WindowCommandService(service: service, stageStore: service.effectiveStageStore, events: events).warp(.left).message
                 case .right: WindowCommandService(service: service, stageStore: service.effectiveStageStore, events: events).warp(.right).message

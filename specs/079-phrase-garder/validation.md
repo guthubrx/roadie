@@ -23,3 +23,9 @@
 - Phrase et étape « Garder » non essayées au clavier (pas de frappe simulée).
 - `warp` déplace dans l'arbre ; dans une stage à une fenêtre, gauche et droite ne changent rien.
 - Preuves : diaporama non produit (écrans privés).
+
+## Correction après livraison (relecture avant audit)
+La boucle de position refaisait un relevé complet avec suivi du focus toutes les 300 ms (jusqu'à
+66 relevés). Elle lit désormais le focus en direct (`focusedWindowID`) et ne fait un relevé sans
+effet de bord qu'au changement de focus, ou toutes les 1,2 s. Essai réel : `--position full` →
+`toggle maximize on: changed=true`. Suite complète relancée.
