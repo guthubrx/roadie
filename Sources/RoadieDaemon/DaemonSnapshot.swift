@@ -1521,6 +1521,8 @@ public extension SnapshotService {
                let accepted = entry.accepted, entry.requested.matchesFrame(target), accepted.matchesFrame(observed) {
                 return nil
             }
+            // Taille imposée par l'application, répétée d'une génération à l'autre (SPEC-068).
+            if !exact, frameRegistry.refusesLastingly(windowID: id.rawValue, target: target, observed: observed) { return nil }
             return ApplyCommand(window: window, frame: Rect(target))
         })
     }

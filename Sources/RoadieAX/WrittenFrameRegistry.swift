@@ -2,6 +2,16 @@ import CoreGraphics
 import Foundation
 import RoadieCore
 
+/// Refus d'une même cible répété d'une génération à l'autre (SPEC-068) : une fenêtre à taille
+/// imposée, par exemple au format verrouillé, répond toujours le même cadre.
+public struct LastingRefusal: Sendable, Equatable {
+    public var requested: CGRect
+    public var answered: CGRect
+    /// Générations consécutives où l'application a répondu ce cadre à cette cible.
+    public var generations: Int
+    public var lastGeneration: UInt64
+}
+
 /// Dernière écriture AX de Roadie sur une fenêtre (SPEC-017 R6, A2, A4, A13, A14).
 public struct WrittenFrame: Sendable, Equatable {
     public var requested: CGRect
@@ -19,6 +29,8 @@ public struct WrittenFrame: Sendable, Equatable {
     public var axResultCodes: [String: Int32]?
     /// Booléen AXFullScreen frais avant l'écriture ; nil si cet attribut était illisible ou absent.
     public var nativeFullscreenReading: Bool?
+    /// Conservé d'une génération à l'autre, contrairement à `accepted` (SPEC-068).
+    public var lastingRefusal: LastingRefusal?
 
     /// Refus en attente : la frame relue s'écarte de la frame demandée.
     public var hasRefusal: Bool {
@@ -62,9 +74,13 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
                 generation: generation, writesInGeneration: 1, refusalConfirmedAt: nil,
                 axResultCodes: axResultCodes, nativeFullscreenReading: nativeFullscreenReading
             )
-            if let previous = entries[windowID], previous.generation == generation {
-                entry.accepted = previous.accepted
-                entry.writesInGeneration = previous.writesInGeneration + 1
+            if let previous = entries[windowID] {
+                // Une écriture appliquée telle quelle efface le refus durable ; sinon il est conservé.
+                entry.lastingRefusal = readBack.map { Self.matches($0, requested) } == true ? nil : previous.lastingRefusal
+                if previous.generation == generation {
+                    entry.accepted = previous.accepted
+                    entry.writesInGeneration = previous.writesInGeneration + 1
+                }
             }
             entries[windowID] = entry
             remember(windowID: windowID, frames: [requested, readBack].compactMap { $0 }, generation: generation, at: date)
@@ -76,12 +92,33 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
         lock.withLock {
             guard let entry = entries[windowID] else { return }
             entries[windowID]?.accepted = frame
+            if Self.matches(frame, entry.requested) {
+                entries[windowID]?.lastingRefusal = nil
+            } else if var lasting = entry.lastingRefusal, Self.matches(lasting.requested, entry.requested),
+                      Self.matches(lasting.answered, frame) {
+                if lasting.lastGeneration != entry.generation {
+                    lasting.generations += 1
+                    lasting.lastGeneration = entry.generation
+                }
+                entries[windowID]?.lastingRefusal = lasting
+            } else {
+                entries[windowID]?.lastingRefusal = LastingRefusal(requested: entry.requested, answered: frame,
+                                                                   generations: 1, lastGeneration: entry.generation)
+            }
             remember(windowID: windowID, frames: [frame], generation: entry.generation, at: date)
         }
     }
 
     public func entry(for windowID: UInt32) -> WrittenFrame? {
         lock.withLock { entries[windowID] }
+    }
+
+    /// Vrai si l'application a déjà répondu ce cadre à cette même cible sur deux générations au
+    /// moins : redemander la cible ferait seulement osciller la fenêtre. Une cible ou un cadre
+    /// observé différents relancent l'écriture. O(1).
+    public func refusesLastingly(windowID: UInt32, target: CGRect, observed: CGRect) -> Bool {
+        guard let lasting = entry(for: windowID)?.lastingRefusal, lasting.generations >= 2 else { return false }
+        return Self.matches(lasting.requested, target) && Self.matches(lasting.answered, observed)
     }
 
     /// Budget A13 épuisé : `writeBudgetPerGeneration` tentatives déjà inscrites pour cette fenêtre

@@ -1377,6 +1377,8 @@ public final class LayoutMaintainer {
         // Tolérance unique (R9) : à refaire seulement au-delà de `frameMatch`.
         if framesAreClose(observed, target, tolerance: exact ? 0 : LayoutTolerance.frameMatch) { return nil }
         if snapBack { return command }
+        // Taille imposée par l'application, répétée d'une génération à l'autre (SPEC-068).
+        if !exact, writtenFrames.refusesLastingly(windowID: id, target: target, observed: observed) { return nil }
         let entry = writtenFrames.entry(for: id)
         let sameTarget = entry.map { framesAreClose($0.requested, target, tolerance: exact ? 0 : LayoutTolerance.frameMatch) } ?? false
         // R9 : la frame acceptée de la génération courante n'est pas à refaire.
