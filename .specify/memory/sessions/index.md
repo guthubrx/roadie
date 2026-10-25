@@ -41,3 +41,8 @@
 | 063 | Clôturée et publiée | `session-062-fenetres-mission-control` (fusionnée, supprimée) | `specs/063-release-080` | 0.8.0 Latest, DMG/SHA-256 retéléchargés identiques, installée (santé 5/5), branches/worktree/builds nettoyés ; revue indépendante non admise (Bridget) |
 | 064 | Abandonnée | `session-064-captures-doc` (supprimée) | aucun | Film et captures publiés environ une heure puis retirés : contenus privés lisibles ; commit remplacé sur main |
 | 065 | Implémentée et installée | `session-065-fenetres-conservees` | `specs/065-fenetres-conservees` | Fenêtres fermées mais gardées en mémoire (AlDente) écartées du sélecteur et de la vue d'ensemble ; 1 934 tests, santé 5/5, contrôle réel |
+| 066 | Clôturée, publiée en 0.9.0 | `session-066-reordonner-bureaux` (fusionnée) | `specs/066-reordonner-bureaux` | Bureaux réordonnés par glisser vers l'espace visé, renumérotation façon Mission Control, CLI `desktop move` ; essais utilisateur |
+| 067 | Clôturée, publiée en 0.9.0 | `session-067-deplacer-stages` (fusionnée) | `specs/067-deplacer-stages` | Stages et fenêtres glissées dans la vue d'ensemble ; noms de stage uniques, doublons nettoyés (70 stages, 23 membres conservés) |
+| 068 | Clôturée, publiée en 0.9.0 | `session-070-ecrans` (fusionnée) | `specs/068-tailles-imposees` | Refus de taille durable retenu entre générations : fin de l'oscillation de l'émulateur Android |
+| 069 | Clôturée et publiée | `session-070-ecrans` (fusionnée) | `specs/069-release-090` | Publication 0.9.0 (sessions 065 à 070) |
+| 070 | Clôturée, publiée en 0.9.0 | `session-070-ecrans` (fusionnée) | `specs/070-glisser-entre-ecrans` | Bureaux, stages et fenêtres glissés d'un écran à l'autre, fenêtres masquées et recentrées sur l'écran d'arrivée |

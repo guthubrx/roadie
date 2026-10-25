@@ -3,7 +3,7 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
-## Non publié
+## 0.9.0 - 2026-10-25
 
 ### Nouveautés
 
@@ -12,10 +12,12 @@ jour et les limites connues ; les README décrivent la version courante.
   place et renumérote les bureaux comme dans Mission Control.
   Stages, fenêtres, nom, épinglages et historique suivent le bureau ; aucune fenêtre
   ne bouge. Même opération en CLI : `roadie desktop move N POSITION`.
-
 - Déplacement des stages et des fenêtres dans la vue d’ensemble : la puce de stage
-  d’une carte se glisse entre deux stages, dans son bureau ou un autre bureau du même
-  écran ; une carte se glisse sur une autre stage pour y envoyer sa fenêtre.
+  d’une carte se glisse entre deux stages, dans son bureau ou un autre bureau ; une
+  carte se glisse sur une autre stage pour y envoyer sa fenêtre.
+- Glisser d’un écran à l’autre : un bureau y devient un bureau de cet écran, une stage
+  ou une fenêtre rejoint la place visée. Les fenêtres passent sur l’autre écran,
+  cachées jusqu’à ce que leur bureau et leur stage y soient affichés.
 - Noms de stage uniques dans tout Roadie : un renommage vers un nom déjà pris est
   refusé, un workspace configuré ne nomme qu’une stage, et `roadie state heal`
   corrige les doublons hérités sans déplacer de fenêtre.
@@ -23,8 +25,11 @@ jour et les limites connues ; les README décrivent la version courante.
 ### Corrections
 
 - Le sélecteur et la vue d’ensemble ne proposent plus une fenêtre fermée que son
-  application garde en mémoire sans l’afficher (par exemple les réglages d’AlDente).
-  Son choix affichait « Action refusée par l’application ».
+  application garde en mémoire sans l’afficher, comme le font certaines applications
+  de la barre des menus. Son choix affichait « Action refusée par l’application ».
+- Une fenêtre à taille imposée (format verrouillé, comme un émulateur de téléphone)
+  ne change plus de taille à chaque changement de stage ou de fenêtre active : Roadie
+  retient un refus répété et ne redemande plus la même taille.
 
 ## 0.8.0 - 2026-10-24
 

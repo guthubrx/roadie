@@ -219,6 +219,12 @@ Session 065 installée : fenêtres fermées mais gardées en mémoire par leur a
 visible, aucun bureau SkyLight. 1 934 tests / 241 suites. PID 62987, santé 5/5.
 Contrôle réel sans AlDente ; diaporama non produit (contenu privé). Reçu :
 specs/065-fenetres-conservees/validation.md.
+Sessions 066, 067, 068 et 070 installées puis publiées en 0.9.0 (session 069) : bureaux
+réordonnés et déplacés entre écrans, stages et fenêtres glissées dans la vue d'ensemble,
+noms de stage uniques (doublons nettoyés, écran branché prioritaire), refus de taille
+durable contre l'oscillation des fenêtres à format imposé. 1 954 tests / 248 suites.
+Reçus : specs/066-reordonner-bureaux/, 067-deplacer-stages/, 068-tailles-imposees/,
+070-glisser-entre-ecrans/, 069-release-090/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
