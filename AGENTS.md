@@ -230,6 +230,9 @@ fantômes, création d'une stage ou d'un bureau en déposant dans le vide, centr
 visée sur la disposition affichée, contour bleu unique de la stage qui reçoit une fenêtre.
 Complément 068 : refus de taille conservé quand l'application revient d'elle-même.
 Reçus : specs/071-apercu-direct/, 072-release-0100/validation.md.
+Sessions 073 et 074 installées : lanceur dans la barre Capslock+F (applications, fenêtres,
+stages, bureaux, cibles), classement appris, verbes et destinations par Tab, liste à la
+manière d'Alfred. 1 976 tests, santé 5/5. Référence : docs/analyses/2026-10-25-reference-alfred.html.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
