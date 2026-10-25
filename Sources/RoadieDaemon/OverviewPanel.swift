@@ -579,7 +579,12 @@ final class OverviewCanvas: NSView {
             if ghost { NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current?.cgContext.setAlpha(0.45) }
             drawCard(item, in: u(item.frame), sameStage: joined || (chosenStage != nil && item.entry.scope == chosenStage))
             if ghost { NSGraphicsContext.restoreGraphicsState() }
-            if joined, !ghost { drawDropRing(u(item.frame)) }
+        }
+        // Un seul contour autour des fenêtres de la stage et de celle qui la rejoint : le groupe se lit
+        // comme un tout. Réunion des rangées, sans englober une autre stage d’une rangée voisine.
+        if let joinedStage {
+            let rows = Dictionary(grouping: shown.cards.filter { $0.entry.scope == joinedStage }.map { u($0.frame) }) { Int($0.minY.rounded()) }
+            drawDropRing(rows.values.map { frames in frames.dropFirst().reduce(frames[0]) { $0.union($1) } })
         }
         if let notice {
             let visible = u(visibleRect)
@@ -587,15 +592,28 @@ final class OverviewCanvas: NSView {
         }
     }
 
-    /// Contour des cartes de la stage qui reçoit une fenêtre glissée.
-    private func drawDropRing(_ frame: CGRect) {
-        let image = CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: max(1, frame.height - OverviewLayout.caption))
-        NSGraphicsContext.saveGraphicsState()
-        let glow = NSShadow(); glow.shadowColor = palette(0.48, 0.80, 0.97, 0.6); glow.shadowBlurRadius = 8; glow.shadowOffset = .zero; glow.set()
-        palette(0.48, 0.80, 0.97, 0.95).setStroke()
-        let ring = NSBezierPath(roundedRect: image.insetBy(dx: -2.5, dy: -2.5), xRadius: 8, yRadius: 8)
-        ring.lineWidth = 1.5; ring.stroke()
-        NSGraphicsContext.restoreGraphicsState()
+    /// Contour unique de la stage qui reçoit une fenêtre glissée : réunion des rectangles de ses rangées
+    /// (légendes comprises), assez élargis pour que deux rangées voisines se rejoignent. O(r).
+    private func drawDropRing(_ rows: [CGRect]) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let sorted = rows.sorted { $0.minY < $1.minY }
+        var pieces = sorted.map { CGPath(roundedRect: $0.insetBy(dx: -6, dy: -6), cornerWidth: 10, cornerHeight: 10, transform: nil) }
+        // Groupe qui passe à la ligne sans recouvrement horizontal : un pont dans l’espace entre les deux
+        // rangées relie la fin de l’une au début de l’autre, comme une sélection de texte.
+        for (upper, lower) in zip(sorted, sorted.dropFirst()) where lower.maxX < upper.minX {
+            // Strictement dans l’espace entre les rangées : aucune carte voisine n’est touchée.
+            let bridge = CGRect(x: lower.maxX, y: upper.maxY, width: upper.minX - lower.maxX, height: max(0, lower.minY - upper.maxY))
+            pieces.append(CGPath(rect: bridge, transform: nil))
+        }
+        let shape = pieces.reduce(nil as CGPath?) { shape, path in shape.map { $0.union(path) } ?? path }
+        guard let shape else { return }
+        context.saveGState()
+        context.setShadow(offset: .zero, blur: 8, color: palette(0.48, 0.80, 0.97, 0.6).cgColor)
+        context.setStrokeColor(palette(0.48, 0.80, 0.97, 0.95).cgColor)
+        context.setLineWidth(1.5)
+        context.addPath(shape)
+        context.strokePath()
+        context.restoreGState()
     }
 
     private func drawChip(_ desktop: OverviewDesktop, in chip: CGRect, focused: Bool, alpha: CGFloat) {
