@@ -12,8 +12,8 @@ English | [Français](README.fr.md)
 Roadie organizes your windows around your activities. Bring a project's apps
 together, find them in the side rail and switch workspaces on each display.
 
-**[Download Roadie 0.9.0](https://github.com/guthubrx/roadie/releases/tag/v0.9.0)** ·
-[What's new](docs/releases/v0.9.0.en.md) · [Installation guide](#manual-installation)
+**[Download Roadie 0.10.0](https://github.com/guthubrx/roadie/releases/tag/v0.10.0)** ·
+[What's new](docs/releases/v0.10.0.en.md) · [Installation guide](#manual-installation)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie workspaces across multiple displays" width="100%">
@@ -95,7 +95,7 @@ desktop, in Archipelago or Bays layout, over your blurred wallpaper. The
 magnifier enlarges the hovered desktop by 100–250%. Open it with
 `roadie overview show`, a BTT gesture (a four-finger upward swipe, for example)
 or an optional shortcut. Drag a chip to reorder desktops or move a stage, and
-drag a card to send a window to another stage. [Overview guide](docs/en/overview.md).
+drag a card to send a window to another stage, with a live preview of the result. [Overview guide](docs/en/overview.md).
 
 
 Settings are grouped by purpose, with aligned controls and scrollable help.

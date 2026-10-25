@@ -3,13 +3,14 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
-## Non publié
+## 0.10.0 - 2026-10-25
 
 ### Nouveautés
 
 - Aperçu en direct des déplacements dans la vue d’ensemble : bureaux, stages et
   cartes glissent pour faire de la place, l’élément déplacé apparaît en fantôme à sa
-  future place. Le trait d’insertion disparaît.
+  future place. Le trait d’insertion disparaît. Une fenêtre glissée sur une stage
+  l’entoure, avec elle, d’un seul contour bleu.
 - Déposer dans le vide crée le contenant : une fenêtre lâchée dans la zone vide d’un
   bureau crée une stage ; une fenêtre ou une stage lâchée sous le dernier bureau d’un
   écran crée un bureau.

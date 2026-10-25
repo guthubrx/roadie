@@ -11,6 +11,7 @@ English guides for the current `main` sources. The [root README](../../README.md
 - [Configuration and rules](configuration-rules.md)
 - [Events and Query API](events-query.md)
 - [Use cases](use-cases.md)
+- [Release notes 0.10.0](../releases/v0.10.0.en.md)
 - [Release notes 0.9.0](../releases/v0.9.0.en.md)
 - [Release notes 0.8.0](../releases/v0.8.0.en.md)
 - [Release notes 0.7.0](../releases/v0.7.0.en.md)

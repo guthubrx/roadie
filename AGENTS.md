@@ -225,6 +225,11 @@ noms de stage uniques (doublons nettoyés, écran branché prioritaire), refus d
 durable contre l'oscillation des fenêtres à format imposé. 1 954 tests / 248 suites.
 Reçus : specs/066-reordonner-bureaux/, 067-deplacer-stages/, 068-tailles-imposees/,
 070-glisser-entre-ecrans/, 069-release-090/validation.md.
+Session 071 publiée en 0.10.0 (session 072) : aperçu en direct des déplacements avec
+fantômes, création d'une stage ou d'un bureau en déposant dans le vide, centrage vertical,
+visée sur la disposition affichée, contour bleu unique de la stage qui reçoit une fenêtre.
+Complément 068 : refus de taille conservé quand l'application revient d'elle-même.
+Reçus : specs/071-apercu-direct/, 072-release-0100/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

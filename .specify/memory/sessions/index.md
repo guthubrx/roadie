@@ -46,3 +46,5 @@
 | 068 | Clôturée, publiée en 0.9.0 | `session-070-ecrans` (fusionnée) | `specs/068-tailles-imposees` | Refus de taille durable retenu entre générations : fin de l'oscillation de l'émulateur Android |
 | 069 | Clôturée et publiée | `session-070-ecrans` (fusionnée) | `specs/069-release-090` | Publication 0.9.0 (sessions 065 à 070) |
 | 070 | Clôturée, publiée en 0.9.0 | `session-070-ecrans` (fusionnée) | `specs/070-glisser-entre-ecrans` | Bureaux, stages et fenêtres glissés d'un écran à l'autre, fenêtres masquées et recentrées sur l'écran d'arrivée |
+| 071 | Clôturée, publiée en 0.10.0 | `session-071-apercu-direct` (fusionnée) | `specs/071-apercu-direct` | Aperçu en direct avec fantômes, création en déposant dans le vide, centrage vertical, visée sur la disposition affichée, contour unique ; essais utilisateur |
+| 072 | Clôturée et publiée | `session-071-apercu-direct` (fusionnée) | `specs/072-release-0100` | Publication 0.10.0 (071 et complément 068) |
