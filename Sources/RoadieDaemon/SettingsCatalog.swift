@@ -394,6 +394,12 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "search_hotkey", "Raccourci de la recherche",
               "Raccourci global qui ouvre la recherche, par exemple command+control+alt+f. Vide : désactivé.",
               .text, .string("command+control+alt+f")),
+        entry(.recherche, "experimental.target_mode", "actions_hotkey", "Raccourci des verbes de la fenêtre active",
+              "Ouvre la barre directement sur les verbes de la fenêtre au premier plan : envoyer, flotter, plein écran. Vide : désactivé.",
+              .text, .string("command+control+alt+shift+f")),
+        entry(.recherche, "experimental.target_mode", "web_search_url", "Recherche web (⌃ Retour)",
+              "Adresse ouverte par ⌃ Retour dans la barre ; {query} reçoit le texte tapé.",
+              .text, .string("https://www.google.com/search?q={query}")),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

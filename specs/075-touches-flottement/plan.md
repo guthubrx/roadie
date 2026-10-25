@@ -15,7 +15,7 @@ câblage clavier et rendu ; puis les effets (règles, actions).
 | Menu | `Sources/RoadieDaemon/TitlebarContextMenuController.swift`, `WindowContextActions.swift` | entrées « Toujours flotter / tuiler <App> », « Retirer la règle » |
 | Config | `Sources/RoadieCore/Config.swift` | `actions_hotkey`, `web_search_url` (clés connues, validation du raccourci) |
 | Raccourci | `Sources/RoadieDaemon/TargetSearchHotkey.swift` (réutilisé), démarrage du daemon | seconde instance |
-| CLI | `Sources/RoadieDaemon/CLICommandRouter.swift` | `roadie target actions` |
+| CLI | `Sources/RoadieDaemon/CLICommandRouter.swift` | `roadie targets actions` |
 
 ## Complexité
 Variantes : O(1). ⌘n : O(r) sur les lignes visibles (r ≤ 30). Règles : O(R) lecture/écriture du

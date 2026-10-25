@@ -23,6 +23,16 @@ struct LauncherSearchContext {
     var perform: @MainActor (LauncherAction) -> TargetActionResult = { _ in
         TargetActionResult(changed: false, message: "launcher_disabled")
     }
+    /// Stage active du bureau affiché : la destination de ⌥ Retour (SPEC-075).
+    var activeStage: StageScope?
+    /// Objet dont la barre montre tout de suite les verbes (Capslock + Maj + F) ; nil : la liste.
+    var initialSubject: LauncherSubject?
+    /// État de tuilage d'une fenêtre, pour ses verbes de flottement.
+    var tiling: @MainActor (WindowID) -> LauncherTilingState? = { _ in nil }
+    /// ⌃ Retour : le texte tapé sur le web ; appelé après la fermeture de la barre.
+    var webSearch: @MainActor (String) -> TargetActionResult = { _ in
+        TargetActionResult(changed: false, message: "launcher_disabled")
+    }
 
     /// Sans lanceur : la barre garde le seul mode recherche (tests, configuration désactivée).
     static var disabled: LauncherSearchContext { LauncherSearchContext(
@@ -102,5 +112,17 @@ enum LauncherPlacement {
             screens.append(LauncherDestination(kind: .display(display.id), title: display.name, detail: "écran"))
         }
         return stages + desktops + screens
+    }
+}
+
+/// Recherche web de ⌃ Retour (SPEC-075), reprise par le repli de la session 077.
+enum LauncherWeb {
+    /// `{query}` remplacé par le texte encodé ; nil si l'adresse obtenue est invalide. O(q).
+    static func searchURL(_ template: String, query: String) -> URL? {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&+=?#")
+        guard template.contains("{query}"),
+              let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        return URL(string: template.replacingOccurrences(of: "{query}", with: encoded))
     }
 }

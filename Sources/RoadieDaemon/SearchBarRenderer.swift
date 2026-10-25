@@ -329,8 +329,11 @@ enum SearchBarRenderer {
         case nil:
             break
         }
+        // Ligne choisie : Tab et Retour ; les autres, leur ⌘ + chiffre (SPEC-075).
         let hint = selected ? line("⇥ actions   ↩", font: fonts.convert(font, toSize: metrics.detail),
-                                   color: NSColor.white.withAlphaComponent(0.75)) : nil
+                                   color: NSColor.white.withAlphaComponent(0.75))
+            : suggestion.shortcut.isEmpty ? nil : line(suggestion.shortcut, font: fonts.convert(font, toSize: metrics.detail),
+                                                       color: NSColor(calibratedWhite: 0.5, alpha: 1))
         let hintWidth = hint.map { $0.size().width + 12 } ?? 0
         let width = max(0, row.maxX - 8 - hintWidth - textX)
         let title = line(suggestion.text.trimmingCharacters(in: .whitespaces), font: fonts.convert(font, toSize: metrics.title),

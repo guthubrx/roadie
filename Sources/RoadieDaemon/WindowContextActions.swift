@@ -84,6 +84,10 @@ public struct WindowContextActions {
         case .removeAffinityApp:
             let result = affinityService.removeAppAffinity(window: entry.window, scope: scope)
             return WindowContextActionResult(message: result.message, changed: result.changed)
+        case .floatAlways, .tileAlways, .clearTiling:
+            let choice: WindowTilingChoice? = action.kind == .floatAlways ? .float : action.kind == .tileAlways ? .tile : nil
+            let result = affinityService.saveTiling(choice, window: entry.window)
+            return WindowContextActionResult(message: result.message, changed: result.changed)
         case .floatStage:
             return setPin(window: entry.window, sourceScope: scope, pinScope: .stage, snapshot: snapshot)
         case .pinDesktop:

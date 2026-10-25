@@ -439,14 +439,30 @@ app, opens it in the active stage of the active display, unless an `assign_stage
 rule applies. Arrow keys move through the list; clicking a row activates it.
 
 **Verbs and destinations**: Tab on the selected row opens its verbs. App: open or go
-to its window, open in…, new window here, gather its windows in…, hide, quit.
-Window: go to, send to…, float, fullscreen, minimize, close. Stage: show, move to a
+to its window, open in…, new window here, gather its windows in…, bring here, hide,
+quit. Window: go to, send to…, bring here, float this window or always the whole app
+(and back: tile this window again, always tile, remove the rule), fullscreen,
+minimize, close. Stage: show, move to a
 desktop or display. Desktop: show, move to a display. On-screen target: click,
 double-click, right-click, Cmd-click. A verb ending with "…" asks for a destination:
 a stage, desktop, display, or "New stage" (named after the input if that name is
 free). As soon as you type a name at the verb step, matching destinations appear:
 `fire`, Tab, `perso`, Return opens a Firefox window in the Perso stage and goes
 there. Escape, or deleting in an empty field, goes back one step.
+
+**Return variants**: holding ⌘, ⌥ or ⌃ changes what Return does, and the selected row's
+detail says so. ⌘ Return opens the app in a new stage of the shown desktop, or sends
+the window there, then Roadie goes there. ⌥ Return brings the window (or the app's
+window) into the active stage without changing the shown stage. ⌃ Return searches the
+web for the typed text (`web_search_url`, Google by default). The first nine shown rows
+carry ⌘1 to ⌘9: the key runs their action, at every step. → with the cursor at the end
+of the input opens the verbs, like Tab.
+
+**Verbs of the active window**: Capslock + Shift + F (`actions_hotkey`, Hyper + Shift + F)
+or `roadie targets actions` opens the bar on the verbs of the frontmost window.
+"Always float <App>" and "Always tile <App>" are also in the title bar Window menu; the
+choice is written to `roadies.generated.toml`, on the same rule as "Always open this app
+here", and applies to every window of the app, present and future.
 
 | Key | Effect |
 |-----|--------|
@@ -456,9 +472,13 @@ there. Escape, or deleting in an empty field, goes back one step.
 | Shift-Tab, Up, Ctrl-P | previous result |
 | Shift + label | select that result (`Shift+S` with few results) |
 | Return | click; on an app: go to its window or open it |
+| ⌘ Return | app, window: new stage; on-screen target: Cmd-click |
+| ⌥ Return | app, window: bring into the active stage |
+| ⌃ Return | search the web for the typed text |
+| ⌘1 to ⌘9 | action of the row carrying that digit |
+| → at the end of the input | verbs of the selected row |
 | Return twice (under 0.35 s) | double-click |
 | Shift-Return | right-click |
-| Cmd-Return | Cmd-click (new tab) |
 | `*` or `;` | show every target |
 | `?` | details of the green target (role, title, text, id) |
 | Esc | close without action |

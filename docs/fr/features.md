@@ -456,14 +456,30 @@ application fermée, l'ouvre dans la stage active de l'écran actif, sauf règle
 
 **Verbes et destinations** : Tab sur la ligne choisie ouvre ses verbes. Application :
 ouvrir ou aller à sa fenêtre, ouvrir dans…, nouvelle fenêtre ici, réunir ses fenêtres
-dans…, masquer, quitter. Fenêtre : aller à, envoyer vers…, faire flotter, plein
-écran, réduire, fermer. Stage : afficher, déplacer vers un bureau ou un écran.
+dans…, amener ici, masquer, quitter. Fenêtre : aller à, envoyer vers…, amener ici,
+faire flotter cette fenêtre ou toujours toute l'application (et l'inverse : remettre au
+tuilage, toujours tuiler, retirer la règle), plein écran, réduire, fermer. Stage : afficher, déplacer vers un bureau ou un écran.
 Bureau : afficher, déplacer vers un écran. Cible à l'écran : clic, double-clic, clic
 droit, Cmd-clic. Un verbe suivi de « … » demande une destination : stage, bureau,
 écran, ou « Nouvelle stage » (nommée d'après la saisie si ce nom est libre). Dès
 qu'on tape un nom à l'étape des verbes, les destinations correspondantes
 apparaissent : `fire`, Tab, `perso`, Retour ouvre une fenêtre Firefox dans la stage
 Perso et y va. Échap, ou l'effacement dans un champ vide, revient d'une étape.
+
+**Variantes de Retour** : tenir ⌘, ⌥ ou ⌃ change ce que fait Retour, et le détail de
+la ligne choisie l'annonce. ⌘ Retour ouvre l'application dans une nouvelle stage du
+bureau affiché, ou y envoie la fenêtre, puis Roadie y va. ⌥ Retour amène la fenêtre
+(ou celle de l'application) dans la stage active, sans changer la stage affichée.
+⌃ Retour cherche le texte tapé sur le web (`web_search_url`, Google par défaut).
+Les neuf premières lignes montrées portent ⌘1 à ⌘9 : la touche fait leur action, à
+toutes les étapes. → avec le curseur en fin de saisie ouvre les verbes, comme Tab.
+
+**Verbes de la fenêtre active** : Capslock + Maj + F (`actions_hotkey`, Hyper + Maj + F)
+ou `roadie targets actions` ouvre la barre directement sur les verbes de la fenêtre au
+premier plan. « Toujours faire flotter <App> » et « Toujours tuiler <App> » sont aussi
+dans le menu Fenêtre de la barre de titre ; le choix est écrit dans
+`roadies.generated.toml`, sur la même règle que « Toujours ouvrir cette app ici », et
+vaut pour toutes les fenêtres de l'application, présentes et futures.
 
 | Touche | Effet |
 |--------|-------|
@@ -473,9 +489,13 @@ Perso et y va. Échap, ou l'effacement dans un champ vide, revient d'une étape.
 | Maj-Tab, Fleche haut, Ctrl-P | resultat precedent |
 | Maj + etiquette | choisir ce resultat (`Maj+S` avec peu de resultats) |
 | Retour | clic ; sur une application : aller à sa fenêtre ou l'ouvrir |
+| ⌘ Retour | application, fenêtre : nouvelle stage ; cible à l'écran : Cmd-clic |
+| ⌥ Retour | application, fenêtre : amener dans la stage active |
+| ⌃ Retour | chercher le texte tapé sur le web |
+| ⌘1 à ⌘9 | action de la ligne portant ce chiffre |
+| → en fin de saisie | verbes de la ligne choisie |
 | Retour deux fois (moins de 0,35 s) | double-clic |
 | Maj-Retour | clic droit |
-| Cmd-Retour | Cmd-clic (nouvel onglet) |
 | `*` ou `;` | afficher toutes les cibles |
 | `?` | fiche de la cible en vert (role, titre, texte, id) |
 | Echap | fermer sans action |

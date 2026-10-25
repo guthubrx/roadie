@@ -637,6 +637,11 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     /// Raccourci global du mode recherche (SPEC-021), forme normalisée `command+control+alt+f` ;
     /// vide = désactivé. Défaut : la hyper key (Cmd+Option+Ctrl) + F, comme le conseille Homerow.
     public var searchHotkey: String
+    /// Raccourci qui ouvre la barre aux verbes de la fenêtre active (SPEC-075) ; vide = désactivé.
+    /// Défaut : hyper key + Maj + F (Capslock + Maj + F).
+    public var actionsHotkey: String
+    /// Recherche web de ⌃ Retour (SPEC-075) ; `{query}` reçoit le texte tapé, encodé.
+    public var webSearchURL: String
     /// Taille de police des étiquettes en points (SPEC-023). Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
     public var labelFontSize: Double
     public var searchLabelFontSize: Double
@@ -646,6 +651,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var commandFontFamily: String
 
     public static let defaultSearchHotkey = "command+control+alt+f"
+    public static let defaultActionsHotkey = "command+control+alt+shift+f"
+    public static let defaultWebSearchURL = "https://www.google.com/search?q={query}"
 
     public init(
         enabled: Bool = true,
@@ -656,6 +663,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         appMouseActionsEnabled: Bool = false,
         scrollModeEnabled: Bool = false,
         searchHotkey: String = TargetModeConfig.defaultSearchHotkey,
+        actionsHotkey: String = TargetModeConfig.defaultActionsHotkey,
+        webSearchURL: String = TargetModeConfig.defaultWebSearchURL,
         labelFontSize: Double = 13,
         searchLabelFontSize: Double = 13,
         searchTextFontSize: Double = 15,
@@ -671,6 +680,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.appMouseActionsEnabled = appMouseActionsEnabled
         self.scrollModeEnabled = scrollModeEnabled
         self.searchHotkey = TargetGridConfig.normalizedKey(searchHotkey, fallback: "")
+        self.actionsHotkey = TargetGridConfig.normalizedKey(actionsHotkey, fallback: "")
+        self.webSearchURL = webSearchURL
         self.labelFontSize = min(48, max(8, labelFontSize))
         self.searchLabelFontSize = min(48, max(8, searchLabelFontSize))
         self.searchTextFontSize = min(48, max(8, searchTextFontSize))
@@ -699,6 +710,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case appMouseActionsEnabled = "app_mouse_actions_enabled"
         case scrollModeEnabled = "scroll_mode_enabled"
         case searchHotkey = "search_hotkey"
+        case actionsHotkey = "actions_hotkey"
+        case webSearchURL = "web_search_url"
         case labelFontSize = "label_font_size"
         case searchLabelFontSize = "search_label_font_size"
         case searchTextFontSize = "search_text_font_size"
@@ -718,6 +731,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             appMouseActionsEnabled: try c.decodeIfPresent(Bool.self, forKey: .appMouseActionsEnabled) ?? false,
             scrollModeEnabled: try c.decodeIfPresent(Bool.self, forKey: .scrollModeEnabled) ?? false,
             searchHotkey: try c.decodeIfPresent(String.self, forKey: .searchHotkey) ?? TargetModeConfig.defaultSearchHotkey,
+            actionsHotkey: try c.decodeIfPresent(String.self, forKey: .actionsHotkey) ?? TargetModeConfig.defaultActionsHotkey,
+            webSearchURL: try c.decodeIfPresent(String.self, forKey: .webSearchURL) ?? TargetModeConfig.defaultWebSearchURL,
             labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? 13,
             searchLabelFontSize: try c.decodeFlexibleDouble(forKey: .searchLabelFontSize) ?? 13,
             searchTextFontSize: try c.decodeFlexibleDouble(forKey: .searchTextFontSize) ?? 15,
@@ -1390,7 +1405,7 @@ private enum ConfigValidationRules {
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
-            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
+            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],
@@ -1687,6 +1702,20 @@ private enum ConfigValidationRules {
                 level: .error,
                 path: "experimental.target_mode.search_hotkey",
                 message: "expected modifiers and one key, e.g. \"cmd+alt+ctrl+f\" or \"hyper+f\"; empty disables"
+            ))
+        }
+        if !config.actionsHotkey.isEmpty, TargetModeConfig.hotkeyParts(config.actionsHotkey) == nil {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_mode.actions_hotkey",
+                message: "expected modifiers and one key, e.g. \"hyper+shift+f\"; empty disables"
+            ))
+        }
+        if !config.webSearchURL.contains("{query}") || URL(string: config.webSearchURL.replacingOccurrences(of: "{query}", with: "q")) == nil {
+            items.append(ConfigValidationItem(
+                level: .warning,
+                path: "experimental.target_mode.web_search_url",
+                message: "expected an address containing {query}"
             ))
         }
         return items

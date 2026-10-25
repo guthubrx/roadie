@@ -25,6 +25,7 @@ var focusFollowsMouseController: FocusFollowsMouseController?
 var titlebarContextMenuController: TitlebarContextMenuController?
 var targetModeRuntimeController: TargetModeRuntimeController?
 var targetSearchHotkey: TargetSearchHotkey?
+var targetActionsHotkey: TargetSearchHotkey?
 var overviewController: OverviewController?
 var windowSwitcherController: WindowSwitcherController?
 var windowSwitcherBridge: WindowSwitcherRuntimeBridge?
@@ -213,6 +214,17 @@ func startTargetModeComponent() {
     targetSearchHotkey = TargetSearchHotkey { targetModeRuntimeController?.requestSearch() }
     targetSearchHotkey?.start()
     ShutdownRegistry.register { targetSearchHotkey?.stop() }
+    // SPEC-075 : verbes de la fenêtre active, même mécanisme avec son propre raccourci.
+    targetActionsHotkey = TargetSearchHotkey(configLoader: {
+        var config = ConfigReloadService.shared.currentConfig().experimental.targetMode
+        config.searchHotkey = config.actionsHotkey
+        return config
+    }, signature: 0x5244_4143, eventType: "target_mode.actions_hotkey",
+       settingsIDs: ["target_mode.actions_hotkey", "target_mode.enabled", "target_mode.overlay_enabled", "*"]) {
+        targetModeRuntimeController?.requestActions()
+    }
+    targetActionsHotkey?.start()
+    ShutdownRegistry.register { targetActionsHotkey?.stop() }
 }
 
 @MainActor

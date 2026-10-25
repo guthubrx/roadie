@@ -101,6 +101,10 @@ public enum WindowContextActionKind: String, Equatable, Codable, Sendable {
     case affinityApp = "affinity_app"
     case affinityAppTitle = "affinity_app_title"
     case removeAffinityApp = "remove_affinity_app"
+    /// Toutes les fenêtres de l'application flottent, ou sont tuilées ; retirer ce choix (SPEC-075).
+    case floatAlways = "float_always"
+    case tileAlways = "tile_always"
+    case clearTiling = "clear_tiling"
 }
 
 public struct WindowContextAction: Equatable, Sendable {
@@ -394,7 +398,7 @@ public final class TitlebarContextMenuController {
     ) -> NSMenu {
         menuTargets.removeAll(keepingCapacity: true)
         let menu = NSMenu(title: "Roadie")
-        addWindowSubmenu(windowID: windowID, sourceScope: sourceScope, pin: pin, to: menu)
+        addWindowSubmenu(window: window, windowID: windowID, sourceScope: sourceScope, pin: pin, to: menu)
         addAffinitySubmenu(window: window, windowID: windowID, sourceScope: sourceScope, to: menu)
         addSubmenu(title: "Envoyer la fenêtre vers stage", kind: .stage, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         addDesktopStageSubmenu(windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
@@ -440,6 +444,7 @@ public final class TitlebarContextMenuController {
     }
 
     private func addWindowSubmenu(
+        window: WindowSnapshot,
         windowID: WindowID,
         sourceScope: StageScope?,
         pin: PersistentWindowPin?,
@@ -485,6 +490,18 @@ public final class TitlebarContextMenuController {
             addActionItem(title: "Flotter dans cette stage", kind: .floatStage, windowID: windowID, sourceScope: sourceScope, to: submenu)
             addActionItem(title: "Pin sur ce desktop", kind: .pinDesktop, windowID: windowID, sourceScope: sourceScope, to: submenu)
             addActionItem(title: "Pin sur tous les desktops", kind: .pinAllDesktops, windowID: windowID, sourceScope: sourceScope, to: submenu)
+        }
+        // Choix durable de toute l'application (SPEC-075), dans sa règle `affinity-app-…`.
+        submenu.addItem(.separator())
+        let rule = WindowRuleAffinityService().tilingChoice(for: window)
+        if rule != .float {
+            addActionItem(title: "Toujours faire flotter \(window.appName)", kind: .floatAlways, windowID: windowID, sourceScope: sourceScope, to: submenu)
+        }
+        if rule == .float || (rule == nil && !window.isTileCandidate && pin == nil) {
+            addActionItem(title: "Toujours tuiler \(window.appName)", kind: .tileAlways, windowID: windowID, sourceScope: sourceScope, to: submenu)
+        }
+        if rule != nil {
+            addActionItem(title: "Retirer la règle de flottement de \(window.appName)", kind: .clearTiling, windowID: windowID, sourceScope: sourceScope, to: submenu)
         }
         parent.submenu = submenu
         menu.addItem(parent)

@@ -8,6 +8,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     var onChange: ((String) -> Void)?
     var onKey: ((SearchKeyInput) -> Void)?
     var onCancel: (() -> Void)?
+    /// Touches modificatrices tenues : la ligne choisie annonce la variante de Retour (SPEC-075).
+    var onFlags: ((NSEvent.ModifierFlags) -> Void)?
     /// Étiquettes affichées (recherche non vide) : Maj + lettre choisit une étiquette au lieu d'écrire
     /// une majuscule. Faux en mode commande, où les majuscules sont du texte (`/stage rename Perso`).
     var labelsEnabled = false
@@ -74,6 +76,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         onChange = nil
         onKey = nil
         onCancel = nil
+        onFlags = nil
         orderOut(nil)
         close()
     }
@@ -89,6 +92,15 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .flagsChanged { onFlags?(event.modifierFlags) }
+        // → en fin de saisie : les verbes de la ligne choisie, comme Tab (SPEC-075). Ailleurs, le curseur.
+        if event.type == .keyDown, event.keyCode == 124, !field.stringValue.isEmpty,
+           event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
+           let editor = field.currentEditor() as? NSTextView, !editor.hasMarkedText(),
+           editor.selectedRange() == NSRange(location: (editor.string as NSString).length, length: 0) {
+            onKey?(SearchKeyInput(kind: .actions))
+            return
+        }
         // Effacement dans un champ vide : rien ne change pour AppKit, la barre revient d'une étape (SPEC-074).
         if event.type == .keyDown, event.keyCode == 51, field.stringValue.isEmpty,
            event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
@@ -131,9 +143,17 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         return super.performKeyEquivalent(with: event)
     }
 
+    /// Codes physiques des chiffres 1 à 9 : rangée du haut puis pavé numérique.
+    private static let digitKeys: [UInt16: Int] = [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9,
+                                                   83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9]
+
     /// O(1). Les modificateurs de déplacement/sélection restent à AppKit.
     static func navigation(_ event: NSEvent, labels: Bool = false) -> SearchKeyInput? {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        // ⌘1 à ⌘9, rangée du haut ou pavé numérique, quelle que soit la disposition (AZERTY : sans Maj).
+        if flags == .command, let rank = digitKeys[event.keyCode] {
+            return SearchKeyInput(kind: .pick(rank))
+        }
         if labels, flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(),
            letter.count == 1, letter.first?.isLetter == true {
             return SearchKeyInput(kind: .labelCharacter(letter))
@@ -141,7 +161,9 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         switch event.keyCode {
         case 53: return SearchKeyInput(kind: .escape)
         case 36, 76:
-            return SearchKeyInput(kind: .confirm(shift: flags.contains(.shift), command: flags.contains(.command), isRepeat: event.isARepeat))
+            return SearchKeyInput(kind: .confirm(shift: flags.contains(.shift), command: flags.contains(.command),
+                                                 option: flags.contains(.option), control: flags.contains(.control),
+                                                 isRepeat: event.isARepeat))
         case 48 where flags.isEmpty || flags == .shift:
             return SearchKeyInput(kind: flags.contains(.shift) ? .previous : .next, navigationSource: .tab)
         case 125 where flags.isEmpty: return SearchKeyInput(kind: .next, navigationSource: .arrow)

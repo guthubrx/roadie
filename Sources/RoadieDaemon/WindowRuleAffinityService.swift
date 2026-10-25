@@ -20,6 +20,12 @@ public struct WindowRuleAffinityResult: Equatable, Sendable {
     }
 }
 
+/// Choix de tuilage durable d'une application (SPEC-075) : toujours flotter ou toujours tuiler.
+public enum WindowTilingChoice: String, Equatable, Sendable {
+    case float
+    case tile
+}
+
 public final class WindowRuleAffinityService: @unchecked Sendable {
     private let path: String
     private let eventLog: EventLog
@@ -40,8 +46,11 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
     ) -> WindowRuleAffinityResult {
         do {
             var rules = try loadRules()
-            let rule = affinityRule(kind: kind, window: window, scope: scope, display: display)
+            var rule = affinityRule(kind: kind, window: window, scope: scope, display: display)
             if let index = rules.firstIndex(where: { $0.id == rule.id }) {
+                // Le choix de tuilage de la même règle survit à la nouvelle affinité (SPEC-075 R4).
+                rule.action.floating = rules[index].action.floating
+                rule.action.manage = rules[index].action.manage
                 rules[index] = rule
             } else {
                 rules.append(rule)
@@ -70,10 +79,19 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
     public func removeAppAffinity(window: WindowSnapshot, scope: StageScope?) -> WindowRuleAffinityResult {
         do {
             let rules = try loadRules()
-            let filtered = rules.filter { rule in
-                !(rule.id.hasPrefix("affinity-") && rule.match.app == window.appName)
+            let appRuleID = ruleID(kind: .app, window: window)
+            // Le choix de tuilage reste : seule la destination de la règle de l'application est retirée.
+            let filtered = rules.compactMap { rule -> WindowRule? in
+                guard rule.id.hasPrefix("affinity-"), rule.match.app == window.appName else { return rule }
+                guard rule.id == appRuleID, rule.action.floating != nil || rule.action.manage != nil else { return nil }
+                var kept = rule
+                kept.action.assignDesktop = nil
+                kept.action.assignDisplay = nil
+                kept.action.assignStage = nil
+                kept.action.follow = nil
+                return kept
             }
-            guard filtered.count != rules.count else {
+            guard filtered != rules else {
                 return WindowRuleAffinityResult(message: "aucune affinite pour \(window.appName)", changed: false, path: path)
             }
             try saveRules(filtered)
@@ -89,6 +107,42 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
             return WindowRuleAffinityResult(message: "affinite retiree: \(window.appName)", changed: true, path: path)
         } catch {
             return WindowRuleAffinityResult(message: "affinite non retiree: \(error)", changed: false, path: path)
+        }
+    }
+
+    /// Choix de tuilage durable de l'application de cette fenêtre, lu dans sa règle. O(R).
+    public func tilingChoice(for window: WindowSnapshot) -> WindowTilingChoice? {
+        let id = ruleID(kind: .app, window: window)
+        guard let rule = try? loadRules().first(where: { $0.id == id }) else { return nil }
+        if rule.action.floating == true { return .float }
+        if rule.action.manage == true { return .tile }
+        return nil
+    }
+
+    /// Toutes les fenêtres de l'application, présentes et futures, flottent ou sont tuilées ; nil retire
+    /// le choix. Porté par la règle `affinity-app-…` : une seule règle s'applique par fenêtre, l'affinité
+    /// d'ouverture de la même règle est conservée (SPEC-075 R4). O(R).
+    public func saveTiling(_ choice: WindowTilingChoice?, window: WindowSnapshot) -> WindowRuleAffinityResult {
+        do {
+            var rules = try loadRules()
+            let id = ruleID(kind: .app, window: window)
+            var rule = rules.first(where: { $0.id == id })
+                ?? WindowRule(id: id, enabled: true, priority: 9_000, stopProcessing: true, match: RuleMatch(app: window.appName))
+            rule.action.floating = choice == .float ? true : nil
+            rule.action.manage = choice == .tile ? true : nil
+            rules.removeAll { $0.id == id }
+            let action = rule.action
+            if action.floating != nil || action.manage != nil || action.assignStage != nil
+                || action.assignDesktop != nil || action.assignDisplay != nil {
+                rules.append(rule)
+            }
+            try saveRules(rules)
+            eventLog.append(RoadieEvent(type: "rule.tiling_saved", details: [
+                "ruleID": id, "app": window.appName, "choice": choice?.rawValue ?? "none", "path": path
+            ]))
+            return WindowRuleAffinityResult(message: "tuilage \(choice?.rawValue ?? "retire"): \(window.appName)", changed: true, path: path)
+        } catch {
+            return WindowRuleAffinityResult(message: "tuilage non enregistre: \(error)", changed: false, path: path)
         }
     }
 

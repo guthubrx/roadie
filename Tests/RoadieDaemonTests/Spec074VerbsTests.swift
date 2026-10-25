@@ -30,7 +30,7 @@ struct Spec074VerbsTests {
 
     @Test func eachSubjectGetsItsVerbsDefaultFirst() {
         #expect(titles(.verbs(for: firefox, query: "", destinations: destinations, newStageHome: home))
-                == ["# Firefox ›", "open", "openIn", "newWindow", "gatherIn", "hide", "quit"])
+                == ["# Firefox ›", "open", "openIn", "bringHere", "newWindow", "gatherIn", "hide", "quit"])
         let window = RoadieTarget(id: "window:7", kind: .window, title: "Firefox", subtitle: "Accueil", source: .roadie,
                                   scope: TargetScopeSnapshot(displayId: "A", desktopId: 1, stageId: "1", windowId: 7), actions: [.focus])
         #expect(LauncherVerb.verbs(for: .target(window)).first == .focus)

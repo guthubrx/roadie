@@ -216,6 +216,11 @@ public final class TargetModeRuntimeController: NSObject {
         handle(TargetModeRuntimeCommand(name: "targets.search"))
     }
 
+    /// Raccourci des verbes de la fenêtre active (SPEC-075).
+    public func requestActions() {
+        handle(TargetModeRuntimeCommand(name: "targets.actions"))
+    }
+
     public func stop() {
         if let observer {
             DistributedNotificationCenter.default().removeObserver(observer)
@@ -243,7 +248,7 @@ public final class TargetModeRuntimeController: NSObject {
         switch command.name {
         case "targets.interactive":
             startTargetsInteractive(command)
-        case "targets.search":
+        case "targets.search", "targets.actions":
             startTargetsSearch(command)
         case "grid.interactive":
             startGridInteractive(command)
@@ -262,7 +267,7 @@ public final class TargetModeRuntimeController: NSObject {
         let config = suppliedConfig ?? service.effectiveConfig
         let style: TargetOverlayStyle
         switch currentCommand {
-        case "targets.search": style = .search(config.experimental.targetMode)
+        case "targets.search", "targets.actions": style = .search(config.experimental.targetMode)
         case "grid.interactive": style = .grid(config.experimental.targetGrid)
         default: style = .labels(config.experimental.targetMode)
         }
@@ -364,6 +369,15 @@ public final class TargetModeRuntimeController: NSObject {
         // Mode commande (SPEC-023) : l'action différée et la fenêtre de réglages partent après la fin
         // de la session et la remise à zéro de `currentSession` (research R2).
         let commands = SlashCommandRunner()
+        // Capslock + Maj + F (SPEC-075) : les verbes de la fenêtre au premier plan, si Roadie la connaît.
+        var initialSubject: LauncherSubject?
+        if command.name == "targets.actions" {
+            let focused = service.snapshot(followFocus: false).focusedWindowID
+            initialSubject = focused.flatMap { id in roadieTargets.first { $0.id == "window:\(id.rawValue)" } }.map(LauncherSubject.target)
+            events.append(RoadieEvent(type: "target_mode.actions_started", details: [
+                "focusedWindowID": focused.map { String($0.rawValue) } ?? "none",
+                "subject": initialSubject == nil ? "none" : "window"]))
+        }
         currentSession = presenter.startSearch(
             targets: roadieTargets,
             alphabet: appTargets.hintCharacters,
@@ -390,7 +404,7 @@ public final class TargetModeRuntimeController: NSObject {
             activate: { target, verb in
                 targets.activate(target: target, action: verb)
             },
-            launcher: launcherContext(),
+            launcher: launcherContext(initialSubject: initialSubject),
             onFinish: { [weak self] result in
                 self?.finish(result, command: command.name)
             }
@@ -399,7 +413,7 @@ public final class TargetModeRuntimeController: NSObject {
 
     /// Lanceur de la barre (SPEC-073) : index des applications gardé en mémoire et rafraîchi à chaque
     /// ouverture, état des applications ouvertes, classement appris lu une fois par session.
-    private func launcherContext() -> LauncherSearchContext {
+    private func launcherContext(initialSubject: LauncherSubject? = nil) -> LauncherSearchContext {
         let catalog = LauncherAppCatalog.shared
         let rankingStore = LauncherRankingStore()
         let state = service.effectiveStageStore.state()
@@ -407,7 +421,13 @@ public final class TargetModeRuntimeController: NSObject {
             .filter { $0.activationPolicy == .regular }.compactMap(\.bundleIdentifier))
         let snapshot = service.snapshot(followFocus: false)
         let names = WindowSwitcherService.stageLabels(in: state, liveWindowIDs: Set(snapshot.windows.map(\.window.id)))
-        return LauncherSearchContext(
+        let homeDisplay = state.activeDisplayID ?? snapshot.displays.first?.id ?? DisplayID(rawValue: "none")
+        let homeDesktop = state.currentDesktopID(for: homeDisplay)
+        let activeStage = state.scopes.first { $0.displayID == homeDisplay && $0.desktopID == homeDesktop }
+            .map { StageScope(displayID: homeDisplay, desktopID: homeDesktop, stageID: $0.activeStageID) }
+        let affinity = WindowRuleAffinityService(eventLog: events)
+        let webSearchURL = service.effectiveConfig.experimental.targetMode.webSearchURL
+        var context = LauncherSearchContext(
             apps: catalog.current,
             details: LauncherPlacement.details(runningBundleIDs: running, state: state, stageNames: names),
             ranking: rankingStore.load(),
@@ -415,14 +435,27 @@ public final class TargetModeRuntimeController: NSObject {
             launch: { [weak self] app in self?.launch(app) ?? TargetActionResult(changed: false, message: "launcher_unavailable") },
             recordVisit: { key, query in rankingStore.recordVisit(key, query: query) },
             destinations: LauncherPlacement.destinations(state: state, displays: snapshot.displays, stageNames: names),
-            newStageHome: {
-                let display = state.activeDisplayID ?? snapshot.displays.first?.id ?? DisplayID(rawValue: "none")
-                return (display, state.currentDesktopID(for: display))
-            }(),
+            newStageHome: (homeDisplay, homeDesktop),
             perform: { [weak self] action in
                 self?.perform(action) ?? TargetActionResult(changed: false, message: "launcher_unavailable")
             }
         )
+        context.activeStage = activeStage
+        context.initialSubject = initialSubject
+        context.tiling = { id in
+            guard let entry = snapshot.windows.first(where: { $0.window.id == id }) else { return nil }
+            return LauncherTilingState(pinned: entry.pin != nil, tiled: entry.window.isTileCandidate && entry.pin == nil,
+                                       rule: affinity.tilingChoice(for: entry.window))
+        }
+        context.webSearch = { [events] text in
+            guard let url = LauncherWeb.searchURL(webSearchURL, query: text) else {
+                return TargetActionResult(changed: false, message: "launcher web: invalid url", error: "web_search_url")
+            }
+            NSWorkspace.shared.open(url)
+            events.append(RoadieEvent(type: "launcher.web_search", details: ["host": url.host ?? ""]))
+            return TargetActionResult(changed: true, message: "launcher web: \(url.host ?? "")")
+        }
+        return context
     }
 
     // MARK: - Verbes du lanceur (SPEC-074)
@@ -448,12 +481,57 @@ public final class TargetModeRuntimeController: NSObject {
                 NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).forEach { $0.hide() }
             case .quit:
                 NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).forEach { $0.terminate() }
+            case .bringHere:
+                bringHere(app, into: action.destination.flatMap(stageScope) ?? activeStageScope())
             default:
                 return refused(label, "verb")
             }
             return TargetActionResult(changed: true, message: "\(label): \(app.bundleID)")
         case .target(let target):
-            return perform(action.verb, on: target, destination: action.destination, label: label)
+            let result = perform(action.verb, on: target, destination: action.destination, label: label)
+            // ⌘ Retour : Roadie va à la fenêtre envoyée dans sa nouvelle stage.
+            if action.follow, result.changed, let id = target.scope.windowId { focus(WindowID(rawValue: id)) }
+            return result
+        }
+    }
+
+    /// Stage active du bureau affiché de l'écran actif. O(S).
+    private func activeStageScope() -> StageScope? {
+        let state = service.effectiveStageStore.state()
+        guard let display = state.activeDisplayID ?? service.snapshot(followFocus: false).displays.first?.id else { return nil }
+        let desktop = state.currentDesktopID(for: display)
+        return state.scopes.first { $0.displayID == display && $0.desktopID == desktop }
+            .map { StageScope(displayID: display, desktopID: desktop, stageID: $0.activeStageID) }
+    }
+
+    /// Met la fenêtre devant, dans sa stage et son bureau.
+    private func focus(_ window: WindowID) {
+        let switcher = WindowSwitcherService(service: service)
+        Task { @MainActor in
+            if let entry = await switcher.load().entries.first(where: { $0.id == window }) { _ = switcher.activate(entry) }
+        }
+    }
+
+    /// ⌥ Retour sur une application : sa fenêtre préférée rejoint la stage active et passe devant ;
+    /// fermée, elle s'ouvre (la stage active reçoit les nouvelles fenêtres). La stage affichée ne change pas.
+    private func bringHere(_ app: LauncherApp, into scope: StageScope?) {
+        guard let scope else { _ = launch(app); return }
+        let service = service
+        let events = events
+        let switcher = WindowSwitcherService(service: service)
+        Task { @MainActor in
+            let loaded = await switcher.load()
+            guard let entry = LauncherPlacement.preferredWindow(loaded.entries.filter { $0.window.bundleID == app.bundleID },
+                                                                state: loaded.persisted) else {
+                _ = self.launch(app)
+                return
+            }
+            if entry.scope != scope {
+                _ = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
+                    .assign(windowID: entry.id, to: scope.stageID, desktopID: scope.desktopID, displayID: scope.displayID)
+            }
+            events.append(RoadieEvent(type: "launcher.brought", details: ["bundleID": app.bundleID, "stage": scope.description]))
+            if let placed = await switcher.load().entries.first(where: { $0.id == entry.id }) { _ = switcher.activate(placed) }
         }
     }
 
@@ -477,9 +555,24 @@ public final class TargetModeRuntimeController: NSObject {
                     .send(windowID: window, toDisplayID: display, focusMovedWindow: false).message
             }
             return TargetActionResult(changed: true, message: message)
-        case (.window, .float):
+        case (.window, .bringHere):
+            guard let window = scope.windowId.map(WindowID.init(rawValue:)),
+                  let here = destination.flatMap(stageScope) ?? activeStageScope() else { return refused(label, "window") }
+            let result = WindowContextActions(snapshotService: service, stageStore: store, eventLog: events)
+                .assign(windowID: window, to: here.stageID, desktopID: here.desktopID, displayID: here.displayID)
+            focus(window)
+            return TargetActionResult(changed: result.changed, message: result.message)
+        case (.window, .float), (.window, .tileWindow):
             guard let window = scope.windowId.map(WindowID.init(rawValue:)) else { return refused(label, "window") }
             let result = WindowContextActions(snapshotService: service, stageStore: store, eventLog: events).toggleFloating(windowID: window)
+            return TargetActionResult(changed: result.changed, message: result.message)
+        case (.window, .floatAlways), (.window, .tileAlways), (.window, .clearTilingRule):
+            guard let id = scope.windowId.map(WindowID.init(rawValue:)),
+                  let entry = service.snapshot(followFocus: false).windows.first(where: { $0.window.id == id }) else {
+                return refused(label, "window")
+            }
+            let choice: WindowTilingChoice? = verb == .floatAlways ? .float : verb == .tileAlways ? .tile : nil
+            let result = WindowRuleAffinityService(eventLog: events).saveTiling(choice, window: entry.window)
             return TargetActionResult(changed: result.changed, message: result.message)
         case (.window, .fullscreen), (.window, .minimize), (.window, .close):
             guard let window = scope.windowId.map(WindowID.init(rawValue:)) else { return refused(label, "window") }

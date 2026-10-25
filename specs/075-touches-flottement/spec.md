@@ -17,7 +17,7 @@ SPEC-021 (mode recherche), SPEC-047 (flottement par stage), SPEC-073 et 074 (lan
 destinations), règles générées du menu de barre de titre (`WindowRuleAffinityService`).
 
 ## Exigences
-- **FR-001 Variantes de Retour.** Sur une application, une fenêtre ou une stage :
+- **FR-001 Variantes de Retour.** Sur une application ou une fenêtre (stage, bureau, écran : ⌃ seulement) :
   - ⌘ Retour : application → l'ouvrir dans une nouvelle stage du bureau affiché ; fenêtre →
     l'envoyer dans une nouvelle stage ; Roadie y va.
   - ⌥ Retour : application ouverte → amener sa fenêtre préférée dans la stage active ;
@@ -33,7 +33,7 @@ destinations), règles générées du menu de barre de titre (`WindowRuleAffinit
   à droite ; ⌘ + chiffre fait leur action par défaut, à toutes les étapes (objets, verbes,
   destinations). La ligne choisie garde son rappel « ⇥ actions ↩ ».
 - **FR-004 Verbes de la fenêtre active.** Un raccourci global (défaut Capslock + Maj + F,
-  réglable, vide = désactivé) et la commande `roadie target actions` ouvrent la barre
+  réglable, vide = désactivé) et la commande `roadie targets actions` ouvrent la barre
   directement à l'étape des verbes de la fenêtre au premier plan. Sans fenêtre gérée, la barre
   s'ouvre normalement.
 - **FR-005 Flèche droite.** → avec le curseur en fin de saisie non vide ouvre les verbes de la

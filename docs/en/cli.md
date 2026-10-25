@@ -261,6 +261,7 @@ roadie targets activate TARGET_ID_OR_LABEL --action double-click
 roadie targets activate TARGET_ID_OR_LABEL --action right-click
 roadie targets activate TARGET_ID_OR_LABEL --action command-click
 roadie targets search
+roadie targets actions
 roadie targets show --json --labels-only
 roadie targets hide
 ```
@@ -273,7 +274,8 @@ roadie targets hide
 actions return structured errors instead of silently falling back.
 
 `targets search` opens search mode (input bar, every visible window), like the
-configurable `search_hotkey` shortcut. See `docs/en/features.md`,
+configurable `search_hotkey` shortcut. `targets actions` opens it directly on the
+verbs of the active window, like `actions_hotkey`. See `docs/en/features.md`,
 Search mode section.
 
 In this bar, a `/` as the first character opens command mode. Its commands

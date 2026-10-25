@@ -902,6 +902,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var actionSelection: String?
     /// Saisie des deuxième et troisième étapes ; la requête de l'objet reste dans `model`.
     private var stepQuery = ""
+    /// État de tuilage de la fenêtre dont les verbes sont montrés, lu une fois à l'entrée (SPEC-075).
+    private var stepTiling: LauncherTilingState?
+    /// Touche tenue qui change ce que fait Retour (SPEC-075).
+    private var heldModifier: LauncherModifier?
+    /// Rangs ⌘1 à ⌘9 : index des lignes montrées, dans l'ordre, calculés avec la géométrie.
+    private var pickRows: [Int] = []
 
     init(
         targets: [RoadieTarget],
@@ -958,6 +964,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let input = SearchInputPanel()
         input.onChange = { [weak self] text in self?.replaceInput(text) }
         input.onKey = { [weak self] key in self?.handleSearch(key) }
+        input.onFlags = { [weak self] flags in self?.modifiersChanged(flags) }
+        if let subject = launcher.initialSubject { enterVerbs(subject) }
         input.onCancel = { [weak self] in self?.cancel() }
         inputPanel = input
         render()
@@ -1069,8 +1077,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             cancel()
             return
         }
-        if case .confirm(let shift, let command, let isRepeat) = input.kind {
+        if case .confirm(let shift, let command, let option, let control, let isRepeat) = input.kind {
             guard !isRepeat else { return }
+            if let modifier = Self.modifier(command: command && !shift, option: option, control: control),
+               let variant = currentVariant(modifier) {
+                finishVariant(variant)
+                return
+            }
             if case .app(let app, _)? = launcherList.row(for: launcherSelection) {
                 finishLaunching(app)
                 return
@@ -1093,6 +1106,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             model.deleteBackward()
         case .next, .previous:
             navigate(input)
+        case .actions:
+            navigate(SearchKeyInput(kind: .next, navigationSource: .tab))
+        case .pick(let rank):
+            pick(rank)
+            return
         case .escape, .confirm, .ignored:
             break
         }
@@ -1158,8 +1176,19 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func enterVerbs(_ subject: LauncherSubject) {
         step = .verbs(subject)
         stepQuery = ""
+        stepTiling = if case .target(let target) = subject, target.kind == .window, let id = target.scope.windowId {
+            launcher.tiling(WindowID(rawValue: id))
+        } else { nil }
         model.highlight(targetID: { if case .target(let target) = subject { return target.id } else { return nil } }())
         refreshActions()
+    }
+
+    /// Objet des étapes verbe et destination.
+    private var stepSubject: LauncherSubject? {
+        switch step {
+        case .objects: nil
+        case .verbs(let subject), .destinations(let subject, _): subject
+        }
     }
 
     private func enterDestinations(_ subject: LauncherSubject, _ verb: LauncherVerb) {
@@ -1185,7 +1214,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch step {
         case .objects: return
         case .verbs(let subject):
-            actionList = .verbs(for: subject, query: stepQuery, destinations: launcher.destinations, newStageHome: launcher.newStageHome)
+            actionList = .verbs(for: subject, query: stepQuery, destinations: launcher.destinations, newStageHome: launcher.newStageHome,
+                                tiling: stepTiling)
         case .destinations(let subject, let verb):
             actionList = .destinations(for: subject, verb: verb, query: stepQuery, destinations: launcher.destinations,
                                        newStageHome: launcher.newStageHome)
@@ -1199,8 +1229,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             stepBack()
         case .delete:
             if stepQuery.isEmpty { stepBack() }
-        case .next where input.navigationSource == .tab:
-            // Tab sur un verbe qui demande une destination : la troisième étape.
+        case .pick(let rank):
+            pick(rank)
+            return
+        case .next where input.navigationSource == .tab, .actions:
+            // Tab ou → sur un verbe qui demande une destination : la troisième étape.
             if case .verb(let verb)? = actionList.row(for: actionSelection), verb.needsDestination, case .verbs(let subject) = step {
                 enterDestinations(subject, verb)
             }
@@ -1208,7 +1241,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             actionSelection = actionList.neighbour(of: actionSelection, step: 1)
         case .previous:
             actionSelection = actionList.neighbour(of: actionSelection, step: -1)
-        case .confirm(_, _, let isRepeat):
+        case .confirm(_, _, _, _, let isRepeat):
             guard !isRepeat else { return }
             confirmStep()
             return
@@ -1216,6 +1249,67 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             break
         }
         render()
+    }
+
+    // MARK: - Touches du lanceur (SPEC-075)
+
+    /// Une seule touche tenue choisit la variante ; deux à la fois, aucune. O(1).
+    private static func modifier(command: Bool, option: Bool, control: Bool) -> LauncherModifier? {
+        switch (command, option, control) {
+        case (true, false, false): .command
+        case (false, true, false): .option
+        case (false, false, true): .control
+        default: nil
+        }
+    }
+
+    private func modifiersChanged(_ flags: NSEvent.ModifierFlags) {
+        let held = flags.contains(.shift) ? nil : Self.modifier(command: flags.contains(.command), option: flags.contains(.option),
+                                                              control: flags.contains(.control))
+        guard held != heldModifier else { return }
+        heldModifier = held
+        render()
+    }
+
+    /// Variante de la ligne choisie à l'étape des objets, hors mode commande. O(1).
+    private func currentVariant(_ modifier: LauncherModifier) -> LauncherVariant? {
+        guard step == .objects, commandModel == nil else { return nil }
+        let subject: LauncherSubject
+        switch launcherList.row(for: launcherSelection) {
+        case .app(let app, _): subject = .app(app)
+        case .target(let target): subject = .target(target)
+        case .header, nil: return nil
+        }
+        return LauncherVariant.of(subject, modifier: modifier, query: model.query,
+                                  newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
+    }
+
+    private func finishVariant(_ variant: LauncherVariant) {
+        switch variant.effect {
+        case .action(let action):
+            finishAction(action)
+        case .webSearch(let text):
+            guard !finished else { return }
+            finished = true
+            cleanup()
+            onFinish?(launcher.webSearch(text))
+        }
+    }
+
+    /// ⌘ + chiffre : action par défaut de la ligne de ce rang parmi celles montrées. O(1).
+    private func pick(_ rank: Int) {
+        guard rank >= 1, rank <= pickRows.count else { return }
+        let index = pickRows[rank - 1]
+        if step == .objects {
+            guard commandModel == nil, index < launcherList.rows.count else { return }
+            launcherSelection = launcherList.rows[index].id
+            syncHighlight()
+            activateSelection(immediate: true)
+        } else {
+            guard index < actionList.rows.count else { return }
+            actionSelection = actionList.rows[index].id
+            confirmStep()
+        }
     }
 
     private func confirmStep() {
@@ -1347,7 +1441,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             }
             show(badges: badges, bar: TargetSearchBar(
                 query: stepQuery, matchCount: actionList.rows.filter { $0.id != nil }.count, properties: nil, isLoading: false,
-                suggestions: actionList.rows.map(Self.suggestion),
+                suggestions: actionList.rows.map { Self.suggestion($0, app: stepSubject?.appName ?? "") },
                 selectedSuggestion: actionList.rows.firstIndex { $0.id == actionSelection && $0.id != nil },
                 richRows: true))
             return
@@ -1386,19 +1480,24 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         // Icône d'une fenêtre : celle de son application, retrouvée par son nom. O(a).
         let appPaths = Dictionary(launcher.apps.map { ($0.name, $0.path) }, uniquingKeysWith: { first, _ in first })
+        var suggestions = launcherList.rows.map { Self.suggestion($0, appPaths: appPaths) }
+        // Touche tenue : la ligne choisie annonce ce que Retour fera (SPEC-075).
+        if let modifier = heldModifier, let index = selectedLauncherRow, let variant = currentVariant(modifier) {
+            suggestions[index].detail = variant.title
+        }
         show(badges: badges, bar: TargetSearchBar(
             query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading,
-            suggestions: launcherList.rows.map { Self.suggestion($0, appPaths: appPaths) }, selectedSuggestion: selectedLauncherRow,
+            suggestions: suggestions, selectedSuggestion: selectedLauncherRow,
             richRows: true))
     }
 
     /// Ligne des étapes verbe et destination.
-    private static func suggestion(_ row: LauncherActionList.Row) -> SlashSuggestion {
+    private static func suggestion(_ row: LauncherActionList.Row, app: String) -> SlashSuggestion {
         switch row {
         case .header(let title):
             return SlashSuggestion(text: title, kind: .header)
         case .verb(let verb):
-            return SlashSuggestion(text: verb.title, detail: verb.needsDestination ? "Tab ou Retour : choisir" : "",
+            return SlashSuggestion(text: verb.title(app: app), detail: verb.needsDestination ? "Tab ou Retour : choisir" : "",
                                    kind: .result, icon: .symbol(verb.needsDestination ? "arrow.right.circle" : "play.circle"))
         case .destination(let verb, let destination):
             let symbol = switch destination.kind {
@@ -1439,6 +1538,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         bar.usesNativeInput = true
         let barWindow = pointerScreen.flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
         searchBarLayout = barWindow.map { bar.layout(in: $0.frame, style: style) }
+        // ⌘1 à ⌘9 sur les lignes montrées ; le rang sert au dessin et à la touche (SPEC-075).
+        pickRows = []
+        if bar.richRows, let layout = searchBarLayout {
+            for index in layout.visibleRange(count: bar.suggestions.count, selected: bar.selectedSuggestion)
+            where bar.suggestions[index].kind != .header && pickRows.count < 9 {
+                pickRows.append(index)
+                bar.suggestions[index].shortcut = "⌘\(pickRows.count)"
+            }
+        }
         inputPanel?.labelsEnabled = step == .objects && commandModel == nil && !model.query.isEmpty
         inputPanel?.field.placeholderString = switch step {
         case .objects: "Rechercher ou saisir /commande"
@@ -1552,14 +1660,14 @@ extension SlashCommandModel {
                 else { previousSuggestion() }
             case .tab, .control, nil: previousSuggestion()
             }
-        case .confirm(_, _, let isRepeat):
+        case .confirm(_, _, _, _, let isRepeat):
             if !isRepeat {
                 acceptSelectedSuggestion()
                 return .submit(submit())
             }
         case .escape:
             return .close
-        case .ignored:
+        case .ignored, .pick, .actions:
             break
         }
         return .update
@@ -1588,7 +1696,12 @@ public struct SearchKeyInput: Sendable, Equatable {
         case escape
         case next
         case previous
-        case confirm(shift: Bool, command: Bool, isRepeat: Bool)
+        /// Option et Contrôle choisissent une variante du lanceur (SPEC-075).
+        case confirm(shift: Bool, command: Bool, option: Bool = false, control: Bool = false, isRepeat: Bool)
+        /// ⌘1 à ⌘9 : action par défaut de la ligne de ce rang parmi celles montrées (SPEC-075).
+        case pick(Int)
+        /// → en fin de saisie : verbes de la ligne choisie, comme Tab (SPEC-075).
+        case actions
         case ignored
     }
 
@@ -1644,7 +1757,7 @@ public struct SearchKeyInput: Sendable, Equatable {
         switch keyCode {
         case 53: self.init(kind: .escape); return
         case 51: self.init(kind: .delete); return
-        case 36, 76: self.init(kind: .confirm(shift: shift, command: command, isRepeat: isRepeat)); return
+        case 36, 76: self.init(kind: .confirm(shift: shift, command: command, control: control, isRepeat: isRepeat)); return
         default: break
         }
         // Cmd-Tab, Cmd-Espace… restent au système.

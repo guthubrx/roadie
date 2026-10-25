@@ -13,6 +13,8 @@ public struct SlashSuggestion: Equatable, Sendable {
     public var detail: String
     public var kind: Kind
     public var icon: Icon?
+    /// Rappel de touche affiché à droite d'une ligne du lanceur (« ⌘3 », SPEC-075) ; vide sinon.
+    public var shortcut = ""
 
     public init(text: String, detail: String = "", kind: Kind, icon: Icon? = nil) {
         self.text = text

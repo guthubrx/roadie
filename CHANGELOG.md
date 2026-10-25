@@ -22,6 +22,12 @@ jour et les limites connues ; les README décrivent la version courante.
   couleur d'accent avec le rappel des touches. L'icône suit la taille du texte
   (deux fois la hauteur du nom), le nom est en graisse normale, les fenêtres
   montrent l'icône de leur application et les symboles sont posés sur une tuile.
+- Touches du lanceur : ⌘, ⌥ et ⌃ + Retour ouvrent dans une nouvelle stage, amènent ici
+  ou cherchent sur le web, annoncés sur la ligne tant que la touche est tenue ; ⌘1 à ⌘9 ;
+  → ouvre les verbes ; Capslock + Maj + F et `roadie targets actions` ouvrent les verbes
+  de la fenêtre active.
+- Flotter ou tuiler cette fenêtre, ou toujours toute l'application, depuis la barre et le
+  menu Fenêtre ; une seule règle par application garde aussi l'affinité d'ouverture.
 - Maj + étiquette choisit de nouveau une cible à l'écran dans la barre de recherche ;
   le champ natif écrivait une majuscule.
 

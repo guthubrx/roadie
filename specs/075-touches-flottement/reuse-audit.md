@@ -9,7 +9,7 @@ Statut : `OK`. Primitive `speckit-audit-existing` utilisée en repli manuel (rec
 | ⌘1 à ⌘9 | `SearchInputPanel.performKeyEquivalent` (⌘ + lettre) | RÉUTILISER, ajouter les chiffres |
 | Variantes | aucun équivalent (`Variant` ailleurs = REL-021, sans lien) | CRÉER `LauncherVariant` dans `LauncherActions.swift` (3 touches × 4 objets) |
 | Raccourci des verbes | `TargetSearchHotkey`, déjà instancié pour la vue d'ensemble (`OverviewController.swift:57`) | RÉUTILISER, seconde instance |
-| `roadie target actions` | `CLICommandRouter` `target search` (`queueTargetModeRuntimeCommand`) | RÉUTILISER le même chemin |
+| `roadie targets actions` | `CLICommandRouter` `target search` (`queueTargetModeRuntimeCommand`) | RÉUTILISER le même chemin |
 | Règles « toujours » | `WindowRuleAffinityService` (fichier généré, relecture avant écriture) | RÉUTILISER, étendre ; règle unique par application (research R4) |
 | Menu Fenêtre | `TitlebarContextMenuController.addWindowSubmenu`, `WindowContextActionKind` | RÉUTILISER, nouvelles entrées |
 | Faire flotter cette fenêtre | `WindowContextActions.toggleFloating` (SPEC-047) | RÉUTILISER |
