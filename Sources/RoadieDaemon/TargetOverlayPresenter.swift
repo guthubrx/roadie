@@ -891,8 +891,6 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Requête et cibles de la dernière liste : elle n'est recalculée que si l'une change.
     private var launcherQuery: String?
     private var launcherTargetIDs: [String] = []
-    /// Lignes de liste au plus pour le lanceur, en-têtes compris.
-    private static let launcherRows = 12
     /// Étapes du lanceur (SPEC-074) : objet, puis verbe, puis destination si le verbe en demande une.
     private enum LauncherStep: Equatable {
         case objects
@@ -1351,7 +1349,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 query: stepQuery, matchCount: actionList.rows.filter { $0.id != nil }.count, properties: nil, isLoading: false,
                 suggestions: actionList.rows.map(Self.suggestion),
                 selectedSuggestion: actionList.rows.firstIndex { $0.id == actionSelection && $0.id != nil },
-                maxRows: Self.launcherRows))
+                richRows: true))
             return
         }
         if let command = commandModel {
@@ -1389,7 +1387,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         show(badges: badges, bar: TargetSearchBar(
             query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading,
             suggestions: launcherList.rows.map(Self.suggestion), selectedSuggestion: selectedLauncherRow,
-            maxRows: Self.launcherRows))
+            richRows: true))
     }
 
     /// Ligne des étapes verbe et destination.

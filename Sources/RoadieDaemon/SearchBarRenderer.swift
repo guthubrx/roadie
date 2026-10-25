@@ -16,6 +16,8 @@ struct SearchBarLayout: Equatable {
     /// De haut en bas.
     var suggestionRows: [CGRect]
     var messageRows: [CGRect]
+    /// Lignes de hauteurs variables (lanceur) : index de la première ligne montrée. nil : lignes égales.
+    var firstVisible: Int? = nil
 
     /// Seules les surfaces visibles gardent la recherche ouverte ; l'espace entre elles reste extérieur.
     func contains(_ point: CGPoint) -> Bool {
@@ -24,7 +26,7 @@ struct SearchBarLayout: Equatable {
 
     /// Le clic et le dessin utilisent la même tranche de propositions. O(s), s ≤ 8.
     func suggestionIndex(at point: CGPoint, count: Int, selected: Int?) -> Int? {
-        let visible = Self.visibleSuggestions(count: count, selected: selected, rows: suggestionRows.count)
+        let visible = visibleRange(count: count, selected: selected)
         guard let row = suggestionRows.firstIndex(where: { $0.insetBy(dx: -6, dy: 0).contains(point) }) else { return nil }
         let index = visible.lowerBound + row
         return visible.contains(index) ? index : nil
@@ -34,7 +36,7 @@ struct SearchBarLayout: Equatable {
     /// place au message. Complexité : O(s + m), s ≤ 8 et m ≤ 12.
     static func make(
         bounds: CGRect, suggestions: Int, messageLines: Int,
-        searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13, maxSuggestions: Int = maxSuggestions
+        searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13
     ) -> SearchBarLayout {
         let lineHeight = Self.lineHeight * min(48, max(8, commandTextFontSize)) / 13
         let barHeight = 40 * min(48, max(8, searchTextFontSize)) / 15
@@ -58,6 +60,37 @@ struct SearchBarLayout: Equatable {
         )
     }
 
+    /// Tranche montrée, commune au dessin et au clic. O(1).
+    func visibleRange(count: Int, selected: Int?) -> Range<Int> {
+        if let firstVisible { return firstVisible..<min(count, firstVisible + suggestionRows.count) }
+        return Self.visibleSuggestions(count: count, selected: selected, rows: suggestionRows.count)
+    }
+
+    /// Liste du lanceur (SPEC-073) : lignes de hauteurs différentes (titres de section fins, résultats
+    /// sur deux niveaux). La tranche montrée commence au début et glisse juste assez pour garder la
+    /// sélection visible. O(n), n lignes.
+    static func makeRich(bounds: CGRect, heights: [CGFloat], selected: Int?, searchTextFontSize: CGFloat = 15) -> SearchBarLayout {
+        let base = make(bounds: bounds, suggestions: 0, messageLines: 0, searchTextFontSize: searchTextFontSize)
+        let room = max(0, bounds.maxY - 8 - base.bar.maxY - gap - 2 * padding)
+        guard !heights.isEmpty else { return base }
+        var start = 0, end = 0, used: CGFloat = 0
+        while end < heights.count, used + heights[end] <= room { used += heights[end]; end += 1 }
+        if let selected, selected >= end, selected < heights.count {
+            end = selected + 1
+            used = heights[start..<end].reduce(0, +)
+            while used > room, start < selected { used -= heights[start]; start += 1 }
+            while end < heights.count, used + heights[end] <= room { used += heights[end]; end += 1 }
+        }
+        guard end > start else { return base }
+        let panel = CGRect(x: base.bar.minX, y: base.bar.maxY + gap, width: base.bar.width, height: used + 2 * padding)
+        var top = panel.maxY - padding
+        let rows = heights[start..<end].map { height -> CGRect in
+            top -= height
+            return CGRect(x: panel.minX + 10, y: top, width: panel.width - 20, height: height)
+        }
+        return SearchBarLayout(bar: base.bar, panel: panel, suggestionRows: rows, messageRows: [], firstVisible: start)
+    }
+
     /// Suggestions montrées dans `rows` lignes, sélection comprise. O(1).
     static func visibleSuggestions(count: Int, selected: Int?, rows: Int) -> Range<Int> {
         let shown = max(0, min(count, rows))
@@ -77,8 +110,8 @@ struct TargetSearchBar {
     var suggestions: [SlashSuggestion] = []
     var selectedSuggestion: Int? = nil
     var message: SlashMessage? = nil
-    /// Lignes de liste au plus : 8 pour les commandes, davantage pour les sections du lanceur.
-    var maxRows = SearchBarLayout.maxSuggestions
+    /// Lanceur : icône grande, nom et détail sur deux niveaux, sélection en couleur d'accent.
+    var richRows = false
     /// Le champ AppKit affiche le texte à l'exécution ; les rendus hors écran le dessinent encore.
     var usesNativeInput = false
 
@@ -101,9 +134,15 @@ struct TargetSearchBar {
 
     /// Même géométrie pour le dessin et les clics, y compris après un réglage de police.
     func layout(in bounds: CGRect, style: TargetOverlayStyle) -> SearchBarLayout {
+        if richRows {
+            let scale = min(48, max(8, style.commandTextFontSize)) / 13
+            let heights = suggestions.map { $0.kind == .header ? 24 * scale : 46 * scale }
+            return SearchBarLayout.makeRich(bounds: bounds, heights: heights, selected: selectedSuggestion,
+                                            searchTextFontSize: style.searchTextFontSize)
+        }
         return SearchBarLayout.make(bounds: bounds, suggestions: suggestions.count,
                                     messageLines: messageTextLines.count, searchTextFontSize: style.searchTextFontSize,
-                                    commandTextFontSize: style.commandTextFontSize, maxSuggestions: maxRows)
+                                    commandTextFontSize: style.commandTextFontSize)
     }
 }
 
@@ -180,8 +219,13 @@ enum SearchBarRenderer {
         }
         guard let panel = layout.panel else { return }
         drawSurface(panel)
-        let shown = SearchBarLayout.visibleSuggestions(count: state.suggestions.count,
-                                                       selected: state.selectedSuggestion, rows: layout.suggestionRows.count)
+        let shown = layout.visibleRange(count: state.suggestions.count, selected: state.selectedSuggestion)
+        if state.richRows {
+            for (row, index) in zip(layout.suggestionRows, shown) {
+                drawRich(state.suggestions[index], in: row, selected: index == state.selectedSuggestion, font: commandFont)
+            }
+            return
+        }
         for (row, index) in zip(layout.suggestionRows, shown) {
             if index == state.selectedSuggestion {
                 NSColor.white.withAlphaComponent(0.08).setFill()
@@ -225,6 +269,46 @@ enum SearchBarRenderer {
             .font: font,
             .foregroundColor: color, .paragraphStyle: paragraph,
         ])
+    }
+
+    /// Ligne du lanceur à la manière d'Alfred : icône de 32 points, nom puis détail plus petit dessous,
+    /// sélection pleine largeur en couleur d'accent avec le rappel des touches à droite.
+    private static func drawRich(_ suggestion: SlashSuggestion, in row: CGRect, selected: Bool, font: NSFont) {
+        if suggestion.kind == .header {
+            let small = NSFontManager.shared.convert(NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 2.5)), toHaveTrait: .boldFontMask)
+            let text = line(suggestion.text.uppercased(), font: small, color: NSColor(calibratedWhite: 0.5, alpha: 1))
+            draw(text, in: CGRect(x: row.minX + 6, y: row.minY, width: row.width - 12, height: row.height * 0.8))
+            return
+        }
+        if selected {
+            NSColor.controlAccentColor.withAlphaComponent(0.88).setFill()
+            NSBezierPath(roundedRect: row.insetBy(dx: -4, dy: 1.5), xRadius: 8, yRadius: 8).fill()
+        }
+        let side = min(32, row.height - 10)
+        var textX = row.minX + 8
+        if let image = icon(suggestion.icon) {
+            let isSymbol = if case .symbol = suggestion.icon { true } else { false }
+            let drawn = isSymbol ? side * 0.7 : side
+            image.draw(in: CGRect(x: textX + (side - drawn) / 2, y: row.midY - drawn / 2, width: drawn, height: drawn))
+            textX += side + 12
+        }
+        let hint = selected ? line("⇥ actions   ↩", font: NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 2)),
+                                   color: NSColor.white.withAlphaComponent(0.7)) : nil
+        let hintWidth = hint.map { $0.size().width + 8 } ?? 0
+        let width = max(0, row.maxX - 8 - hintWidth - textX)
+        let titleFont = NSFontManager.shared.convert(NSFontManager.shared.convert(font, toSize: font.pointSize + 2.5), toHaveTrait: .boldFontMask)
+        let detailFont = NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 1.5))
+        let title = line(suggestion.text.trimmingCharacters(in: .whitespaces), font: titleFont, color: .white)
+        if suggestion.detail.isEmpty {
+            draw(title, in: CGRect(x: textX, y: row.minY, width: width, height: row.height))
+        } else {
+            let detail = line(suggestion.detail, font: detailFont,
+                              color: selected ? NSColor.white.withAlphaComponent(0.8) : NSColor(calibratedWhite: 0.6, alpha: 1),
+                              truncation: .byTruncatingMiddle)
+            draw(title, in: CGRect(x: textX, y: row.midY, width: width, height: row.height / 2 - 2))
+            draw(detail, in: CGRect(x: textX, y: row.minY + 3, width: width, height: row.height / 2 - 3))
+        }
+        if let hint { draw(hint, in: CGRect(x: row.maxX - hintWidth, y: row.minY, width: hintWidth, height: row.height)) }
     }
 
     /// Icônes des lignes du lanceur, gardées pendant la vie du processus. O(1) après la première lecture.

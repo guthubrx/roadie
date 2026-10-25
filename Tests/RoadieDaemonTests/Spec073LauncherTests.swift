@@ -141,3 +141,21 @@ struct Spec073LauncherPlacementTests {
         #expect(details["com.apple.finder"] == nil)
     }
 }
+
+struct Spec073RichLayoutTests {
+    @Test func theListSlidesJustEnoughToKeepTheSelectionVisible() throws {
+        let bounds = CGRect(x: 0, y: 0, width: 800, height: 400)
+        let heights: [CGFloat] = [24] + Array(repeating: 46, count: 12)
+        let top = SearchBarLayout.makeRich(bounds: bounds, heights: heights, selected: 1)
+        #expect(top.firstVisible == 0)
+        let shown = top.suggestionRows.count
+        #expect(shown > 1 && shown < heights.count)
+        let bottom = SearchBarLayout.makeRich(bounds: bounds, heights: heights, selected: 12)
+        let first = try #require(bottom.firstVisible)
+        #expect(first > 0 && first + bottom.suggestionRows.count == 13)
+        // Le clic sur la dernière ligne montrée vise la ligne sélectionnée.
+        let last = try #require(bottom.suggestionRows.last)
+        #expect(bottom.suggestionIndex(at: CGPoint(x: last.midX, y: last.midY), count: 13, selected: 12) == 12)
+        #expect((top.panel?.maxY ?? 0) <= bounds.maxY)
+    }
+}

@@ -65,6 +65,9 @@ struct LauncherList: Equatable, Sendable {
         return location.map { "Ouverte · \($0)" } ?? "Ouverte"
     }
 
+    /// Emplacement d'une application fermée, dossier personnel abrégé en `~`, comme Alfred.
+    static func shortPath(_ path: String) -> String { (path as NSString).abbreviatingWithTildeInPath }
+
     /// Clé d'une cible : type et titre ; le titre d'une fenêtre est le nom de son application.
     static func rankingKey(_ target: RoadieTarget) -> String { "target:\(target.kind.rawValue):\(target.title)" }
 
@@ -79,7 +82,7 @@ struct LauncherList: Equatable, Sendable {
             let score = ([app.name] + app.alternateNames).compactMap { LauncherMatch.score(query, in: $0) }.max()
                 ?? (ranking.exactUses(app.rankingKey, query: query) > 0 ? 1 : nil)
             guard let score else { continue }
-            candidates.append(Candidate(row: .app(app, detail: details[app.bundleID] ?? "Application"), id: app.rankingKey, key: app.rankingKey,
+            candidates.append(Candidate(row: .app(app, detail: details[app.bundleID] ?? Self.shortPath(app.path)), id: app.rankingKey, key: app.rankingKey,
                                         section: .applications, score: score, name: app.name))
         }
         for target in targets {

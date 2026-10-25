@@ -17,6 +17,9 @@ jour et les limites connues ; les README décrivent la version courante.
   stage ou un bureau, réunir les fenêtres d'une application, masquer, quitter…).
   « Nouvelle stage » crée la stage visée. `fire`, Tab, `perso`, Retour ouvre Firefox
   dans la stage Perso.
+- Liste du lanceur plus lisible, à la manière d'Alfred : grandes icônes, nom puis
+  détail sur deux niveaux (emplacement pour une application fermée), sélection en
+  couleur d'accent avec le rappel des touches.
 - Maj + étiquette choisit de nouveau une cible à l'écran dans la barre de recherche ;
   le champ natif écrivait une majuscule.
 
