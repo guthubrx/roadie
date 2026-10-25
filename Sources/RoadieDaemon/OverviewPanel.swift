@@ -570,16 +570,32 @@ final class OverviewCanvas: NSView {
         }
         // Stage de la fenêtre sélectionnée : ses puces passent en bleu pour montrer ses voisines.
         let chosenStage = shown.cards.first { $0.entry.id == selectedID }?.entry.scope
+        // Fenêtre déposée sur une stage existante : les cartes de cette stage s’entourent de bleu.
+        var joinedStage: StageScope?
+        if case .window(_, let target)? = preview?.intent { joinedStage = target }
         for item in shown.cards where u(item.frame).insetBy(dx: -8, dy: -8).intersects(dirtyRect) {
             let ghost = ghostWindows.contains(item.entry.id)
+            let joined = joinedStage != nil && item.entry.scope == joinedStage
             if ghost { NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current?.cgContext.setAlpha(0.45) }
-            drawCard(item, in: u(item.frame), sameStage: chosenStage != nil && item.entry.scope == chosenStage)
+            drawCard(item, in: u(item.frame), sameStage: joined || (chosenStage != nil && item.entry.scope == chosenStage))
             if ghost { NSGraphicsContext.restoreGraphicsState() }
+            if joined, !ghost { drawDropRing(u(item.frame)) }
         }
         if let notice {
             let visible = u(visibleRect)
             text(notice, in: CGRect(x: visible.minX + 35, y: visible.midY - 20, width: visible.width - 70, height: 30), size: 14)
         }
+    }
+
+    /// Contour des cartes de la stage qui reçoit une fenêtre glissée.
+    private func drawDropRing(_ frame: CGRect) {
+        let image = CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: max(1, frame.height - OverviewLayout.caption))
+        NSGraphicsContext.saveGraphicsState()
+        let glow = NSShadow(); glow.shadowColor = palette(0.48, 0.80, 0.97, 0.6); glow.shadowBlurRadius = 8; glow.shadowOffset = .zero; glow.set()
+        palette(0.48, 0.80, 0.97, 0.95).setStroke()
+        let ring = NSBezierPath(roundedRect: image.insetBy(dx: -2.5, dy: -2.5), xRadius: 8, yRadius: 8)
+        ring.lineWidth = 1.5; ring.stroke()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawChip(_ desktop: OverviewDesktop, in chip: CGRect, focused: Bool, alpha: CGFloat) {
