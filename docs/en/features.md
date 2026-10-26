@@ -472,6 +472,21 @@ opens it like a file (a folder in Finder). Hidden items show only when the rest 
 Command mode keeps priority: `/s`, `/set`, `/d`… stay commands; from the second `/` (`/sbin/`)
 it is a path.
 
+**Workflows**: the bar runs Alfred-format workflows, those installed in Alfred (read without
+changing them, synced folder followed) and those in `~/.config/roadies/workflows`. Typing their
+keyword (`emoji heart`) shows only their rows, under their name; from 2 letters, matching
+keywords appear in a « Workflows » section (Tab or Return completes). The script runs in the
+background (100 ms after the last keystroke, stopped by the next one, 10 s at most). Return
+follows the workflow graph: scripts, conditions, splits, replacements, URL, file, Finder, copy
+(auto-paste included), notification, sound, speech, written file. Holding ⌘, ⌥ or ⌃ shows what the
+row will do; Tab completes, ⌘C copies, ⌘Y previews. A workflow runs with Roadie's rights, as it
+does in Alfred: install only those you know. Settings: `workflows_enabled`, `alfred_workflows`
+(Settings > Search). `roadie workflow list` reports each one (complete, partial, unusable) and
+what is missing; `roadie workflow check FOLDER` does the same; `roadie workflow install
+X.alfredworkflow` and `roadie workflow remove ID` manage Roadie's folder. Not yet: hotkeys,
+external triggers, file actions, list and file filters, automation tasks; never: Text, Grid,
+Image, PDF views, snippets, Alfred Remote. The log keeps neither input nor result.
+
 **Verbs and destinations**: Tab on the selected row opens its verbs. App: open or go
 to its window, open in…, new window here, gather its windows in…, bring here, hide,
 quit. Window: go to, send to…, bring here, float this window or always the whole app

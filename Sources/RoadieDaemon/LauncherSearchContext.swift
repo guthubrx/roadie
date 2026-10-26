@@ -59,6 +59,15 @@ struct LauncherSearchContext {
     var saveAlias: @MainActor (LauncherAlias, String) -> LauncherAlias? = { _, _ in nil }
     /// Fin de l'aperçu par Retour : la disposition de l'aperçu reste (vrai) ou est restaurée (faux).
     var endPreview: @MainActor (Bool) -> Void = { _ in }
+    /// Workflows (SPEC-088) : entrées tapées ; Script Filter lancé hors du fil principal (réponse ou
+    /// erreur rendue sur le fil principal, processus annulable) ; schéma exécuté après la fermeture.
+    var workflowEntries: [AlfredEntry] = []
+    var runScriptFilter: (AlfredEntry, String, @escaping @MainActor @Sendable (AlfredScriptFilterResponse?, String?) -> Void) -> AlfredProcess? = { _, _, _ in nil }
+    var runWorkflow: @MainActor (AlfredEntry, [String], [String: String], Int) -> TargetActionResult = { _, _, _, _ in
+        TargetActionResult(changed: false, message: "launcher_disabled")
+    }
+    /// Texte de départ de la barre (Show Alfred d'un workflow).
+    var initialQuery: String?
     /// ⌃ Retour : le texte tapé sur le web ; appelé après la fermeture de la barre.
     var webSearch: @MainActor (String) -> TargetActionResult = { _ in
         TargetActionResult(changed: false, message: "launcher_disabled")

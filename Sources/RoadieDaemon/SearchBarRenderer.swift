@@ -318,7 +318,7 @@ enum SearchBarRenderer {
         let side = metrics.icon
         let iconRect = CGRect(x: iconX, y: row.midY - side / 2, width: side, height: side)
         switch suggestion.icon {
-        case .file?:
+        case .file?, .image?:
             icon(suggestion.icon)?.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1,
                                         respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
         case .symbol?:
@@ -425,6 +425,7 @@ enum SearchBarRenderer {
         // Lien résolu : sans la flèche d'alias (Safari est un lien vers le système).
         case .file(let path): NSWorkspace.shared.icon(forFile: URL(fileURLWithPath: path).resolvingSymlinksInPath().path)
         case .window(_, let app): app.map { NSWorkspace.shared.icon(forFile: URL(fileURLWithPath: $0).resolvingSymlinksInPath().path) }
+        case .image(let path): NSImage(contentsOfFile: path)
         case .symbol(let name): NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
                 .applying(.init(paletteColors: [NSColor(calibratedWhite: 0.9, alpha: 1)])))

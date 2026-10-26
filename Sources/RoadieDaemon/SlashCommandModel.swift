@@ -6,7 +6,8 @@ public struct SlashSuggestion: Equatable, Sendable {
     public enum Kind: Equatable, Sendable { case command, argument, setting, header, result }
     /// Icône d'une ligne du lanceur : celle d'un fichier (application), un symbole système, ou la vignette
     /// d'une fenêtre avec le chemin de son application pour la pastille et le repli (SPEC-076).
-    public enum Icon: Hashable, Sendable { case file(String), symbol(String), window(UInt32, app: String?) }
+    /// `image` : fichier image dessiné tel quel (icônes des workflows, SPEC-088).
+    public enum Icon: Hashable, Sendable { case file(String), symbol(String), window(UInt32, app: String?), image(String) }
 
     /// Texte à insérer à la place du mot courant (`stage `, `target_grid.rows`).
     public var text: String

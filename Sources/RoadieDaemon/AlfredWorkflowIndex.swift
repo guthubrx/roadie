@@ -16,6 +16,13 @@ struct AlfredEntry: Equatable, Sendable {
     let title: String
     let subtitle: String
     let icon: String?
+    /// Dossier du workflow : base des icônes relatives.
+    var folder = ""
+    /// « Alfred filtre les résultats » : le script tourne une fois, la barre filtre (mode d'Alfred).
+    var filtersResults = false
+    var filterMode = 0
+    /// Sous-titre pendant que le script tourne.
+    var runningSubtitle = ""
 
     var id: String { "wf:\(workflowID):\(objectUID)" }
 
@@ -126,13 +133,18 @@ final class AlfredWorkflowIndex: @unchecked Sendable {
                     .trimmingCharacters(in: .whitespaces)
                 guard !keyword.isEmpty else { continue }
                 let title = AlfredPlaceholders.expand(object.string("title") ?? object.string("text") ?? "", query: "", variables: variables)
-                entries.append(AlfredEntry(
+                var entry = AlfredEntry(
                     workflowID: workflow.id, workflowName: workflow.name, objectUID: object.uid, kind: kind, keyword: keyword,
                     withSpace: object.config["withspace"]?.bool ?? true,
                     argument: AlfredEntry.Argument(rawValue: object.int("argumenttype") ?? 0) ?? .required,
                     title: title.isEmpty ? workflow.name : title,
                     subtitle: AlfredPlaceholders.expand(object.string("subtext") ?? "", query: "", variables: variables),
-                    icon: workflow.icon(for: object.uid)))
+                    icon: workflow.icon(for: object.uid))
+                entry.folder = workflow.folder.path
+                entry.filtersResults = object.bool("alfredfiltersresults")
+                entry.filterMode = object.int("alfredfiltersresultsmatchmode") ?? 0
+                entry.runningSubtitle = object.string("runningsubtext") ?? ""
+                entries.append(entry)
             }
         }
         return entries.sorted { ($0.keyword, $0.workflowName) < ($1.keyword, $1.workflowName) }

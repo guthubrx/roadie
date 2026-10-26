@@ -908,6 +908,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var stepTiling: LauncherTilingState?
     /// Touche tenue qui change ce que fait Retour (SPEC-075).
     private var heldModifier: LauncherModifier?
+    /// Maj tenue seule : sous-titre `mods.shift` d'une ligne de workflow (SPEC-088 FR-006).
+    private var heldShift = false
     /// Rangs ⌘1 à ⌘9 : index des lignes montrées, dans l'ordre, calculés avec la géométrie.
     private var pickRows: [Int] = []
     /// Lettres Maj (SPEC-084) : index de la ligne de cible montrée pour chaque lettre, dans l'ordre affiché.
@@ -927,6 +929,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private let pathListing = LauncherPathListing()
     private var pathFiles: [LauncherFile] = []
     private var pathFor: String?
+    /// Workflows (SPEC-088) : script en cours, saisie demandée et dernière réponse, par entrée.
+    private var workflowRuns: [String: AlfredProcess] = [:]
+    private var workflowRequested: [String: String] = [:]
+    private var workflowResponses: [String: (argument: String, response: AlfredScriptFilterResponse?, error: String?)] = [:]
+    private var workflowPending: [String: DispatchWorkItem] = [:]
     /// Aperçu actif (SPEC-078) : demande envoyée au contrôleur, attente de 150 ms, fantôme rendu.
     private var sentPreview: LauncherPreviewRequest?
     private var pendingPreview: LauncherPreviewRequest?
@@ -995,6 +1002,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         if let subject = launcher.initialSubject { enterVerbs(subject) }
         input.onCancel = { [weak self] in self?.cancel() }
         inputPanel = input
+        if let text = launcher.initialQuery, !text.isEmpty { model.replaceQuery(text) }
         render()
         input.beginEditing()
         launcher.loadOpenItems { [weak self] items in
@@ -1122,6 +1130,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 finishCalc(calc)
                 return
             }
+            if confirmWorkflow(modifiers: Self.alfredModifiers(command: command, option: option, control: control, shift: shift)) { return }
             if case .app(let app, _)? = launcherList.row(for: launcherSelection) {
                 finishLaunching(app)
                 return
@@ -1192,6 +1201,14 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 finishAction(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil))
                 return
             }
+            if case .workflowItem(_, let item, _)? = launcherList.row(for: launcherSelection), let raw = item.quickLookURL {
+                let path = URL(string: raw).flatMap { $0.isFileURL ? $0.path : nil } ?? NSString(string: raw).expandingTildeInPath
+                if path.hasPrefix("/") {
+                    let file = LauncherFile(path: path, name: (path as NSString).lastPathComponent, isFolder: false, lastUsed: nil)
+                    finishAction(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil))
+                    return
+                }
+            }
         case .escape, .confirm, .ignored:
             break
         }
@@ -1211,6 +1228,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .project(let project): enterVerbs(.project(project.name))
             case .action(_, let action, _, _): enterVerbs(action.subject)
             case .rule, .openItem, .calc: break
+            case .workflowKeyword(let entry): completeWorkflow(entry, nil)
+            case .workflowItem(let entry, let item, _): if let text = item.autocomplete { completeWorkflow(entry, text) }
             case .header, nil: model.handleNavigation(input)
             }
             return
@@ -1228,7 +1247,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func syncHighlight() {
         switch launcherList.row(for: launcherSelection) {
         case .target(let target): model.highlight(targetID: target.id)
-        case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem, .calc: model.highlight(targetID: nil)
+        case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem: model.highlight(targetID: nil)
         case .header, nil: break
         }
     }
@@ -1236,6 +1255,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Recalcule la liste si la requête ou les cibles ont changé. Nouvelle requête : la meilleure
     /// ligne est choisie ; nouvelles cibles seulement : la ligne choisie est gardée si elle reste. O(a + n).
     private func refreshLauncher() {
+        let runs = launcher.workflowEntries.compactMap { entry -> (entry: AlfredEntry, argument: String)? in
+            if case .run(let argument) = entry.match(model.query) { return (entry, argument) }
+            return nil
+        }
+        pruneWorkflows(keeping: Set(runs.map(\.entry.id)))
+        if !runs.isEmpty {
+            refreshWorkflows(runs)
+            return
+        }
         if Self.isPath(model.query) {
             refreshPath()
             return
@@ -1267,12 +1295,170 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         if let (name, alias) = launcher.aliases.alias(for: model.query), let action = launcher.aliasAction(alias) {
             launcherList.prepend(.alias(name, action, LauncherPhrase.title(action)), header: "Abréviation")
         }
+        // Mots-clés de workflows en cours de frappe (SPEC-088), après la première section.
+        let keywords = launcher.workflowEntries.filter { $0.match(model.query) == .suggest }
+        launcherList.insertSection("Workflows", keywords.prefix(4).map(LauncherList.Row.workflowKeyword))
         // Calcul (SPEC-087) : son résultat passe en tête et devient la ligne choisie.
         if let calc = LauncherCalculator.evaluate(model.query) {
             launcherList.prepend(.calc(calc), header: "Calcul")
         }
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
         syncHighlight()
+    }
+
+    // MARK: - Workflows (SPEC-088)
+
+    /// Bits des modificateurs d'Alfred pour les touches tenues avec Retour.
+    private static func alfredModifiers(command: Bool, option: Bool, control: Bool, shift: Bool) -> Int {
+        (command ? 1_048_576 : 0) + (option ? 524_288 : 0) + (control ? 262_144 : 0) + (shift ? 131_072 : 0)
+    }
+
+    /// Entrées qui ne correspondent plus à la saisie : leur script s'arrête, leur réponse est oubliée.
+    private func pruneWorkflows(keeping active: Set<String>) {
+        for key in Set(workflowRuns.keys).union(workflowResponses.keys).union(workflowPending.keys) where !active.contains(key) {
+            workflowRuns.removeValue(forKey: key)?.cancel()
+            workflowPending.removeValue(forKey: key)?.cancel()
+            workflowResponses[key] = nil
+            workflowRequested[key] = nil
+        }
+    }
+
+    /// Mot-clé tapé : seules les lignes de ce ou ces workflows, sous leur nom ; la réponse précédente
+    /// reste affichée pendant que le script tourne (FR-002, FR-005, FR-006). O(i log i).
+    private func refreshWorkflows(_ runs: [(entry: AlfredEntry, argument: String)]) {
+        let query = model.query
+        for run in runs where run.entry.kind == .scriptFilter { requestScriptFilter(run.entry, run.argument) }
+        guard query != launcherQuery || filesChanged else { return }
+        let queryChanged = query != launcherQuery
+        if queryChanged { copiedRowID = nil }
+        launcherQuery = query
+        filesChanged = false
+        var rows: [LauncherList.Row] = []
+        for (entry, argument) in runs {
+            rows.append(.header(entry.workflowName))
+            guard entry.kind == .scriptFilter else { rows.append(.workflowKeyword(entry)); continue }
+            guard let answer = workflowResponses[entry.id], let response = answer.response else {
+                let waiting = workflowResponses[entry.id]?.error ?? (entry.runningSubtitle.isEmpty ? "Recherche…" : entry.runningSubtitle)
+                rows.append(.workflowItem(entry, AlfredItem(title: entry.title, subtitle: waiting, valid: false), index: 0))
+                continue
+            }
+            var items = entry.filtersResults ? AlfredScriptFilterResponse.filter(response.items, query: argument, mode: entry.filterMode) : response.items
+            if !response.skipKnowledge {
+                // Classement appris par `uid`, l'ordre du script sinon (tri stable).
+                let ranking = launcher.ranking
+                items = items.enumerated().sorted { a, b in
+                    let ua = a.element.uid.map { ranking.exactUses("\(entry.id):\($0)", query: query) } ?? 0
+                    let ub = b.element.uid.map { ranking.exactUses("\(entry.id):\($0)", query: query) } ?? 0
+                    return ua != ub ? ua > ub : a.offset < b.offset
+                }.map(\.element)
+            }
+            if items.isEmpty { rows.append(.workflowItem(entry, AlfredItem(title: "Aucun résultat", subtitle: entry.title, valid: false), index: 0)) }
+            rows += items.enumerated().map { .workflowItem(entry, $0.element, index: $0.offset) }
+        }
+        launcherList = .idle(rows)
+        if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
+        syncHighlight()
+    }
+
+    /// Lance le Script Filter pour cet argument : tout de suite à la première frappe, 100 ms après la
+    /// dernière ensuite ; la frappe suivante arrête le script en cours (FR-004). « Alfred filtre les
+    /// résultats » : une seule fois par mot-clé. `rerun` : relancé à l'identique.
+    private func requestScriptFilter(_ entry: AlfredEntry, _ argument: String, force: Bool = false) {
+        let key = entry.id
+        if !force {
+            if let answer = workflowResponses[key], entry.filtersResults || answer.argument == argument { return }
+            if workflowRequested[key] == argument { return }
+        }
+        workflowRequested[key] = argument
+        workflowRuns.removeValue(forKey: key)?.cancel()
+        workflowPending.removeValue(forKey: key)?.cancel()
+        let query = model.query
+        let start: @MainActor () -> Void = { [weak self] in
+            guard let self, !self.finished, self.workflowRequested[key] == argument else { return }
+            self.workflowRuns[key] = self.launcher.runScriptFilter(entry, argument) { [weak self] response, error in
+                guard let self, !self.finished, self.workflowRequested[key] == argument else { return }
+                self.workflowRuns[key] = nil
+                self.workflowResponses[key] = (argument, response, error ?? (response == nil ? "Réponse illisible" : nil))
+                self.filesChanged = true
+                self.render()
+                if let rerun = response?.rerun {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + rerun) { [weak self] in
+                        MainActor.assumeIsolated {
+                            guard let self, !self.finished, self.model.query == query else { return }
+                            self.requestScriptFilter(entry, argument, force: true)
+                        }
+                    }
+                }
+            }
+        }
+        guard workflowResponses[key] != nil, !force else { start(); return }
+        let work = DispatchWorkItem { MainActor.assumeIsolated { start() } }
+        workflowPending[key] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+    }
+
+    /// Retour sur une ligne de workflow ; vrai si c'en était une (FR-007). Modificateur sans connexion
+    /// propre : géré par le moteur (research R6).
+    private func confirmWorkflow(modifiers: Int) -> Bool {
+        switch launcherList.row(for: launcherSelection) {
+        case .workflowKeyword(let entry):
+            if case .run(let argument) = entry.match(model.query), entry.kind == .keyword {
+                finishWorkflow(entry, arg: [argument], variables: [:], modifiers: modifiers, rankingKey: entry.id)
+            } else if case .suggest = entry.match(model.query) {
+                // Entrée Keyword sans argument obligatoire : Retour la lance, comme Alfred (FR-003).
+                if entry.kind == .keyword, entry.argument != .required {
+                    finishWorkflow(entry, arg: [""], variables: [:], modifiers: modifiers, rankingKey: entry.id)
+                } else {
+                    completeWorkflow(entry, nil)
+                    render()
+                }
+            }
+            return true
+        case .workflowItem(let entry, let item, let index):
+            let mod = item.mods[modifiers]
+            guard mod?.valid ?? item.valid else {
+                if let text = item.autocomplete { completeWorkflow(entry, text); render() }
+                return true
+            }
+            var variables = workflowResponses[entry.id]?.response?.variables ?? [:]
+            variables.merge(item.variables) { $1 }
+            variables.merge(mod?.variables ?? [:]) { $1 }
+            finishWorkflow(entry, arg: mod?.arg ?? item.arg, variables: variables, modifiers: modifiers,
+                           rankingKey: LauncherList.Row.workflowItem(entry, item, index: index).rankingKey)
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Tab : `autocomplete` d'une ligne après le mot-clé (research R7), ou le mot-clé seul.
+    private func completeWorkflow(_ entry: AlfredEntry, _ text: String?) {
+        let prefix = entry.keyword + (entry.withSpace ? " " : "")
+        let completed = text.map { $0.lowercased().hasPrefix(entry.keyword.lowercased()) ? $0 : prefix + $0 } ?? prefix
+        model.replaceQuery(completed)
+    }
+
+    private func finishWorkflow(_ entry: AlfredEntry, arg: [String], variables: [String: String], modifiers: Int, rankingKey: String?) {
+        guard !finished else { return }
+        finished = true
+        let query = model.query
+        cleanup()
+        if let rankingKey { launcher.recordVisit(rankingKey, query) }
+        onFinish?(launcher.runWorkflow(entry, arg, variables, modifiers))
+    }
+
+    /// Icône d'une ligne de workflow : image du workflow (chemin relatif à son dossier), icône d'un
+    /// fichier, ou icône du workflow.
+    private static func workflowIcon(_ icon: AlfredIcon?, entry: AlfredEntry) -> SlashSuggestion.Icon {
+        let fallback: SlashSuggestion.Icon = entry.icon.map(SlashSuggestion.Icon.image) ?? .symbol("puzzlepiece.extension")
+        switch icon {
+        case .image(let path)?:
+            let absolute = path.hasPrefix("/") ? path : (entry.folder as NSString).appendingPathComponent(path)
+            return FileManager.default.fileExists(atPath: absolute) ? .image(absolute) : fallback
+        case .fileIcon(let path)?: return .file(NSString(string: path).expandingTildeInPath)
+        case .fileType?: return .symbol("doc")
+        case nil: return fallback
+        }
     }
 
     /// Saisie qui désigne un chemin plutôt qu'une commande (SPEC-087 FR-004). O(c + r).
@@ -1341,7 +1527,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .phrase(let action, _), .alias(_, let action, _): action.subject
         case .project(let project): .project(project.name)
         case .action(_, let action, _, _): action.subject
-        case .rule, .openItem, .calc, .header, nil: nil
+        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .header, nil: nil
         }
     }
 
@@ -1356,6 +1542,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .action(_, _, let title, _): title
         case .openItem(let item): item.url ?? item.title
         case .calc(let calc): calc.text
+        case .workflowKeyword(let entry): entry.keyword
+        case .workflowItem(_, let item, _): item.copyText ?? (item.arg.isEmpty ? item.title : item.arg.joined(separator: "\n"))
         case .rule, .header, nil: nil
         }
         guard let text else { return }
@@ -1378,6 +1566,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .rule(let suggestion, let choice): finishRule(suggestion, choice)
         case .openItem(let item): finishOpenItem(item)
         case .calc(let calc): finishCalc(calc)
+        case .workflowKeyword, .workflowItem: _ = confirmWorkflow(modifiers: 0)
         case .header, nil: break
         }
     }
@@ -1414,7 +1603,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .phrase(let action, _), .alias(_, let action, _): action
         case .project(let project): LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil)
         case .action(_, let action, _, _): action
-        case .rule, .openItem, .calc, .header, nil: nil
+        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .header, nil: nil
         }
     }
 
@@ -1620,8 +1809,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func modifiersChanged(_ flags: NSEvent.ModifierFlags) {
         let held = flags.contains(.shift) ? nil : Self.modifier(command: flags.contains(.command), option: flags.contains(.option),
                                                               control: flags.contains(.control))
-        guard held != heldModifier else { return }
+        let shift = flags.intersection([.command, .option, .control, .shift]) == .shift
+        guard held != heldModifier || shift != heldShift else { return }
         heldModifier = held
+        heldShift = shift
         render()
     }
 
@@ -1633,7 +1824,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .app(let app, _): subject = .app(app)
         case .target(let target): subject = .target(target)
         case .file(let file): subject = .file(file)
-        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .header, nil: return nil
+        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
                                   newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
@@ -1835,6 +2026,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         if let modifier = heldModifier, let index = selectedLauncherRow, let variant = currentVariant(modifier) {
             suggestions[index].detail = variant.title
         }
+        // Workflow : le sous-titre du modificateur tenu (SPEC-088 FR-006).
+        if heldModifier != nil || heldShift, let index = selectedLauncherRow,
+           case .workflowItem(_, let item, _)? = launcherList.row(for: launcherSelection) {
+            let bits = Self.alfredModifiers(command: heldModifier == .command, option: heldModifier == .option,
+                                            control: heldModifier == .control, shift: heldShift)
+            if let subtitle = item.mods[bits]?.subtitle { suggestions[index].detail = subtitle }
+        }
         if let copied = copiedRowID, let index = launcherList.rows.firstIndex(where: { $0.id == copied }) {
             suggestions[index].detail = "Copié dans le presse-papiers"
         }
@@ -1904,6 +2102,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             let icon: SlashSuggestion.Icon = item.windowID.map { .window($0.rawValue, app: appPaths[item.appName]) }
                 ?? appPaths[item.appName].map(SlashSuggestion.Icon.file) ?? .symbol(item.kind == .tab ? "globe" : "doc")
             return SlashSuggestion(text: item.title, detail: item.detail, kind: .result, icon: icon)
+        case .workflowKeyword(let entry):
+            return SlashSuggestion(text: entry.title, detail: entry.subtitle.isEmpty ? "\(entry.keyword) · \(entry.workflowName)" : entry.subtitle,
+                                   kind: .result, icon: workflowIcon(nil, entry: entry))
+        case .workflowItem(let entry, let item, _):
+            return SlashSuggestion(text: item.title, detail: item.subtitle, kind: .result, icon: workflowIcon(item.icon, entry: entry))
         case .calc(let calc):
             return SlashSuggestion(text: calc.text, detail: "\(calc.expression) · Retour copie", kind: .result, icon: .symbol("equal.square"))
         case .rule(let suggestion, let choice):
@@ -1996,6 +2199,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func cleanup() {
         fileSearch.cancel()
         pathListing.cancel()
+        workflowRuns.values.forEach { $0.cancel() }
+        workflowRuns = [:]
+        workflowPending.values.forEach { $0.cancel() }
+        workflowPending = [:]
         previewWork?.cancel()
         previewWork = nil
         pendingPreview = nil

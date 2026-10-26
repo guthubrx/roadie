@@ -478,7 +478,8 @@ public struct TargetMacroService {
     }
 }
 
-private extension String {
+extension String {
+    /// Texte placé entre guillemets dans un AppleScript.
     var applescriptEscaped: String {
         replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")

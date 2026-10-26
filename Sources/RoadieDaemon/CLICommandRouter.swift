@@ -223,6 +223,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
         CLICommandSpec(usage: "project save [NAME] | open NAME | list [--json] | delete NAME"),
         CLICommandSpec(usage: "undo"),
+        CLICommandSpec(usage: "workflow list [--json] | check FOLDER [--json] | install FILE.alfredworkflow [--replace] | remove ID"),
         CLICommandSpec(usage: "launch --open-items [--tabs]"),
         CLICommandSpec(usage: "launch PATH [--stage NAME | --here | --new-stage] [--position left|right|full|float] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
@@ -643,6 +644,8 @@ public final class CLICommandRouter {
             default:
                 return usageError()
             }
+        case "workflow":
+            return try runWorkflowCommand(Array(args.dropFirst()))
         case "launch":
             // SPEC-082 : diagnostic des documents (et onglets avec --tabs) que la barre trouverait.
             if args.count >= 2, args[1] == "--open-items" {
@@ -855,6 +858,89 @@ public final class CLICommandRouter {
         } catch {
             err("roadie: failed to encode JSON: \(error)")
             throw CLIExit(code: 1)
+        }
+    }
+
+    /// Workflows au format d'Alfred (SPEC-088 FR-010) : lus et installés ici, sans le démon.
+    private func runWorkflowCommand(_ args: [String]) throws -> Int32 {
+        let json = args.contains("--json")
+        func show(_ reports: [AlfredCompatibilityReport], totals: Bool) throws {
+            if json {
+                let rows: [[String: Any]] = reports.map { report in
+                    ["id": report.id, "name": report.name, "bundleID": report.bundleID, "source": report.source.rawValue,
+                     "keywords": report.keywords, "state": report.state.rawValue, "missing": report.missing,
+                     "mentionsAlfred": report.mentionsAlfred]
+                }
+                out(String(data: try JSONSerialization.data(withJSONObject: rows, options: [.sortedKeys, .prettyPrinted]), encoding: .utf8) ?? "[]")
+                return
+            }
+            let state = ["complete": "complet", "partial": "partiel", "unusable": "inutilisable"]
+            for report in reports {
+                let keywords = report.keywords.isEmpty ? "" : " [\(report.keywords.joined(separator: ", "))]"
+                let missing = report.missing.isEmpty ? "" : " · manque : \(report.missing.joined(separator: ", "))"
+                let alfred = report.mentionsAlfred ? " · parle à Alfred" : ""
+                out("\(state[report.state.rawValue] ?? report.state.rawValue)\t\(report.name)\(keywords) (\(report.source.rawValue))\(missing)\(alfred)")
+            }
+            if totals {
+                let total = max(1, reports.count)
+                let complete = reports.filter { $0.state == .complete }.count, partial = reports.filter { $0.state == .partial }.count
+                out("total \(reports.count) · complets \(complete) (\(100 * complete / total) %) · avec une entrée complète \(complete + partial) (\(100 * (complete + partial) / total) %) · sans mention d'Alfred et complets \(reports.filter { $0.state == .complete && !$0.mentionsAlfred }.count)")
+            }
+            if reports.isEmpty { out("aucun workflow") }
+        }
+        switch args.first ?? "" {
+        case "list":
+            let config = configReload.currentConfig().experimental.targetMode
+            let workflows = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
+            try show(workflows.map(AlfredCompatibility.report), totals: false)
+            return 0
+        case "check":
+            guard args.count >= 2 else { return usageError() }
+            let folder = URL(fileURLWithPath: NSString(string: args[1]).expandingTildeInPath, isDirectory: true)
+            try show(AlfredCompatibility.check(folder: folder), totals: true)
+            return 0
+        case "install":
+            guard args.count >= 2, !args[1].hasPrefix("--") else { return usageError() }
+            let file = URL(fileURLWithPath: NSString(string: args[1]).expandingTildeInPath)
+            guard FileManager.default.fileExists(atPath: file.path) else { err("workflow: introuvable : \(args[1])"); return 2 }
+            // Décompression dans un dossier temporaire, puis rangement sous le nom de son identifiant.
+            let staging = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-workflow-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: staging) }
+            let unzip = Process()
+            unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            unzip.arguments = ["-x", "-k", file.path, staging.path]
+            try unzip.run()
+            unzip.waitUntilExit()
+            let root = FileManager.default.fileExists(atPath: staging.appendingPathComponent("info.plist").path) ? staging
+                : AlfredWorkflowIndex.children(of: staging).first
+            guard unzip.terminationStatus == 0, let root, let workflow = AlfredWorkflow.load(folder: root, source: .roadie) else {
+                err("workflow: archive illisible (info.plist absent)")
+                return 1
+            }
+            let name = (workflow.bundleID.isEmpty ? file.deletingPathExtension().lastPathComponent : workflow.bundleID)
+                .replacingOccurrences(of: "/", with: "-")
+            let target = AlfredWorkflowIndex.roadieFolder.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: target.path) {
+                guard args.contains("--replace") else { err("workflow: déjà installé : \(name) (--replace pour remplacer)"); return 1 }
+                try FileManager.default.removeItem(at: target)
+            }
+            try FileManager.default.createDirectory(at: AlfredWorkflowIndex.roadieFolder, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: root, to: target)
+            let report = AlfredCompatibility.report(AlfredWorkflow.load(folder: target, source: .roadie) ?? workflow)
+            out("installé : \(workflow.name) → \(target.path) (\(report.state.rawValue))")
+            return 0
+        case "remove":
+            guard args.count >= 2 else { return usageError() }
+            let target = AlfredWorkflowIndex.roadieFolder.appendingPathComponent(args[1].replacingOccurrences(of: "/", with: "-"))
+            guard FileManager.default.fileExists(atPath: target.appendingPathComponent("info.plist").path) else {
+                err("workflow: absent du dossier de Roadie : \(args[1]) (les workflows d'Alfred se retirent dans Alfred)")
+                return 2
+            }
+            try FileManager.default.removeItem(at: target)
+            out("retiré : \(args[1])")
+            return 0
+        default:
+            return usageError()
         }
     }
 

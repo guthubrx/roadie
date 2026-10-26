@@ -24,6 +24,10 @@ struct LauncherList: Equatable, Sendable {
         case openItem(LauncherOpenItem)
         /// Résultat d'un calcul tapé (SPEC-087).
         case calc(LauncherCalculation)
+        /// Workflow (SPEC-088) : mot-clé proposé ou entrée à lancer, ligne rendue par un Script Filter
+        /// (`index` la distingue quand elle n'a pas d'`uid`).
+        case workflowKeyword(AlfredEntry)
+        case workflowItem(AlfredEntry, AlfredItem, index: Int)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -39,6 +43,8 @@ struct LauncherList: Equatable, Sendable {
             case .rule(let suggestion, let choice): "rule:\(suggestion.declineKey):\(choice.rawValue)"
             case .openItem(let item): item.id
             case .calc: "calc"
+            case .workflowKeyword(let entry): "wfk:\(entry.id)"
+            case .workflowItem(let entry, let item, let index): "wfi:\(entry.id):\(item.uid ?? String(index))"
             }
         }
 
@@ -53,6 +59,8 @@ struct LauncherList: Equatable, Sendable {
             case .project(let project): "project:\(LauncherMatch.fold(project.name))"
             case .action(_, let action, _, _): action.subject.rankingKey
             case .rule, .calc: nil
+            case .workflowKeyword(let entry): entry.id
+            case .workflowItem(let entry, let item, _): item.uid.map { "\(entry.id):\($0)" }
             case .openItem(let item): "open:\(item.kind.rawValue):\(item.bundleID):\(item.title)"
             }
         }
@@ -229,6 +237,14 @@ struct LauncherList: Equatable, Sendable {
     /// Contenu d'un dossier tapé (SPEC-087) : lignes de fichiers sous « Chemin », la première choisie. O(n).
     static func path(_ files: [LauncherFile]) -> LauncherList {
         idle(files.isEmpty ? [] : [.header("Chemin")] + files.map(Row.file))
+    }
+
+    /// Section ajoutée après la première, sans changer la ligne choisie (mots-clés de workflows, SPEC-088). O(n).
+    mutating func insertSection(_ header: String, _ section: [Row]) {
+        guard !section.isEmpty else { return }
+        let next = rows.indices.dropFirst().first { if case .header = rows[$0] { return true } else { return false } } ?? rows.count
+        rows.insert(contentsOf: [.header(header)] + section, at: next)
+        if best == nil { best = section.lazy.compactMap(\.id).first }
     }
 
     /// Phrase ou abréviation en tête, sous son titre, et choisie par défaut (SPEC-079). O(n).

@@ -491,6 +491,23 @@ fichier (un dossier dans le Finder). Les éléments cachés n'apparaissent que s
 par `.`. Le mode commande garde la priorité : `/s`, `/set`, `/d`… restent des commandes ; dès le
 second `/` (`/sbin/`), c'est un chemin.
 
+**Workflows** : la barre fait tourner les workflows au format d'Alfred, ceux installés dans
+Alfred (lus sans les modifier, dossier synchronisé suivi) et ceux de `~/.config/roadies/workflows`.
+Taper leur mot-clé (`emoji heart`) montre seulement leurs lignes, sous leur nom ; dès 2 lettres,
+les mots-clés possibles apparaissent dans une section « Workflows » (Tab ou Retour complète).
+Le script tourne en fond (100 ms après la dernière frappe, arrêté à la suivante, 10 s au plus).
+Retour suit le schéma du workflow : scripts, conditions, découpes, remplacements, adresse,
+fichier, Finder, copie (collage automatique compris), notification, son, parole, fichier écrit.
+Tenir ⌘, ⌥ ou ⌃ montre ce que la ligne fera ; Tab complète, ⌘C copie, ⌘Y montre l'aperçu.
+Un workflow tourne avec les droits de Roadie, comme dans Alfred : n'installez que ceux que vous
+connaissez. Réglages : `workflows_enabled`, `alfred_workflows` (Paramètres > Recherche).
+`roadie workflow list` donne l'état de chacun (complet, partiel, inutilisable) et ce qui manque ;
+`roadie workflow check DOSSIER` fait le même relevé ; `roadie workflow install X.alfredworkflow`
+et `roadie workflow remove ID` gèrent le dossier de Roadie. Hors de portée pour l'instant :
+raccourcis, déclencheurs externes, actions sur fichier, filtres de liste et de fichiers, tâches
+d'automatisation ; jamais : vues Texte, Grille, Image, PDF, snippets, Alfred Remote. Le journal
+ne garde ni saisie ni résultat.
+
 **Verbes et destinations** : Tab sur la ligne choisie ouvre ses verbes. Application :
 ouvrir ou aller à sa fenêtre, ouvrir dans…, nouvelle fenêtre ici, réunir ses fenêtres
 dans…, amener ici, masquer, quitter. Fenêtre : aller à, envoyer vers…, amener ici,

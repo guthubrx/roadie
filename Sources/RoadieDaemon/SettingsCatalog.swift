@@ -403,6 +403,12 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "pick_modifier", "Touche des raccourcis 1 à 9",
               "Touche tenue avec un chiffre pour ouvrir une ligne de la barre : command (⌘), shift (⇧), alt (⌥) ou control (⌃). Avec shift, les chiffres de la rangée du haut ne s'écrivent plus dans la recherche en AZERTY.",
               .choice(["command", "shift", "alt", "control"]), .string("command")),
+        entry(.recherche, "experimental.target_mode", "workflows_enabled", "Workflows dans la barre",
+              "Mots-clés et listes des workflows au format d'Alfred dans la barre. Un workflow tourne avec les droits de Roadie : n'installez que ceux que vous connaissez.",
+              .bool, .bool(true)),
+        entry(.recherche, "experimental.target_mode", "alfred_workflows", "Workflows installés dans Alfred",
+              "Lit aussi, sans les modifier, les workflows installés dans Alfred. Ceux de ~/.config/roadies/workflows restent lus.",
+              .bool, .bool(true)),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

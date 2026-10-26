@@ -458,7 +458,7 @@ public final class TargetModeRuntimeController: NSObject {
                 }
                 return targets.activate(target: target, action: verb)
             },
-            launcher: launcherContext(initialSubject: initialSubject, targets: roadieTargets),
+            launcher: launcherContext(initialSubject: initialSubject, targets: roadieTargets, initialQuery: command.string("query")),
             onFinish: { [weak self] result in
                 self?.finish(result, command: command.name)
             }
@@ -467,7 +467,7 @@ public final class TargetModeRuntimeController: NSObject {
 
     /// Lanceur de la barre (SPEC-073) : index des applications gardé en mémoire et rafraîchi à chaque
     /// ouverture, état des applications ouvertes, classement appris lu une fois par session.
-    private func launcherContext(initialSubject: LauncherSubject? = nil, targets: [RoadieTarget] = []) -> LauncherSearchContext {
+    private func launcherContext(initialSubject: LauncherSubject? = nil, targets: [RoadieTarget] = [], initialQuery: String? = nil) -> LauncherSearchContext {
         let catalog = LauncherAppCatalog.shared
         let rankingStore = LauncherRankingStore()
         let state = service.effectiveStageStore.state()
@@ -595,6 +595,8 @@ public final class TargetModeRuntimeController: NSObject {
             return previous
         }
         context.endPreview = { [weak self] commit in self?.endPreview(commit: commit) }
+        context.initialQuery = initialQuery
+        workflowContext(&context, webSearchURL: webSearchURL)
         context.webSearch = { [events] text in
             guard let url = LauncherWeb.searchURL(webSearchURL, query: text) else {
                 return TargetActionResult(changed: false, message: "launcher web: invalid url", error: "web_search_url")
@@ -604,6 +606,54 @@ public final class TargetModeRuntimeController: NSObject {
             return TargetActionResult(changed: true, message: "launcher web: \(url.host ?? "")")
         }
         return context
+    }
+
+    // MARK: - Workflows (SPEC-088)
+
+    /// Workflows de la barre : index relu s'il a changé, Script Filter lancé en fond, schéma exécuté
+    /// après la fermeture avec les vrais effets. Le journal ne garde ni saisie ni résultat (FR-011).
+    private func workflowContext(_ context: inout LauncherSearchContext, webSearchURL: String) {
+        let config = service.effectiveConfig.experimental.targetMode
+        guard config.workflowsEnabled else { return }
+        let workflows = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
+        let byID = Dictionary(workflows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let events = events
+        context.workflowEntries = AlfredWorkflowIndex.entries(workflows)
+        context.runScriptFilter = { entry, argument, done in
+            guard let workflow = byID[entry.workflowID], let object = workflow.objects[entry.objectUID],
+                  let script = AlfredScript(object: object) else {
+                DispatchQueue.main.async { MainActor.assumeIsolated { done(nil, "script absent") } }
+                return nil
+            }
+            let started = Date()
+            let arguments = argument.isEmpty && object.bool("argumenttreatemptyqueryasnil") ? [] : [argument]
+            return AlfredScriptRunner.start(script, query: argument, arguments: arguments, workflow: workflow,
+                                            variables: workflow.configuredVariables, keyword: entry.keyword) { result in
+                let response = result.output.isEmpty ? nil : AlfredScriptFilterResponse.parse(result.output)
+                events.append(RoadieEvent(type: "launcher.workflow_filter", details: [
+                    "workflow": workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID,
+                    "ms": String(Int(Date().timeIntervalSince(started) * 1000)), "status": String(result.status),
+                    "items": String(response?.items.count ?? -1), "cancelled": String(result.cancelled), "timedOut": String(result.timedOut)]))
+                guard !result.cancelled else { return }
+                let error = result.failure ?? (result.timedOut ? "délai dépassé" : nil)
+                DispatchQueue.main.async { MainActor.assumeIsolated { done(response, error) } }
+            }
+        }
+        context.runWorkflow = { [weak self] entry, arg, variables, modifiers in
+            guard let workflow = byID[entry.workflowID] else {
+                return TargetActionResult(changed: false, message: "launcher workflow: absent", error: "workflow")
+            }
+            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL) { text in self?.reopenSearch(text) }
+            Task.detached {
+                _ = await AlfredWorkflowEngine(effects: effects).run(workflow, from: entry.objectUID, arg: arg, variables: variables, modifiers: modifiers)
+            }
+            return TargetActionResult(changed: true, message: "launcher workflow: \(workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID)")
+        }
+    }
+
+    /// Barre rouverte sur un texte (Show Alfred, Script Filter atteint par un schéma).
+    private func reopenSearch(_ text: String) {
+        handle(TargetModeRuntimeCommand(name: "targets.search", arguments: ["query": text]))
     }
 
     // MARK: - Verbes du lanceur (SPEC-074)

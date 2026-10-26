@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Workflows au format d'Alfred dans le lanceur : mots-clés et Script Filters des workflows installés
+  dans Alfred ou dans `~/.config/roadies/workflows`, schéma suivi (scripts, conditions, utilitaires,
+  copie, notification…), touches par ligne ; `roadie workflow list|check|install|remove`.
 - Calculatrice dans le lanceur : un calcul tapé (`12*4,5`, `=sqrt(2)`) donne son résultat en
   tête, Retour le copie. Avec Maj pour les raccourcis 1 à 9, Maj + chiffre écrit le chiffre dans
   un calcul (AZERTY).

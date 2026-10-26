@@ -96,7 +96,8 @@ enum AlfredScriptRunner {
             return .success([python3, "-c", source] + arguments)
         case 8:
             guard let file = script.file else { return .failure(.missingFile("")) }
-            let path = folder.appendingPathComponent(file).path
+            // Chemin absolu (`/usr/bin/networkQuality`) ou relatif au dossier du workflow.
+            let path = file.hasPrefix("/") ? file : folder.appendingPathComponent(file).path
             guard FileManager.default.isExecutableFile(atPath: path) else { return .failure(.missingFile(file)) }
             return .success([path] + arguments)
         default: return .failure(.unknownLanguage(script.language))

@@ -24,6 +24,7 @@ struct Spec088ScriptRunnerTests {
         #expect(try AlfredScriptRunner.argv(for: AlfredScript(language: 7, source: "s"), arguments: ["a"], folder: folder).get() == ["/usr/bin/osascript", "-l", "JavaScript", "-e", "s", "a"])
         #expect((try? AlfredScriptRunner.argv(for: AlfredScript(language: 10, source: "s"), arguments: [], folder: folder).get()) == nil)
         #expect((try? AlfredScriptRunner.argv(for: AlfredScript(language: 8, source: "", file: "absent.sh"), arguments: [], folder: folder).get()) == nil)
+        #expect(try AlfredScriptRunner.argv(for: AlfredScript(language: 8, source: "", file: "/bin/ls"), arguments: ["a"], folder: folder).get() == ["/bin/ls", "a"])
     }
 
     @Test func runsWithArgvEnvironmentAndFolder() async throws {
