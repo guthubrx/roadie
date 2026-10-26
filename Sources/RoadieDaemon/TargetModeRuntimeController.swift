@@ -735,7 +735,8 @@ public final class TargetModeRuntimeController: NSObject {
                let text = value as? String, !text.isEmpty { return text }
         }
         let board = NSPasteboard.general
-        let previous = board.string(forType: .string), count = board.changeCount
+        // Tout le contenu est gardé (images, fichiers…), pas seulement le texte (audit V15 087-091, F1).
+        let previous = PasteboardSnapshot(board), count = board.changeCount
         let source = CGEventSource(stateID: .hidSystemState)
         for down in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: 8, keyDown: down) else { continue }
@@ -745,8 +746,7 @@ public final class TargetModeRuntimeController: NSObject {
         try? await Task.sleep(for: .milliseconds(250))
         guard board.changeCount != count else { return nil }
         let text = board.string(forType: .string)
-        board.clearContents()
-        if let previous { board.setString(previous, forType: .string) }
+        previous.restore(to: board)
         return text
     }
 
@@ -1838,5 +1838,27 @@ private extension TargetGridArrowDirection {
 private extension CGRect {
     var area: CGFloat {
         isNull || isEmpty ? 0 : width * height
+    }
+}
+
+/// Contenu complet d'un presse-papiers, toutes ses représentations, pour le remettre après une copie
+/// simulée. O(t) types.
+struct PasteboardSnapshot {
+    private let items: [[NSPasteboard.PasteboardType: Data]]
+
+    init(_ board: NSPasteboard) {
+        items = (board.pasteboardItems ?? []).map { item in
+            Dictionary(item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }, uniquingKeysWith: { first, _ in first })
+        }
+    }
+
+    func restore(to board: NSPasteboard) {
+        board.clearContents()
+        let restored = items.map { entry -> NSPasteboardItem in
+            let item = NSPasteboardItem()
+            for (type, data) in entry { item.setData(data, forType: type) }
+            return item
+        }
+        if !restored.isEmpty { board.writeObjects(restored) }
     }
 }
