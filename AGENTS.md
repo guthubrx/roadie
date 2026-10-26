@@ -254,6 +254,9 @@ Session 081 installée : barre vide utile, `roadie undo`, règles proposées ave
 fichiers du lanceur suivent `TestEnvironment.launcherFile`. 2 024 tests, santé 5/5.
 Session 082 installée : documents et onglets ouverts dans la recherche (Firefox non couvert),
 diagnostic `roadie launch --open-items`. 2 028 tests, santé 5/5.
+Session 086 installée : échec d'écriture identique répété gardé durable (boucle T3 Code à 31 s
+en `bsp`), applications lentes nommées dans `live_tick.axSlowApps` pour les passes d'au moins 1 s.
+2 037 tests / 280 suites, santé 5/5. Reçu : specs/086-echecs-durables/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
