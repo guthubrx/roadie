@@ -90,6 +90,9 @@ public final class LayoutMaintainer {
     /// durable, sinon la fenêtre et ses voisines bougent toutes les 30 s (SPEC-083).
     private var expiredClamps: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
+    /// Échecs expirés gardés de même : un échec identique qui revient devient durable, sinon
+    /// l'écriture refusée est refaite toutes les 30 s (T3 Code, SPEC-086).
+    private var expiredFailures: [UInt32: FailedFrame] = [:]
     /// Échecs des placements directs : attendre une nouvelle géométrie ou intention explicite.
     private var failedRestorations: [WindowID: FailedRestoration] = [:]
     private var lastRestorationActivationWindowID: WindowID?
@@ -249,6 +252,7 @@ public final class LayoutMaintainer {
         clampedFrames.removeAll()
         expiredClamps.removeAll()
         failedFrames.removeAll()
+        expiredFailures.removeAll()
         revertedAppliedFrames.removeAll()
     }
 
@@ -324,6 +328,7 @@ public final class LayoutMaintainer {
             clampedFrames.removeAll()
             expiredClamps.removeAll()
             failedFrames.removeAll()
+            expiredFailures.removeAll()
             failedRestorations.removeAll()
             failedDriftWindows.removeAll()
             revertedAppliedFrames.removeAll()
@@ -351,7 +356,10 @@ public final class LayoutMaintainer {
         }
         if cause.hasPrefix("command:") {
             // Une intention explicite libère aussi le refus nonTree de la restauration focalisée.
-            for id in failedRestorations.keys { failedFrames[id.rawValue] = nil }
+            for id in failedRestorations.keys {
+                failedFrames[id.rawValue] = nil
+                expiredFailures[id.rawValue] = nil
+            }
             failedRestorations.removeAll()
         }
         failedDriftWindows = failedDriftWindows.filter { tickNow < $0.value.retryAt }
@@ -374,6 +382,7 @@ public final class LayoutMaintainer {
                   window.pid != failed.pid || window.bundleID != failed.bundleID else { continue }
             failedRestorations[id] = nil
             failedFrames[id.rawValue] = nil
+            expiredFailures[id.rawValue] = nil
         }
         tickFullscreen = fullscreenEntries(in: snapshot)
         tickExcludedScopes = []
@@ -477,6 +486,7 @@ public final class LayoutMaintainer {
             if let id = observedFocusedWindowID, id != lastRestorationActivationWindowID,
                failedRestorations.removeValue(forKey: id) != nil {
                 failedFrames[id.rawValue] = nil
+                expiredFailures[id.rawValue] = nil
             }
             lastRestorationActivationWindowID = observedFocusedWindowID
         }
@@ -506,6 +516,7 @@ public final class LayoutMaintainer {
                 clampedFrames[entry.window.id.rawValue] = nil
                 expiredClamps[entry.window.id.rawValue] = nil
                 failedFrames[entry.window.id.rawValue] = nil
+                expiredFailures[entry.window.id.rawValue] = nil
                 revertedAppliedFrames[entry.window.id.rawValue] = nil
             }
         }
@@ -552,6 +563,7 @@ public final class LayoutMaintainer {
             // Un geste confirmé autorise une nouvelle intention, même vers une cible refusée.
             failedRestorations[entry.window.id] = nil
             failedFrames[raw] = nil
+            expiredFailures[raw] = nil
         }
 
         let waitingPlacementScopes = unreadyPlacementScopes(
@@ -2101,8 +2113,8 @@ public final class LayoutMaintainer {
         events.append(RoadieEvent(type: focusRestore.isFullscreen ? "stage_focus_fullscreen_restore" : "stage_focus_restore", details: details))
     }
 
-    /// Oublie les refus de taille et les échecs de plus de 30 s, sauf les refus durables, et la
-    /// mémoire des fenêtres disparues (FR-004, SPEC-083). O(r) - r entrées mémorisées.
+    /// Oublie les refus de taille et les échecs de plus de 30 s, sauf les durables, et la
+    /// mémoire des fenêtres disparues (FR-004, SPEC-083, SPEC-086). O(r) - r entrées mémorisées.
     private func forgetGoneWindows(liveWindowIDs: Set<UInt32>, now: Date) {
         let oldest = now.addingTimeInterval(-LayoutTolerance.refusalMemorySeconds)
         for (id, clamp) in clampedFrames where !clamp.lasting && clamp.recordedAt < oldest {
@@ -2112,7 +2124,13 @@ public final class LayoutMaintainer {
             liveWindowIDs.contains($0.key) && ($0.value.lasting || $0.value.recordedAt >= oldest)
         }
         expiredClamps = expiredClamps.filter { liveWindowIDs.contains($0.key) && clampedFrames[$0.key] == nil }
-        failedFrames = failedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
+        for (id, failure) in failedFrames where !failure.lasting && failure.recordedAt < oldest {
+            expiredFailures[id] = failure
+        }
+        failedFrames = failedFrames.filter {
+            liveWindowIDs.contains($0.key) && ($0.value.lasting || $0.value.recordedAt >= oldest)
+        }
+        expiredFailures = expiredFailures.filter { liveWindowIDs.contains($0.key) && failedFrames[$0.key] == nil }
         failedRestorations = failedRestorations.filter { liveWindowIDs.contains($0.key.rawValue) }
         revertedAppliedFrames = revertedAppliedFrames.filter { liveWindowIDs.contains($0.key) }
         writeCounts = writeCounts.filter { liveWindowIDs.contains($0.key) }
@@ -3138,6 +3156,7 @@ public final class LayoutMaintainer {
                 if !movedAtRefusedSize { clampedFrames.removeValue(forKey: item.windowID.rawValue) }
                 expiredClamps.removeValue(forKey: item.windowID.rawValue)
                 failedFrames.removeValue(forKey: item.windowID.rawValue)
+                expiredFailures.removeValue(forKey: item.windowID.rawValue)
                 if let command = commandsByID[item.windowID],
                    !command.window.frame.isClose(to: item.requested, tolerance: LayoutTolerance.frameMatch) {
                     // La même écriture refaite depuis le même cadre : l'application est revenue
@@ -3155,11 +3174,15 @@ public final class LayoutMaintainer {
                 }
             case .failed:
                 if let command = commandsByID[item.windowID] {
-                    failedFrames[item.windowID.rawValue] = FailedFrame(
+                    let id = item.windowID.rawValue
+                    let previous = failedFrames[id] ?? expiredFailures[id]
+                    failedFrames[id] = FailedFrame(
                         requested: item.requested,
                         observedAtFailure: command.window.frame,
-                        recordedAt: now()
+                        recordedAt: now(),
+                        lasting: previous?.matches(command: command) == true
                     )
+                    expiredFailures[id] = nil
                 }
                 revertedAppliedFrames.removeValue(forKey: item.windowID.rawValue)
             }
@@ -4224,11 +4247,14 @@ private struct FailedRestoration {
     }
 }
 
-/// Échec d'application mémorisé. Expire après `LayoutTolerance.refusalMemorySeconds` (FR-004).
+/// Échec d'application mémorisé. Expire après `LayoutTolerance.refusalMemorySeconds` (FR-004),
+/// sauf s'il s'est répété à l'identique après expiration : il dure alors tant que la fenêtre
+/// reste à ce cadre et que la demande ne change pas (SPEC-086).
 private struct FailedFrame {
     var requested: Rect
     var observedAtFailure: Rect
     var recordedAt: Date
+    var lasting = false
 
     func matches(command: ApplyCommand) -> Bool {
         requested.isClose(to: command.frame, tolerance: LayoutTolerance.sameRequest)

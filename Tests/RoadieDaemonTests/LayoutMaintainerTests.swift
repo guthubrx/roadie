@@ -3472,6 +3472,35 @@ extension LayoutMaintainerTests {
         #expect(writer.attempts == attemptsAfterRetry)
     }
 
+    /// SPEC-086 : le même échec d'écriture revenu après l'expiration devient durable. Sans cela,
+    /// l'écriture refusée par T3 Code était refaite toutes les 31 s (28 fois le 25 octobre).
+    @Test(arguments: [WindowManagementMode.bsp, .spatialBsp])
+    func identicalFailureAfterExpiryBecomesLasting(mode: WindowManagementMode) {
+        let display = lotCDisplay()
+        let initial = Rect(x: 80, y: 80, width: 320, height: 240)
+        let writer = FailingWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[initial]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: mode, gapsOuter: 0, gapsInner: 0))
+        )
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
+
+        _ = maintainer.tick()
+        currentTime = currentTime.addingTimeInterval(31)
+        let retried = maintainer.tick()
+        let attemptsAfterRetry = writer.attempts
+        for _ in 0..<4 {
+            currentTime = currentTime.addingTimeInterval(31)
+            _ = maintainer.tick()
+        }
+
+        #expect(retried.failed == 1)
+        #expect(attemptsAfterRetry == 2)
+        #expect(writer.attempts == attemptsAfterRetry)
+    }
+
     /// SPEC-083 : une fenêtre accepte la cible puis revient d'elle-même à sa taille. Les passes de
     /// contrôle, plus espacées que la mémoire courte de 3 s, la réécrivaient sans fin.
     @Test

@@ -522,7 +522,9 @@ struct AXApplicationWindows {
         let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return nil }
         var raw: CFTypeRef?
-        let error = AXUIElementCopyAttributeValue(AXMessaging.application(pid), kAXWindowsAttribute as CFString, &raw)
+        let error = AXCallTimings.shared.measure(pid) {
+            AXUIElementCopyAttributeValue(AXMessaging.application(pid), kAXWindowsAttribute as CFString, &raw)
+        }
         registry.noteResult(error, pid: pid)
         guard error == .success, let windows = raw as? [AXUIElement] else { return nil }
 
@@ -536,7 +538,7 @@ struct AXApplicationWindows {
         func value(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
             guard !registry.isQuarantined(pid) else { return nil }
             var raw: CFTypeRef?
-            let error = AXUIElementCopyAttributeValue(element, attribute as CFString, &raw)
+            let error = AXCallTimings.shared.measure(pid) { AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) }
             registry.noteResult(error, pid: pid)
             return error == .success ? raw : nil
         }
@@ -664,7 +666,7 @@ protocol AXFrameIO: Sendable {
 
 struct LiveAXFrameIO: AXFrameIO {
     func performAction(_ action: String, on element: AXUIElement) -> AXError {
-        AXUIElementPerformAction(element, action as CFString)
+        AXCallTimings.shared.measure(element) { AXUIElementPerformAction(element, action as CFString) }
     }
 
     func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
@@ -673,20 +675,22 @@ struct LiveAXFrameIO: AXFrameIO {
 
     func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?) {
         var raw: CFTypeRef?
-        let error = AXUIElementCopyAttributeValue(element, attribute as CFString, &raw)
+        let error = AXCallTimings.shared.measure(element) { AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) }
         return (error, raw)
     }
 
     func values(of attributes: [String], on element: AXUIElement) -> (AXError, [AnyObject]) {
         var raw: CFArray?
-        let error = AXUIElementCopyMultipleAttributeValues(
-            element, attributes as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
-        )
+        let error = AXCallTimings.shared.measure(element) {
+            AXUIElementCopyMultipleAttributeValues(
+                element, attributes as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
+            )
+        }
         return (error, error == .success ? (raw as? [AnyObject]) ?? [] : [])
     }
 
     func setValue(_ value: CFTypeRef, of attribute: String, on element: AXUIElement) -> AXError {
-        AXUIElementSetAttributeValue(element, attribute as CFString, value)
+        AXCallTimings.shared.measure(element) { AXUIElementSetAttributeValue(element, attribute as CFString, value) }
     }
 }
 
@@ -880,9 +884,11 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
     /// nil si l'application ne repond pas (elle vient d'etre mise de cote).
     private static func readVolatile(_ element: AXUIElement, pid: pid_t) -> AXVolatileReading? {
         var raw: CFArray?
-        let error = AXUIElementCopyMultipleAttributeValues(
-            element, volatileAttributeNames as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
-        )
+        let error = AXCallTimings.shared.measure(pid) {
+            AXUIElementCopyMultipleAttributeValues(
+                element, volatileAttributeNames as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
+            )
+        }
         if AXUnresponsiveApps.shared.noteResult(error, pid: pid) { return nil }
         let values = error == .success ? (raw as? [AnyObject]) ?? [] : []
         if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: AXUnresponsiveApps.shared) { return nil }
@@ -902,9 +908,11 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
     private static func readStable(_ element: AXUIElement, pid: pid_t) -> AXStableWindowAttributes? {
         let registry = AXUnresponsiveApps.shared
         var raw: CFArray?
-        let error = AXUIElementCopyMultipleAttributeValues(
-            element, stableAttributeNames as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
-        )
+        let error = AXCallTimings.shared.measure(pid) {
+            AXUIElementCopyMultipleAttributeValues(
+                element, stableAttributeNames as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
+            )
+        }
         registry.noteResult(error, pid: pid)
         guard error == .success, let values = raw as? [AnyObject], values.count == stableAttributeNames.count else {
             return nil
@@ -931,14 +939,18 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         var fullscreenEnabled = false
         if isElement(fullscreenButton) {
             var rawEnabled: CFTypeRef?
-            let enabledError = AXUIElementCopyAttributeValue(
-                fullscreenButton as! AXUIElement, kAXEnabledAttribute as CFString, &rawEnabled // Safe : isElement
-            )
+            let enabledError = AXCallTimings.shared.measure(pid) {
+                AXUIElementCopyAttributeValue(
+                    fullscreenButton as! AXUIElement, kAXEnabledAttribute as CFString, &rawEnabled // Safe : isElement
+                )
+            }
             if registry.noteResult(enabledError, pid: pid) { return nil }
             fullscreenEnabled = enabledError == .success && (rawEnabled as? Bool) == true
         }
         var settable = DarwinBoolean(false)
-        let settableError = AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &settable)
+        let settableError = AXCallTimings.shared.measure(pid) {
+            AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &settable)
+        }
         if registry.noteResult(settableError, pid: pid) { return nil }
 
         return AXStableWindowAttributes(
@@ -967,7 +979,9 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return nil }
         var rawFocused: CFTypeRef?
-        let error = AXUIElementCopyAttributeValue(AXMessaging.application(pid), kAXFocusedWindowAttribute as CFString, &rawFocused)
+        let error = AXCallTimings.shared.measure(pid) {
+            AXUIElementCopyAttributeValue(AXMessaging.application(pid), kAXFocusedWindowAttribute as CFString, &rawFocused)
+        }
         registry.noteResult(error, pid: pid)
         guard error == .success,
               let focused = rawFocused,

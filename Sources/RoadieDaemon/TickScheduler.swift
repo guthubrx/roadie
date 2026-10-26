@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import RoadieAX
 
 /// Ordonnanceur unique des passes du tiler, sur le thread principal (SPEC-017 R5, A1, A6, A12, A20).
 /// - Aucun événement perdu : une demande rejoint la demande en attente, l'échéance la plus proche gagne.
@@ -176,25 +177,31 @@ public final class TickScheduler {
     /// Passe, puis trace `live_tick` (latence depuis la demande, durée) comme avant la SPEC-017,
     /// pour comparer les mesures avec le même outil (Article XXII). La latence se décompose
     /// (T221) : délai demandé (regroupement ou échéance), retenue par une attente (bouton
-    /// enfoncé), retard d'exécution après l'échéance (file principale).
+    /// enfoncé), retard d'exécution après l'échéance (file principale). Une passe d'une seconde
+    /// ou plus nomme les applications qui ont fait attendre ses appels AX (SPEC-086).
     private func run(_ cause: String, requested: Pending?, due: Date, requestedDelay: TimeInterval, at start: Date) {
+        AXCallTimings.shared.reset()
         let result = tick(cause)
         guard let events else { return }
         let isEvent = requested.map { $0.coalescing != .safetyNet } ?? false
-        guard isEvent || result.commands > 0 || result.failed > 0 else { return }
+        let duration = now().timeIntervalSince(start)
+        let slowApps = duration >= 1 ? AXCallTimings.shared.drainSlowest(minimumSeconds: 0.2, limit: 3) : ""
+        guard isEvent || result.commands > 0 || result.failed > 0 || !slowApps.isEmpty else { return }
         let ms = { (seconds: TimeInterval) in String(format: "%.1f", max(0, seconds) * 1000) }
-        events.append(RoadieEvent(type: "live_tick", details: [
+        var details = [
             "notification": cause,
             "fast": String(requested?.coalescing == .event),
             "requestedDelayMs": ms(requestedDelay),
             "dueLagMs": ms(start.timeIntervalSince(due)),
             "heldByGestureMs": ms(requested?.heldSince.map { start.timeIntervalSince($0) } ?? 0),
             "latencyMs": ms(requested.map { start.timeIntervalSince($0.requestedAt) } ?? 0),
-            "durationMs": ms(now().timeIntervalSince(start)),
+            "durationMs": ms(duration),
             "commands": String(result.commands),
             "applied": String(result.applied),
             "failed": String(result.failed),
-        ]))
+        ]
+        if !slowApps.isEmpty { details["axSlowApps"] = slowApps }
+        events.append(RoadieEvent(type: "live_tick", details: details))
     }
 
     /// Minuterie de production : file principale.
