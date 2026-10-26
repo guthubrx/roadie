@@ -111,7 +111,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         }
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
-           let input = Self.navigation(event, labels: labelLetters, pick: pickModifier) {
+           let input = Self.navigation(event, labels: labelLetters, pick: pickModifier, text: field.stringValue) {
             onKey?(input)
             return
         }
@@ -157,11 +157,15 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
                                                    83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9]
 
     /// O(1). Les modificateurs de déplacement/sélection restent à AppKit.
-    static func navigation(_ event: NSEvent, labels: Set<String> = [], pick: NSEvent.ModifierFlags = .command) -> SearchKeyInput? {
+    /// `text` : saisie du champ. Avec Maj pour les raccourcis, Maj + chiffre écrit le chiffre dans une
+    /// saisie vide ou de calcul : en AZERTY, les chiffres se tapent avec Maj (SPEC-087 FR-009).
+    static func navigation(_ event: NSEvent, labels: Set<String> = [], pick: NSEvent.ModifierFlags = .command,
+                           text: String = "") -> SearchKeyInput? {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
         // ⌘1 à ⌘9 (ou la touche de `pick_modifier`), rangée du haut ou pavé numérique, quelle que soit
         // la disposition : le code physique compte, pas le caractère.
-        if flags == pick, let rank = digitKeys[event.keyCode] {
+        let typesDigit = pick == .shift && text.allSatisfy(LauncherCalculator.typingCharacters.contains)
+        if flags == pick, !typesDigit, let rank = digitKeys[event.keyCode] {
             return SearchKeyInput(kind: .pick(rank))
         }
         if flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(), labels.contains(letter) {

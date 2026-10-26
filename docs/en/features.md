@@ -458,6 +458,20 @@ Windows show their real thumbnail
 (already captured by the rail, switcher or overview) with their app icon as a badge;
 without a thumbnail, the icon alone.
 
+**Calculation**: a typed calculation (`12*4.5`, `2^10`, `-(3+4)*2`) shows its result on top,
+under « Calcul »; Return copies it and closes the bar, ⌘C copies it. Operators `+ - * / ^ %`,
+`×`, `÷`, parentheses, `,` or `.` decimal; after `=`: `pi`, `e`, `sqrt`, `abs`, `round`,
+`floor`, `ceil`, `exp`, `ln`, `log`, `log2`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`
+(`=sqrt(2)`). 12 significant digits, system decimal separator. A lone number or an unfinished
+calculation (`12*`, `1/0`) gives no row.
+
+**Path**: an input starting with `~`, or with `/` followed by a root folder (`/Us`,
+`/Applications/`), lists that folder filtered by the rest of the input; nothing else is
+searched. Tab completes the selected name (`~/Doc` → `~/Documents/`), → opens its verbs, Return
+opens it like a file (a folder in Finder). Hidden items show only when the rest starts with `.`.
+Command mode keeps priority: `/s`, `/set`, `/d`… stay commands; from the second `/` (`/sbin/`)
+it is a path.
+
 **Verbs and destinations**: Tab on the selected row opens its verbs. App: open or go
 to its window, open in…, new window here, gather its windows in…, bring here, hide,
 quit. Window: go to, send to…, bring here, float this window or always the whole app
@@ -513,7 +527,7 @@ window) into the active stage without changing the shown stage. ⌃ Return searc
 web for the typed text (`web_search_url`, Google by default). The first nine shown rows
 carry ⌘1 to ⌘9: the key runs their action, at every step. The modifier is set in
 `pick_modifier` (`command` by default, `shift`, `alt` or `control`); with `shift`, the
-top-row digits can no longer be typed in the search on AZERTY. → with the cursor at the end
+top-row digits are typed on AZERTY only in an empty input or a calculation. → with the cursor at the end
 of the input opens the verbs, like Tab.
 
 **Verbs of the active window**: Capslock + Shift + F (`actions_hotkey`, Hyper + Shift + F)

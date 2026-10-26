@@ -477,6 +477,20 @@ Les fenêtres montrent leur vignette réelle (déjà capturée par le rail, le s
 la vue d'ensemble) avec l'icône de leur application en pastille ; sans vignette,
 l'icône seule.
 
+**Calcul** : un calcul tapé (`12*4,5`, `2^10`, `-(3+4)*2`) donne son résultat en tête,
+sous « Calcul » ; Retour le copie et ferme la barre, ⌘C le copie. Opérateurs `+ - * / ^ %`, `×`,
+`÷`, parenthèses, `,` ou `.` décimal ; après `=` : `pi`, `e`, `sqrt`, `abs`, `round`, `floor`,
+`ceil`, `exp`, `ln`, `log`, `log2`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan` (`=sqrt(2)`).
+12 chiffres significatifs, virgule décimale en français. Un nombre seul ou un calcul inachevé
+(`12*`, `1/0`) ne donne aucune ligne.
+
+**Chemin** : une saisie qui commence par `~`, ou par `/` suivi d'un dossier de la racine (`/Us`,
+`/Applications/`), liste ce dossier filtré par la suite tapée ; rien d'autre n'est cherché. Tab
+complète le nom choisi (`~/Doc` → `~/Documents/`), → ouvre ses verbes, Retour l'ouvre comme un
+fichier (un dossier dans le Finder). Les éléments cachés n'apparaissent que si la suite commence
+par `.`. Le mode commande garde la priorité : `/s`, `/set`, `/d`… restent des commandes ; dès le
+second `/` (`/sbin/`), c'est un chemin.
+
 **Verbes et destinations** : Tab sur la ligne choisie ouvre ses verbes. Application :
 ouvrir ou aller à sa fenêtre, ouvrir dans…, nouvelle fenêtre ici, réunir ses fenêtres
 dans…, amener ici, masquer, quitter. Fenêtre : aller à, envoyer vers…, amener ici,
@@ -537,7 +551,7 @@ bureau affiché, ou y envoie la fenêtre, puis Roadie y va. ⌥ Retour amène la
 Les neuf premières lignes montrées portent ⌘1 à ⌘9 : la touche fait leur action, à
 toutes les étapes. La touche se règle dans `pick_modifier` (`command` par défaut,
 `shift`, `alt` ou `control`) ; avec `shift`, les chiffres de la rangée du haut ne
-s'écrivent plus dans la recherche en AZERTY. → avec le curseur en fin de saisie ouvre les verbes, comme Tab.
+s'écrivent dans la recherche en AZERTY que dans une saisie vide ou un calcul. → avec le curseur en fin de saisie ouvre les verbes, comme Tab.
 
 **Verbes de la fenêtre active** : Capslock + Maj + F (`actions_hotkey`, Hyper + Maj + F)
 ou `roadie targets actions` ouvre la barre directement sur les verbes de la fenêtre au

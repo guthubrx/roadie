@@ -22,6 +22,8 @@ struct LauncherList: Equatable, Sendable {
         case rule(RuleSuggestion, RuleChoice)
         /// Document ou onglet ouvert, même caché (SPEC-082).
         case openItem(LauncherOpenItem)
+        /// Résultat d'un calcul tapé (SPEC-087).
+        case calc(LauncherCalculation)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -36,6 +38,7 @@ struct LauncherList: Equatable, Sendable {
             case .action(let key, _, _, _): "action:\(key)"
             case .rule(let suggestion, let choice): "rule:\(suggestion.declineKey):\(choice.rawValue)"
             case .openItem(let item): item.id
+            case .calc: "calc"
             }
         }
 
@@ -49,7 +52,7 @@ struct LauncherList: Equatable, Sendable {
             case .phrase(let action, _), .alias(_, let action, _): action.subject.rankingKey
             case .project(let project): "project:\(LauncherMatch.fold(project.name))"
             case .action(_, let action, _, _): action.subject.rankingKey
-            case .rule: nil
+            case .rule, .calc: nil
             case .openItem(let item): "open:\(item.kind.rawValue):\(item.bundleID):\(item.title)"
             }
         }
@@ -221,6 +224,11 @@ struct LauncherList: Equatable, Sendable {
         list.rows = rows
         list.best = rows.lazy.compactMap(\.id).first
         return list
+    }
+
+    /// Contenu d'un dossier tapé (SPEC-087) : lignes de fichiers sous « Chemin », la première choisie. O(n).
+    static func path(_ files: [LauncherFile]) -> LauncherList {
+        idle(files.isEmpty ? [] : [.header("Chemin")] + files.map(Row.file))
     }
 
     /// Phrase ou abréviation en tête, sous son titre, et choisie par défaut (SPEC-079). O(n).

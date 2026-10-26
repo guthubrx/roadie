@@ -37,7 +37,7 @@ SPEC-075 (variantes et raccourcis 1 à 9), SPEC-085 (touche des raccourcis).
   personnel) ; la suite filtre ses éléments par l'appariement du lanceur. Si le chemin tapé
   désigne lui-même un élément existant, il vient en premier. Dossiers puis fichiers, par nom ;
   éléments cachés seulement si la suite commence par `.` ; 200 éléments lus au plus. Section
-  « Chemin », 12 lignes montrées. Lecture hors du fil principal ; une réponse périmée est ignorée.
+  « Chemin » ; la liste défile avec la sélection. Lecture hors du fil principal ; une réponse périmée est ignorée.
 - **FR-006 Tab complète.** En mode chemin, Tab remplace la saisie par le chemin de la ligne
   choisie (`~` gardé), suivi de `/` pour un dossier ; → ouvre ses verbes. Hors mode chemin, Tab
   garde son rôle.

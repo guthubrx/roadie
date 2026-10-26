@@ -923,6 +923,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var copiedRowID: String?
     /// Documents et onglets ouverts (SPEC-082), arrivés en fond après l'ouverture.
     private var openItems: [LauncherOpenItem] = []
+    /// Chemin tapé (SPEC-087) : lecture du dossier en fond, éléments de la saisie `pathFor`.
+    private let pathListing = LauncherPathListing()
+    private var pathFiles: [LauncherFile] = []
+    private var pathFor: String?
     /// Aperçu actif (SPEC-078) : demande envoyée au contrôleur, attente de 150 ms, fantôme rendu.
     private var sentPreview: LauncherPreviewRequest?
     private var pendingPreview: LauncherPreviewRequest?
@@ -1073,7 +1077,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             render()
             return
         }
-        if text.hasPrefix("/") {
+        if text.hasPrefix("/"), !Self.isPath(text) {
             if commandModel == nil {
                 model.replaceQuery("/")
                 enterCommandMode()
@@ -1096,8 +1100,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             handleStep(input)
             return
         }
-        // Mode commande (SPEC-023 R3) : aiguillage avant le modèle de recherche.
-        if model.isCommandMode {
+        // Mode commande (SPEC-023 R3) : aiguillage avant le modèle de recherche. Un chemin `/Users…`
+        // reste une recherche (SPEC-087).
+        if commandModel != nil {
             handleCommand(input)
             return
         }
@@ -1111,6 +1116,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             if let modifier = Self.modifier(command: command && !shift, option: option, control: control),
                let variant = currentVariant(modifier) {
                 finishVariant(variant)
+                return
+            }
+            if case .calc(let calc)? = launcherList.row(for: launcherSelection) {
+                finishCalc(calc)
                 return
             }
             if case .app(let app, _)? = launcherList.row(for: launcherSelection) {
@@ -1150,7 +1159,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch input.kind {
         case .text(let value):
             model.type(value)
-            if model.isCommandMode { enterCommandMode() }
+            if model.isCommandMode, !Self.isPath(model.query) { enterCommandMode() }
         case .labelCharacter(let value):
             // Maj + lettre d'une pastille : sa ligne s'ouvre, comme ⌘ + chiffre (SPEC-084).
             guard let index = letterRows[value], index < launcherList.rows.count else { return }
@@ -1163,7 +1172,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .next, .previous:
             navigate(input)
         case .actions:
-            navigate(SearchKeyInput(kind: .next, navigationSource: .tab))
+            // Chemin tapé : → ouvre les verbes, Tab complète (SPEC-087).
+            if Self.isPath(model.query), case .file(let file)? = launcherList.row(for: launcherSelection) {
+                enterVerbs(.file(file))
+            } else {
+                navigate(SearchKeyInput(kind: .next, navigationSource: .tab))
+            }
         case .pick(let rank):
             pick(rank)
             return
@@ -1191,11 +1205,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             switch launcherList.row(for: launcherSelection) {
             case .app(let app, _): enterVerbs(.app(app))
             case .target(let target): enterVerbs(.target(target))
-            case .file(let file): enterVerbs(.file(file))
+            case .file(let file):
+                if Self.isPath(model.query) { completePath(file) } else { enterVerbs(.file(file)) }
             case .phrase(let action, _), .alias(_, let action, _): enterVerbs(action.subject)
             case .project(let project): enterVerbs(.project(project.name))
             case .action(_, let action, _, _): enterVerbs(action.subject)
-            case .rule, .openItem: break
+            case .rule, .openItem, .calc: break
             case .header, nil: model.handleNavigation(input)
             }
             return
@@ -1213,7 +1228,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func syncHighlight() {
         switch launcherList.row(for: launcherSelection) {
         case .target(let target): model.highlight(targetID: target.id)
-        case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem: model.highlight(targetID: nil)
+        case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem, .calc: model.highlight(targetID: nil)
         case .header, nil: break
         }
     }
@@ -1221,6 +1236,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Recalcule la liste si la requête ou les cibles ont changé. Nouvelle requête : la meilleure
     /// ligne est choisie ; nouvelles cibles seulement : la ligne choisie est gardée si elle reste. O(a + n).
     private func refreshLauncher() {
+        if Self.isPath(model.query) {
+            refreshPath()
+            return
+        }
         refreshFiles()
         let ids = model.matches.map(\.id)
         guard model.query != launcherQuery || ids != launcherTargetIDs || filesChanged else { return }
@@ -1248,8 +1267,53 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         if let (name, alias) = launcher.aliases.alias(for: model.query), let action = launcher.aliasAction(alias) {
             launcherList.prepend(.alias(name, action, LauncherPhrase.title(action)), header: "Abréviation")
         }
+        // Calcul (SPEC-087) : son résultat passe en tête et devient la ligne choisie.
+        if let calc = LauncherCalculator.evaluate(model.query) {
+            launcherList.prepend(.calc(calc), header: "Calcul")
+        }
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
         syncHighlight()
+    }
+
+    /// Saisie qui désigne un chemin plutôt qu'une commande (SPEC-087 FR-004). O(c + r).
+    private static func isPath(_ text: String) -> Bool {
+        LauncherPathRules.isPath(text, commands: LauncherPathRules.commandNames, rootEntries: LauncherPathRules.rootEntries)
+    }
+
+    /// Chemin tapé : le dossier est lu en fond, la liste montre ses éléments dès la réponse ; rien
+    /// d'autre n'est cherché (SPEC-087 FR-005, FR-008). O(f).
+    private func refreshPath() {
+        let query = model.query
+        if query != pathFor {
+            pathFor = query
+            fileSearch.cancel()
+            pathListing.list(LauncherPathRules.parts(query)) { [weak self] files in
+                guard let self, !self.finished, self.model.query == query, self.step == .objects else { return }
+                self.pathFiles = files
+                self.filesChanged = true
+                self.render()
+            }
+        }
+        guard query != launcherQuery || filesChanged else { return }
+        let queryChanged = query != launcherQuery
+        if queryChanged { copiedRowID = nil }
+        launcherQuery = query
+        filesChanged = false
+        launcherList = .path(pathFiles)
+        if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
+        syncHighlight()
+    }
+
+    /// Tab sur un élément d'un chemin : la saisie devient son chemin, `/` final pour un dossier (FR-006).
+    private func completePath(_ file: LauncherFile) {
+        model.replaceQuery(LauncherPathRules.completion(file, in: LauncherPathRules.parts(model.query)))
+    }
+
+    /// Retour sur un calcul : le résultat est copié, la barre se ferme (SPEC-087 FR-003).
+    private func finishCalc(_ calc: LauncherCalculation) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(calc.text, forType: .string)
+        finish(TargetActionResult(changed: true, message: "launcher calc copied"))
     }
 
     /// Nouvelle saisie : les fichiers qui la contiennent encore restent affichés pendant que Spotlight
@@ -1277,7 +1341,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .phrase(let action, _), .alias(_, let action, _): action.subject
         case .project(let project): .project(project.name)
         case .action(_, let action, _, _): action.subject
-        case .rule, .openItem, .header, nil: nil
+        case .rule, .openItem, .calc, .header, nil: nil
         }
     }
 
@@ -1291,6 +1355,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .project(let project): project.name
         case .action(_, _, let title, _): title
         case .openItem(let item): item.url ?? item.title
+        case .calc(let calc): calc.text
         case .rule, .header, nil: nil
         }
         guard let text else { return }
@@ -1312,6 +1377,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .action(_, let action, _, _): finishAction(action)
         case .rule(let suggestion, let choice): finishRule(suggestion, choice)
         case .openItem(let item): finishOpenItem(item)
+        case .calc(let calc): finishCalc(calc)
         case .header, nil: break
         }
     }
@@ -1348,7 +1414,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .phrase(let action, _), .alias(_, let action, _): action
         case .project(let project): LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil)
         case .action(_, let action, _, _): action
-        case .rule, .openItem, .header, nil: nil
+        case .rule, .openItem, .calc, .header, nil: nil
         }
     }
 
@@ -1567,7 +1633,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .app(let app, _): subject = .app(app)
         case .target(let target): subject = .target(target)
         case .file(let file): subject = .file(file)
-        case .phrase, .alias, .project, .action, .rule, .openItem, .header, nil: return nil
+        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
                                   newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
@@ -1838,6 +1904,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             let icon: SlashSuggestion.Icon = item.windowID.map { .window($0.rawValue, app: appPaths[item.appName]) }
                 ?? appPaths[item.appName].map(SlashSuggestion.Icon.file) ?? .symbol(item.kind == .tab ? "globe" : "doc")
             return SlashSuggestion(text: item.title, detail: item.detail, kind: .result, icon: icon)
+        case .calc(let calc):
+            return SlashSuggestion(text: calc.text, detail: "\(calc.expression) · Retour copie", kind: .result, icon: .symbol("equal.square"))
         case .rule(let suggestion, let choice):
             let text = switch choice {
             case .create: "Créer la règle : \(suggestion.appName) toujours dans \(suggestion.stageTitle)"
@@ -1927,6 +1995,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     private func cleanup() {
         fileSearch.cancel()
+        pathListing.cancel()
         previewWork?.cancel()
         previewWork = nil
         pendingPreview = nil

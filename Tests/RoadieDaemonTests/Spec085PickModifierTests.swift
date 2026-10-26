@@ -17,7 +17,7 @@ struct Spec085PickModifierTests {
         #expect(SearchInputPanel.navigation(try key(19, "2", .command))?.kind == .pick(2))
         #expect(SearchInputPanel.navigation(try key(19, "2", .shift)) == nil)
         let shift = LauncherPickModifier.shift.flags
-        #expect(SearchInputPanel.navigation(try key(19, "2", .shift), pick: shift)?.kind == .pick(2))
+        #expect(SearchInputPanel.navigation(try key(19, "2", .shift), pick: shift, text: "fi")?.kind == .pick(2))
         // Commande n'ouvre plus de ligne : elle reste aux autres raccourcis.
         #expect(SearchInputPanel.navigation(try key(19, "2", .command), pick: shift) == nil)
     }

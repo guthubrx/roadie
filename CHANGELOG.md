@@ -7,6 +7,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Calculatrice dans le lanceur : un calcul tapé (`12*4,5`, `=sqrt(2)`) donne son résultat en
+  tête, Retour le copie. Avec Maj pour les raccourcis 1 à 9, Maj + chiffre écrit le chiffre dans
+  un calcul (AZERTY).
+- Chemins tapés : `~/Doc` ou `/Applications/` liste le dossier, Tab complète, Retour ouvre comme un
+  fichier ; le mode commande `/` reste prioritaire.
 - Lanceur dans la barre de recherche (Capslock + F) : les applications installées
   rejoignent les fenêtres, stages, bureaux et cibles à l'écran, groupées en sections
   avec leur icône. Correspondance par initiales, classement qui apprend vos choix.
