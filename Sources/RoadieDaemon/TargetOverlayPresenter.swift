@@ -898,7 +898,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case destinations(LauncherSubject, LauncherVerb)
         /// ⌘S (SPEC-079) : la saisie est l'abréviation ; échec si l'action ne se garde pas.
         case saving(LauncherAction, Result<LauncherAlias, LauncherAlias.Refusal>)
+        /// Lot de la sélection multiple (SPEC-091) : ses verbes, puis la destination d'« Envoyer vers… ».
+        case batchVerbs
+        case batchDestinations
     }
+    /// Sélection multiple (SPEC-091), gardée quand la saisie change.
+    private var selection = LauncherSelection()
     private var step = LauncherStep.objects
     private var actionList = LauncherActionList()
     private var actionSelection: String?
@@ -1117,11 +1122,23 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         if case .escape = input.kind {
             model.cancelPendingReturn()
+            // Échap vide d'abord la sélection, puis ferme (SPEC-091 FR-003).
+            if !selection.isEmpty {
+                selection.clear()
+                render()
+                return
+            }
             cancel()
             return
         }
         if case .confirm(let shift, let command, let option, let control, let isRepeat) = input.kind {
             guard !isRepeat else { return }
+            // Retour avec une sélection : ses verbes, sans agir tout de suite (FR-003).
+            if !selection.isEmpty {
+                enterBatch()
+                render()
+                return
+            }
             if let modifier = Self.modifier(command: command && !shift, option: option, control: control),
                let variant = currentVariant(modifier) {
                 finishVariant(variant)
@@ -1148,8 +1165,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .project(let project)?:
                 finishAction(LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil))
                 return
-            case .action(_, let action, _, _)?:
-                finishAction(action)
+            case .action(let key, let action, _, _)?:
+                if key == "undo-batch" { finishUndo() } else { finishAction(action) }
                 return
             case .rule(let suggestion, let choice)?:
                 finishRule(suggestion, choice)
@@ -1202,6 +1219,20 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             if let action = objectAction() { enterSaving(action) }
         case .showRules:
             model.replaceQuery("")
+        case .selectToggle:
+            if let subject = Self.subject(of: launcherList.row(for: launcherSelection)) { selection.toggle(subject) }
+        case .selectAddNext:
+            if let subject = Self.subject(of: launcherList.row(for: launcherSelection)), LauncherSelection.key(subject) != nil {
+                selection.add(subject)
+                launcherSelection = launcherList.neighbour(of: launcherSelection, step: 1)
+                syncHighlight()
+            }
+        case .selectRemoveLast:
+            selection.removeLast()
+        case .selectionVerbs:
+            if !selection.isEmpty { enterBatch() }
+        case .selectClear:
+            selection.clear()
         case .preview:
             if case .file(let file)? = launcherList.row(for: launcherSelection) {
                 finishAction(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil))
@@ -1637,7 +1668,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .file(let file): finishAction(LauncherAction(subject: .file(file), verb: .open, destination: nil))
         case .phrase(let action, _), .alias(_, let action, _): finishAction(action)
         case .project(let project): finishAction(LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil))
-        case .action(_, let action, _, _): finishAction(action)
+        case .action(let key, let action, _, _): if key == "undo-batch" { finishUndo() } else { finishAction(action) }
         case .rule(let suggestion, let choice): finishRule(suggestion, choice)
         case .openItem(let item): finishOpenItem(item)
         case .calc(let calc): finishCalc(calc)
@@ -1662,7 +1693,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Objet des étapes verbe et destination.
     private var stepSubject: LauncherSubject? {
         switch step {
-        case .objects: nil
+        case .objects, .batchVerbs, .batchDestinations: nil
         case .verbs(let subject), .destinations(let subject, _): subject
         case .saving(let action, _): action.subject
         }
@@ -1762,11 +1793,39 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             launcherQuery = nil
         case .destinations(let subject, _):
             enterVerbs(subject)
-        case .saving:
+        case .saving, .batchVerbs:
             step = .objects
             stepQuery = ""
             launcherQuery = nil
+        case .batchDestinations:
+            enterBatch()
         }
+    }
+
+    // MARK: - Sélection multiple (SPEC-091)
+
+    private func enterBatch() {
+        step = .batchVerbs
+        stepQuery = ""
+        refreshActions()
+    }
+
+    /// Le lot part au contrôleur après la fermeture : une action par objet (FR-005).
+    private func finishBatch(_ verb: LauncherVerb, _ destination: LauncherDestination?) {
+        guard !finished else { return }
+        finished = true
+        launcher.recordQuery(model.query)
+        let actions = selection.actions(verb, destination: destination)
+        cleanup()
+        onFinish?(launcher.performBatch(actions))
+    }
+
+    /// « Annuler » de la barre vide pour un lot (FR-006).
+    private func finishUndo() {
+        guard !finished else { return }
+        finished = true
+        cleanup()
+        onFinish?(launcher.undo())
     }
 
     private func refreshActions() {
@@ -1783,6 +1842,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                                        newStageHome: launcher.newStageHome)
         case .saving:
             return
+        case .batchVerbs:
+            actionList = .batch(selection, query: stepQuery)
+        case .batchDestinations:
+            let title = "\(selection.count) choisi\(selection.count > 1 ? "s" : "")"
+            actionList = .destinations(for: .project(title), verb: LauncherActionList.batchDestinationVerb(selection), query: stepQuery,
+                                       destinations: launcher.destinations, newStageHome: launcher.newStageHome)
         }
         actionSelection = actionList.best
     }
@@ -1820,6 +1885,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             // Tab ou → sur un verbe qui demande une destination : la troisième étape.
             if case .verb(let verb)? = actionList.row(for: actionSelection), verb.needsDestination, case .verbs(let subject) = step {
                 enterDestinations(subject, verb)
+            } else if case .verb(.sendTo)? = actionList.row(for: actionSelection), step == .batchVerbs {
+                step = .batchDestinations
+                stepQuery = ""
+                refreshActions()
             }
         case .next:
             actionSelection = actionList.neighbour(of: actionSelection, step: 1)
@@ -1829,7 +1898,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             guard !isRepeat else { return }
             confirmStep()
             return
-        case .text, .labelCharacter, .ignored, .copy, .preview, .showRules:
+        case .text, .labelCharacter, .ignored, .copy, .preview, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
+             .selectionVerbs, .selectClear:
             break
         }
         render()
@@ -1944,9 +2014,22 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func confirmStep() {
+        if step == .batchVerbs || step == .batchDestinations {
+            switch actionList.row(for: actionSelection) {
+            case .verb(.sendTo):
+                step = .batchDestinations
+                stepQuery = ""
+                refreshActions()
+                render()
+            case .verb(let verb): finishBatch(verb, nil)
+            case .destination(_, let destination): finishBatch(.sendTo, destination)
+            case .workflow, .header, nil: break
+            }
+            return
+        }
         let subject: LauncherSubject
         switch step {
-        case .objects, .saving: return
+        case .objects, .saving, .batchVerbs, .batchDestinations: return
         case .verbs(let current): subject = current
         case .destinations(let current, _): subject = current
         }
@@ -2087,9 +2170,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 return TargetOverlayBadge(label: target.label, title: target.title, kind: target.kind, isActive: target.isActive,
                                           frame: RoadieScreenCoordinate.axRectToNS(frame), isHighlighted: true, isFramed: true, isSearchResult: true)
             }
+            let batch = step == .batchVerbs
             show(badges: badges, bar: TargetSearchBar(
                 query: stepQuery, matchCount: actionList.rows.filter { $0.id != nil }.count, properties: nil, isLoading: false,
-                suggestions: actionList.rows.map { Self.suggestion($0, app: stepSubject?.appName ?? "") },
+                suggestions: actionList.rows.map { row in
+                    // Lot : chaque verbe avec le nombre d'objets qu'il concerne (SPEC-091 FR-004).
+                    guard batch, case .verb(let verb) = row else { return Self.suggestion(row, app: stepSubject?.appName ?? "") }
+                    var line = Self.suggestion(row, app: "")
+                    line.text = LauncherSelection.title(verb, count: selection.applicable(verb).count)
+                    return line
+                },
                 selectedSuggestion: actionList.rows.firstIndex { $0.id == actionSelection && $0.id != nil },
                 richRows: true))
             return
@@ -2126,12 +2216,22 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         if let copied = copiedRowID, let index = launcherList.rows.firstIndex(where: { $0.id == copied }) {
             suggestions[index].detail = "Copié dans le presse-papiers"
         }
+        // Sélection multiple : « ✓ » devant les lignes choisies (SPEC-091 FR-002).
+        if !selection.isEmpty {
+            for (index, row) in launcherList.rows.enumerated() {
+                if let subject = Self.subject(of: row), selection.contains(subject) { suggestions[index].text = "✓ " + suggestions[index].text }
+            }
+        }
         var bar = TargetSearchBar(
             query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading,
             suggestions: suggestions, selectedSuggestion: selectedLauncherRow,
             richRows: true)
         // Chip (SPEC-081) : une règle attend pendant une recherche ; ⌘R la montre.
         if launcher.pendingRules > 0, !model.query.isEmpty { bar.chip = "💡 \(launcher.pendingRules)" }
+        if !selection.isEmpty {
+            let chosen = "\(selection.count) choisi\(selection.count > 1 ? "s" : "")"
+            bar.chip = bar.chip.map { "\($0) · \(chosen)" } ?? chosen
+        }
         // Barre vide : aucune lettre ; sinon les cibles montrées en reçoivent une (SPEC-084).
         show(badges: [], bar: bar, letterTargets: !model.query.isEmpty)
     }
@@ -2268,8 +2368,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         inputPanel?.field.placeholderString = switch step {
         case .objects: "Rechercher ou saisir /commande"
         case .verbs: "Verbe ou destination…"
-        case .destinations: "Stage, bureau ou écran…"
+        case .destinations, .batchDestinations: "Stage, bureau ou écran…"
         case .saving: "Abréviation (12 caractères au plus)…"
+        case .batchVerbs: "Verbe pour la sélection…"
         }
         if let layout = searchBarLayout {
             let text = step != .objects ? stepQuery : commandModel.map { "/" + $0.input } ?? model.query
@@ -2399,7 +2500,8 @@ extension SlashCommandModel {
             }
         case .escape:
             return .close
-        case .ignored, .pick, .actions, .copy, .preview, .save, .showRules:
+        case .ignored, .pick, .actions, .copy, .preview, .save, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
+             .selectionVerbs, .selectClear:
             break
         }
         return .update
@@ -2441,6 +2543,9 @@ public struct SearchKeyInput: Sendable, Equatable {
         case save
         /// ⌘R : vider la saisie et montrer la règle proposée (SPEC-081).
         case showRules
+        /// Sélection multiple (SPEC-091) : ⌥↑ ajoute ou retire, ⌥↓ ajoute et descend, ⌥← retire la
+        /// dernière, ⌥→ verbes du lot, ⌥⌫ vide.
+        case selectToggle, selectAddNext, selectRemoveLast, selectionVerbs, selectClear
         case ignored
     }
 

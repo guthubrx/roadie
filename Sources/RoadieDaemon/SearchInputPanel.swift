@@ -176,6 +176,17 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         if flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(), labels.contains(letter) {
             return SearchKeyInput(kind: .labelCharacter(letter))
         }
+        // Sélection multiple (SPEC-091, research R1) : ⌥ + flèches et ⌥⌫, comme le tampon d'Alfred.
+        if flags == .option {
+            switch event.keyCode {
+            case 126: return SearchKeyInput(kind: .selectToggle)
+            case 125: return SearchKeyInput(kind: .selectAddNext)
+            case 123: return SearchKeyInput(kind: .selectRemoveLast)
+            case 124: return SearchKeyInput(kind: .selectionVerbs)
+            case 51: return SearchKeyInput(kind: .selectClear)
+            default: break
+            }
+        }
         switch event.keyCode {
         case 53: return SearchKeyInput(kind: .escape)
         case 36, 76:

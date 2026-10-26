@@ -57,7 +57,8 @@ struct Spec038NativeInputTests {
         #expect(panel.field.currentEditor() === editor)
     }
 
-    @Test(arguments: [NSEvent.ModifierFlags.option, .shift, .command, [.option, .shift]])
+    /// ⌥ seul est pris par la sélection multiple (SPEC-091, research R1) ; ⌥⇧, ⇧ et ⌘ restent au champ.
+    @Test(arguments: [NSEvent.ModifierFlags.shift, .command, [.option, .shift]])
     func modifiedArrowsRemainNativeTextNavigation(flags: NSEvent.ModifierFlags) throws {
         #expect(SearchInputPanel.navigation(try key(123, flags: flags)) == nil)
         #expect(SearchInputPanel.navigation(try key(126, flags: flags)) == nil)

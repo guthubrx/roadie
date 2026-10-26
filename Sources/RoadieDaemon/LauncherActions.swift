@@ -404,6 +404,14 @@ struct LauncherActionList: Equatable, Sendable {
 
     func row(for id: String?) -> Row? { id.flatMap { id in rows.first { $0.id == id } } }
 
+    /// Construction d'une liste de lot (SPEC-091).
+    mutating func appendHeader(_ title: String) { rows.append(.header(title)) }
+
+    mutating func appendVerb(_ verb: LauncherVerb) {
+        rows.append(.verb(verb))
+        if best == nil { best = Row.verb(verb).id }
+    }
+
     /// Actions de workflows sur l'objet, filtrées par la saisie, sous « Workflows » (SPEC-089). O(a).
     mutating func appendWorkflows(_ entries: [AlfredEntry], query: String) {
         let folded = LauncherMatch.fold(query)

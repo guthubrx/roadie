@@ -76,6 +76,11 @@ struct LauncherSearchContext {
     var webSearches: [WebSearch] = WebSearch.defaults
     var webSearchTemplate = TargetModeConfig.defaultWebSearchURL
     var fallbackSearches: [String] = []
+    /// Lot de la sélection multiple (SPEC-091) et annulation du dernier lot.
+    var performBatch: @MainActor ([LauncherAction]) -> TargetActionResult = { _ in
+        TargetActionResult(changed: false, message: "launcher_disabled")
+    }
+    var undo: @MainActor () -> TargetActionResult = { TargetActionResult(changed: false, message: "launcher_disabled") }
     /// Saisie qui a mené à une action : gardée pour l'historique.
     var recordQuery: @MainActor (String) -> Void = { _ in }
     /// ⌃ Retour : le texte tapé sur le web ; appelé après la fermeture de la barre.

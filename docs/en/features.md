@@ -521,6 +521,15 @@ free). As soon as you type a name at the verb step, matching destinations appear
 `fire`, Tab, `perso`, Return opens a Firefox window in the Perso stage and goes
 there. Escape, or deleting in an empty field, goes back one step.
 
+**Multiple selection**: ⌥↑ adds or removes the selected row, ⌥↓ adds it and moves down, ⌥← removes
+the last one added, ⌥→ opens the selection's verbs, ⌥⌫ clears it (apps, windows and files; « ✓ »
+before the rows, « N choisis » in the chip). The selection stays when the input changes: `fire`
+⌥↓, `term` ⌥↓, `code` ⌥↓. Return with a selection opens its verbs, with the number of objects
+concerned: Send to… (windows sent; apps and files opened in the stage), Bring here, Close,
+Minimize, Quit, Hide, Copy paths, Reveal in Finder. A new stage is created once and receives
+everything; Roadie goes there at the end. « Annuler » in the empty bar puts the whole batch back.
+Escape first clears the selection. In this field, ⌥ + arrows no longer move by word (⌃A, ⌃E remain).
+
 **Empty bar**: before you type, the bar offers what is useful now: a proposed rule, Back
 (previous window), Undo (put the window of the last move back, within 10 minutes; also
 `roadie undo`), Recently closed (reopen in its stage a window closed less than 12 h ago),

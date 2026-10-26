@@ -543,7 +543,16 @@ public final class TargetModeRuntimeController: NSObject {
             .compactMap({ windowTargets["window:\($0.rawValue)"] }).first {
             idle += [.header("Revenir"), .target(previous)]
         }
-        if let move = memory.undoable(at: now, currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope }),
+        let batchMoves = memory.undoableBatch(at: now, currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope })
+        if batchMoves.count > 1, let move = batchMoves.last, let from = move.from, let info = stageInfo(from) {
+            // Envoi groupé (SPEC-091) : une ligne pour tout le lot.
+            let target = RoadieTarget(id: "window:\(move.windowID.rawValue)", kind: .window, title: move.appName, source: .roadie,
+                                      scope: TargetScopeSnapshot(scope: move.to, windowId: move.windowID), actions: [.focus])
+            let action = LauncherAction(subject: .target(target), verb: .sendTo,
+                                        destination: LauncherDestination(kind: .stage(from), title: info.title, detail: ""))
+            idle += [.header("Annuler"), .action("undo-batch", action, "Remettre les \(batchMoves.count) fenêtres à leur place",
+                                                 "envoi groupé \(ClosedWindow.ago(move.at, now: now))")]
+        } else if let move = memory.undoable(at: now, currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope }),
            let from = move.from, let info = stageInfo(from) {
             let target = windowTargets["window:\(move.windowID.rawValue)"]
                 ?? RoadieTarget(id: "window:\(move.windowID.rawValue)", kind: .window, title: move.appName, source: .roadie,
@@ -600,6 +609,8 @@ public final class TargetModeRuntimeController: NSObject {
             return previous
         }
         context.endPreview = { [weak self] commit in self?.endPreview(commit: commit) }
+        context.performBatch = { [weak self] actions in self?.performBatch(actions) ?? TargetActionResult(changed: false, message: "launcher_unavailable") }
+        context.undo = { [weak self] in self?.undoLastMove() ?? TargetActionResult(changed: false, message: "launcher_unavailable") }
         context.initialQuery = initialQuery
         workflowContext(&context, webSearchURL: webSearchURL)
         // Web et historique (SPEC-090) : la dernière saisie revient sous 5 minutes, sélectionnée.
@@ -1240,14 +1251,57 @@ public final class TargetModeRuntimeController: NSObject {
 
     /// `roadie undo` et la ligne Annuler : la fenêtre du dernier déplacement revient dans sa stage
     /// d'origine (10 minutes au plus, si elle n'a pas bougé depuis).
+    /// Annule le dernier déplacement, ou tout le dernier envoi groupé encore en place (SPEC-091 FR-006).
     private func undoLastMove() -> TargetActionResult {
         let snapshot = service.snapshot(followFocus: false)
-        guard let move = LauncherMemoryStore().load().undoable(at: Date(), currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope }),
-              let from = move.from else { return refused("launcher undo", "nothing") }
-        let result = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
-            .assign(windowID: move.windowID, to: from.stageID, desktopID: from.desktopID, displayID: from.displayID)
-        events.append(RoadieEvent(type: "launcher.undo", details: ["changed": String(result.changed), "message": result.message]))
-        return TargetActionResult(changed: result.changed, message: result.message)
+        let moves = LauncherMemoryStore().load().undoableBatch(at: Date(), currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope })
+        guard !moves.isEmpty else { return refused("launcher undo", "nothing") }
+        let actions = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
+        var changed = 0
+        for move in moves {
+            guard let from = move.from else { continue }
+            if actions.assign(windowID: move.windowID, to: from.stageID, desktopID: from.desktopID, displayID: from.displayID).changed { changed += 1 }
+        }
+        events.append(RoadieEvent(type: "launcher.undo", details: ["changed": String(changed), "moves": String(moves.count)]))
+        return TargetActionResult(changed: changed > 0, message: "launcher undo: \(changed) sur \(moves.count)")
+    }
+
+    /// Lot de la sélection multiple (SPEC-091 FR-005) : nouvelle stage créée une fois puis visée par tous,
+    /// un objet après l'autre (un échec n'arrête pas les suivants), copie et Finder en une fois ; Roadie va
+    /// à la dernière fenêtre envoyée ; déplacements marqués d'un même lot pour l'annulation. O(s).
+    private func performBatch(_ actions: [LauncherAction]) -> TargetActionResult {
+        guard let first = actions.first else { return refused("launcher batch", "empty") }
+        let start = Date()
+        var resolved = actions
+        if case .newStage? = first.destination?.kind, let destination = first.destination, let scope = stageScope(for: destination) {
+            let created = LauncherDestination(kind: .stage(scope), title: destination.title, detail: destination.detail)
+            resolved = actions.map { LauncherAction(subject: $0.subject, verb: $0.verb, destination: created) }
+        }
+        let files: [String] = resolved.compactMap { if case .file(let file) = $0.subject { file.path } else { nil } }
+        switch first.verb {
+        case .copyPath:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(files.joined(separator: "\n"), forType: .string)
+            return TargetActionResult(changed: true, message: "launcher batch: \(files.count) chemins copiés")
+        case .reveal:
+            NSWorkspace.shared.activateFileViewerSelecting(files.map { URL(fileURLWithPath: $0) })
+            return TargetActionResult(changed: true, message: "launcher batch: \(files.count) dans le Finder")
+        default:
+            break
+        }
+        var done = 0
+        var windows: [WindowID] = []
+        for action in resolved {
+            if perform(action).changed { done += 1 }
+            if case .target(let target) = action.subject, let id = target.scope.windowId { windows.append(WindowID(rawValue: id)) }
+        }
+        if windows.count > 1 {
+            let batch = UUID().uuidString
+            LauncherMemoryStore().update { $0.mark(batch: batch, windows: Set(windows), since: start) }
+        }
+        if first.verb == .sendTo, case .stage? = resolved.first?.destination?.kind, let last = windows.last { focus(last) }
+        events.append(RoadieEvent(type: "launcher.batch", details: ["verb": first.verb.rawValue, "done": String(done), "count": String(resolved.count)]))
+        return TargetActionResult(changed: done > 0, message: "launcher batch: \(done) sur \(resolved.count)")
     }
 
     // MARK: - Position (SPEC-079)

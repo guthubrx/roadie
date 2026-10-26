@@ -11,6 +11,8 @@ struct WindowMove: Codable, Equatable, Sendable {
     let from: StageScope?
     let to: StageScope
     let at: Date
+    /// Envoi groupé (SPEC-091) : tous ses déplacements s'annulent ensemble.
+    var batch: String?
 }
 
 /// Règle proposée : une application déplacée souvent vers la même stage.
@@ -51,6 +53,20 @@ struct LauncherMemoryBook: Codable, Equatable, Sendable {
               now.timeIntervalSince(last.at) <= Self.undoWindow,
               currentScope(last.windowID) == last.to else { return nil }
         return last
+    }
+
+    /// Déplacements à annuler ensemble : le dernier, ou tout son lot encore en place (SPEC-091 FR-006). O(m).
+    func undoableBatch(at now: Date, currentScope: (WindowID) -> StageScope?) -> [WindowMove] {
+        guard let last = undoable(at: now, currentScope: currentScope) else { return [] }
+        guard let batch = last.batch else { return [last] }
+        return moves.filter { $0.batch == batch && $0.from != nil && $0.from != $0.to && currentScope($0.windowID) == $0.to }
+    }
+
+    /// Marque d'un lot les déplacements de ces fenêtres notés depuis `start`. O(m).
+    mutating func mark(batch: String, windows: Set<WindowID>, since start: Date) {
+        for index in moves.indices where moves[index].at >= start && windows.contains(moves[index].windowID) {
+            moves[index].batch = batch
+        }
     }
 
     /// Propositions : 3 déplacements au moins d'une application vers une même stage en 7 jours, 75 % de

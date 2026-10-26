@@ -543,6 +543,16 @@ qu'on tape un nom à l'étape des verbes, les destinations correspondantes
 apparaissent : `fire`, Tab, `perso`, Retour ouvre une fenêtre Firefox dans la stage
 Perso et y va. Échap, ou l'effacement dans un champ vide, revient d'une étape.
 
+**Sélection multiple** : ⌥↑ ajoute ou retire la ligne choisie, ⌥↓ l'ajoute et descend, ⌥← retire la
+dernière ajoutée, ⌥→ ouvre les verbes de la sélection, ⌥⌫ la vide (applications, fenêtres et
+fichiers ; « ✓ » devant les lignes, « N choisis » dans la capsule). La sélection reste quand la
+saisie change : `fire` ⌥↓, `term` ⌥↓, `code` ⌥↓. Retour avec une sélection ouvre ses verbes, avec le
+nombre d'objets concernés : Envoyer vers… (fenêtres envoyées ; applications et fichiers ouverts
+dans la stage), Amener ici, Fermer, Réduire, Quitter, Masquer, Copier les chemins, Montrer dans le
+Finder. Une nouvelle stage est créée une seule fois puis reçoit tout ; Roadie y va à la fin.
+« Annuler » de la barre vide remet tout le lot. Échap vide d'abord la sélection. Dans ce champ, ⌥ +
+flèches ne déplace plus le curseur par mot (⌃A, ⌃E restent).
+
 **Barre vide** : avant de taper, la barre propose ce qui sert maintenant : une règle
 proposée, Revenir (fenêtre précédente), Annuler (remettre la fenêtre du dernier
 déplacement, 10 minutes au plus ; aussi `roadie undo`), Fermées récemment (rouvrir dans
