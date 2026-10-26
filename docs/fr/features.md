@@ -503,10 +503,19 @@ Un workflow tourne avec les droits de Roadie, comme dans Alfred : n'installez qu
 connaissez. Réglages : `workflows_enabled`, `alfred_workflows` (Paramètres > Recherche).
 `roadie workflow list` donne l'état de chacun (complet, partiel, inutilisable) et ce qui manque ;
 `roadie workflow check DOSSIER` fait le même relevé ; `roadie workflow install X.alfredworkflow`
-et `roadie workflow remove ID` gèrent le dossier de Roadie. Hors de portée pour l'instant :
-raccourcis, déclencheurs externes, actions sur fichier, filtres de liste et de fichiers, tâches
-d'automatisation ; jamais : vues Texte, Grille, Image, PDF, snippets, Alfred Remote. Le journal
-ne garde ni saisie ni résultat.
+et `roadie workflow remove ID` gèrent le dossier de Roadie. Les filtres de liste et de fichiers
+(Spotlight, → ouvre les verbes du fichier), les recherches de repli et les actions universelles
+sur texte (section « Repli » en bas) marchent aussi ; les actions sur fichier deviennent des verbes
+« Workflow : … » (Tab sur un fichier). `roadie workflow run ID OBJET [ARGUMENT]` lance n'importe
+quel objet, `roadie workflow trigger ID DÉCLENCHEUR [ARGUMENT] [--var nom=valeur]` un déclencheur
+externe ; `roadie workflow list --hotkeys` liste les raccourcis avec la commande à lier dans
+BetterTouchTool (Roadie ne capture pas ces touches ; argument « sélection » lu par l'accessibilité,
+sinon par ⌘C). Les tâches d'automatisation officielles d'Alfred (dépôt public
+`alfredapp/automation-tasks`, licence BSD-3) s'installent par `roadie workflow tasks update` dans
+`~/.roadies/alfred-tasks`. Autres briques : touches simulées, grand texte, Terminal, Raccourcis
+Apple, dialogue, type de fichier, barre rouverte sur un chemin. Jamais : vues Texte, Grille, Image,
+PDF, snippets, Alfred Remote, tampon d'Alfred. Un script lancé par un workflow obtient
+l'autorisation Accessibilité de Roadie (mesuré). Le journal ne garde ni saisie ni résultat.
 
 **Verbes et destinations** : Tab sur la ligne choisie ouvre ses verbes. Application :
 ouvrir ou aller à sa fenêtre, ouvrir dans…, nouvelle fenêtre ici, réunir ses fenêtres

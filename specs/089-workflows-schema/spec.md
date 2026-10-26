@@ -36,14 +36,14 @@ reprennent les recherches de repli des workflows quand elle est livrée).
 - **FR-005 Filtre de liste.** `input.listfilter` : ses éléments fixes (titre, sous-titre, argument)
   filtrés par la saisie après le mot-clé.
 - **FR-006 Filtre de fichiers.** `input.filefilter` : recherche Spotlight du workflow (types,
-  portée, champs, limite), lignes de fichiers avec leurs verbes Roadie.
+  portée, champs, limite) par `mdfind`, lignes de fichiers ; → ouvre leurs verbes Roadie.
 - **FR-007 Tâches d'automatisation.** `automation.task` exécute la tâche officielle (dépôt public
   `alfredapp/automation-tasks`, BSD-3) : script, type, réglages et entrée multiple. Les tâches ne
   sont pas livrées avec Roadie : `roadie workflow tasks update` télécharge l'archive publique dans
   `~/.roadies/alfred-tasks/` ; sans elle, la brique manque et la fiche le dit.
 - **FR-008 Autres briques.** Dispatch Key Combo (touches simulées), Large Type (panneau de grand
   texte, Échap ferme), Browse in Terminal, Terminal Command, Run Shortcut (Raccourcis Apple),
-  File Utility (copie, déplacement, corbeille), Dialog (confirmation), Browse in Alfred et
+  File Utility (type UTI du fichier, en argument ou en variable ; relevé du corpus), Dialog (confirmation), Browse in Alfred et
   Action in Alfred (barre rouverte sur le chemin, mode chemin de la 087).
 - **FR-009 Fiche.** `roadie workflow list` et `check` tiennent compte de ces briques.
 

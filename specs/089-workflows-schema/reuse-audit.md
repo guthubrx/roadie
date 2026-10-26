@@ -20,4 +20,6 @@ Statut : `OK`. Repli manuel (`rg`), 26 octobre 2026.
 - [x] Aucun refactor à demander.
 
 ## Arbitrages
-Aucun.
+- Filtre de fichiers (implémentation) : `mdfind` lancé par `AlfredScriptRunner` plutôt que
+  `LauncherFileSearch` paramétrée. Raison : la recherche devient annulable par la frappe, bornée en
+  temps et en sortie comme un Script Filter, sans toucher à la recherche 077 (`LauncherFiles.swift:58`).

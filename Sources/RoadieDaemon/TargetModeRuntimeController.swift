@@ -266,6 +266,9 @@ public final class TargetModeRuntimeController: NSObject {
         case "launcher.undo":
             _ = undoLastMove()
             return
+        case "workflow.run", "workflow.trigger":
+            runWorkflowCommand(command)
+            return
         case "launcher.open_items":
             // Diagnostic SPEC-082 : comptes par application et par sorte, sans titre ni adresse.
             let service = service
@@ -619,9 +622,10 @@ public final class TargetModeRuntimeController: NSObject {
         let byID = Dictionary(workflows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let events = events
         context.workflowEntries = AlfredWorkflowIndex.entries(workflows)
+        context.workflowTriggers = AlfredWorkflowIndex.triggers(workflows)
         context.runScriptFilter = { entry, argument, done in
             guard let workflow = byID[entry.workflowID], let object = workflow.objects[entry.objectUID],
-                  let script = AlfredScript(object: object) else {
+                  let script = entry.kind == .fileFilter ? AlfredFileFilter.script(object, argument: argument) : AlfredScript(object: object) else {
                 DispatchQueue.main.async { MainActor.assumeIsolated { done(nil, "script absent") } }
                 return nil
             }
@@ -629,7 +633,8 @@ public final class TargetModeRuntimeController: NSObject {
             let arguments = argument.isEmpty && object.bool("argumenttreatemptyqueryasnil") ? [] : [argument]
             return AlfredScriptRunner.start(script, query: argument, arguments: arguments, workflow: workflow,
                                             variables: workflow.configuredVariables, keyword: entry.keyword) { result in
-                let response = result.output.isEmpty ? nil : AlfredScriptFilterResponse.parse(result.output)
+                let response = entry.kind == .fileFilter ? AlfredFileFilter.response(result.text)
+                    : result.output.isEmpty ? nil : AlfredScriptFilterResponse.parse(result.output)
                 events.append(RoadieEvent(type: "launcher.workflow_filter", details: [
                     "workflow": workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID,
                     "ms": String(Int(Date().timeIntervalSince(started) * 1000)), "status": String(result.status),
@@ -649,6 +654,75 @@ public final class TargetModeRuntimeController: NSObject {
             }
             return TargetActionResult(changed: true, message: "launcher workflow: \(workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID)")
         }
+    }
+
+    /// `roadie workflow run|trigger` (SPEC-089 FR-001, FR-002) : workflow trouvé par dossier ou
+    /// identifiant ; objet par `uid` ou déclencheur externe par son nom. Argument donné, sinon celui
+    /// d'un raccourci (sélection, presse-papiers, texte). Journal sans argument.
+    private func runWorkflowCommand(_ command: TargetModeRuntimeCommand) {
+        let config = service.effectiveConfig.experimental.targetMode
+        let workflows = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
+        let events = events
+        guard let id = command.string("id"), let workflow = workflows.first(where: { $0.id == id || $0.bundleID == id }) else {
+            events.append(RoadieEvent(type: "launcher.workflow_command", details: ["outcome": "workflow_not_found"]))
+            return
+        }
+        let uid = command.name == "workflow.trigger"
+            ? AlfredWorkflowEngine.externalTrigger(command.string("trigger") ?? "", in: workflow)?.uid : command.string("object")
+        guard let uid, let object = workflow.objects[uid] else {
+            events.append(RoadieEvent(type: "launcher.workflow_command", details: ["outcome": "object_not_found", "workflow": workflow.id]))
+            return
+        }
+        let variables = command.string("variables").flatMap { $0.data(using: .utf8) }
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] } ?? [:]
+        let argument = command.string("argument")
+        let webSearchURL = config.webSearchURL
+        Task { @MainActor [weak self] in
+            let arg: [String] = if let argument { [argument] }
+                else if object.type == "trigger.hotkey" { await Self.hotkeyArgument(object) } else { [] }
+            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL) { text in self?.reopenSearch(text) }
+            let engine = AlfredWorkflowEngine(effects: effects, workflows: workflows)
+            _ = await engine.start(workflow, at: uid, arg: arg, variables: variables)
+        }
+    }
+
+    /// Argument d'un raccourci d'Alfred (research R2 de la 089) : 0 sélection, 1 presse-papiers,
+    /// 2 presse-papiers de recherche, 3 texte fixe, autre : aucun.
+    private static func hotkeyArgument(_ object: AlfredObject) async -> [String] {
+        switch object.int("argument") ?? 0 {
+        case 0: return [await selectedText() ?? ""]
+        case 1: return [NSPasteboard.general.string(forType: .string) ?? ""]
+        case 2: return [NSPasteboard(name: .find).string(forType: .string) ?? ""]
+        case 3: return [object.string("argumenttext") ?? ""]
+        default: return []
+        }
+    }
+
+    /// Texte choisi dans l'application au premier plan : attribut AX, sinon ⌘C simulé avec le
+    /// presse-papiers remis comme avant.
+    private static func selectedText() async -> String? {
+        let system = AXUIElementCreateSystemWide()
+        var focused: CFTypeRef?
+        if AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+           let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() {
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(focused as! AXUIElement, kAXSelectedTextAttribute as CFString, &value) == .success,
+               let text = value as? String, !text.isEmpty { return text }
+        }
+        let board = NSPasteboard.general
+        let previous = board.string(forType: .string), count = board.changeCount
+        let source = CGEventSource(stateID: .hidSystemState)
+        for down in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: 8, keyDown: down) else { continue }
+            event.flags = .maskCommand
+            event.post(tap: .cghidEventTap)
+        }
+        try? await Task.sleep(for: .milliseconds(250))
+        guard board.changeCount != count else { return nil }
+        let text = board.string(forType: .string)
+        board.clearContents()
+        if let previous { board.setString(previous, forType: .string) }
+        return text
     }
 
     /// Barre rouverte sur un texte (Show Alfred, Script Filter atteint par un schéma).

@@ -60,6 +60,13 @@ final class RecordedEffects: AlfredEffects, @unchecked Sendable {
     func webSearch(_ text: String) async { note("web:\(text)") }
     func showBar(_ text: String) async { note("bar:\(text)") }
     func log(_ type: String, _ details: [String: String]) {}
+    var dialogChoice: Int? = 1
+    func keyCombo(keyCode: Int, character: String, modifiers: Int, count: Int) async { note("keys:\(keyCode):\(character):\(modifiers):\(count)") }
+    func largeType(_ text: String) async { note("large:\(text)") }
+    func terminal(command: String) async { note("terminal:\(command)") }
+    func terminal(folder: String) async { note("terminal-folder:\(folder)") }
+    func shortcut(_ name: String, input: String?) async -> String { note("shortcut:\(name):\(input ?? "-")"); return "sortie" }
+    func dialog(title: String, text: String, buttons: [String]) async -> Int? { note("dialog:\(title)"); return dialogChoice }
 }
 
 enum FixtureError: Error { case missing }

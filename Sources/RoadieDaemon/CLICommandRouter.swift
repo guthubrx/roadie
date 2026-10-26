@@ -223,7 +223,8 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
         CLICommandSpec(usage: "project save [NAME] | open NAME | list [--json] | delete NAME"),
         CLICommandSpec(usage: "undo"),
-        CLICommandSpec(usage: "workflow list [--json] | check FOLDER [--json] | install FILE.alfredworkflow [--replace] | remove ID"),
+        CLICommandSpec(usage: "workflow list [--json] [--hotkeys] | check FOLDER [--json] | install FILE.alfredworkflow [--replace] | remove ID"),
+        CLICommandSpec(usage: "workflow run ID OBJECT [ARGUMENT] [--var NAME=VALUE] | trigger ID TRIGGER [ARGUMENT] [--var NAME=VALUE] | tasks update"),
         CLICommandSpec(usage: "launch --open-items [--tabs]"),
         CLICommandSpec(usage: "launch PATH [--stage NAME | --here | --new-stage] [--position left|right|full|float] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
@@ -889,10 +890,41 @@ public final class CLICommandRouter {
             if reports.isEmpty { out("aucun workflow") }
         }
         switch args.first ?? "" {
+        case "list" where args.contains("--hotkeys"):
+            // Raccourcis déclarés (SPEC-089 FR-002) : Roadie ne les capture pas ; la commande se lie dans BetterTouchTool.
+            let config = configReload.currentConfig().experimental.targetMode
+            let workflows = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
+            let arguments = [0: "sélection", 1: "presse-papiers", 2: "presse-papiers de recherche", 3: "texte"]
+            let hotkeys = AlfredWorkflowIndex.triggers(workflows).filter { $0.kind == .hotkey }
+            for entry in hotkeys {
+                let id = workflows.first { $0.id == entry.workflowID }.map { $0.bundleID.isEmpty ? $0.id : $0.bundleID } ?? entry.workflowID
+                let argument = entry.hotkeyArgument == 3 ? "texte « \(entry.hotkeyText) »" : arguments[entry.hotkeyArgument] ?? "aucun"
+                out("\(entry.workflowName)\t\(entry.keys.isEmpty ? "touches non attribuées" : entry.keys)\targument : \(argument)\troadie workflow run \(id) \(entry.objectUID)")
+            }
+            if hotkeys.isEmpty { out("aucun raccourci") }
+            return 0
+        case "run", "trigger":
+            guard args.count >= 3 else { return usageError() }
+            var payload = ["id": args[1], args[0] == "run" ? "object" : "trigger": args[2]]
+            if args.count >= 4, !args[3].hasPrefix("--") { payload["argument"] = args[3] }
+            var variables: [String: String] = [:]
+            for (index, arg) in args.enumerated() where arg == "--var" && index + 1 < args.count {
+                let parts = args[index + 1].split(separator: "=", maxSplits: 1).map(String.init)
+                if parts.count == 2 { variables[parts[0]] = parts[1] }
+            }
+            if !variables.isEmpty {
+                payload["variables"] = String(data: try JSONSerialization.data(withJSONObject: variables), encoding: .utf8)
+            }
+            return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "workflow.\(args[0])", arguments: payload), json: json)
+        case "tasks":
+            guard args.count >= 2, args[1] == "update" else { return usageError() }
+            let count = try AlfredAutomationTasks.update()
+            out("tâches d'automatisation : \(count) dans \(AlfredAutomationTasks.root.path) (dépôt public alfredapp/automation-tasks, licence BSD-3 gardée à côté)")
+            return 0
         case "list":
             let config = configReload.currentConfig().experimental.targetMode
             let workflows = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
-            try show(workflows.map(AlfredCompatibility.report), totals: false)
+            try show(workflows.map { AlfredCompatibility.report($0) }, totals: false)
             return 0
         case "check":
             guard args.count >= 2 else { return usageError() }

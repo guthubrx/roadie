@@ -24,15 +24,20 @@ struct AlfredCompatibilityReport: Equatable, Sendable {
 
 enum AlfredCompatibility {
     /// Entrées par lesquelles Roadie démarre un workflow.
-    static var entryTypes: Set<String> { ["input.scriptfilter", "input.keyword"] }
+    static var entryTypes: Set<String> {
+        ["input.scriptfilter", "input.keyword", "input.listfilter", "input.filefilter", "trigger.hotkey", "trigger.external",
+         "trigger.action", "trigger.universalaction", "trigger.fallback"]
+    }
 
     /// État d'un workflow : briques non exécutées, interpréteurs absents, entrées complètes. O(o + c).
-    static func report(_ workflow: AlfredWorkflow) -> AlfredCompatibilityReport {
+    static func report(_ workflow: AlfredWorkflow, tasksRoot: URL = AlfredAutomationTasks.root) -> AlfredCompatibilityReport {
         let supported = AlfredWorkflowEngine.supportedTypes
         var missingByObject: [String: String] = [:]
         for object in workflow.objects.values {
             if !supported.contains(object.type) && !entryTypes.contains(object.type) {
                 missingByObject[object.uid] = object.type
+            } else if object.type == "automation.task", AlfredAutomationTasks.task(object.string("taskuid") ?? "", root: tasksRoot) == nil {
+                missingByObject[object.uid] = "tâches d'automatisation absentes (roadie workflow tasks update)"
             } else if let script = AlfredScript(object: object),
                       case .failure(let failure) = AlfredScriptRunner.argv(for: script, arguments: [], folder: workflow.folder) {
                 missingByObject[object.uid] = failure.message
@@ -59,7 +64,7 @@ enum AlfredCompatibility {
     /// Recherche de l'identifiant d'Alfred dans `info.plist` et les scripts du dossier (1 Mo au plus chacun). O(f).
     static func mentionsAlfred(_ workflow: AlfredWorkflow) -> Bool {
         let markers = ["com.runningwithcrayons.Alfred", "application \"Alfred", "Application(\"com.runningwithcrayons", "Application('com.runningwithcrayons"]
-        let files = ((try? FileManager.default.contentsOfDirectory(at: workflow.folder, includingPropertiesForKeys: [.fileSizeKey])) ?? [])
+        let files = ((try? FileManager.default.contentsOfDirectory(at: workflow.folder.resolvingSymlinksInPath(), includingPropertiesForKeys: [.fileSizeKey])) ?? [])
             .filter { ["plist", "sh", "zsh", "js", "py", "rb", "applescript", "scpt", ""].contains($0.pathExtension) }
         for file in files {
             guard ((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) < 1_048_576,
@@ -71,6 +76,6 @@ enum AlfredCompatibility {
 
     /// Fiches de tous les workflows d'un dossier, et totaux par état. O(W × (o + c)).
     static func check(folder: URL) -> [AlfredCompatibilityReport] {
-        AlfredWorkflowIndex.children(of: folder).compactMap { AlfredWorkflow.load(folder: $0, source: .roadie) }.map(report)
+        AlfredWorkflowIndex.children(of: folder).compactMap { AlfredWorkflow.load(folder: $0, source: .roadie) }.map { report($0) }
     }
 }

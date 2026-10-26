@@ -7,6 +7,10 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Workflows Alfred, étape 2 : déclencheurs externes et raccourcis (`roadie workflow run|trigger`,
+  `list --hotkeys` pour BetterTouchTool), actions sur fichier en verbes, recherches de repli, filtres
+  de liste et de fichiers, tâches d'automatisation officielles (`roadie workflow tasks update`),
+  touches simulées, grand texte, Terminal, Raccourcis Apple, dialogues.
 - Workflows au format d'Alfred dans le lanceur : mots-clés et Script Filters des workflows installés
   dans Alfred ou dans `~/.config/roadies/workflows`, schéma suivi (scripts, conditions, utilitaires,
   copie, notification…), touches par ligne ; `roadie workflow list|check|install|remove`.

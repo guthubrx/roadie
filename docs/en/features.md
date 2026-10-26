@@ -483,9 +483,18 @@ row will do; Tab completes, ⌘C copies, ⌘Y previews. A workflow runs with Roa
 does in Alfred: install only those you know. Settings: `workflows_enabled`, `alfred_workflows`
 (Settings > Search). `roadie workflow list` reports each one (complete, partial, unusable) and
 what is missing; `roadie workflow check FOLDER` does the same; `roadie workflow install
-X.alfredworkflow` and `roadie workflow remove ID` manage Roadie's folder. Not yet: hotkeys,
-external triggers, file actions, list and file filters, automation tasks; never: Text, Grid,
-Image, PDF views, snippets, Alfred Remote. The log keeps neither input nor result.
+X.alfredworkflow` and `roadie workflow remove ID` manage Roadie's folder. List and file filters
+(Spotlight, → opens the file's verbs), fallback searches and universal text actions (« Repli »
+section at the bottom) work too; file actions become « Workflow : … » verbs (Tab on a file).
+`roadie workflow run ID OBJECT [ARGUMENT]` runs any object, `roadie workflow trigger ID TRIGGER
+[ARGUMENT] [--var name=value]` an external trigger; `roadie workflow list --hotkeys` lists hotkeys
+with the command to bind in BetterTouchTool (Roadie does not capture these keys; the « selection »
+argument is read through accessibility, else by ⌘C). Alfred's official automation tasks (public
+repository `alfredapp/automation-tasks`, BSD-3 license) install with `roadie workflow tasks update`
+into `~/.roadies/alfred-tasks`. Other bricks: simulated keys, large type, Terminal, Apple Shortcuts,
+dialog, file type, bar reopened on a path. Never: Text, Grid, Image, PDF views, snippets, Alfred
+Remote, Alfred's buffer. A script run by a workflow gets Roadie's Accessibility permission
+(measured). The log keeps neither input nor result.
 
 **Verbs and destinations**: Tab on the selected row opens its verbs. App: open or go
 to its window, open in…, new window here, gather its windows in…, bring here, hide,

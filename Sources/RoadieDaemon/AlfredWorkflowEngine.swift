@@ -15,6 +15,17 @@ protocol AlfredEffects: Sendable {
     func showBar(_ text: String) async
     /// Journal sans saisie ni argument (FR-011).
     func log(_ type: String, _ details: [String: String])
+    // Étape 2 (SPEC-089 FR-008).
+    /// Touches simulées : code de touche (-1 : `character`), modificateurs d'Alfred, répétitions.
+    func keyCombo(keyCode: Int, character: String, modifiers: Int, count: Int) async
+    func largeType(_ text: String) async
+    /// Commande lancée dans le Terminal ; dossier ouvert dans le Terminal.
+    func terminal(command: String) async
+    func terminal(folder: String) async
+    /// Raccourci Apple ; sortie rendue (vide si aucune).
+    func shortcut(_ name: String, input: String?) async -> String
+    /// Boutons non vides ; rend le numéro du bouton choisi (1 à 3), nil si fermé.
+    func dialog(title: String, text: String, buttons: [String]) async -> Int?
 }
 
 /// Bilan d'une exécution : étapes, briques manquantes, erreurs (sans contenu de l'utilisateur).
@@ -38,11 +49,28 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         "utility.filter", "utility.split", "utility.joinargs", "utility.transform", "utility.replace", "utility.delay",
         "utility.random", "utility.json", "utility.hidealfred", "utility.showalfred", "utility.debug", "utility.expression",
         "input.scriptfilter", "input.keyword",
+        // Étape 2 (SPEC-089).
+        "trigger.hotkey", "trigger.external", "trigger.action", "trigger.universalaction", "trigger.fallback",
+        "input.listfilter", "input.filefilter", "output.callexternaltrigger", "output.dispatchkeycombo", "output.largetype",
+        "action.browseinterminal", "action.terminalcommand", "automation.runshortcut", "automation.task", "utility.dialog",
+        "utility.file", "action.browseinalfred", "action.actioninalfred",
     ]
 
     let effects: AlfredEffects
+    /// Workflows connus : cibles d'un appel externe vers un autre workflow (`Call External Trigger`).
+    var workflows: [AlfredWorkflow] = []
+    /// Dossier des tâches d'automatisation (tests : dossier d'essai).
+    var tasksRoot = AlfredAutomationTasks.root
 
-    init(effects: AlfredEffects) { self.effects = effects }
+    init(effects: AlfredEffects, workflows: [AlfredWorkflow] = []) {
+        self.effects = effects
+        self.workflows = workflows
+    }
+
+    /// Déclencheur externe d'un workflow par son `triggerid`. O(o).
+    static func externalTrigger(_ id: String, in workflow: AlfredWorkflow) -> AlfredObject? {
+        workflow.objects.values.first { $0.type == "trigger.external" && $0.string("triggerid") == id }
+    }
 
     private final class Run: @unchecked Sendable {
         var outcome = AlfredRunOutcome()
@@ -63,6 +91,16 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         return run.outcome
     }
 
+    /// Exécute l'objet lui-même puis la suite (`roadie workflow run`, SPEC-089 FR-002). O(o + c).
+    func start(_ workflow: AlfredWorkflow, at uid: String, arg: [String], variables: [String: String] = [:]) async -> AlfredRunOutcome {
+        let run = Run()
+        await execute(workflow, uid: uid, input: arg, variables: workflow.configuredVariables.merging(variables) { $1 }, run: run)
+        effects.log("workflow.run", ["workflow": workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID,
+                                      "steps": String(run.outcome.steps), "missing": run.outcome.missing.joined(separator: ","),
+                                      "errors": String(run.outcome.errors.count)])
+        return run.outcome
+    }
+
     /// Flèches à suivre : celles du modificateur tenu s'il y en a, sinon celles sans modificateur
     /// (research R6) ; après une condition, celles de sa branche (`nil` = sinon). O(c).
     static func next(_ workflow: AlfredWorkflow, from uid: String, modifiers: Int, branch: String?, isConditional: Bool) -> [AlfredConnection] {
@@ -74,7 +112,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
 
     private func follow(_ workflow: AlfredWorkflow, from uid: String, input: [String], variables: [String: String],
                         modifiers: Int, branch: String?, run: Run) async {
-        let isConditional = workflow.objects[uid]?.type == "utility.conditional"
+        let isConditional = ["utility.conditional", "utility.dialog"].contains(workflow.objects[uid]?.type ?? "")
         for link in Self.next(workflow, from: uid, modifiers: modifiers, branch: branch, isConditional: isConditional) {
             await execute(workflow, uid: link.destination, input: input, variables: variables, run: run)
         }
@@ -240,6 +278,78 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             // Entrée atteinte en cours de schéma : la barre se rouvre sur son mot-clé.
             let keyword = expand(object.string("keyword") ?? "")
             await effects.showBar(keyword.isEmpty ? query : "\(keyword) \(query)")
+            return .stop
+        // MARK: Étape 2 (SPEC-089)
+        case "trigger.hotkey", "trigger.external", "trigger.action", "trigger.universalaction", "trigger.fallback":
+            // Déclencheur atteint par une flèche : il passe la main tel quel.
+            return pass
+        case "input.listfilter", "input.filefilter":
+            let keyword = expand(object.string("keyword") ?? "")
+            await effects.showBar(keyword.isEmpty ? query : "\(keyword) \(query)")
+            return .stop
+        case "output.callexternaltrigger":
+            let target = object.string("workflowbundleid") ?? "self"
+            let destination = target == "self" || target.isEmpty ? workflow
+                : workflows.first { $0.bundleID == target || $0.id == target }
+            guard let destination, let trigger = Self.externalTrigger(object.string("externaltriggerid") ?? "", in: destination) else {
+                run.outcome.errors.append("externaltrigger")
+                return .stop
+            }
+            let arg = (object.config["passinputasargument"]?.bool ?? true) ? input : []
+            let vars = (object.config["passvariables"]?.bool ?? false) ? variables : destination.configuredVariables
+            await follow(destination, from: trigger.uid, input: arg, variables: vars, modifiers: 0, branch: nil, run: run)
+            return .stop
+        case "output.dispatchkeycombo":
+            await effects.keyCombo(keyCode: object.int("keycode") ?? -1, character: object.string("keychar") ?? "",
+                                   modifiers: object.int("keymod") ?? 0, count: max(1, min(50, object.int("count") ?? 1)))
+            return pass
+        case "output.largetype":
+            await effects.largeType(text("largetypetext"))
+            return pass
+        case "action.browseinterminal":
+            let raw = object.string("path") ?? ""
+            await effects.terminal(folder: Self.path(raw.isEmpty ? query : expand(raw), in: workflow))
+            return pass
+        case "action.terminalcommand":
+            let command = AlfredPlaceholders.expand(object.string("script") ?? "", query: AlfredScriptRunner.escape(query, bits: object.int("escaping") ?? 0),
+                                                    variables: variables, constants: constants)
+            await effects.terminal(command: command)
+            return pass
+        case "automation.runshortcut":
+            let output = await effects.shortcut(expand(object.string("shortcut") ?? ""), input: (object.int("inputmode") ?? 1) == 0 ? nil : query)
+            return .next((object.int("outputmode") ?? 0) == 0 ? [output] : input, variables, branch: nil)
+        case "automation.task":
+            let uid = object.string("taskuid") ?? ""
+            guard let task = AlfredAutomationTasks.task(uid, root: tasksRoot) else {
+                return missing("tâche absente : \(uid) (roadie workflow tasks update)", workflow, run)
+            }
+            let settings = (object.config["tasksettings"]?.dict ?? [:]).mapValues { value -> String in
+                if case .bool(let flag) = value { return flag ? "1" : "0" }
+                return expand(value.string ?? "")
+            }
+            let result = await AlfredAutomationTasks.run(task, settings: settings, input: input, workflow: workflow, variables: variables)
+            guard result.failure == nil, !result.timedOut else {
+                run.outcome.errors.append(result.failure ?? "timeout")
+                return .stop
+            }
+            let output = AlfredRunScriptOutput.parse(result.text)
+            return .next(output.arg, variables.merging(output.variables) { $1 }, branch: nil)
+        case "utility.dialog":
+            let buttons = ["button1", "button2", "button3"].map { expand(object.string($0) ?? "") }
+            guard let chosen = await effects.dialog(title: text("title", default: workflow.name), text: text("description", default: ""),
+                                                    buttons: buttons) else { return .stop }
+            return .next(input, variables, branch: "_button\(chosen)")
+        case "utility.file":
+            // Type (UTI) du fichier reçu : en argument et, si un nom est donné, en variable.
+            let uti = (try? URL(fileURLWithPath: query).resourceValues(forKeys: [.contentTypeKey]).contentType?.identifier) ?? ""
+            var vars = variables
+            if let name = object.string("fileutivariablename"), !name.isEmpty { vars[name] = uti }
+            return .next(object.bool("outputfileuti") ? [uti] : input, vars, branch: nil)
+        case "action.browseinalfred", "action.actioninalfred":
+            // Barre rouverte sur le chemin : mode chemin (SPEC-087), → y ouvre ses verbes.
+            let raw = object.string("path") ?? ""
+            let path = raw.isEmpty ? query : expand(raw)
+            await effects.showBar((path as NSString).abbreviatingWithTildeInPath)
             return .stop
         default:
             return missing(object.type, workflow, run)

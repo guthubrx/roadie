@@ -62,6 +62,8 @@ struct LauncherSearchContext {
     /// Workflows (SPEC-088) : entrées tapées ; Script Filter lancé hors du fil principal (réponse ou
     /// erreur rendue sur le fil principal, processus annulable) ; schéma exécuté après la fermeture.
     var workflowEntries: [AlfredEntry] = []
+    /// Déclencheurs (SPEC-089) : recherches de repli, actions universelles sur texte, actions sur fichier.
+    var workflowTriggers: [AlfredEntry] = []
     var runScriptFilter: (AlfredEntry, String, @escaping @MainActor @Sendable (AlfredScriptFilterResponse?, String?) -> Void) -> AlfredProcess? = { _, _, _ in nil }
     var runWorkflow: @MainActor (AlfredEntry, [String], [String: String], Int) -> TargetActionResult = { _, _, _, _ in
         TargetActionResult(changed: false, message: "launcher_disabled")

@@ -194,7 +194,7 @@ enum AlfredScriptRunner {
     @discardableResult
     static func start(_ script: AlfredScript, query: String, arguments: [String], workflow: AlfredWorkflow,
                       variables: [String: String], keyword: String? = nil, timeout: TimeInterval = defaultTimeout,
-                      done: @escaping @Sendable (AlfredScriptResult) -> Void) -> AlfredProcess {
+                      directory: URL? = nil, done: @escaping @Sendable (AlfredScriptResult) -> Void) -> AlfredProcess {
         let process = AlfredProcess()
         var script = script
         var arguments = arguments
@@ -203,22 +203,24 @@ enum AlfredScriptRunner {
                                   file: script.file, usesArgv: false, escaping: script.escaping)
             arguments = []
         }
-        let argv = argv(for: script, arguments: arguments, folder: workflow.folder)
+        let folder = directory ?? workflow.folder
+        let argv = argv(for: script, arguments: arguments, folder: folder)
         let env = environment(workflow: workflow, variables: variables, keyword: keyword)
         DispatchQueue.global(qos: .userInitiated).async {
             switch argv {
             case .failure(let failure): done(AlfredScriptResult(failure: failure.message))
-            case .success(let argv): done(spawn(argv, environment: env, directory: workflow.folder, timeout: timeout, process: process))
+            case .success(let argv): done(spawn(argv, environment: env, directory: folder, timeout: timeout, process: process))
             }
         }
         return process
     }
 
     static func run(_ script: AlfredScript, query: String, arguments: [String], workflow: AlfredWorkflow,
-                    variables: [String: String], keyword: String? = nil, timeout: TimeInterval = defaultTimeout) async -> AlfredScriptResult {
+                    variables: [String: String], keyword: String? = nil, timeout: TimeInterval = defaultTimeout,
+                    directory: URL? = nil) async -> AlfredScriptResult {
         await withCheckedContinuation { continuation in
             start(script, query: query, arguments: arguments, workflow: workflow, variables: variables, keyword: keyword,
-                  timeout: timeout) { continuation.resume(returning: $0) }
+                  timeout: timeout, directory: directory) { continuation.resume(returning: $0) }
         }
     }
 

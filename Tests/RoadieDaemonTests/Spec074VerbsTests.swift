@@ -24,6 +24,7 @@ struct Spec074VerbsTests {
             case .header(let title): "# \(title)"
             case .verb(let verb): verb.rawValue
             case .destination(let verb, let destination): "\(verb.rawValue) → \(destination.title)"
+            case .workflow(let entry): "workflow \(entry.title)"
             }
         }
     }

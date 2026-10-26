@@ -304,12 +304,15 @@ struct LauncherActionList: Equatable, Sendable {
         case header(String)
         case verb(LauncherVerb)
         case destination(LauncherVerb, LauncherDestination)
+        /// Action sur fichier d'un workflow (SPEC-089 FR-003).
+        case workflow(AlfredEntry)
 
         var id: String? {
             switch self {
             case .header: nil
             case .verb(let verb): "verb:\(verb.rawValue)"
             case .destination(let verb, let destination): "destination:\(verb.rawValue):\(destination.id)"
+            case .workflow(let entry): "workflow:\(entry.id)"
             }
         }
     }
@@ -394,4 +397,14 @@ struct LauncherActionList: Equatable, Sendable {
     }
 
     func row(for id: String?) -> Row? { id.flatMap { id in rows.first { $0.id == id } } }
+
+    /// Actions de workflows sur l'objet, filtrées par la saisie, sous « Workflows » (SPEC-089). O(a).
+    mutating func appendWorkflows(_ entries: [AlfredEntry], query: String) {
+        let folded = LauncherMatch.fold(query)
+        let shown = entries.filter { folded.isEmpty || LauncherMatch.score(query, in: $0.title) != nil }
+        guard !shown.isEmpty else { return }
+        rows.append(.header("Workflows"))
+        rows.append(contentsOf: shown.map(Row.workflow))
+        if best == nil { best = rows.lazy.compactMap(\.id).first }
+    }
 }

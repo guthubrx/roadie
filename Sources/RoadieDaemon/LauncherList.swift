@@ -239,6 +239,13 @@ struct LauncherList: Equatable, Sendable {
         idle(files.isEmpty ? [] : [.header("Chemin")] + files.map(Row.file))
     }
 
+    /// Section ajoutée à la fin (repli, SPEC-089) ; choisie seulement si la liste n'avait rien. O(n).
+    mutating func appendSection(_ header: String, _ section: [Row]) {
+        guard !section.isEmpty else { return }
+        rows.append(contentsOf: [.header(header)] + section)
+        if best == nil { best = section.lazy.compactMap(\.id).first }
+    }
+
     /// Section ajoutée après la première, sans changer la ligne choisie (mots-clés de workflows, SPEC-088). O(n).
     mutating func insertSection(_ header: String, _ section: [Row]) {
         guard !section.isEmpty else { return }

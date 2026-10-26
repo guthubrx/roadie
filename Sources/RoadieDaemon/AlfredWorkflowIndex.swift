@@ -1,8 +1,13 @@
 import Foundation
+import UniformTypeIdentifiers
 
 /// Entrée tapée d'un workflow (SPEC-088) : mot-clé d'un Script Filter ou d'une entrée Keyword.
 struct AlfredEntry: Equatable, Sendable {
-    enum Kind: String, Sendable { case scriptFilter, keyword, listFilter, fileFilter }
+    enum Kind: String, Sendable {
+        case scriptFilter, keyword, listFilter, fileFilter
+        /// Déclencheurs (SPEC-089) : pas de mot-clé tapé.
+        case hotkey, external, fileAction, universalAction, fallback
+    }
     enum Argument: Int, Sendable { case required = 0, optional = 1, none = 2 }
 
     let workflowID: String
@@ -23,6 +28,18 @@ struct AlfredEntry: Equatable, Sendable {
     var filterMode = 0
     /// Sous-titre pendant que le script tourne.
     var runningSubtitle = ""
+    /// Déclencheurs (SPEC-089) : identifiant externe, ce qu'accepte une action, touches d'un raccourci
+    /// (« ⌥⌘G », vide si non attribuées) et son argument (0 sélection, 1 presse-papiers, 3 texte, 4 aucun).
+    var triggerID = ""
+    var acceptsFiles = false
+    var acceptsText = false
+    var acceptsURLs = false
+    var fileTypes: [String] = []
+    var keys = ""
+    var hotkeyArgument = 0
+    var hotkeyText = ""
+    /// Filtre de liste (SPEC-089 FR-005) : ses éléments fixes, sans script.
+    var listItems: [AlfredItem] = []
 
     var id: String { "wf:\(workflowID):\(objectUID)" }
 
@@ -144,9 +161,68 @@ final class AlfredWorkflowIndex: @unchecked Sendable {
                 entry.filtersResults = object.bool("alfredfiltersresults")
                 entry.filterMode = object.int("alfredfiltersresultsmatchmode") ?? 0
                 entry.runningSubtitle = object.string("runningsubtext") ?? ""
+                if kind == .listFilter {
+                    entry.filtersResults = true
+                    entry.filterMode = object.int("matchmode") ?? 0
+                    if let data = (object.string("items") ?? "").data(using: .utf8),
+                       let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                        entry.listItems = AlfredScriptFilterResponse.parse(json: ["items": items]).items
+                    }
+                }
                 entries.append(entry)
             }
         }
         return entries.sorted { ($0.keyword, $0.workflowName) < ($1.keyword, $1.workflowName) }
+    }
+
+    /// Déclencheurs des workflows : raccourcis, appels externes, actions sur fichier, actions
+    /// universelles, recherches de repli (SPEC-089). O(W × o).
+    static func triggers(_ workflows: [AlfredWorkflow]) -> [AlfredEntry] {
+        var found: [AlfredEntry] = []
+        for workflow in workflows {
+            let variables = workflow.configuredVariables
+            for object in workflow.objects.values {
+                let kind: AlfredEntry.Kind? = switch object.type {
+                case "trigger.hotkey": .hotkey
+                case "trigger.external": .external
+                case "trigger.action": .fileAction
+                case "trigger.universalaction": .universalAction
+                case "trigger.fallback": .fallback
+                default: nil
+                }
+                guard let kind else { continue }
+                let name = AlfredPlaceholders.expand(object.string("name") ?? object.string("text") ?? "", query: "{query}", variables: variables)
+                var entry = AlfredEntry(workflowID: workflow.id, workflowName: workflow.name, objectUID: object.uid, kind: kind, keyword: "",
+                                        withSpace: false, argument: .optional, title: name.isEmpty ? workflow.name : name, subtitle: workflow.name,
+                                        icon: workflow.icon(for: object.uid))
+                entry.folder = workflow.folder.path
+                entry.triggerID = object.string("triggerid") ?? ""
+                entry.acceptsFiles = kind == .fileAction || object.bool("acceptsfiles")
+                entry.acceptsText = object.bool("acceptstext")
+                entry.acceptsURLs = object.bool("acceptsurls")
+                entry.fileTypes = (object.config["filetypes"]?.array ?? []).compactMap(\.string)
+                entry.hotkeyArgument = object.int("argument") ?? 0
+                entry.hotkeyText = object.string("argumenttext") ?? ""
+                entry.keys = keys(modifiers: object.int("hotmod") ?? 0, key: object.string("hotstring") ?? "")
+                found.append(entry)
+            }
+        }
+        return found.sorted { ($0.workflowName, $0.title) < ($1.workflowName, $1.title) }
+    }
+
+    /// Touches d'un raccourci d'Alfred, dans l'ordre de macOS (⌃⌥⇧⌘). Vide sans touche. O(1).
+    static func keys(modifiers: Int, key: String) -> String {
+        guard !key.isEmpty else { return "" }
+        let symbols = [(262_144, "⌃"), (524_288, "⌥"), (131_072, "⇧"), (1_048_576, "⌘")].filter { modifiers & $0.0 != 0 }.map(\.1)
+        return symbols.joined() + key.uppercased()
+    }
+
+    /// Un fichier convient-il à une action ? Types vides : tous ; sinon le type du fichier doit
+    /// se conformer à l'un d'eux (UTI). O(t).
+    static func accepts(_ entry: AlfredEntry, path: String) -> Bool {
+        guard entry.acceptsFiles else { return false }
+        guard !entry.fileTypes.isEmpty else { return true }
+        guard let type = try? URL(fileURLWithPath: path).resourceValues(forKeys: [.contentTypeKey]).contentType else { return false }
+        return entry.fileTypes.contains { identifier in UTType(identifier).map { type.conforms(to: $0) } ?? false }
     }
 }

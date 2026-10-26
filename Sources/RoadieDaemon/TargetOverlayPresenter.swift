@@ -1184,6 +1184,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             // Chemin tapé : → ouvre les verbes, Tab complète (SPEC-087).
             if Self.isPath(model.query), case .file(let file)? = launcherList.row(for: launcherSelection) {
                 enterVerbs(.file(file))
+            } else if case .workflowItem(_, let item, _)? = launcherList.row(for: launcherSelection), item.isFile,
+                      let path = item.arg.first, path.hasPrefix("/") {
+                // Fichier rendu par un workflow (filtre de fichiers) : ses verbes de Roadie (SPEC-089 FR-006).
+                enterVerbs(.file(LauncherFile(path: path, name: (path as NSString).lastPathComponent, isFolder: false, lastUsed: nil)))
             } else {
                 navigate(SearchKeyInput(kind: .next, navigationSource: .tab))
             }
@@ -1298,6 +1302,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         // Mots-clés de workflows en cours de frappe (SPEC-088), après la première section.
         let keywords = launcher.workflowEntries.filter { $0.match(model.query) == .suggest }
         launcherList.insertSection("Workflows", keywords.prefix(4).map(LauncherList.Row.workflowKeyword))
+        // Recherches de repli et actions universelles sur texte des workflows, en bas (SPEC-089 FR-003, FR-004).
+        launcherList.appendSection("Repli", fallbackRows(model.query))
         // Calcul (SPEC-087) : son résultat passe en tête et devient la ligne choisie.
         if let calc = LauncherCalculator.evaluate(model.query) {
             launcherList.prepend(.calc(calc), header: "Calcul")
@@ -1327,7 +1333,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// reste affichée pendant que le script tourne (FR-002, FR-005, FR-006). O(i log i).
     private func refreshWorkflows(_ runs: [(entry: AlfredEntry, argument: String)]) {
         let query = model.query
-        for run in runs where run.entry.kind == .scriptFilter { requestScriptFilter(run.entry, run.argument) }
+        for run in runs where run.entry.kind == .scriptFilter || run.entry.kind == .fileFilter { requestScriptFilter(run.entry, run.argument) }
         guard query != launcherQuery || filesChanged else { return }
         let queryChanged = query != launcherQuery
         if queryChanged { copiedRowID = nil }
@@ -1336,7 +1342,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         var rows: [LauncherList.Row] = []
         for (entry, argument) in runs {
             rows.append(.header(entry.workflowName))
-            guard entry.kind == .scriptFilter else { rows.append(.workflowKeyword(entry)); continue }
+            if entry.kind == .listFilter {
+                // Filtre de liste (SPEC-089 FR-005) : éléments fixes, filtrés par la barre.
+                let items = AlfredScriptFilterResponse.filter(entry.listItems, query: argument, mode: entry.filterMode)
+                rows += items.enumerated().map { .workflowItem(entry, $0.element, index: $0.offset) }
+                continue
+            }
+            guard entry.kind == .scriptFilter || entry.kind == .fileFilter else { rows.append(.workflowKeyword(entry)); continue }
             guard let answer = workflowResponses[entry.id], let response = answer.response else {
                 let waiting = workflowResponses[entry.id]?.error ?? (entry.runningSubtitle.isEmpty ? "Recherche…" : entry.runningSubtitle)
                 rows.append(.workflowItem(entry, AlfredItem(title: entry.title, subtitle: waiting, valid: false), index: 0))
@@ -1358,6 +1370,21 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         launcherList = .idle(rows)
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
         syncHighlight()
+    }
+
+    /// Lignes de repli : texte du workflow avec la saisie, ou nom de l'action universelle. O(t).
+    private func fallbackRows(_ query: String) -> [LauncherList.Row] {
+        let text = query.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return [] }
+        return launcher.workflowTriggers.enumerated().compactMap { index, entry in
+            let title: String
+            switch entry.kind {
+            case .fallback: title = entry.title.replacingOccurrences(of: "{query}", with: text)
+            case .universalAction where entry.acceptsText: title = "\(entry.title) : « \(text) »"
+            default: return nil
+            }
+            return .workflowItem(entry, AlfredItem(title: title, subtitle: entry.workflowName, arg: [text]), index: index)
+        }
     }
 
     /// Lance le Script Filter pour cet argument : tout de suite à la première frappe, 100 ms après la
@@ -1631,7 +1658,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch actionList.row(for: actionSelection) {
         case .verb(let verb): return verb.needsDestination ? nil : LauncherAction(subject: subject, verb: verb, destination: nil)
         case .destination(let verb, let destination): return LauncherAction(subject: subject, verb: verb, destination: destination)
-        case .header, nil: return nil
+        case .workflow, .header, nil: return nil
         }
     }
 
@@ -1697,6 +1724,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .verbs(let subject):
             actionList = .verbs(for: subject, query: stepQuery, destinations: launcher.destinations, newStageHome: launcher.newStageHome,
                                 tiling: stepTiling)
+            if case .file(let file) = subject {
+                actionList.appendWorkflows(launcher.workflowTriggers.filter { AlfredWorkflowIndex.accepts($0, path: file.path) }, query: stepQuery)
+            }
         case .destinations(let subject, let verb):
             actionList = .destinations(for: subject, verb: verb, query: stepQuery, destinations: launcher.destinations,
                                        newStageHome: launcher.newStageHome)
@@ -1875,6 +1905,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             }
         case .destination(let verb, let destination):
             finishAction(LauncherAction(subject: subject, verb: verb, destination: destination))
+        case .workflow(let entry):
+            // Action sur fichier d'un workflow (SPEC-089 FR-003) : le chemin en argument.
+            if case .file(let file) = subject { finishWorkflow(entry, arg: [file.path], variables: [:], modifiers: 0, rankingKey: nil) }
         case .header, nil:
             break
         }
@@ -2051,6 +2084,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch row {
         case .header(let title):
             return SlashSuggestion(text: title, kind: .header)
+        case .workflow(let entry):
+            return SlashSuggestion(text: "Workflow : \(entry.title)", detail: entry.workflowName, kind: .result, icon: workflowIcon(nil, entry: entry))
         case .verb(let verb):
             return SlashSuggestion(text: verb.title(app: app), detail: verb.needsDestination ? "Tab ou Retour : choisir" : "",
                                    kind: .result, icon: .symbol(verb.needsDestination ? "arrow.right.circle" : "play.circle"))
