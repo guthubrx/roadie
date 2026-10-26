@@ -223,6 +223,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
         CLICommandSpec(usage: "project save [NAME] | open NAME | list [--json] | delete NAME"),
         CLICommandSpec(usage: "undo"),
+        CLICommandSpec(usage: "launcher history [--clear] [--json]"),
         CLICommandSpec(usage: "workflow list [--json] [--hotkeys] | check FOLDER [--json] | install FILE.alfredworkflow [--replace] | remove ID"),
         CLICommandSpec(usage: "workflow run ID OBJECT [ARGUMENT] [--var NAME=VALUE] | trigger ID TRIGGER [ARGUMENT] [--var NAME=VALUE] | tasks update"),
         CLICommandSpec(usage: "launch --open-items [--tabs]"),
@@ -647,6 +648,23 @@ public final class CLICommandRouter {
             }
         case "workflow":
             return try runWorkflowCommand(Array(args.dropFirst()))
+        case "launcher":
+            // SPEC-090 : historique des saisies de la barre, gardé sur ce Mac.
+            guard args.count >= 2, args[1] == "history" else { return usageError() }
+            let store = LauncherHistoryStore()
+            if args.contains("--clear") {
+                store.clear()
+                out("historique effacé")
+                return 0
+            }
+            let entries = store.load().entries.reversed()
+            if args.contains("--json") {
+                let rows = entries.map { ["query": $0.query, "at": ISO8601DateFormatter().string(from: $0.at)] }
+                out(String(data: try JSONSerialization.data(withJSONObject: rows, options: [.sortedKeys, .prettyPrinted]), encoding: .utf8) ?? "[]")
+            } else {
+                out(entries.isEmpty ? "historique vide" : entries.map(\.query).joined(separator: "\n"))
+            }
+            return 0
         case "launch":
             // SPEC-082 : diagnostic des documents (et onglets avec --tabs) que la barre trouverait.
             if args.count >= 2, args[1] == "--open-items" {

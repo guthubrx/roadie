@@ -63,6 +63,11 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         }
     }
 
+    /// Saisie reprise (SPEC-090) : tout le texte est sélectionné, la frappe le remplace.
+    func selectAllText() {
+        (field.currentEditor() as? NSTextView)?.selectAll(nil)
+    }
+
     func beginEditing() {
         makeKeyAndOrderFront(nil)
         makeFirstResponder(field)

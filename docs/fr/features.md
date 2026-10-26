@@ -477,6 +477,20 @@ Les fenêtres montrent leur vignette réelle (déjà capturée par le rail, le s
 la vue d'ensemble) avec l'icône de leur application en pastille ; sans vignette,
 l'icône seule.
 
+**Web** : une adresse tapée (`github.com/x`, `www.lemonde.fr`, `localhost:3000`, `https://…`) donne
+en tête « Ouvrir … » ; Retour l'ouvre dans le navigateur par défaut, Tab propose Ouvrir dans… (une
+nouvelle fenêtre du navigateur rejoint la stage choisie ; Firefox : un onglet vide peut rester),
+Amener ici, Copier. Un nom de fichier (`fichier.txt`, `readme.md`) n'est pas une adresse, sauf avec
+`/`, un port ou `www.`. `yt chat` cherche « chat » sur YouTube ; défauts : `g` Google, `yt`
+YouTube, `wp` Wikipédia, `ddg` DuckDuckGo, `maps` Plans ; une table
+`[[experimental.target_mode.web_searches]]` (`keyword`, `title`, `url` avec `{query}`) les
+remplace. Toute saisie finit par une section « Web » (recherche de `web_search_url`, puis les
+mots-clés de `fallback_searches`), choisie seulement s'il n'y a rien d'autre.
+**Historique** : les 20 dernières saisies qui ont mené à une action sont gardées
+(`~/.roadies/launcher-history.json`, sur ce Mac seulement). Rouverte dans les 5 minutes, la barre
+reprend la dernière, sélectionnée : la frappe la remplace. La barre vide propose les 3 recherches
+récentes. `roadie launcher history [--clear]` les montre ou les efface.
+
 **Calcul** : un calcul tapé (`12*4,5`, `2^10`, `-(3+4)*2`) donne son résultat en tête,
 sous « Calcul » ; Retour le copie et ferme la barre, ⌘C le copie. Opérateurs `+ - * / ^ %`, `×`,
 `÷`, parenthèses, `,` ou `.` décimal ; après `=` : `pi`, `e`, `sqrt`, `abs`, `round`, `floor`,

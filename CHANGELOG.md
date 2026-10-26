@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Web dans le lanceur : adresse tapée ouverte (ou dans une stage, nouvelle fenêtre placée), recherches
+  par mot-clé (`yt chat`, table `web_searches`), section « Web » de repli, historique des saisies
+  (reprise sous 5 minutes, recherches récentes, `roadie launcher history [--clear]`).
 - Workflows Alfred, étape 2 : déclencheurs externes et raccourcis (`roadie workflow run|trigger`,
   `list --hotkeys` pour BetterTouchTool), actions sur fichier en verbes, recherches de repli, filtres
   de liste et de fichiers, tâches d'automatisation officielles (`roadie workflow tasks update`),

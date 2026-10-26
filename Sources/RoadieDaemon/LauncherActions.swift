@@ -11,6 +11,8 @@ enum LauncherSubject: Equatable, Sendable {
     case file(LauncherFile)
     /// Projet gardé (SPEC-080), par son nom.
     case project(String)
+    /// Adresse tapée (SPEC-090).
+    case url(URL)
 
     var title: String {
         switch self {
@@ -18,6 +20,7 @@ enum LauncherSubject: Equatable, Sendable {
         case .target(let target): target.subtitle.isEmpty ? target.title : "\(target.title) · \(target.subtitle)"
         case .file(let file): file.name
         case .project(let name): name
+        case .url(let url): url.absoluteString
         }
     }
 
@@ -27,6 +30,7 @@ enum LauncherSubject: Equatable, Sendable {
         case .target(let target): LauncherList.rankingKey(target)
         case .file(let file): file.rankingKey
         case .project(let name): "project:\(LauncherMatch.fold(name))"
+        case .url(let url): "url:\(url.host ?? url.absoluteString)"
         }
     }
 
@@ -37,6 +41,7 @@ enum LauncherSubject: Equatable, Sendable {
         case .target(let target): target.title
         case .file(let file): file.name
         case .project(let name): name
+        case .url(let url): url.host ?? url.absoluteString
         }
     }
 }
@@ -134,6 +139,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .app: return [.open, .openIn, .bringHere, .newWindow, .gatherIn, .hide, .quit]
         case .file: return [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath]
         case .project: return [.reopenProject, .deleteProject]
+        case .url: return [.open, .openIn, .bringHere, .copyPath]
         case .target(let target):
             switch target.kind {
             case .window: return [.focus, .sendTo, .bringHere] + tilingVerbs(tiling) + [.fullscreen, .minimize, .close]
@@ -270,7 +276,7 @@ struct LauncherVariant: Equatable, Sendable {
         let window: RoadieTarget? = if case .target(let target) = subject, target.kind == .window { target } else { nil }
         // Un fichier se comporte comme une application : il s'ouvre, dans une stage ou ici.
         let isApp = switch subject {
-        case .app, .file: true
+        case .app, .file, .url: true
         case .target, .project: false
         }
         switch modifier {

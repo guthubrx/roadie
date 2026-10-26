@@ -115,7 +115,7 @@ struct LauncherPhrase: Equatable, Sendable {
             return action
         }
         switch subject {
-        case .app, .file:
+        case .app, .file, .url:
             switch place {
             case .none: return make(.open, nil)
             case .here: return here.map { make(.bringHere, $0) }

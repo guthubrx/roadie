@@ -28,6 +28,9 @@ struct LauncherList: Equatable, Sendable {
         /// (`index` la distingue quand elle n'a pas d'`uid`).
         case workflowKeyword(AlfredEntry)
         case workflowItem(AlfredEntry, AlfredItem, index: Int)
+        /// Web (SPEC-090) : adresse tapée, recherche, invite d'un mot-clé ; recherche récente.
+        case web(LauncherWebRow)
+        case history(String)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -45,6 +48,8 @@ struct LauncherList: Equatable, Sendable {
             case .calc: "calc"
             case .workflowKeyword(let entry): "wfk:\(entry.id)"
             case .workflowItem(let entry, let item, let index): "wfi:\(entry.id):\(item.uid ?? String(index))"
+            case .web(let row): row.id
+            case .history(let query): "history:\(query)"
             }
         }
 
@@ -61,6 +66,8 @@ struct LauncherList: Equatable, Sendable {
             case .rule, .calc: nil
             case .workflowKeyword(let entry): entry.id
             case .workflowItem(let entry, let item, _): item.uid.map { "\(entry.id):\($0)" }
+            case .web(let row): row.url.map { "url:\($0.host ?? $0.absoluteString)" }
+            case .history: nil
             case .openItem(let item): "open:\(item.kind.rawValue):\(item.bundleID):\(item.title)"
             }
         }

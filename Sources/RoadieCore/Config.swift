@@ -626,6 +626,29 @@ public struct ExperimentalConfig: Equatable, Codable, Sendable {
     }
 }
 
+/// Recherche par mot-clé de la barre (SPEC-090) : `yt chat` cherche « chat » sur YouTube.
+public struct WebSearch: Equatable, Codable, Sendable {
+    public var keyword: String
+    public var title: String
+    /// Adresse avec `{query}`.
+    public var url: String
+
+    public init(keyword: String, title: String, url: String) {
+        self.keyword = keyword
+        self.title = title
+        self.url = url
+    }
+
+    /// Recherches proposées quand `web_searches` est absent.
+    public static let defaults = [
+        WebSearch(keyword: "g", title: "Google", url: "https://www.google.com/search?q={query}"),
+        WebSearch(keyword: "yt", title: "YouTube", url: "https://www.youtube.com/results?search_query={query}"),
+        WebSearch(keyword: "wp", title: "Wikipédia", url: "https://fr.wikipedia.org/w/index.php?search={query}"),
+        WebSearch(keyword: "ddg", title: "DuckDuckGo", url: "https://duckduckgo.com/?q={query}"),
+        WebSearch(keyword: "maps", title: "Plans", url: "maps://?q={query}"),
+    ]
+}
+
 public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var enabled: Bool
     public var pickerEnabled: Bool
@@ -648,6 +671,10 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     /// Workflows dans la barre (SPEC-088) ; `alfredWorkflows` : lire aussi ceux installés dans Alfred.
     public var workflowsEnabled: Bool
     public var alfredWorkflows: Bool
+    /// Recherches par mot-clé de la barre (SPEC-090) ; nil = défauts (`WebSearch.defaults`), vide = aucune.
+    public var webSearches: [WebSearch]?
+    /// Mots-clés de `webSearches` proposés en repli, après la recherche de `web_search_url`.
+    public var fallbackSearches: [String]
     /// Taille de police des étiquettes en points (SPEC-023). Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
     public var labelFontSize: Double
     public var searchLabelFontSize: Double
@@ -675,6 +702,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         pickModifier: String = "command",
         workflowsEnabled: Bool = true,
         alfredWorkflows: Bool = true,
+        webSearches: [WebSearch]? = nil,
+        fallbackSearches: [String] = [],
         labelFontSize: Double = 13,
         searchLabelFontSize: Double = 13,
         searchTextFontSize: Double = 15,
@@ -695,6 +724,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.pickModifier = TargetModeConfig.pickModifiers.contains(pickModifier) ? pickModifier : "command"
         self.workflowsEnabled = workflowsEnabled
         self.alfredWorkflows = alfredWorkflows
+        self.webSearches = webSearches
+        self.fallbackSearches = fallbackSearches
         self.labelFontSize = min(48, max(8, labelFontSize))
         self.searchLabelFontSize = min(48, max(8, searchLabelFontSize))
         self.searchTextFontSize = min(48, max(8, searchTextFontSize))
@@ -728,6 +759,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case pickModifier = "pick_modifier"
         case workflowsEnabled = "workflows_enabled"
         case alfredWorkflows = "alfred_workflows"
+        case webSearches = "web_searches"
+        case fallbackSearches = "fallback_searches"
         case labelFontSize = "label_font_size"
         case searchLabelFontSize = "search_label_font_size"
         case searchTextFontSize = "search_text_font_size"
@@ -752,6 +785,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             pickModifier: try c.decodeIfPresent(String.self, forKey: .pickModifier) ?? "command",
             workflowsEnabled: try c.decodeIfPresent(Bool.self, forKey: .workflowsEnabled) ?? true,
             alfredWorkflows: try c.decodeIfPresent(Bool.self, forKey: .alfredWorkflows) ?? true,
+            webSearches: try c.decodeIfPresent([WebSearch].self, forKey: .webSearches),
+            fallbackSearches: try c.decodeIfPresent([String].self, forKey: .fallbackSearches) ?? [],
             labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? 13,
             searchLabelFontSize: try c.decodeFlexibleDouble(forKey: .searchLabelFontSize) ?? 13,
             searchTextFontSize: try c.decodeFlexibleDouble(forKey: .searchTextFontSize) ?? 15,
@@ -1196,13 +1231,14 @@ public enum RoadieConfigLoader {
         "fx.borders": ["stage_overrides"],
         "width_adjustment": ["presets"],
         "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"],
+        "experimental.target_mode": ["web_searches", "fallback_searches"],
         "switcher": ["excluded_bundles", "shortcuts"]
     ]
 
     /// Tables qui sont elles-mêmes des tableaux de tables ou leurs sous-tables.
     private static let nonScalarTables: Set<String> = [
         "tiling.display_overrides", "stage_manager.workspaces", "fx.borders.stage_overrides",
-        "fx.rail.preview.stage_overrides", "switcher.shortcuts", "rules", "rules.match", "rules.action"
+        "fx.rail.preview.stage_overrides", "switcher.shortcuts", "experimental.target_mode.web_searches", "rules", "rules.match", "rules.action"
     ]
 
     /// Clés scalaires reconnues par le validateur, par chemin de table TOML complet.
@@ -1368,6 +1404,7 @@ private enum ConfigValidationRules {
         "experimental",
         "experimental.titlebar_context_menu",
         "experimental.target_mode",
+        "experimental.target_mode.web_searches",
         "experimental.app_targets",
         "experimental.target_grid",
         "experimental.target_record",
@@ -1421,10 +1458,11 @@ private enum ConfigValidationRules {
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
             "overview": ["enabled", "presentation", "loupe", "magnification", "hotkey", "background_blur", "selection_color", "selection_width"],
             "switcher": ["enabled", "presentation", "style", "auto_size", "thumbnail_width", "font_size", "font_family", "preview", "excluded_bundles", "shortcuts"],
+            "experimental.target_mode.web_searches": ["keyword", "title", "url"],
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
-            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
+            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],

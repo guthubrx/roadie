@@ -1005,6 +1005,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         if let text = launcher.initialQuery, !text.isEmpty { model.replaceQuery(text) }
         render()
         input.beginEditing()
+        if launcher.restoredQuery { input.selectAllText() }
         launcher.loadOpenItems { [weak self] items in
             guard let self, !self.finished else { return }
             self.openItems = items
@@ -1131,6 +1132,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 return
             }
             if confirmWorkflow(modifiers: Self.alfredModifiers(command: command, option: option, control: control, shift: shift)) { return }
+            if confirmWeb() { return }
             if case .app(let app, _)? = launcherList.row(for: launcherSelection) {
                 finishLaunching(app)
                 return
@@ -1233,6 +1235,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .action(_, let action, _, _): enterVerbs(action.subject)
             case .rule, .openItem, .calc: break
             case .workflowKeyword(let entry): completeWorkflow(entry, nil)
+            case .web(let row):
+                if let url = row.url { enterVerbs(.url(url)) } else if case .hint(let search) = row.kind { model.replaceQuery(search.keyword + " ") }
+            case .history(let query): model.replaceQuery(query)
             case .workflowItem(let entry, let item, _): if let text = item.autocomplete { completeWorkflow(entry, text) }
             case .header, nil: model.handleNavigation(input)
             }
@@ -1251,7 +1256,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func syncHighlight() {
         switch launcherList.row(for: launcherSelection) {
         case .target(let target): model.highlight(targetID: target.id)
-        case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem: model.highlight(targetID: nil)
+        case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .web, .history:
+            model.highlight(targetID: nil)
         case .header, nil: break
         }
     }
@@ -1304,6 +1310,23 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         launcherList.insertSection("Workflows", keywords.prefix(4).map(LauncherList.Row.workflowKeyword))
         // Recherches de repli et actions universelles sur texte des workflows, en bas (SPEC-089 FR-003, FR-004).
         launcherList.appendSection("Repli", fallbackRows(model.query))
+        // Web (SPEC-090) : repli en bas ; recherche par mot-clé et adresse tapée en tête, choisies.
+        launcherList.appendSection("Web", LauncherWeb.fallbackRows(model.query, template: launcher.webSearchTemplate,
+                                                                   searches: launcher.webSearches, fallbacks: launcher.fallbackSearches)
+            .map(LauncherList.Row.web))
+        if let (search, text) = LauncherWeb.keywordSearch(model.query, in: launcher.webSearches) {
+            if text.isEmpty {
+                launcherList.prepend(.web(LauncherWebRow(kind: .hint(search), title: "\(search.title) : tapez la recherche")), header: "Web")
+            } else if let url = LauncherWeb.searchURL(search.url, query: text) {
+                launcherList.prepend(.web(LauncherWebRow(kind: .search(url), title: "Rechercher « \(text) » sur \(search.title)")), header: "Web")
+            }
+        } else if let search = launcher.webSearches.first(where: { $0.keyword.lowercased() == model.query.lowercased() }) {
+            // Mot-clé seul : l'invite, sans prendre la sélection (`g` ne cache pas Ghostty).
+            launcherList.insertSection("Web", [.web(LauncherWebRow(kind: .hint(search), title: "\(search.title) : tapez la recherche"))])
+        }
+        if let url = LauncherWeb.address(model.query) {
+            launcherList.prepend(.web(LauncherWebRow(kind: .address(url), title: "Ouvrir \(url.absoluteString)")), header: "Adresse")
+        }
         // Calcul (SPEC-087) : son résultat passe en tête et devient la ligne choisie.
         if let calc = LauncherCalculator.evaluate(model.query) {
             launcherList.prepend(.calc(calc), header: "Calcul")
@@ -1458,6 +1481,26 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
     }
 
+    /// Retour sur une ligne web ou une recherche récente ; vrai si c'en était une (SPEC-090).
+    private func confirmWeb() -> Bool {
+        switch launcherList.row(for: launcherSelection) {
+        case .web(let row):
+            if let url = row.url {
+                finishAction(LauncherAction(subject: .url(url), verb: .open, destination: nil))
+            } else if case .hint(let search) = row.kind {
+                model.replaceQuery(search.keyword + " ")
+                render()
+            }
+            return true
+        case .history(let query):
+            model.replaceQuery(query)
+            render()
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Tab : `autocomplete` d'une ligne après le mot-clé (research R7), ou le mot-clé seul.
     private func completeWorkflow(_ entry: AlfredEntry, _ text: String?) {
         let prefix = entry.keyword + (entry.withSpace ? " " : "")
@@ -1469,6 +1512,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         guard !finished else { return }
         finished = true
         let query = model.query
+        launcher.recordQuery(query)
         cleanup()
         if let rankingKey { launcher.recordVisit(rankingKey, query) }
         onFinish?(launcher.runWorkflow(entry, arg, variables, modifiers))
@@ -1524,6 +1568,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     /// Retour sur un calcul : le résultat est copié, la barre se ferme (SPEC-087 FR-003).
     private func finishCalc(_ calc: LauncherCalculation) {
+        launcher.recordQuery(model.query)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(calc.text, forType: .string)
         finish(TargetActionResult(changed: true, message: "launcher calc copied"))
@@ -1554,7 +1599,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .phrase(let action, _), .alias(_, let action, _): action.subject
         case .project(let project): .project(project.name)
         case .action(_, let action, _, _): action.subject
-        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .header, nil: nil
+        case .web(let row): row.url.map(LauncherSubject.url)
+        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .header, nil: nil
         }
     }
 
@@ -1571,6 +1617,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .calc(let calc): calc.text
         case .workflowKeyword(let entry): entry.keyword
         case .workflowItem(_, let item, _): item.copyText ?? (item.arg.isEmpty ? item.title : item.arg.joined(separator: "\n"))
+        case .web(let row): row.url?.absoluteString
+        case .history(let query): query
         case .rule, .header, nil: nil
         }
         guard let text else { return }
@@ -1594,6 +1642,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .openItem(let item): finishOpenItem(item)
         case .calc(let calc): finishCalc(calc)
         case .workflowKeyword, .workflowItem: _ = confirmWorkflow(modifiers: 0)
+        case .web, .history: _ = confirmWeb()
         case .header, nil: break
         }
     }
@@ -1630,7 +1679,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .phrase(let action, _), .alias(_, let action, _): action
         case .project(let project): LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil)
         case .action(_, let action, _, _): action
-        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .header, nil: nil
+        case .web(let row): row.url.map { LauncherAction(subject: .url($0), verb: .open, destination: nil) }
+        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .header, nil: nil
         }
     }
 
@@ -1639,6 +1689,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         guard !finished else { return }
         finished = true
         let query = model.query
+        launcher.recordQuery(query)
         cleanup()
         launcher.recordVisit("open:\(item.kind.rawValue):\(item.bundleID):\(item.title)", query)
         onFinish?(launcher.activateOpenItem(item))
@@ -1854,7 +1905,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .app(let app, _): subject = .app(app)
         case .target(let target): subject = .target(target)
         case .file(let file): subject = .file(file)
-        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .header, nil: return nil
+        case .web(let row):
+            guard let url = row.url else { return nil }
+            subject = .url(url)
+        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
                                   newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
@@ -1867,6 +1921,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .webSearch(let text):
             guard !finished else { return }
             finished = true
+            launcher.recordQuery(model.query)
             cleanup()
             onFinish?(launcher.webSearch(text))
         }
@@ -1923,6 +1978,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         guard !finished else { return }
         finished = true
         let query = model.query
+        launcher.recordQuery(query)
         // Retour sur la destination de l'aperçu : la disposition reste ; sur une autre, elle est restaurée.
         if sentPreview != nil {
             launcher.endPreview(sentPreview == LauncherPreviewRequest.of(action))
@@ -1948,6 +2004,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         guard !finished else { return }
         finished = true
         let query = model.query
+        launcher.recordQuery(query)
         cleanup()
         launcher.recordVisit(app.rankingKey, query)
         onFinish?(launcher.launch(app))
@@ -2137,6 +2194,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             let icon: SlashSuggestion.Icon = item.windowID.map { .window($0.rawValue, app: appPaths[item.appName]) }
                 ?? appPaths[item.appName].map(SlashSuggestion.Icon.file) ?? .symbol(item.kind == .tab ? "globe" : "doc")
             return SlashSuggestion(text: item.title, detail: item.detail, kind: .result, icon: icon)
+        case .web(let row):
+            let (detail, symbol): (String, String) = switch row.kind {
+            case .address: ("Retour ouvre · Tab : ouvrir dans une stage", "globe")
+            case .search(let url): (url.host ?? "", "magnifyingglass")
+            case .hint(let search): ("Tab ou Retour : « \(search.keyword) »", "keyboard")
+            }
+            return SlashSuggestion(text: row.title, detail: detail, kind: .result, icon: .symbol(symbol))
+        case .history(let query):
+            return SlashSuggestion(text: query, detail: "Recherche récente", kind: .result, icon: .symbol("clock.arrow.circlepath"))
         case .workflowKeyword(let entry):
             return SlashSuggestion(text: entry.title, detail: entry.subtitle.isEmpty ? "\(entry.keyword) · \(entry.workflowName)" : entry.subtitle,
                                    kind: .result, icon: workflowIcon(nil, entry: entry))
@@ -2163,6 +2229,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .file(let file): .file(file.path)
         case .target(let target): appPaths[target.title].map(SlashSuggestion.Icon.file) ?? .symbol("macwindow")
         case .project: .symbol("square.stack.3d.down.right")
+        case .url: .symbol("globe")
         }
     }
 
@@ -2226,6 +2293,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         guard !finished else { return }
         finished = true
         let query = model.query
+        launcher.recordQuery(query)
         cleanup()
         launcher.recordVisit(LauncherList.rankingKey(target), query)
         onFinish?(activate(target, verb))

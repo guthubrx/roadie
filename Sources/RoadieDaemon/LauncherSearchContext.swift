@@ -68,8 +68,16 @@ struct LauncherSearchContext {
     var runWorkflow: @MainActor (AlfredEntry, [String], [String: String], Int) -> TargetActionResult = { _, _, _, _ in
         TargetActionResult(changed: false, message: "launcher_disabled")
     }
-    /// Texte de départ de la barre (Show Alfred d'un workflow).
+    /// Texte de départ de la barre (Show Alfred d'un workflow, ou dernière saisie reprise).
     var initialQuery: String?
+    /// La saisie de départ est la dernière reprise (moins de 5 minutes) : elle est sélectionnée (SPEC-090).
+    var restoredQuery = false
+    /// Web (SPEC-090) : recherches par mot-clé, adresse de ⌃ Retour, mots-clés de repli.
+    var webSearches: [WebSearch] = WebSearch.defaults
+    var webSearchTemplate = TargetModeConfig.defaultWebSearchURL
+    var fallbackSearches: [String] = []
+    /// Saisie qui a mené à une action : gardée pour l'historique.
+    var recordQuery: @MainActor (String) -> Void = { _ in }
     /// ⌃ Retour : le texte tapé sur le web ; appelé après la fermeture de la barre.
     var webSearch: @MainActor (String) -> TargetActionResult = { _ in
         TargetActionResult(changed: false, message: "launcher_disabled")
@@ -185,6 +193,8 @@ struct LauncherPreviewRequest: Equatable, Sendable {
             guard target.kind == .window, let id = target.scope.windowId,
                   LauncherActionList.ownStage(of: action.subject) != stage else { return nil }
             return LauncherPreviewRequest(stage: stage, incoming: WindowID(rawValue: id), appPath: nil)
+        case .url(let url):
+            return LauncherPreviewRequest(stage: stage, incoming: nil, appPath: NSWorkspace.shared.urlForApplication(toOpen: url)?.path)
         case .project:
             return nil
         }
@@ -230,5 +240,98 @@ enum LauncherWeb {
         guard template.contains("{query}"),
               let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
         return URL(string: template.replacingOccurrences(of: "{query}", with: encoded))
+    }
+
+    /// Suffixes reconnus seuls (research R1 de la 090).
+    static let suffixes: Set<String> = ["com", "net", "org", "io", "dev", "fr", "de", "uk", "eu", "be", "ch", "ca", "us", "info", "ai",
+                                        "co", "me", "tv", "gg", "ly", "es", "it", "nl", "se", "no", "dk", "fi", "pl", "pt", "at", "jp",
+                                        "cn", "ru", "br", "in", "au", "nz", "xyz", "site", "online", "tech", "cloud", "page", "so", "app"]
+    /// Aussi des extensions de fichiers : une adresse seulement avec `www.`, un chemin ou un port.
+    static let fileLike: Set<String> = ["md", "sh", "py", "rs", "js", "ts", "pl", "app", "zip", "so", "in", "me", "co", "it", "rb", "go"]
+
+    /// Adresse tapée, sans espace : schéma, `localhost` ou IPv4, `www.`, ou nom de domaine à suffixe
+    /// connu ; un chemin, un port ou `www.` rendent l'intention claire. nil sinon. O(q).
+    static func address(_ raw: String) -> URL? {
+        let text = raw.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty, !text.contains(" ") else { return nil }
+        let lower = text.lowercased()
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") {
+            return URL(string: text).flatMap { ($0.host ?? "").isEmpty ? nil : $0 }
+        }
+        let hostEnd = text.firstIndex { "/:?#".contains($0) } ?? text.endIndex
+        let host = String(text[..<hostEnd]).lowercased()
+        let explicit = hostEnd != text.endIndex
+        if host == "localhost" || isIPv4(host) { return explicit || host != "localhost" ? URL(string: "http://" + text) : nil }
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2, labels.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" } }),
+              let suffix = labels.last.map(String.init), suffix.count >= 2, suffix.allSatisfy(\.isLetter) else { return nil }
+        let strong = explicit || host.hasPrefix("www.")
+        guard strong || (suffixes.contains(suffix) && !fileLike.contains(suffix)) else { return nil }
+        return URL(string: "https://" + text)
+    }
+
+    private static func isIPv4(_ host: String) -> Bool {
+        let parts = host.split(separator: ".")
+        return parts.count == 4 && parts.allSatisfy { Int($0).map { (0...255).contains($0) } ?? false }
+    }
+
+    /// Recherche par mot-clé : `yt chat` → YouTube, « chat ». Le mot-clé seul suivi d'une espace donne
+    /// un texte vide (ligne d'invite). O(k).
+    static func keywordSearch(_ query: String, in searches: [WebSearch]) -> (search: WebSearch, text: String)? {
+        guard let space = query.firstIndex(of: " ") else { return nil }
+        let keyword = query[..<space].lowercased()
+        guard let search = searches.first(where: { $0.keyword.lowercased() == keyword }) else { return nil }
+        return (search, query[query.index(after: space)...].trimmingCharacters(in: .whitespaces))
+    }
+
+    /// Nom du moteur d'une adresse de recherche : celui d'une recherche connue, sinon l'hôte. O(k).
+    static func engineName(_ template: String, searches: [WebSearch]) -> String {
+        if let known = (searches + WebSearch.defaults).first(where: { $0.url == template }) { return known.title }
+        let host = URL(string: template.replacingOccurrences(of: "{query}", with: "x"))?.host ?? "le web"
+        let name = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        return name.split(separator: ".").first.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? name
+    }
+
+    /// Lignes de repli : la recherche de `web_search_url`, puis celles de `fallback_searches`. O(k).
+    static func fallbackRows(_ text: String, template: String, searches: [WebSearch], fallbacks: [String]) -> [LauncherWebRow] {
+        let query = text.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return [] }
+        var rows: [LauncherWebRow] = []
+        if let url = searchURL(template, query: query) {
+            rows.append(LauncherWebRow(kind: .search(url), title: "Rechercher « \(query) » sur \(engineName(template, searches: searches))"))
+        }
+        for keyword in fallbacks {
+            guard let search = searches.first(where: { $0.keyword.lowercased() == keyword.lowercased() }),
+                  let url = searchURL(search.url, query: query), !rows.contains(where: { $0.kind == .search(url) }) else { continue }
+            rows.append(LauncherWebRow(kind: .search(url), title: "Rechercher « \(query) » sur \(search.title)"))
+        }
+        return rows
+    }
+}
+
+/// Ligne web de la barre (SPEC-090) : adresse tapée, recherche, ou invite d'une recherche par mot-clé.
+struct LauncherWebRow: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        case address(URL)
+        case search(URL)
+        case hint(WebSearch)
+    }
+
+    let kind: Kind
+    let title: String
+
+    var id: String {
+        switch kind {
+        case .address(let url): "web:open:\(url.absoluteString)"
+        case .search(let url): "web:search:\(url.absoluteString)"
+        case .hint(let search): "web:hint:\(search.keyword)"
+        }
+    }
+
+    var url: URL? {
+        switch kind {
+        case .address(let url), .search(let url): url
+        case .hint: nil
+        }
     }
 }

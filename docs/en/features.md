@@ -458,6 +458,19 @@ Windows show their real thumbnail
 (already captured by the rail, switcher or overview) with their app icon as a badge;
 without a thumbnail, the icon alone.
 
+**Web**: a typed address (`github.com/x`, `www.lemonde.fr`, `localhost:3000`, `https://…`) shows
+« Ouvrir … » on top; Return opens it in the default browser, Tab offers Open in… (a new browser
+window joins the chosen stage; Firefox: an empty tab may remain), Bring here, Copy. A file name
+(`fichier.txt`, `readme.md`) is not an address, unless followed by `/`, a port or with `www.`.
+`yt chat` searches « chat » on YouTube; defaults: `g` Google, `yt` YouTube, `wp` Wikipedia, `ddg`
+DuckDuckGo, `maps` Maps; a `[[experimental.target_mode.web_searches]]` table (`keyword`, `title`,
+`url` with `{query}`) replaces them. Every input ends with a « Web » section (the
+`web_search_url` search, then the `fallback_searches` keywords), selected only when nothing else
+matches. **History**: the last 20 inputs that led to an action are kept
+(`~/.roadies/launcher-history.json`, on this Mac only). Reopened within 5 minutes, the bar brings
+back the last one, selected: typing replaces it. The empty bar offers the 3 recent searches.
+`roadie launcher history [--clear]` shows or clears them.
+
 **Calculation**: a typed calculation (`12*4.5`, `2^10`, `-(3+4)*2`) shows its result on top,
 under « Calcul »; Return copies it and closes the bar, ⌘C copies it. Operators `+ - * / ^ %`,
 `×`, `÷`, parentheses, `,` or `.` decimal; after `=`: `pi`, `e`, `sqrt`, `abs`, `round`,

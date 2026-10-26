@@ -573,6 +573,8 @@ public final class TargetModeRuntimeController: NSObject {
                 .prefix(3)
             if !habits.isEmpty { idle += [.header("Souvent ici")] + habits.map { .app($0, detail: "souvent dans cette stage") } }
         }
+        let recent = LauncherHistoryStore().load().recent(3)
+        if !recent.isEmpty { idle += [.header("Recherches récentes")] + recent.map(LauncherList.Row.history) }
         context.idleRows = idle
         context.loadOpenItems = { [service] done in
             Task { @MainActor in
@@ -600,6 +602,18 @@ public final class TargetModeRuntimeController: NSObject {
         context.endPreview = { [weak self] commit in self?.endPreview(commit: commit) }
         context.initialQuery = initialQuery
         workflowContext(&context, webSearchURL: webSearchURL)
+        // Web et historique (SPEC-090) : la dernière saisie revient sous 5 minutes, sélectionnée.
+        let targetMode = service.effectiveConfig.experimental.targetMode
+        context.webSearches = targetMode.webSearches ?? WebSearch.defaults
+        context.webSearchTemplate = webSearchURL
+        context.fallbackSearches = targetMode.fallbackSearches
+        let historyStore = LauncherHistoryStore()
+        let history = historyStore.load()
+        context.recordQuery = { query in historyStore.record(query) }
+        if initialQuery == nil, initialSubject == nil, let resumed = history.resumable(at: now) {
+            context.initialQuery = resumed
+            context.restoredQuery = true
+        }
         context.webSearch = { [events] text in
             guard let url = LauncherWeb.searchURL(webSearchURL, query: text) else {
                 return TargetActionResult(changed: false, message: "launcher web: invalid url", error: "web_search_url")
@@ -762,6 +776,8 @@ public final class TargetModeRuntimeController: NSObject {
             return TargetActionResult(changed: true, message: "\(label): \(app.bundleID)")
         case .file(let file):
             return performFile(action, file: file, label: label)
+        case .url(let url):
+            return performURL(action, url: url, label: label)
         case .project(let name):
             switch action.verb {
             case .reopenProject: return openProject(named: name)
@@ -775,6 +791,65 @@ public final class TargetModeRuntimeController: NSObject {
             // ⌘ Retour : Roadie va à la fenêtre envoyée dans sa nouvelle stage.
             if action.follow, result.changed, let id = target.scope.windowId { focus(WindowID(rawValue: id)) }
             return result
+        }
+    }
+
+    // MARK: - Adresses (SPEC-090)
+
+    /// Navigateurs Chromium : `--new-window` est transmis à l'instance ouverte (research R2).
+    private static let chromiumBrowsers: Set<String> = ["com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac",
+                                                        "company.thebrowser.Browser", "com.vivaldi.Vivaldi"]
+
+    /// Ouvrir (navigateur par défaut), ouvrir dans une stage ou ici (nouvelle fenêtre placée), copier.
+    private func performURL(_ action: LauncherAction, url: URL, label: String) -> TargetActionResult {
+        switch action.verb {
+        case .open:
+            NSWorkspace.shared.open(url)
+        case .openIn, .bringHere:
+            guard let scope = action.verb == .openIn ? action.destination.flatMap(stageScope) : action.destination.flatMap(stageScope) ?? activeStageScope()
+            else { return refused(label, "destination") }
+            openURLWindow(url, into: scope)
+        case .copyPath:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        default:
+            return refused(label, "verb")
+        }
+        events.append(RoadieEvent(type: "launcher.url", details: ["verb": action.verb.rawValue, "host": url.host ?? ""]))
+        return TargetActionResult(changed: true, message: "\(label): \(url.host ?? "")")
+    }
+
+    /// Nouvelle fenêtre du navigateur par défaut avec l'adresse, puis placée dans la stage (R2) :
+    /// Chromium `--new-window`, Safari par AppleScript, les autres ⌘N puis l'adresse (un onglet vide
+    /// peut rester, limite notée).
+    private func openURLWindow(_ url: URL, into scope: StageScope) {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: url), let bundle = Bundle(url: app)?.bundleIdentifier else {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        let service = service
+        let events = events
+        let switcher = WindowSwitcherService(service: service)
+        Task { @MainActor in
+            let known = Set(await switcher.load().entries.filter { $0.window.bundleID == bundle }.map(\.id))
+            let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first
+            if Self.chromiumBrowsers.contains(bundle) {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                process.arguments = ["-na", app.path, "--args", "--new-window", url.absoluteString]
+                try? process.run()
+            } else if bundle == "com.apple.Safari" {
+                _ = await LauncherBrowsers.run("tell application id \"com.apple.Safari\"\nactivate\nmake new document with properties {URL:\"\(url.absoluteString.applescriptEscaped)\"}\nend tell", timeout: 5)
+            } else if let running, !known.isEmpty {
+                running.activate()
+                try? await Task.sleep(for: .milliseconds(300))
+                Self.postNewWindowShortcut(to: running.processIdentifier)
+                try? await Task.sleep(for: .milliseconds(500))
+                NSWorkspace.shared.open(url)
+            } else {
+                NSWorkspace.shared.open(url)
+            }
+            await Self.placeNewWindow(bundleID: bundle, known: known, into: scope, service: service, events: events)
         }
     }
 
@@ -1198,6 +1273,9 @@ public final class TargetModeRuntimeController: NSObject {
         case .target(let window):
             let id = window.scope.windowId
             expected = { $0.window.id.rawValue == id }
+        case .url(let url):
+            let bundle = NSWorkspace.shared.urlForApplication(toOpen: url).flatMap { Bundle(url: $0)?.bundleIdentifier }
+            expected = { $0.window.bundleID == bundle && inTarget($0) }
         case .project:
             return
         }
