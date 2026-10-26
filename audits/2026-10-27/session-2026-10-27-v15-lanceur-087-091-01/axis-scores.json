@@ -1,0 +1,1040 @@
+{
+  "scoring_version": "axes-2",
+  "input_sha256": "e866e717e51ca8353bda57d484a0f4433a59913380a9dc4497cb34275b639f39",
+  "manifest_sha256": "41038f14fb6ba3831acdfdb6e6b60812fd53e8e1662cd10bf6eec76382344eaf",
+  "axes": {
+    "security": {
+      "title": "Sécurité",
+      "score": 60,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 5,
+      "controls_applicable": 5,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 1,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {
+        "INFO": 1
+      },
+      "limits": [],
+      "control_ids": [
+        "axes.security.01",
+        "axes.security.02",
+        "axes.security.03",
+        "axes.security.04",
+        "axes.security.05"
+      ],
+      "finding_fingerprints": [
+        "0dc59bb564fc2a0bb91b"
+      ],
+      "demonstrated_score": 60,
+      "criteria": [
+        {
+          "id": "axes.security.01",
+          "axis": "security",
+          "title": "Analyse statique et validation des entrées",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Semgrep (peu de règles Swift) ; échappements de {query}, AppleScript et requêtes Spotlight relus. Niveau 3 : règles Swift ciblées ou CodeQL.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261026T231849266745Z/run.json",
+              "sha256": "3eb9811ecb32a1169c318fa1dc799bcd3f29094ec5ba4cb4cf23d819533eff47"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/constats.md",
+              "sha256": "72a6918e4205daf3ba12edd493699d415997a6adc6aba45adb616744c1a9315e"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.02",
+          "axis": "security",
+          "title": "Protection des secrets courants",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Gitleaks fichiers sans fuite. Niveau 4 : contrôle en CI à chaque commit.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261026T231852139786Z/run.json",
+              "sha256": "f50de6984fea688ded8709a3b2d3a58c7b510b09f871628ef67badfc922f6848"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.03",
+          "axis": "security",
+          "title": "Maîtrise des secrets historiques",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Historique borné depuis 50e36a43. Niveau 3 : historique complet analysé.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261026T231853898382Z/run.json",
+              "sha256": "3de79f741ca2fdc0920c20b70dabe622335ea6e1fb003c57f4efa658cad4cbe3"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.04",
+          "axis": "security",
+          "title": "Authentification et séparation des droits",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Pas d'authentification ; frontière : code tiers des workflows avec les droits du démon (F2, mesuré), lu seulement depuis les dossiers de l'utilisateur. Niveau 3 : isolement des scripts (droits retirés).",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/constats.md",
+              "sha256": "72a6918e4205daf3ba12edd493699d415997a6adc6aba45adb616744c1a9315e"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.05",
+          "axis": "security",
+          "title": "Maîtrise des dépendances vulnérables",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "OSV exécuté depuis le checkout principal : 0 avis ; aucune dépendance ajoutée. Niveau 4 : surveillance continue.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261026T231853271494Z/run.json",
+              "sha256": "e6bdd7104f654279af7fc4a25faaa6ff08444d0224664843eb2a7ea7efc64741"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "llm_security": {
+      "title": "Sécurité IA",
+      "score": null,
+      "grade": "N/A",
+      "status": "not_applicable",
+      "controls_verified": 0,
+      "controls_applicable": 0,
+      "coverage_percent": null,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.llm_security.01",
+        "axes.llm_security.02",
+        "axes.llm_security.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": null,
+      "criteria": [
+        {
+          "id": "axes.llm_security.01",
+          "axis": "llm_security",
+          "title": "Confidentialité et pseudonymisation",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Aucune fonction LLM dans le produit ni dans le diff.",
+          "evidence": [],
+          "excluded": true
+        },
+        {
+          "id": "axes.llm_security.02",
+          "axis": "llm_security",
+          "title": "Permissions des appels externes",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Aucun appel à un service LLM.",
+          "evidence": [],
+          "excluded": true
+        },
+        {
+          "id": "axes.llm_security.03",
+          "axis": "llm_security",
+          "title": "Résistance aux instructions malveillantes",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Aucune entrée traitée par un LLM.",
+          "evidence": [],
+          "excluded": true
+        }
+      ]
+    },
+    "reliability": {
+      "title": "Fiabilité et exploitation",
+      "score": 63,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 2,
+      "controls_applicable": 2,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.reliability.01",
+        "axes.reliability.02",
+        "axes.reliability.03",
+        "axes.reliability.04"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 63,
+      "criteria": [
+        {
+          "id": "axes.reliability.01",
+          "axis": "reliability",
+          "title": "Conservation et rotation des sauvegardes",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Configuration de l'utilisateur non modifiée par la session ; tâches remplacées par commande explicite avec la licence ; pas de rotation. Niveau 3 : sauvegarde automatique avant remplacement.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "fc49b3ab28996681612d089b16647bdc730ffcbce5c4e14a289679b5c63982b3"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.reliability.02",
+          "axis": "reliability",
+          "title": "Reprise des traitements interrompus",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Scripts arrêtés à la frappe, au délai (10 s) et au plafond (5 Mo), groupe complet (test) ; un lot continue après un échec. Niveau 4 : reprise mesurée en charge.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/constats.md",
+              "sha256": "72a6918e4205daf3ba12edd493699d415997a6adc6aba45adb616744c1a9315e"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.reliability.03",
+          "axis": "reliability",
+          "title": "Continuité pendant une bascule",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Pas de bascule de service dans le périmètre.",
+          "evidence": [],
+          "excluded": true
+        },
+        {
+          "id": "axes.reliability.04",
+          "axis": "reliability",
+          "title": "Restauration après sinistre",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Pas de restauration après sinistre dans le périmètre.",
+          "evidence": [],
+          "excluded": true
+        }
+      ]
+    },
+    "tests": {
+      "title": "Tests et validation",
+      "score": 65,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 5,
+      "controls_applicable": 5,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.tests.01",
+        "axes.tests.02",
+        "axes.tests.03",
+        "axes.tests.04",
+        "axes.tests.05"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 65,
+      "criteria": [
+        {
+          "id": "axes.tests.01",
+          "axis": "tests",
+          "title": "Typage des sources et des tests",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Compilation Swift 6 des sources et des tests sans erreur. Niveau 4 : Thread Sanitizer.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261026T231854147135Z/run.json",
+              "sha256": "5b4845b3d1182b32ff0f71714dd7d0b03ef8b323cc4b70756eb38fde87255162"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.02",
+          "axis": "tests",
+          "title": "Analyse de style et erreurs statiques",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Pas de linter Swift configuré ; avertissements du compilateur traités. Niveau 3 : linter configuré.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261026T231854147135Z/run.json",
+              "sha256": "5b4845b3d1182b32ff0f71714dd7d0b03ef8b323cc4b70756eb38fde87255162"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/outils.md",
+              "sha256": "dea86b6fd7d3e31716674c2c96d6e5534f625b2ed66a21a5ce535680491eefb2"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.03",
+          "axis": "tests",
+          "title": "Régressions et cas limites",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "2 086 tests ; 10 000 saisies aléatoires du calcul, corpus réel, cas limites (échappement, branches, signaux). Niveau 4 : mutation.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261026T231854147135Z/run.json",
+              "sha256": "5b4845b3d1182b32ff0f71714dd7d0b03ef8b323cc4b70756eb38fde87255162"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.04",
+          "axis": "tests",
+          "title": "Qualification du runtime livré",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Installation signée et santé 5/5 à chaque session ; essais réels par CLI (workflow list/check/trigger, R8). Niveau 4 : essai clavier enregistré.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "fc49b3ab28996681612d089b16647bdc730ffcbce5c4e14a289679b5c63982b3"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.05",
+          "axis": "tests",
+          "title": "Tests interface et intégration des données",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Données réelles (workflows de l'utilisateur et corpus) ; parcours clavier non simulés. Niveau 3 : tests d'interface.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "fc49b3ab28996681612d089b16647bdc730ffcbce5c4e14a289679b5c63982b3"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "performance": {
+      "title": "Performance et ressources",
+      "score": 50,
+      "grade": "F",
+      "status": "assessed",
+      "controls_verified": 4,
+      "controls_applicable": 4,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.performance.01",
+        "axes.performance.02",
+        "axes.performance.03",
+        "axes.performance.04"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 50,
+      "criteria": [
+        {
+          "id": "axes.performance.01",
+          "axis": "performance",
+          "title": "Admission et saturation des demandes",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Un script par entrée à la fois, frappes regroupées 100 ms ; lecture de dossier en fond. Niveau 3 : mesure de charge.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.performance.02",
+          "axis": "performance",
+          "title": "Budget mémoire",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Sorties plafonnées à 5 Mo, 200 éléments de dossier ; réponses gardées pour la barre ouverte seulement. Niveau 3 : mesure mémoire.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.performance.03",
+          "axis": "performance",
+          "title": "Délais, annulation et libération",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Délais (10 s scripts, 30 s Raccourcis, 600 s dialogue) et annulations ; nettoyage à la fin de la barre.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.performance.04",
+          "axis": "performance",
+          "title": "Mesures représentatives de latence et charge",
+          "weight": 1,
+          "status": "pass",
+          "level": 1,
+          "rating_rationale": "Latence par frappe (critère 50 ms de la 087) non mesurée. Niveau 2 : mesure représentative.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "complexity": {
+      "title": "Complexité algorithmique",
+      "score": 67,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.complexity.01",
+        "axes.complexity.02",
+        "axes.complexity.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 67,
+      "criteria": [
+        {
+          "id": "axes.complexity.01",
+          "axis": "complexity",
+          "title": "Complexité des points d’entrée",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Points d'entrée annotés O(…) (calcul O(n), chemin O(e), mot-clé O(k), schéma O(o + c)).",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.complexity.02",
+          "axis": "complexity",
+          "title": "Bornes des parcours et allocations",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Bornes écrites et testées (5 000, 200, 200 étapes, 5 Mo, 20 saisies).",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.complexity.03",
+          "axis": "complexity",
+          "title": "Coût des accès et écritures de données",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Historique réécrit à chaque action (20 entrées) ; index relu par date de modification. Niveau 3 : écriture différée mesurée.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "quality": {
+      "title": "Qualité du code et des erreurs",
+      "score": 67,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.quality.01",
+        "axes.quality.02",
+        "axes.quality.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 67,
+      "criteria": [
+        {
+          "id": "axes.quality.01",
+          "axis": "quality",
+          "title": "Gestion des refus et messages utilisateur",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Messages clairs : interpréteur absent, brique non prise en charge, tâche absente avec la commande à lancer. Niveau 4 : messages essayés par l'utilisateur.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/constats.md",
+              "sha256": "72a6918e4205daf3ba12edd493699d415997a6adc6aba45adb616744c1a9315e"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.quality.02",
+          "axis": "quality",
+          "title": "Gestion des erreurs partielles",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Lot : « N sur M », un échec n'arrête pas la suite ; schéma arrêté proprement sur une brique manquante.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.quality.03",
+          "axis": "quality",
+          "title": "Ergonomie des parcours concernés",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "⌥ + flèches et Maj + chiffre réaffectés (choix écrits) ; parcours clavier à essayer. Niveau 3 : parcours validés.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "architecture": {
+      "title": "Architecture et dépendances",
+      "score": 69,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 4,
+      "controls_applicable": 4,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.architecture.01",
+        "axes.architecture.02",
+        "axes.architecture.03",
+        "axes.architecture.04"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 69,
+      "criteria": [
+        {
+          "id": "axes.architecture.01",
+          "axis": "architecture",
+          "title": "Frontières et résolution des dépendances",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Types purs séparés, effets injectés (AlfredEffects) ; aucune dépendance ajoutée.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.architecture.02",
+          "axis": "architecture",
+          "title": "Maîtrise des cycles",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Aucun cycle de module ajouté.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.architecture.03",
+          "axis": "architecture",
+          "title": "Séparation construction et exécution",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Présentateur (+530 lignes) et contrôleur (+296) grossissent encore. Niveau 3 : services dédiés.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.architecture.04",
+          "axis": "architecture",
+          "title": "Assemblages et dépendances dynamiques",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Assemblage par fermetures du contexte de barre ; aucun chargement dynamique de code Roadie.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "ai_hygiene": {
+      "title": "Responsabilité future et hygiène",
+      "score": 50,
+      "grade": "F",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.ai_hygiene.01",
+        "axes.ai_hygiene.02",
+        "axes.ai_hygiene.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 50,
+      "criteria": [
+        {
+          "id": "axes.ai_hygiene.01",
+          "axis": "ai_hygiene",
+          "title": "Invariants et compromis expliqués",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Invariants et compromis écrits (research.md, commentaires, validation.md).",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.ai_hygiene.02",
+          "axis": "ai_hygiene",
+          "title": "Périmètre et maintenabilité du changement",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Cinq sessions en une passe, diff large (3 559 lignes) ; découpage par session, tests et convergence. Niveau 3 : diff réduit par livraison relue.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.ai_hygiene.03",
+          "axis": "ai_hygiene",
+          "title": "Revue contradictoire et responsabilité",
+          "weight": 1,
+          "status": "pass",
+          "level": 1,
+          "rating_rationale": "Aucune revue contradictoire : Bridget a refusé trois admissions. Niveau 2 : revue indépendante documentée.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "fc49b3ab28996681612d089b16647bdc730ffcbce5c4e14a289679b5c63982b3"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "minimalism": {
+      "title": "Minimalisme et frugalité",
+      "score": 67,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.minimalism.01",
+        "axes.minimalism.02",
+        "axes.minimalism.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 67,
+      "criteria": [
+        {
+          "id": "axes.minimalism.01",
+          "axis": "minimalism",
+          "title": "Dépendances nécessaires en exploitation",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Aucune dépendance ajoutée.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.minimalism.02",
+          "axis": "minimalism",
+          "title": "Poids et ressources justifiés",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Un processus par frappe utile dans un mot-clé (borné, annulé) ; coût non mesuré. Niveau 3 : coût mesuré.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.minimalism.03",
+          "axis": "minimalism",
+          "title": "Code mort et simplifications possibles",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Pas de code mort identifié.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "business": {
+      "title": "Métier et fidélité des données",
+      "score": 75,
+      "grade": "C",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 1,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.business.01",
+        "axes.business.02",
+        "axes.business.03"
+      ],
+      "finding_fingerprints": [
+        "9f9fb739461977263910"
+      ],
+      "demonstrated_score": 75,
+      "criteria": [
+        {
+          "id": "axes.business.01",
+          "axis": "business",
+          "title": "Fidélité des données lues",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Format d'Alfred relevé sur 101 workflows réels (types, échappement, branches, conditions).",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.business.02",
+          "axis": "business",
+          "title": "Cohérence et idempotence des versions",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Nouvelle stage créée une fois par lot ; annulation groupée idempotente ; historique sans doublon.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.business.03",
+          "axis": "business",
+          "title": "Conformité aux règles et données de référence",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Règles de la référence Alfred et de la CJUE (format libre) respectées ; aucun workflow tiers livré.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "fc49b3ab28996681612d089b16647bdc730ffcbce5c4e14a289679b5c63982b3"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "traceability": {
+      "title": "Traçabilité des exigences",
+      "score": 75,
+      "grade": "C",
+      "status": "assessed",
+      "controls_verified": 2,
+      "controls_applicable": 2,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.traceability.01",
+        "axes.traceability.02"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 75,
+      "criteria": [
+        {
+          "id": "axes.traceability.01",
+          "axis": "traceability",
+          "title": "Lien constats, corrections et preuves",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Constats reliés aux corrections et preuves.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/constats.md",
+              "sha256": "72a6918e4205daf3ba12edd493699d415997a6adc6aba45adb616744c1a9315e"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.traceability.02",
+          "axis": "traceability",
+          "title": "Couverture des exigences obligatoires",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Exigences 087 à 091 couvertes ou limites écrites dans validation.md.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/axes.md",
+              "sha256": "9e5835ed3049e9941c43d65fcf694be6e27606e374f2164aec1f09e9601c9966"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    }
+  },
+  "unmapped_findings": [],
+  "method": "Qualité observée = somme des niveaux justifiés / maximum des critères notés. Niveaux ancrés de0 à4, poids figés. Le nombre de défauts ne donne plus la note : leurs pénalités restent un garde-fou. Couverture séparée. Note démontrée = points acquis / maximum de tous les critères applicables ; les inconnus ne rapportent aucun point. Aucun niveau justifié : non noté. Pas de moyenne globale des axes.",
+  "rubric_version": "quality-1",
+  "rubric_sha256": "cf850d3dd0976f4cd6ca9385ba320154248c8e85b084392af0efe9acda208607"
+}

@@ -1,0 +1,128 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": false,
+    "decision": "pass"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 1,
+    "total": 1,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "audit087091.clipboard-partial-restore",
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "symbol": "TargetModeRuntimeController.selectedText",
+      "instance": "text-only-restore-after-simulated-copy",
+      "line": 1,
+      "category": "correctness",
+      "title": "Copie simulée de la sélection : presse-papiers non texte perdu",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Seul le texte était gardé puis remis après clearContents ; une image ou des fichiers copiés étaient perdus.",
+      "remediation": "PasteboardSnapshot garde et remet toutes les représentations.",
+      "requirements": [
+        "FR-002"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Écritures du presse-papiers recensées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "9ea0254fc330608f21cd585e71e5d4ecc3b79611e82a655302cc1ced1d7c1485"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Test PNG + texte remis, presse-papiers vide laissé vide ; suite complète 2 086.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261026T231854147135Z/run.json",
+            "sha256": "5b4845b3d1182b32ff0f71714dd7d0b03ef8b323cc4b70756eb38fde87255162"
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/AuditV15LanceurTests.swift",
+            "sha256": "43fe3bd347e72a34a861ca6aeb9ef65691057d4ce87ea251d53dba62cf3777c5"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "72a6918e4205daf3ba12edd493699d415997a6adc6aba45adb616744c1a9315e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F1-selectedText.swift.txt",
+          "sha256": "04b32f4f6e8c622e920cbe198c1e86000bd023b5e9e912326d1029ea2c8b959a"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F1-sha.txt",
+          "sha256": "793bed8ec0569e5814af37e3dfcaee8dba1d52a526eb138b29b07383e586d57e"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "sha256": "ec787ecd77d1da1dbd222afaed2660ea7e1f7f14593a76eab8462aba5c59a7b6"
+        }
+      ],
+      "fingerprint": "9f9fb739461977263910"
+    },
+    {
+      "rule_id": "audit087091.workflow-inherits-accessibility",
+      "file": "Sources/RoadieDaemon/AlfredScriptRunner.swift",
+      "symbol": "AlfredScriptRunner.spawn",
+      "instance": "child-inherits-daemon-tcc",
+      "line": 1,
+      "category": "security",
+      "title": "Un script de workflow obtient l'autorisation Accessibilité du démon",
+      "severity": "INFO",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Mesure R8 : AXIsProcessTrusted() vrai pour un script lancé par roadied, faux depuis le Terminal ; même situation que dans Alfred.",
+      "remediation": "Atténuations en place : workflows installés par l'utilisateur seulement, réglages workflows_enabled et alfred_workflows, avertissement.",
+      "requirements": [
+        "FR-004"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Processus enfants du démon recensés.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "9ea0254fc330608f21cd585e71e5d4ecc3b79611e82a655302cc1ced1d7c1485"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "72a6918e4205daf3ba12edd493699d415997a6adc6aba45adb616744c1a9315e"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredScriptRunner.swift",
+          "sha256": "492a63ed925994bf1cebf983c615a455c02235716a6fd8422f272d468a2db0bc"
+        }
+      ],
+      "fingerprint": "0dc59bb564fc2a0bb91b"
+    }
+  ],
+  "suppressed": []
+}

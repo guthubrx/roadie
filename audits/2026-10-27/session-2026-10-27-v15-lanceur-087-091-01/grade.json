@@ -1,0 +1,28 @@
+{
+  "protocol": "15.0.0",
+  "grade": "A",
+  "score": 100,
+  "date": "2026-10-26",
+  "spec": "non précisée",
+  "scope": "Sessions 087 à 091 du lanceur : calculatrice, chemins, workflows Alfred, web, sélection multiple (diff 50e36a43..e393b467)",
+  "decision": "pass",
+  "release_blocked": false,
+  "coverage_percent": 100.0,
+  "controls_verified": 14,
+  "controls_applicable": 14,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 1,
+    "total": 1,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [],
+  "source_drift": [],
+  "input_sha256": "e866e717e51ca8353bda57d484a0f4433a59913380a9dc4497cb34275b639f39",
+  "manifest_sha256": "41038f14fb6ba3831acdfdb6e6b60812fd53e8e1662cd10bf6eec76382344eaf",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

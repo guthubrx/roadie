@@ -1,0 +1,31 @@
+    /// Texte choisi dans l'application au premier plan : attribut AX, sinon ⌘C simulé avec le
+    /// presse-papiers remis comme avant.
+    private static func selectedText() async -> String? {
+        let system = AXUIElementCreateSystemWide()
+        var focused: CFTypeRef?
+        if AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+           let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() {
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(focused as! AXUIElement, kAXSelectedTextAttribute as CFString, &value) == .success,
+               let text = value as? String, !text.isEmpty { return text }
+        }
+        let board = NSPasteboard.general
+        let previous = board.string(forType: .string), count = board.changeCount
+        let source = CGEventSource(stateID: .hidSystemState)
+        for down in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: 8, keyDown: down) else { continue }
+            event.flags = .maskCommand
+            event.post(tap: .cghidEventTap)
+        }
+        try? await Task.sleep(for: .milliseconds(250))
+        guard board.changeCount != count else { return nil }
+        let text = board.string(forType: .string)
+        board.clearContents()
+        if let previous { board.setString(previous, forType: .string) }
+        return text
+    }
+
+    /// Barre rouverte sur un texte (Show Alfred, Script Filter atteint par un schéma).
+    private func reopenSearch(_ text: String) {
+        handle(TargetModeRuntimeCommand(name: "targets.search", arguments: ["query": text]))
+    }
