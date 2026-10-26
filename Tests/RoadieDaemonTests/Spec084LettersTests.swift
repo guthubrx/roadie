@@ -27,6 +27,20 @@ struct Spec084LettersTests {
         #expect(list.letterRows(visible: 0..<4, letters: ["a", "s", "d"]).map { $0.target.id } == ["A", "B"])
     }
 
+    @Test func onlyWindowsOfAShownStageGetABadgeOnScreen() {
+        var context = LauncherSearchContext.disabled
+        context.shownStages = [StageScope(displayID: DisplayID(rawValue: "LG"), desktopID: DesktopID(rawValue: 3), stageID: StageID(rawValue: "2"))]
+        func window(_ display: String, _ desktop: Int, _ stage: String) -> RoadieTarget {
+            RoadieTarget(id: "window:1", kind: .window, title: "Teams", source: .roadie,
+                         scope: TargetScopeSnapshot(displayId: display, desktopId: desktop, stageId: stage, windowId: 1), actions: [.focus])
+        }
+        #expect(context.isOnScreen(window("LG", 3, "2")))
+        // Autre bureau de l'écran interne, ou stage cachée : pas de badge.
+        #expect(!context.isOnScreen(window("Interne", 1, "8")))
+        #expect(!context.isOnScreen(window("LG", 3, "5")))
+        #expect(context.isOnScreen(RoadieTarget(id: "stage:2", kind: .stage, title: "Com", source: .roadie, actions: [.switch])))
+    }
+
     @Test func onlyAShownLetterIsTakenFromTheText() throws {
         func shift(_ text: String) throws -> NSEvent {
             try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 0, windowNumber: 0,

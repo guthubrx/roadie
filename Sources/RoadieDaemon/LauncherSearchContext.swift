@@ -25,6 +25,8 @@ struct LauncherSearchContext {
     }
     /// Stage active du bureau affiché : la destination de ⌥ Retour (SPEC-075).
     var activeStage: StageScope?
+    /// Stages affichées, une par écran (SPEC-084) : seules leurs fenêtres reçoivent un badge à l'écran.
+    var shownStages: Set<StageScope> = []
     /// Identité de cette stage pour le classement appris (SPEC-076) : `stage:<nom>` ou `scope:<place>`.
     var rankingContext: String?
     /// Objet dont la barre montre tout de suite les verbes (Capslock + Maj + F) ; nil : la liste.
@@ -58,6 +60,15 @@ struct LauncherSearchContext {
     /// ⌃ Retour : le texte tapé sur le web ; appelé après la fermeture de la barre.
     var webSearch: @MainActor (String) -> TargetActionResult = { _ in
         TargetActionResult(changed: false, message: "launcher_disabled")
+    }
+
+    /// Badge à l'écran (SPEC-084) : une fenêtre Roadie seulement si sa stage est affichée ; une fenêtre
+    /// d'une stage cachée ou d'un autre bureau n'est pas visible. Les autres cibles sont à l'écran. O(1).
+    func isOnScreen(_ target: RoadieTarget) -> Bool {
+        guard target.kind == .window, target.source == .roadie, let display = target.scope.displayId,
+              let desktop = target.scope.desktopId, let stage = target.scope.stageId else { return true }
+        return shownStages.contains(StageScope(displayID: DisplayID(rawValue: display), desktopID: DesktopID(rawValue: desktop),
+                                               stageID: StageID(rawValue: stage)))
     }
 
     /// Sans lanceur : la barre garde le seul mode recherche (tests, configuration désactivée).

@@ -13,6 +13,13 @@ rien et le K ne s'écrivait pas.
 3. Maj + une lettre sans étiquette était avalée : la majuscule ne s'écrivait pas.
 4. Barre vide : les lettres s'affichaient (lignes de la barre vide) sans être utilisables.
 5. La lettre collée au nom gênait la lecture.
+6. Après installation, essai réel (06:19 UTC) : Teams, fenêtre 19149, stage 8 du bureau 1 de
+   l'écran interne, bureau non affiché. Maj + lettre a donné `targets.activate` action `focus`,
+   « focused 19149 » : l'application est passée devant (barre de menus Teams) sans que son
+   bureau ni sa stage s'affichent. `WindowCommandService.focus` donne seulement le focus ;
+   le sélecteur et les applications du lanceur passent par `switcher.activate`.
+7. Des badges verts apparaissaient pour des fenêtres invisibles : stages cachées et autres
+   bureaux, à leur dernier cadre connu.
 
 ## Exigences
 
@@ -24,6 +31,10 @@ rien et le K ne s'écrivait pas.
 - **FR-004** Maj + une lettre non affichée s'écrit dans le champ.
 - **FR-005** Barre vide, verbes, destinations et mode commande : aucune lettre.
 - **FR-006** À l'écran, seules les cibles qui ont une lettre portent un badge, avec la même lettre.
+- **FR-007** Une fenêtre Roadie ouverte depuis le lanceur (Retour, ⌘ + chiffre, Maj + lettre)
+  affiche son bureau et sa stage, comme dans le sélecteur.
+- **FR-008** Pas de badge à l'écran pour une fenêtre d'une stage non affichée ; sa pastille dans
+  la liste reste utilisable.
 
 ## Hors périmètre
 

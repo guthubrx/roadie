@@ -1884,7 +1884,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             for (letter, index, target) in launcherList.letterRows(visible: visible, letters: letters) {
                 letterRows[letter] = index
                 bar.suggestions[index].letter = "⇧" + letter.uppercased()
-                guard let frame = target.frame?.cgRect else { continue }
+                guard let frame = target.frame?.cgRect, launcher.isOnScreen(target) else { continue }
                 badges.append(TargetOverlayBadge(label: letter.uppercased(), title: target.title, kind: target.kind,
                                                  isActive: target.isActive, frame: RoadieScreenCoordinate.axRectToNS(frame),
                                                  isHighlighted: target.id == highlightedID, isFramed: true, isSearchResult: true))

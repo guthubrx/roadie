@@ -449,8 +449,14 @@ public final class TargetModeRuntimeController: NSObject {
                     }
                 }
             },
-            activate: { target, verb in
-                targets.activate(target: target, action: verb)
+            activate: { [weak self] target, verb in
+                // Fenêtre Roadie : son bureau et sa stage s'affichent, comme dans le sélecteur (SPEC-084) ;
+                // le seul focus activait l'application sans montrer une fenêtre d'un autre bureau.
+                if verb == .focus, target.kind == .window, target.source == .roadie, let id = target.scope.windowId, let self {
+                    self.focus(WindowID(rawValue: id))
+                    return TargetActionResult(changed: true, message: "launcher: window \(id)", target: target)
+                }
+                return targets.activate(target: target, action: verb)
             },
             launcher: launcherContext(initialSubject: initialSubject, targets: roadieTargets),
             onFinish: { [weak self] result in
@@ -493,6 +499,11 @@ public final class TargetModeRuntimeController: NSObject {
             }
         )
         context.activeStage = activeStage
+        context.shownStages = Set(snapshot.displays.compactMap { display in
+            let desktop = state.currentDesktopID(for: display.id)
+            return state.scopes.first { $0.displayID == display.id && $0.desktopID == desktop }
+                .map { StageScope(displayID: display.id, desktopID: desktop, stageID: $0.activeStageID) }
+        })
         context.rankingContext = rankingContext
         context.initialSubject = initialSubject
         context.tiling = { id in

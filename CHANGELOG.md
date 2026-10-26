@@ -52,6 +52,9 @@ jour et les limites connues ; les README décrivent la version courante.
 - Lanceur : les lettres des fenêtres, stages et bureaux sont dans une pastille à droite
   (« ⇧K »), une seule lettre par ligne, dans l'ordre affiché. Maj + la lettre ouvre la
   ligne, comme ⌘1 ; une autre majuscule s'écrit normalement. Barre vide : aucune lettre.
+- Lanceur : une fenêtre choisie sur un autre bureau ou dans une stage cachée s'affiche avec
+  son bureau et sa stage (avant, seule l'application passait devant). Les badges à l'écran
+  ne marquent plus les fenêtres invisibles.
 - Une fenêtre qui s'ouvre reste sur l'écran actif, même quand macOS l'affiche d'abord
   sur l'autre écran (stages en mode bsp).
 - Une fenêtre qui refuse une largeur trop petite (T3 Code, 840 points au minimum) et ses
