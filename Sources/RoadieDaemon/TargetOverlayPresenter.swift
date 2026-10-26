@@ -910,6 +910,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var heldModifier: LauncherModifier?
     /// Rangs ⌘1 à ⌘9 : index des lignes montrées, dans l'ordre, calculés avec la géométrie.
     private var pickRows: [Int] = []
+    /// Lettres Maj (SPEC-084) : index de la ligne de cible montrée pour chaque lettre, dans l'ordre affiché.
+    private var letterRows: [String: Int] = [:]
+    /// Lettres simples de `hint_characters`, dans leur ordre.
+    private let letters: [String]
     /// Fichiers de Spotlight pour la saisie `filesQuery` (SPEC-077) ; `filesChanged` force la liste.
     private let fileSearch = LauncherFileSearch()
     private var files: [LauncherFile] = []
@@ -943,6 +947,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let pointerScreen = NSScreen.screens.first { $0.frame.contains(mouse) }?.frame
         self.pointerScreen = pointerScreen
         self.model = TargetSearchModel(targets: targets, alphabet: alphabet) { Self.rank($0, windowOrder: -1, pointerScreen: pointerScreen) }
+        self.letters = LauncherList.letters(alphabet)
         self.style = style
         self.commands = commands
         self.runDeferred = runDeferred
@@ -1147,7 +1152,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             model.type(value)
             if model.isCommandMode { enterCommandMode() }
         case .labelCharacter(let value):
-            if model.typeLabel(value) { launcherSelection = model.highlighted.map { "target:\($0.id)" } }
+            // Maj + lettre d'une pastille : sa ligne s'ouvre, comme ⌘ + chiffre (SPEC-084).
+            guard let index = letterRows[value], index < launcherList.rows.count else { return }
+            launcherSelection = launcherList.rows[index].id
+            syncHighlight()
+            activateSelection(immediate: true)
+            return
         case .delete:
             model.deleteBackward()
         case .next, .previous:
@@ -1752,23 +1762,6 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return
         }
         refreshLauncher()
-        let highlightedID = model.highlighted?.id
-        // Barre vide : aucune étiquette (`*` les montre toutes). Étiquettes d'une lettre : chacun encadré.
-        let shown = model.query.isEmpty ? [] : model.matches
-        let framesAll = model.hasShortLabels
-        let badges: [TargetOverlayBadge] = shown.compactMap { target in
-            guard let frame = target.frame?.cgRect else { return nil }
-            return TargetOverlayBadge(
-                label: target.label,
-                title: target.title,
-                kind: target.kind,
-                isActive: target.isActive,
-                frame: RoadieScreenCoordinate.axRectToNS(frame),
-                isHighlighted: target.id == highlightedID,
-                isFramed: framesAll,
-                isSearchResult: true
-            )
-        }
         // Icône d'une fenêtre : celle de son application, retrouvée par son nom. O(a).
         let appPaths = Dictionary(launcher.apps.map { ($0.name, $0.path) }, uniquingKeysWith: { first, _ in first })
         var suggestions = launcherList.rows.map { Self.suggestion($0, appPaths: appPaths) }
@@ -1785,7 +1778,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             richRows: true)
         // Chip (SPEC-081) : une règle attend pendant une recherche ; ⌘R la montre.
         if launcher.pendingRules > 0, !model.query.isEmpty { bar.chip = "💡 \(launcher.pendingRules)" }
-        show(badges: badges, bar: bar)
+        // Barre vide : aucune lettre ; sinon les cibles montrées en reçoivent une (SPEC-084).
+        show(badges: [], bar: bar, letterTargets: !model.query.isEmpty)
     }
 
     /// Ligne des étapes verbe et destination.
@@ -1824,12 +1818,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .bookmark: "bookmark"
             case .appElement, .gridCell: "cursorarrow.rays"
             }
-            let label = target.label.isEmpty ? "" : "\(target.label)  "
             // Fenêtre : sa vignette réelle si Roadie l'a capturée, sinon l'icône de son application (SPEC-076).
             let icon: SlashSuggestion.Icon = if target.kind == .window, let id = target.scope.windowId {
                 .window(id, app: appPaths[target.title])
             } else { .symbol(symbol) }
-            return SlashSuggestion(text: label + target.title, detail: target.subtitle, kind: .result, icon: icon)
+            return SlashSuggestion(text: target.title, detail: target.subtitle, kind: .result, icon: icon)
         case .file(let file):
             return SlashSuggestion(text: file.name, detail: file.location, kind: .result, icon: .file(file.path))
         case .phrase(let action, let title):
@@ -1867,8 +1860,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
     }
 
-    private func show(badges: [TargetOverlayBadge], bar: TargetSearchBar) {
+    /// `letterTargets` : étape des objets avec une saisie ; les lignes de cible montrées reçoivent une
+    /// lettre et leur fenêtre le même badge à l'écran. O(v), v lignes montrées.
+    private func show(badges: [TargetOverlayBadge], bar: TargetSearchBar, letterTargets: Bool = false) {
         var bar = bar
+        var badges = badges
         bar.usesNativeInput = true
         let barWindow = pointerScreen.flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
         searchBarLayout = barWindow.map { bar.layout(in: $0.frame, style: style) }
@@ -1881,7 +1877,20 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 bar.suggestions[index].shortcut = "⌘\(pickRows.count)"
             }
         }
-        inputPanel?.labelsEnabled = step == .objects && commandModel == nil && !model.query.isEmpty
+        letterRows = [:]
+        if letterTargets, let layout = searchBarLayout {
+            let highlightedID = model.highlighted?.id
+            let visible = layout.visibleRange(count: bar.suggestions.count, selected: bar.selectedSuggestion)
+            for (letter, index, target) in launcherList.letterRows(visible: visible, letters: letters) {
+                letterRows[letter] = index
+                bar.suggestions[index].letter = "⇧" + letter.uppercased()
+                guard let frame = target.frame?.cgRect else { continue }
+                badges.append(TargetOverlayBadge(label: letter.uppercased(), title: target.title, kind: target.kind,
+                                                 isActive: target.isActive, frame: RoadieScreenCoordinate.axRectToNS(frame),
+                                                 isHighlighted: target.id == highlightedID, isFramed: true, isSearchResult: true))
+            }
+        }
+        inputPanel?.labelLetters = Set(letterRows.keys)
         inputPanel?.field.placeholderString = switch step {
         case .objects: "Rechercher ou saisir /commande"
         case .verbs: "Verbe ou destination…"

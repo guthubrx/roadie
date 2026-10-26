@@ -199,6 +199,22 @@ struct LauncherList: Equatable, Sendable {
 
     func row(for id: String?) -> Row? { id.flatMap { id in rows.first { $0.id == id } } }
 
+    /// Lettres Maj (SPEC-084) : une par ligne de cible parmi les lignes montrées, dans l'ordre affiché,
+    /// tant qu'il en reste. O(v), v lignes montrées.
+    func letterRows(visible: Range<Int>, letters: [String]) -> [(letter: String, index: Int, target: RoadieTarget)] {
+        var found: [(letter: String, index: Int, target: RoadieTarget)] = []
+        for index in visible where index < rows.count && found.count < letters.count {
+            if case .target(let target) = rows[index] { found.append((letters[found.count], index, target)) }
+        }
+        return found
+    }
+
+    /// Lettres simples et distinctes de `hint_characters`, en minuscules, dans leur ordre. O(a).
+    static func letters(_ alphabet: String) -> [String] {
+        var seen = Set<String>()
+        return alphabet.lowercased().map(String.init).filter { $0.first?.isLetter == true && seen.insert($0).inserted }
+    }
+
     /// Liste de la barre vide (SPEC-081) : les propositions telles quelles, la première choisie. O(n).
     static func idle(_ rows: [Row]) -> LauncherList {
         var list = LauncherList.empty

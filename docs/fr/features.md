@@ -550,7 +550,7 @@ vaut pour toutes les fenêtres de l'application, présentes et futures.
 | Tab | verbes de la ligne choisie ; sur un verbe à « … », ses destinations |
 | Fleche bas, Ctrl-N | resultat suivant |
 | Maj-Tab, Fleche haut, Ctrl-P | resultat precedent |
-| Maj + etiquette | choisir ce resultat (`Maj+S` avec peu de resultats) |
+| Maj + lettre de la pastille | ouvrir cette ligne (`⇧K` a droite d'une fenetre, stage ou bureau) |
 | Retour | clic ; sur une application : aller à sa fenêtre ou l'ouvrir |
 | ⌘ Retour | application, fenêtre : nouvelle stage ; cible à l'écran : Cmd-clic |
 | ⌥ Retour | application, fenêtre : amener dans la stage active |

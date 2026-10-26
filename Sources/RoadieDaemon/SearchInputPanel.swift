@@ -10,9 +10,9 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     var onCancel: (() -> Void)?
     /// Touches modificatrices tenues : la ligne choisie annonce la variante de Retour (SPEC-075).
     var onFlags: ((NSEvent.ModifierFlags) -> Void)?
-    /// Étiquettes affichées (recherche non vide) : Maj + lettre choisit une étiquette au lieu d'écrire
-    /// une majuscule. Faux en mode commande, où les majuscules sont du texte (`/stage rename Perso`).
-    var labelsEnabled = false
+    /// Lettres affichées dans les pastilles (SPEC-084) : Maj + l'une d'elles choisit sa ligne ; toute autre
+    /// majuscule reste du texte. Vide en mode commande (`/stage rename Perso`) et barre vide.
+    var labelLetters: Set<String> = []
     private var updating = false
     private var closing = false
 
@@ -109,7 +109,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         }
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
-           let input = Self.navigation(event, labels: labelsEnabled) {
+           let input = Self.navigation(event, labels: labelLetters) {
             onKey?(input)
             return
         }
@@ -155,14 +155,13 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
                                                    83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9]
 
     /// O(1). Les modificateurs de déplacement/sélection restent à AppKit.
-    static func navigation(_ event: NSEvent, labels: Bool = false) -> SearchKeyInput? {
+    static func navigation(_ event: NSEvent, labels: Set<String> = []) -> SearchKeyInput? {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
         // ⌘1 à ⌘9, rangée du haut ou pavé numérique, quelle que soit la disposition (AZERTY : sans Maj).
         if flags == .command, let rank = digitKeys[event.keyCode] {
             return SearchKeyInput(kind: .pick(rank))
         }
-        if labels, flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(),
-           letter.count == 1, letter.first?.isLetter == true {
+        if flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(), labels.contains(letter) {
             return SearchKeyInput(kind: .labelCharacter(letter))
         }
         switch event.keyCode {

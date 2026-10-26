@@ -526,7 +526,7 @@ here", and applies to every window of the app, present and future.
 | Tab | verbs of the selected row; on a verb ending with "…", its destinations |
 | Down, Ctrl-N | next result |
 | Shift-Tab, Up, Ctrl-P | previous result |
-| Shift + label | select that result (`Shift+S` with few results) |
+| Shift + chip letter | open that row (`⇧K` on the right of a window, stage or desktop) |
 | Return | click; on an app: go to its window or open it |
 | ⌘ Return | app, window: new stage; on-screen target: Cmd-click |
 | ⌥ Return | app, window: bring into the active stage |

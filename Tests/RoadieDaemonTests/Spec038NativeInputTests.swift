@@ -70,9 +70,9 @@ struct Spec038NativeInputTests {
         #expect(SearchInputPanel.navigation(try key(126)) == SearchKeyInput(kind: .previous, navigationSource: .arrow))
         #expect(SearchInputPanel.navigation(try key(36, flags: .command))?.kind == .confirm(shift: false, command: true, isRepeat: false))
         #expect(SearchInputPanel.navigation(try key(0, text: "A", flags: .shift)) == nil)
-        // Étiquettes affichées (SPEC-073) : Maj + lettre choisit l'étiquette, sans écrire de majuscule.
-        #expect(SearchInputPanel.navigation(try key(0, text: "A", flags: .shift), labels: true)?.kind == .labelCharacter("a"))
-        #expect(SearchInputPanel.navigation(try key(0, text: "a"), labels: true) == nil)
+        // Lettre affichée en pastille (SPEC-084) : Maj + lettre choisit sa ligne, sans écrire de majuscule.
+        #expect(SearchInputPanel.navigation(try key(0, text: "A", flags: .shift), labels: ["a"])?.kind == .labelCharacter("a"))
+        #expect(SearchInputPanel.navigation(try key(0, text: "a"), labels: ["a"]) == nil)
     }
 
     @Test

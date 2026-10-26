@@ -342,7 +342,12 @@ enum SearchBarRenderer {
                                    color: NSColor.white.withAlphaComponent(0.75))
             : suggestion.shortcut.isEmpty ? nil : line(suggestion.shortcut, font: fonts.convert(font, toSize: metrics.detail),
                                                        color: NSColor(calibratedWhite: 0.5, alpha: 1))
-        let hintWidth = hint.map { $0.size().width + 12 } ?? 0
+        // Pastille de la lettre Maj (SPEC-084), au-dessus du rappel de touche.
+        let letter = suggestion.letter.isEmpty ? nil
+            : line(suggestion.letter, font: fonts.convert(fonts.convert(font, toSize: metrics.detail), toHaveTrait: .boldFontMask),
+                   color: NSColor(calibratedWhite: 0.97, alpha: 1))
+        let chip = letter.map { CGSize(width: $0.size().width + 10, height: $0.size().height + 2) }
+        let hintWidth = max(hint.map { $0.size().width + 12 } ?? 0, chip.map { $0.width + 12 } ?? 0)
         let width = max(0, row.maxX - 8 - hintWidth - textX)
         let title = line(suggestion.text.trimmingCharacters(in: .whitespaces), font: fonts.convert(font, toSize: metrics.title),
                          color: NSColor(calibratedWhite: 0.97, alpha: 1))
@@ -358,7 +363,20 @@ enum SearchBarRenderer {
             draw(detail, in: CGRect(x: textX, y: bottom, width: width, height: detailHeight))
             draw(title, in: CGRect(x: textX, y: bottom + detailHeight, width: width, height: titleHeight))
         }
-        if let hint { draw(hint, in: CGRect(x: row.maxX - hintWidth, y: row.minY, width: hintWidth, height: row.height)) }
+        guard let letter, let chip else {
+            if let hint { draw(hint, in: CGRect(x: row.maxX - hintWidth, y: row.minY, width: hintWidth, height: row.height)) }
+            return
+        }
+        // Pastille en haut, rappel en bas, calés à droite comme les autres rappels ; sans rappel, la
+        // pastille est centrée en hauteur. Repère non retourné : y monte.
+        let right = row.maxX - 12
+        let hintSize = hint?.size() ?? .zero
+        let top = row.midY + (chip.height + hintSize.height) / 2
+        let capsule = CGRect(x: right - chip.width, y: top - chip.height, width: chip.width, height: chip.height)
+        (selected ? NSColor.white.withAlphaComponent(0.28) : NSColor(calibratedWhite: 1, alpha: 0.16)).setFill()
+        NSBezierPath(roundedRect: capsule, xRadius: chip.height / 2, yRadius: chip.height / 2).fill()
+        draw(letter, in: capsule, centered: true)
+        if let hint { draw(hint, in: CGRect(x: right - hintSize.width, y: capsule.minY - hintSize.height, width: hintSize.width, height: hintSize.height)) }
     }
 
     /// Dernière vignette nette, sinon celle du rail ou du sélecteur ; jamais l'icône de repli du cache.

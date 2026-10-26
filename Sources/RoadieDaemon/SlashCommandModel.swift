@@ -16,6 +16,8 @@ public struct SlashSuggestion: Equatable, Sendable {
     public var icon: Icon?
     /// Rappel de touche affiché à droite d'une ligne du lanceur (« ⌘3 », SPEC-075) ; vide sinon.
     public var shortcut = ""
+    /// Lettre Maj d'une cible (« ⇧K », SPEC-084), en pastille au-dessus du rappel ; vide sinon.
+    public var letter = ""
 
     public init(text: String, detail: String = "", kind: Kind, icon: Icon? = nil) {
         self.text = text
