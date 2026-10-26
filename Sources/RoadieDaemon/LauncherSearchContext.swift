@@ -27,6 +27,8 @@ struct LauncherSearchContext {
     var activeStage: StageScope?
     /// Stages affichées, une par écran (SPEC-084) : seules leurs fenêtres reçoivent un badge à l'écran.
     var shownStages: Set<StageScope> = []
+    /// Touche des raccourcis 1 à 9 (SPEC-085).
+    var pickModifier = LauncherPickModifier.command
     /// Identité de cette stage pour le classement appris (SPEC-076) : `stage:<nom>` ou `scope:<place>`.
     var rankingContext: String?
     /// Objet dont la barre montre tout de suite les verbes (Capslock + Maj + F) ; nil : la liste.

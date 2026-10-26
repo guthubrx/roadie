@@ -511,7 +511,9 @@ detail says so. ⌘ Return opens the app in a new stage of the shown desktop, or
 the window there, then Roadie goes there. ⌥ Return brings the window (or the app's
 window) into the active stage without changing the shown stage. ⌃ Return searches the
 web for the typed text (`web_search_url`, Google by default). The first nine shown rows
-carry ⌘1 to ⌘9: the key runs their action, at every step. → with the cursor at the end
+carry ⌘1 to ⌘9: the key runs their action, at every step. The modifier is set in
+`pick_modifier` (`command` by default, `shift`, `alt` or `control`); with `shift`, the
+top-row digits can no longer be typed in the search on AZERTY. → with the cursor at the end
 of the input opens the verbs, like Tab.
 
 **Verbs of the active window**: Capslock + Shift + F (`actions_hotkey`, Hyper + Shift + F)

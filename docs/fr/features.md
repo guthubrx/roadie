@@ -535,7 +535,9 @@ bureau affiché, ou y envoie la fenêtre, puis Roadie y va. ⌥ Retour amène la
 (ou celle de l'application) dans la stage active, sans changer la stage affichée.
 ⌃ Retour cherche le texte tapé sur le web (`web_search_url`, Google par défaut).
 Les neuf premières lignes montrées portent ⌘1 à ⌘9 : la touche fait leur action, à
-toutes les étapes. → avec le curseur en fin de saisie ouvre les verbes, comme Tab.
+toutes les étapes. La touche se règle dans `pick_modifier` (`command` par défaut,
+`shift`, `alt` ou `control`) ; avec `shift`, les chiffres de la rangée du haut ne
+s'écrivent plus dans la recherche en AZERTY. → avec le curseur en fin de saisie ouvre les verbes, comme Tab.
 
 **Verbes de la fenêtre active** : Capslock + Maj + F (`actions_hotkey`, Hyper + Maj + F)
 ou `roadie targets actions` ouvre la barre directement sur les verbes de la fenêtre au

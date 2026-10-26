@@ -49,6 +49,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Lanceur : la touche des raccourcis 1 à 9 se choisit (`pick_modifier` dans
+  `[experimental.target_mode]`, ou Paramètres > Recherche) : Commande par défaut, ou Maj,
+  Option, Contrôle. Le rappel à droite des lignes suit (« ⇧2 »).
 - Lanceur : les lettres des fenêtres, stages et bureaux sont dans une pastille à droite
   (« ⇧K »), une seule lettre par ligne, dans l'ordre affiché. Maj + la lettre ouvre la
   ligne, comme ⌘1 ; une autre majuscule s'écrit normalement. Barre vide : aucune lettre.

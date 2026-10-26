@@ -505,6 +505,7 @@ public final class TargetModeRuntimeController: NSObject {
                 .map { StageScope(displayID: display.id, desktopID: desktop, stageID: $0.activeStageID) }
         })
         context.rankingContext = rankingContext
+        context.pickModifier = LauncherPickModifier(config: service.effectiveConfig.experimental.targetMode.pickModifier)
         context.initialSubject = initialSubject
         context.tiling = { id in
             guard let entry = snapshot.windows.first(where: { $0.window.id == id }) else { return nil }

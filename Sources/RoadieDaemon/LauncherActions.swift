@@ -236,6 +236,22 @@ enum LauncherModifier: Sendable {
     case command, option, control
 }
 
+/// Touche des raccourcis 1 à 9 (SPEC-085), lue dans `pick_modifier` ; Commande par défaut.
+enum LauncherPickModifier: String, Sendable {
+    case command, shift, alt, control
+
+    init(config value: String) { self = LauncherPickModifier(rawValue: value) ?? .command }
+
+    var symbol: String {
+        switch self {
+        case .command: "⌘"
+        case .shift: "⇧"
+        case .alt: "⌥"
+        case .control: "⌃"
+        }
+    }
+}
+
 /// Ce que Retour fait quand une touche est tenue, et ce que la ligne annonce avant.
 struct LauncherVariant: Equatable, Sendable {
     enum Effect: Equatable, Sendable {

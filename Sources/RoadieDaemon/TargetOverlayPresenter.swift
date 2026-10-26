@@ -1874,7 +1874,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             for index in layout.visibleRange(count: bar.suggestions.count, selected: bar.selectedSuggestion)
             where bar.suggestions[index].kind != .header && pickRows.count < 9 {
                 pickRows.append(index)
-                bar.suggestions[index].shortcut = "⌘\(pickRows.count)"
+                bar.suggestions[index].shortcut = "\(launcher.pickModifier.symbol)\(pickRows.count)"
             }
         }
         letterRows = [:]
@@ -1891,6 +1891,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             }
         }
         inputPanel?.labelLetters = Set(letterRows.keys)
+        inputPanel?.pickModifier = launcher.pickModifier.flags
         inputPanel?.field.placeholderString = switch step {
         case .objects: "Rechercher ou saisir /commande"
         case .verbs: "Verbe ou destination…"

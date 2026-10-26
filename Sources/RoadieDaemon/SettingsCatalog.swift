@@ -400,6 +400,9 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "web_search_url", "Recherche web (⌃ Retour)",
               "Adresse ouverte par ⌃ Retour dans la barre ; {query} reçoit le texte tapé.",
               .text, .string("https://www.google.com/search?q={query}")),
+        entry(.recherche, "experimental.target_mode", "pick_modifier", "Touche des raccourcis 1 à 9",
+              "Touche tenue avec un chiffre pour ouvrir une ligne de la barre : command (⌘), shift (⇧), alt (⌥) ou control (⌃). Avec shift, les chiffres de la rangée du haut ne s'écrivent plus dans la recherche en AZERTY.",
+              .choice(["command", "shift", "alt", "control"]), .string("command")),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [
