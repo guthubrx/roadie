@@ -19,3 +19,10 @@ PID 52635, santé 5/5, signature conservée.
 - Applications et fichiers d'un lot : une fenêtre neuve attendue 10 s chacune, sans aperçu actif.
 - ⌥ + flèches ne déplace plus le curseur par mot dans la barre.
 - Contre-revue Bridget : refusée (`project_mapping_unknown`).
+
+## Correction du 27 octobre 2026
+- ⌥ + flèches et ⌥⌫ ne servent à la sélection que si elle peut servir (`SelectionKeys`, research R1) ;
+  sinon le curseur se déplace par mot, par exemple dans `=sqrt(2)+3`.
+- Tests : `optionKeysDriveTheSelection` couvre les trois cas ; suite complète 2 086 tests / 292 suites.
+  Installé : PID 60525, santé 5/5, certificat `roadied-cert` conservé.
+- Non vérifié : frappe réelle dans la barre (essai utilisateur).

@@ -61,11 +61,21 @@ struct Spec091SelectionTests {
             try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0,
                                           context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code))
         }
-        #expect(SearchInputPanel.navigation(try key(126))?.kind == .selectToggle)
-        #expect(SearchInputPanel.navigation(try key(125))?.kind == .selectAddNext)
-        #expect(SearchInputPanel.navigation(try key(123))?.kind == .selectRemoveLast)
-        #expect(SearchInputPanel.navigation(try key(124))?.kind == .selectionVerbs)
-        #expect(SearchInputPanel.navigation(try key(51))?.kind == .selectClear)
+        let active = SelectionKeys(hasSelection: true, rowSelectable: true)
+        #expect(SearchInputPanel.navigation(try key(126), selection: active)?.kind == .selectToggle)
+        #expect(SearchInputPanel.navigation(try key(125), selection: active)?.kind == .selectAddNext)
+        #expect(SearchInputPanel.navigation(try key(123), selection: active)?.kind == .selectRemoveLast)
+        #expect(SearchInputPanel.navigation(try key(124), selection: active)?.kind == .selectionVerbs)
+        #expect(SearchInputPanel.navigation(try key(51), selection: active)?.kind == .selectClear)
+        // Calcul ou chemin, sans sélection : ⌥ + flèches et ⌥⌫ restent au champ (mot par mot).
+        for code: UInt16 in [126, 125, 123, 124, 51] {
+            #expect(SearchInputPanel.navigation(try key(code), text: "=sqrt(2)+3") == nil)
+        }
+        // Ligne qui se choisit, sans sélection : ⌥↓ ajoute, ⌥← et ⌥→ déplacent le curseur.
+        let row = SelectionKeys(hasSelection: false, rowSelectable: true)
+        #expect(SearchInputPanel.navigation(try key(125), selection: row)?.kind == .selectAddNext)
+        #expect(SearchInputPanel.navigation(try key(123), selection: row) == nil)
+        #expect(SearchInputPanel.navigation(try key(124), selection: row) == nil)
         // Sans ⌥ : les flèches gardent leur rôle.
         #expect(SearchInputPanel.navigation(try key(125, []))?.kind == .next)
         #expect(SearchInputPanel.navigation(try key(123, [])) == nil)

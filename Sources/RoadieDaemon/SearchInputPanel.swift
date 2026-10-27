@@ -15,6 +15,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     var labelLetters: Set<String> = []
     /// Touche tenue avec un chiffre pour ouvrir une ligne (SPEC-085).
     var pickModifier: NSEvent.ModifierFlags = .command
+    /// Quand ⌥ + flèches servent à la sélection multiple (SPEC-091) ; sinon elles déplacent le curseur.
+    var selectionKeys = SelectionKeys()
     private var updating = false
     private var closing = false
 
@@ -116,7 +118,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         }
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
-           let input = Self.navigation(event, labels: labelLetters, pick: pickModifier, text: field.stringValue) {
+           let input = Self.navigation(event, labels: labelLetters, pick: pickModifier, text: field.stringValue,
+                                       selection: selectionKeys) {
             onKey?(input)
             return
         }
@@ -165,7 +168,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     /// `text` : saisie du champ. Avec Maj pour les raccourcis, Maj + chiffre écrit le chiffre dans une
     /// saisie vide ou de calcul : en AZERTY, les chiffres se tapent avec Maj (SPEC-087 FR-009).
     static func navigation(_ event: NSEvent, labels: Set<String> = [], pick: NSEvent.ModifierFlags = .command,
-                           text: String = "") -> SearchKeyInput? {
+                           text: String = "", selection: SelectionKeys = SelectionKeys()) -> SearchKeyInput? {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
         // ⌘1 à ⌘9 (ou la touche de `pick_modifier`), rangée du haut ou pavé numérique, quelle que soit
         // la disposition : le code physique compte, pas le caractère.
@@ -177,13 +180,15 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
             return SearchKeyInput(kind: .labelCharacter(letter))
         }
         // Sélection multiple (SPEC-091, research R1) : ⌥ + flèches et ⌥⌫, comme le tampon d'Alfred.
+        // ⌥↑ ⌥↓ sur une ligne qui se choisit, ⌥← ⌥→ ⌥⌫ avec une sélection ; sinon AppKit déplace le
+        // curseur ou efface par mot (calcul, chemin, texte).
         if flags == .option {
             switch event.keyCode {
-            case 126: return SearchKeyInput(kind: .selectToggle)
-            case 125: return SearchKeyInput(kind: .selectAddNext)
-            case 123: return SearchKeyInput(kind: .selectRemoveLast)
-            case 124: return SearchKeyInput(kind: .selectionVerbs)
-            case 51: return SearchKeyInput(kind: .selectClear)
+            case 126 where selection.rowSelectable: return SearchKeyInput(kind: .selectToggle)
+            case 125 where selection.rowSelectable: return SearchKeyInput(kind: .selectAddNext)
+            case 123 where selection.hasSelection: return SearchKeyInput(kind: .selectRemoveLast)
+            case 124 where selection.hasSelection: return SearchKeyInput(kind: .selectionVerbs)
+            case 51 where selection.hasSelection: return SearchKeyInput(kind: .selectClear)
             default: break
             }
         }
@@ -219,4 +224,10 @@ extension LauncherPickModifier {
         case .control: .control
         }
     }
+}
+
+/// État de la barre utile aux touches ⌥ (SPEC-091) : une sélection existe, la ligne choisie se choisit.
+struct SelectionKeys: Equatable, Sendable {
+    var hasSelection = false
+    var rowSelectable = false
 }

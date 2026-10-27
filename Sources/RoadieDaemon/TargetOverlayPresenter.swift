@@ -2365,6 +2365,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         inputPanel?.labelLetters = Set(letterRows.keys)
         inputPanel?.pickModifier = launcher.pickModifier.flags
+        let selectable = Self.subject(of: launcherList.row(for: launcherSelection)).flatMap(LauncherSelection.key) != nil
+        inputPanel?.selectionKeys = step == .objects ? SelectionKeys(hasSelection: !selection.isEmpty, rowSelectable: selectable) : SelectionKeys()
         inputPanel?.field.placeholderString = switch step {
         case .objects: "Rechercher ou saisir /commande"
         case .verbs: "Verbe ou destination…"

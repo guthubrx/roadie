@@ -19,3 +19,8 @@ affiche la stage à la fin (`focus` de la dernière fenêtre envoyée).
 ## R4 Applications et fichiers dans un lot
 Une application ou un fichier « envoyé » vers une stage s'ouvre dans cette stage (verbe `openIn`
 existant, une fenêtre neuve attendue 10 s chacune, en séquence pour attribuer chaque fenêtre).
+
+**Correction du 27 octobre 2026.** Signalé : dans `=sqrt(2)+3`, ⌥ + flèches ne déplaçaient plus le
+curseur. Règle retenue : ⌥↑ ⌥↓ vont à la sélection quand la ligne choisie se choisit (application,
+fenêtre, fichier) ; ⌥← ⌥→ ⌥⌫ y vont quand une sélection existe. Sinon AppKit déplace le curseur ou
+efface par mot, comme avant la 091 (calcul, chemin, texte sans sélection).
