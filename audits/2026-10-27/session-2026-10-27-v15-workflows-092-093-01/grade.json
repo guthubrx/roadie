@@ -1,0 +1,28 @@
+{
+  "protocol": "15.0.0",
+  "grade": "A",
+  "score": 100,
+  "date": "2026-10-27",
+  "spec": "specs/093-ordres-alfred",
+  "scope": "Sessions 092 (grille des workflows) et 093 (ordres à Alfred)",
+  "decision": "pass",
+  "release_blocked": false,
+  "coverage_percent": 100.0,
+  "controls_verified": 14,
+  "controls_applicable": 14,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [],
+  "source_drift": [],
+  "input_sha256": "3f6c48afb02fbec640d20f1ecd9791c822bf03792b4236d837439bef0e80287d",
+  "manifest_sha256": "0120f145d8330e714de0a459d5b2679066e248b2eff9423835a9b93121d84511",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

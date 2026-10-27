@@ -1,0 +1,3 @@
+$ osascript de Roadie -l JavaScript -e 'Application("com.runningwithcrayons.Alfred").running()'
+TypeError (code 1) ; /usr/bin/osascript direct : true (code 0).
+Cause : objet __roadieAlfred sans méthode running.

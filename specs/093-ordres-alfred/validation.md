@@ -8,7 +8,8 @@
   (citation de cache exclue, `action` non traduit), guillemets échappés `\"`, options d'`osascript`,
   `/usr/bin/osascript` redirigé sauf dans `</string>`, scripts préparés avant lancement et `PATH`,
   réglages gardés fusionnés après `prefs.plist`, fiche d'un workflow.
-- Suite complète : 2 108 tests / 294 suites réussis.
+- Suite complète : 2 108 tests / 294 suites réussis ; 2 110 après les corrections de l'audit V15
+  (F1 fichier `.js` sans `-l`, F2 réglage sans workflow, F3 `running()`, voir `audit-v15.md`).
 
 ## Mesure réelle (SC-002), 27 octobre 2026, 05:46 UTC
 Roadie installé (PID 86689, santé 5/5). Workflow d'essai `test.roadie.bridge093` dans

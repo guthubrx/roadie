@@ -1,0 +1,1034 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055317306598Z/run.json",
+          "sha256": "1edb0e718ea9d8483404a24892673d2631a1fe40b62d06fd2391e7d7ba35f0c6"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055320261930Z/run.json",
+          "sha256": "86565fc472748307e0582880eed9bb9d595e32f6f113f6d48150dbe24edd0112"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s).  Historique limité à 5ed75b0532c4179c2b6b7d6a4a88e5e2ec2e92fd..b90f53d7c64716876defd87c11f1376a8edf6b42; les commits antérieurs sont hors périmètre.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055321233188Z/run.json",
+          "sha256": "d5e975a1b1768e7473cd2d7dd185ef4c6a7be53ca5d1783bba111fc4edb5c3b3"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055321460009Z/run.json",
+          "sha256": "ed0d24d3bb0e86809b2ed846933307afc6cbebc1751d81815671897b03cbef11"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "pass",
+      "rationale": "Aucune authentification ni réseau entrant ; osascript de Roadie limité au PATH des scripts de workflows, texte sans ordre passé tel quel ; citations shell et AppleScript relues et testées ; dossier d'Alfred jamais écrit.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "a8e8867c935f244aab3e4e20d374d7e81ec41bbfd9234f3ed92ea20d9249c38d"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        }
+      ]
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "pass",
+      "rationale": "Grille (sources, surcharge, présélection, voisins, Retour), externalid, traduction des formes du corpus, exécution réelle et mesure réelle ; F1 à F3 corrigés et testés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        }
+      ]
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "pass",
+      "rationale": "Effets sur le fil principal, barre ouverte annulée avant la grille (essai concurrent observé), shim écrit une fois, index sous verrou.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ]
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "pass",
+      "rationale": "Traduction O(n), voisins O(n/|pas|), disposition O(t), fiche O(f × n), regex compilées une fois ; annotations dans le code.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ]
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pass",
+      "rationale": "Suite complète réussie à la révision corrigée (2 110 tests), dont 24 neufs et deux exécutions réelles d'osascript.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055322037936Z/run.json",
+          "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+        }
+      ]
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pass",
+      "rationale": "Aucune dépendance ni cycle ajouté ; deux types purs, grille par les lignes existantes.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ]
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "pass",
+      "rationale": "Potentiel minimalisme : ~0 ligne suppressible ; arbitrages A1/A2 écrits ; aucune option ajoutée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ]
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "pass",
+      "rationale": "Code relu, constats vérifiés par reproduction ; revue indépendante absente (Bridget refusé), déclarée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "a8e8867c935f244aab3e4e20d374d7e81ec41bbfd9234f3ed92ea20d9249c38d"
+        }
+      ]
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "pass",
+      "rationale": "Événements launcher.workflow_grid et launcher.alfred_call sans texte de l'utilisateur ; erreurs de grille notifiées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ]
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "pass",
+      "rationale": "FR 092 (10) et 093 (7) reliés à des tests ou à des limites écrites (validation.md).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "audit092093.osascript-js-file-language",
+      "file": "Sources/RoadieDaemon/AlfredBridge.swift",
+      "symbol": "AlfredBridge.OsascriptCall.rebuilt",
+      "instance": "js-file-without-l",
+      "line": 1,
+      "category": "correctness",
+      "title": "Fichier JavaScript traduit relu comme de l'AppleScript",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Le fichier .js remplacé par -e sans -l : erreur -2740, alors que l'appel direct réussissait.",
+      "remediation": "-l JavaScript ajouté pour un fichier .js/.jxa sans -l.",
+      "requirements": [
+        "FR-003"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "75810f11053604e39c891d750110d986ec2adefe9001fb9550c3c8618320ae77"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Test ciblé et suite complète réussis à la révision corrigée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T055322037936Z/run.json",
+            "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/Spec093BridgeTests.swift",
+            "sha256": "67905c4846b4861cc0a06939b317e09120b6e5d17fa395bb7263a4c7df934727"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F1-reproduction.txt",
+          "sha256": "a43c0dc923a23cb2a61c81bf5fc0dec70ff66ab2ee40b2d89364d65443783c6b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F1-rebuilt.swift.txt",
+          "sha256": "dddf61e37059dbd0c539881a094c3e9e7368595c9bdefe24eafba71179ff03b7"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredBridge.swift",
+          "sha256": "e50f1723368f558991bcff6e27188e0d43252c4be05ff8e61a0f0ec1e9fc482a"
+        }
+      ]
+    },
+    {
+      "rule_id": "audit092093.kept-settings-empty-workflow",
+      "file": "Sources/RoadieDaemon/AlfredBridge.swift",
+      "symbol": "AlfredKeptSettings.set",
+      "instance": "empty-workflow-file",
+      "line": 1,
+      "category": "correctness",
+      "title": "Réglage gardé sans workflow écrit dans .json",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Un identifiant vide écrivait ~/.roadies/workflows-settings/.json.",
+      "remediation": "Erreur MissingWorkflow, rien n'est écrit.",
+      "requirements": [
+        "FR-005"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "75810f11053604e39c891d750110d986ec2adefe9001fb9550c3c8618320ae77"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Test ciblé et suite complète réussis à la révision corrigée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T055322037936Z/run.json",
+            "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/Spec093BridgeTests.swift",
+            "sha256": "67905c4846b4861cc0a06939b317e09120b6e5d17fa395bb7263a4c7df934727"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredBridge.swift",
+          "sha256": "e50f1723368f558991bcff6e27188e0d43252c4be05ff8e61a0f0ec1e9fc482a"
+        }
+      ]
+    },
+    {
+      "rule_id": "audit092093.bridge-missing-running",
+      "file": "Sources/RoadieDaemon/AlfredBridge.swift",
+      "symbol": "AlfredBridge.javaScript",
+      "instance": "object-without-running",
+      "line": 1,
+      "category": "correctness",
+      "title": "running() absent de l'objet JavaScript",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "TypeError après traduction, alors que l'appel direct rendait true.",
+      "remediation": "running() rend vrai ; compté traduit dans la fiche.",
+      "requirements": [
+        "FR-002"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "75810f11053604e39c891d750110d986ec2adefe9001fb9550c3c8618320ae77"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Test ciblé et suite complète réussis à la révision corrigée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T055322037936Z/run.json",
+            "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/Spec093BridgeTests.swift",
+            "sha256": "67905c4846b4861cc0a06939b317e09120b6e5d17fa395bb7263a4c7df934727"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F3-reproduction.txt",
+          "sha256": "8f8153d02d568f187fdd1fe47be33e4d8af1d3fc71a6c79f847da09117b1d42e"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredBridge.swift",
+          "sha256": "e50f1723368f558991bcff6e27188e0d43252c4be05ff8e61a0f0ec1e9fc482a"
+        }
+      ]
+    }
+  ],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Semgrep (peu de règles Swift) ; citations shell, AppleScript (quoted form of) et JavaScript relues et testées. Niveau 3 : règles Swift ciblées ou CodeQL.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055317306598Z/run.json",
+          "sha256": "1edb0e718ea9d8483404a24892673d2631a1fe40b62d06fd2391e7d7ba35f0c6"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Semgrep (peu de règles Swift) ; citations shell, AppleScript (quoted form of) et JavaScript relues et testées. Niveau 3 : règles Swift ciblées ou CodeQL."
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Gitleaks fichiers sans fuite. Niveau 4 : contrôle en CI à chaque commit.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055320261930Z/run.json",
+          "sha256": "86565fc472748307e0582880eed9bb9d595e32f6f113f6d48150dbe24edd0112"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Gitleaks fichiers sans fuite. Niveau 4 : contrôle en CI à chaque commit."
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Historique borné depuis 5ed75b05. Niveau 3 : historique complet analysé.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055321233188Z/run.json",
+          "sha256": "d5e975a1b1768e7473cd2d7dd185ef4c6a7be53ca5d1783bba111fc4edb5c3b3"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Historique borné depuis 5ed75b05. Niveau 3 : historique complet analysé."
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Pas d'authentification ; frontière : code tiers des workflows avec les droits du démon (inchangé) ; l'osascript de Roadie ne s'applique qu'à leurs scripts. Niveau 3 : isolement des scripts.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Pas d'authentification ; frontière : code tiers des workflows avec les droits du démon (inchangé) ; l'osascript de Roadie ne s'applique qu'à leurs scripts. Niveau 3 : isolement des scripts."
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "OSV depuis une copie propre hors .worktrees : 0 avis ; aucune dépendance ajoutée. Niveau 4 : surveillance continue.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055321460009Z/run.json",
+          "sha256": "ed0d24d3bb0e86809b2ed846933307afc6cbebc1751d81815671897b03cbef11"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "OSV depuis une copie propre hors .worktrees : 0 avis ; aucune dépendance ajoutée. Niveau 4 : surveillance continue."
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucune fonction LLM dans le produit ni dans le diff.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucune entrée traitée par un LLM.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "pass",
+      "rationale": "Configuration de l'utilisateur non modifiée ; réglages des workflows gardés à part, jamais dans le dossier d'Alfred. Niveau 3 : migration et retour arrière écrits.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "a8e8867c935f244aab3e4e20d374d7e81ec41bbfd9234f3ed92ea20d9249c38d"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Configuration de l'utilisateur non modifiée ; réglages des workflows gardés à part, jamais dans le dossier d'Alfred. Niveau 3 : migration et retour arrière écrits."
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pass",
+      "rationale": "Grille : erreur de script notifiée, source inconnue signalée ; osascript de Roadie passe la main sans ordre ; scripts toujours bornés (délai, plafond, groupe).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Grille : erreur de script notifiée, source inconnue signalée ; osascript de Roadie passe la main sans ordre ; scripts toujours bornés (délai, plafond, groupe)."
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Pas de bascule de service dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Pas de restauration après sinistre dans le périmètre.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Compilation Swift 6 des sources et des tests sans erreur. Niveau 4 : Thread Sanitizer.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055322037936Z/run.json",
+          "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Compilation Swift 6 des sources et des tests sans erreur. Niveau 4 : Thread Sanitizer."
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Pas de linter Swift configuré ; avertissements du compilateur traités. Niveau 3 : linter configuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055322037936Z/run.json",
+          "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/outils.md",
+          "sha256": "d40ce743a88208b1c2a0c6d6f62044ba269b18fa229c25e1d182e1506f00be75"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Pas de linter Swift configuré ; avertissements du compilateur traités. Niveau 3 : linter configuré."
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "2 110 tests ; formes réelles du corpus, exécutions réelles d'osascript, cas limites (espaceurs, bords, apostrophe, #!).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055322037936Z/run.json",
+          "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "2 110 tests ; formes réelles du corpus, exécutions réelles d'osascript, cas limites (espaceurs, bords, apostrophe, #!)."
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Installation signée et santé 5/5 ; essai réel de la grille (journal) et mesure réelle des ordres (fichier d'essai). Niveau 4 : essai automatisé de bout en bout.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "a8e8867c935f244aab3e4e20d374d7e81ec41bbfd9234f3ed92ea20d9249c38d"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Installation signée et santé 5/5 ; essai réel de la grille (journal) et mesure réelle des ordres (fichier d'essai). Niveau 4 : essai automatisé de bout en bout."
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Workflows réels de l'utilisateur et corpus ; rendu des tuiles non capturé. Niveau 3 : test d'interface automatisé.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "a8e8867c935f244aab3e4e20d374d7e81ec41bbfd9234f3ed92ea20d9249c38d"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Workflows réels de l'utilisateur et corpus ; rendu des tuiles non capturé. Niveau 3 : test d'interface automatisé."
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Script de grille lancé une fois, filtre en mémoire ; traduction O(n) au lancement. Niveau 3 : mesure du coût par script.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Script de grille lancé une fois, filtre en mémoire ; traduction O(n) au lancement. Niveau 3 : mesure du coût par script."
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Tuiles en mémoire pour la barre ouverte ; sorties plafonnées à 5 Mo. Niveau 3 : mesure mémoire.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Tuiles en mémoire pour la barre ouverte ; sorties plafonnées à 5 Mo. Niveau 3 : mesure mémoire."
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Délais des scripts conservés (10 s), osascript de Roadie remplacé par execv (aucun processus en plus).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Délais des scripts conservés (10 s), osascript de Roadie remplacé par execv (aucun processus en plus)."
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Latence de la barre en grille et coût du passage par roadie non mesurés. Niveau 2 : mesure représentative.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 1,
+      "rating_rationale": "Latence de la barre en grille et coût du passage par roadie non mesurés. Niveau 2 : mesure représentative."
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Points d'entrée annotés O(…) (traduction, voisins, disposition, fiche).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Points d'entrée annotés O(…) (traduction, voisins, disposition, fiche)."
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Bornes écrites et testées (1 à 12 colonnes, tuiles montrées, 200 étapes).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Bornes écrites et testées (1 à 12 colonnes, tuiles montrées, 200 étapes)."
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Fiche : regex par variable JavaScript sur tout le texte (O(v × n), v petit). Niveau 3 : un seul passage.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Fiche : regex par variable JavaScript sur tout le texte (O(v × n), v petit). Niveau 3 : un seul passage."
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Messages clairs : source de grille inconnue, script de grille absent, ordres non traduits nommés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Messages clairs : source de grille inconnue, script de grille absent, ordres non traduits nommés."
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Grille : Retour sur une tuile invalide sans effet ; ordre inconnu laissé visible (erreur) plutôt qu'ignoré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Grille : Retour sur une tuile invalide sans effet ; ordre inconnu laissé visible (erreur) plutôt qu'ignoré."
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "← → réservées à la grille (choix de l'utilisateur) ; parcours clavier à essayer. Niveau 3 : parcours validé.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "← → réservées à la grille (choix de l'utilisateur) ; parcours clavier à essayer. Niveau 3 : parcours validé."
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Types purs (AlfredGridView, AlfredBridge), effets injectés (showGrid) ; aucune dépendance ajoutée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Types purs (AlfredGridView, AlfredBridge), effets injectés (showGrid) ; aucune dépendance ajoutée."
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Aucun cycle de module ajouté.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Aucun cycle de module ajouté."
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Présentateur (+80) et contrôleur (+40) grossissent encore. Niveau 3 : services dédiés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Présentateur (+80) et contrôleur (+40) grossissent encore. Niveau 3 : services dédiés."
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Grille par la vue en attente et le contexte de barre ; aucun chargement dynamique de code Roadie.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Grille par la vue en attente et le contexte de barre ; aucun chargement dynamique de code Roadie."
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Invariants, compromis et mesures écrits (research.md, validation.md, commentaires).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Invariants, compromis et mesures écrits (research.md, validation.md, commentaires)."
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Deux sessions découpées, diff borné (~1 200 lignes), Converge en deux passages chacune.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Deux sessions découpées, diff borné (~1 200 lignes), Converge en deux passages chacune."
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Aucune revue contradictoire : Bridget a refusé l'admission (origin_request_invalid). Niveau 2 : revue indépendante documentée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "a8e8867c935f244aab3e4e20d374d7e81ec41bbfd9234f3ed92ea20d9249c38d"
+        }
+      ],
+      "level": 1,
+      "rating_rationale": "Aucune revue contradictoire : Bridget a refusé l'admission (origin_request_invalid). Niveau 2 : revue indépendante documentée."
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Aucune dépendance ajoutée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Aucune dépendance ajoutée."
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Un passage par roadie pour chaque osascript de workflow (execv, coût non mesuré). Niveau 3 : coût mesuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Un passage par roadie pour chaque osascript de workflow (execv, coût non mesuré). Niveau 3 : coût mesuré."
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Pas de code mort identifié ; mentionsAlfred remplacé, non dupliqué.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Pas de code mort identifié ; mentionsAlfred remplacé, non dupliqué."
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Format d'Alfred relevé sur les workflows réels (grilles, externalid, 12 workflows à ordres).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Format d'Alfred relevé sur les workflows réels (grilles, externalid, 12 workflows à ordres)."
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Réglages gardés idempotents (fusion par clé) ; une grille à la fois.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Réglages gardés idempotents (fusion par clé) ; une grille à la fois."
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Dossier d'Alfred jamais écrit ; aucun workflow tiers livré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "a8e8867c935f244aab3e4e20d374d7e81ec41bbfd9234f3ed92ea20d9249c38d"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Dossier d'Alfred jamais écrit ; aucun workflow tiers livré."
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Constats reliés aux corrections, reproductions et tests.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Constats reliés aux corrections, reproductions et tests."
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Exigences 092 et 093 couvertes ou limites écrites dans validation.md.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/axes.md",
+          "sha256": "0759ed1dae7432c2a00c7c8fbd14eaa4e9eb0f8fd426d004b139bc31c90ad1a2"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Exigences 092 et 093 couvertes ou limites écrites dans validation.md."
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : ~0 ligne suppressible à comportement constant ; vigilance sur la taille de TargetOverlayPresenter et TargetModeRuntimeController.",
+  "responsibility": "Vertus LLM et responsabilité future : charge cognitive contenue (deux types purs testés, grille par les lignes existantes, traduction bornée aux formes relevées) ; volume justifié par deux demandes ; trois défauts trouvés par reproduction et corrigés ; revue indépendante absente (Bridget refusé)."
+}

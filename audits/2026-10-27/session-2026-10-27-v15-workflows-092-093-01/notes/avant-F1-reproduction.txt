@@ -1,0 +1,7 @@
+Reproduction F1 (27 octobre 2026, Roadie installé au commit 2d81ec04) :
+$ printf 'Application("com.runningwithcrayons.Alfred").version()' > /tmp/roadie-f1.js
+$ ~/Library/Caches/roadie/alfred-bridge/osascript /tmp/roadie-f1.js
+0:18: syntax error: A identifier can't go after this identifier. (-2740)   (code 1)
+$ /usr/bin/osascript /tmp/roadie-f1.js   (code 0)
+Cause : OsascriptCall.rebuilt remplace le fichier par -e sans -l ; osascript ne déduit plus le
+JavaScript de l'extension .js.

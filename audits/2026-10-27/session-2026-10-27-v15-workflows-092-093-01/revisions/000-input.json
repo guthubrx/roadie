@@ -1,0 +1,429 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T054956709374Z/run.json",
+          "sha256": "58292a2d172f88127e19aa5f6345c98567177888055ad890103a2291a088b8b3"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055000283206Z/run.json",
+          "sha256": "695461878cca5bf67c6f0238dd349ba234f2228791d9aaff2f97bf461f5fe820"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s).  Historique limité à 5ed75b0532c4179c2b6b7d6a4a88e5e2ec2e92fd..2d81ec041a7d3e86772f37bc0fb720fe8aa253b5; les commits antérieurs sont hors périmètre.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055001432120Z/run.json",
+          "sha256": "c49914d2cbce4e6c830d0578db39d4791fc4841a00afe3fd898b0e3ce7671af0"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055001691100Z/run.json",
+          "sha256": "7e851132f28f453ef9b4312c6e55b9b2cdfcb029445cb7d99d109d737ae8ea42"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "pending",
+      "rationale": "Non vérifié",
+      "evidence": []
+    }
+  ],
+  "findings": [],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Analyse statique et validation des entrées",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Protection des secrets courants",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Maîtrise des secrets historiques",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Authentification et séparation des droits",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "À examiner : Maîtrise des dépendances vulnérables",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "À examiner : Confidentialité et pseudonymisation",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "À examiner : Permissions des appels externes",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "À examiner : Résistance aux instructions malveillantes",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Conservation et rotation des sauvegardes",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Reprise des traitements interrompus",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Continuité pendant une bascule",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "À examiner : Restauration après sinistre",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Typage des sources et des tests",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Analyse de style et erreurs statiques",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Régressions et cas limites",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Qualification du runtime livré",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "À examiner : Tests interface et intégration des données",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Admission et saturation des demandes",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Budget mémoire",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Délais, annulation et libération",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "À examiner : Mesures représentatives de latence et charge",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "À examiner : Complexité des points d’entrée",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "À examiner : Bornes des parcours et allocations",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "À examiner : Coût des accès et écritures de données",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "À examiner : Gestion des refus et messages utilisateur",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "À examiner : Gestion des erreurs partielles",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "À examiner : Ergonomie des parcours concernés",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Frontières et résolution des dépendances",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Maîtrise des cycles",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Séparation construction et exécution",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "À examiner : Assemblages et dépendances dynamiques",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "À examiner : Invariants et compromis expliqués",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "À examiner : Périmètre et maintenabilité du changement",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "À examiner : Revue contradictoire et responsabilité",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "À examiner : Dépendances nécessaires en exploitation",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "À examiner : Poids et ressources justifiés",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "À examiner : Code mort et simplifications possibles",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "À examiner : Fidélité des données lues",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "À examiner : Cohérence et idempotence des versions",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "À examiner : Conformité aux règles et données de référence",
+      "evidence": []
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pending",
+      "rationale": "À examiner : Lien constats, corrections et preuves",
+      "evidence": []
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pending",
+      "rationale": "À examiner : Couverture des exigences obligatoires",
+      "evidence": []
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : non mesuré.",
+  "responsibility": "Vertus LLM et responsabilité future : non vérifiées."
+}

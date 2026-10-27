@@ -1,0 +1,3 @@
+        func rebuilt(source: String) -> [String] {
+            (language.map { ["-l", $0] } ?? []) + options + ["-e", source] + arguments
+        }

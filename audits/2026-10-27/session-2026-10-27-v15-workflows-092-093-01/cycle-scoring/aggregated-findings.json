@@ -1,0 +1,206 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": false,
+    "decision": "pass"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "audit092093.osascript-js-file-language",
+      "file": "Sources/RoadieDaemon/AlfredBridge.swift",
+      "symbol": "AlfredBridge.OsascriptCall.rebuilt",
+      "instance": "js-file-without-l",
+      "line": 1,
+      "category": "correctness",
+      "title": "Fichier JavaScript traduit relu comme de l'AppleScript",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Le fichier .js remplacé par -e sans -l : erreur -2740, alors que l'appel direct réussissait.",
+      "remediation": "-l JavaScript ajouté pour un fichier .js/.jxa sans -l.",
+      "requirements": [
+        "FR-003"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "75810f11053604e39c891d750110d986ec2adefe9001fb9550c3c8618320ae77"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Test ciblé et suite complète réussis à la révision corrigée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T055322037936Z/run.json",
+            "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/Spec093BridgeTests.swift",
+            "sha256": "67905c4846b4861cc0a06939b317e09120b6e5d17fa395bb7263a4c7df934727"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F1-reproduction.txt",
+          "sha256": "a43c0dc923a23cb2a61c81bf5fc0dec70ff66ab2ee40b2d89364d65443783c6b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F1-rebuilt.swift.txt",
+          "sha256": "dddf61e37059dbd0c539881a094c3e9e7368595c9bdefe24eafba71179ff03b7"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredBridge.swift",
+          "sha256": "e50f1723368f558991bcff6e27188e0d43252c4be05ff8e61a0f0ec1e9fc482a"
+        }
+      ],
+      "fingerprint": "6104eef98e96dea69e44"
+    },
+    {
+      "rule_id": "audit092093.kept-settings-empty-workflow",
+      "file": "Sources/RoadieDaemon/AlfredBridge.swift",
+      "symbol": "AlfredKeptSettings.set",
+      "instance": "empty-workflow-file",
+      "line": 1,
+      "category": "correctness",
+      "title": "Réglage gardé sans workflow écrit dans .json",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Un identifiant vide écrivait ~/.roadies/workflows-settings/.json.",
+      "remediation": "Erreur MissingWorkflow, rien n'est écrit.",
+      "requirements": [
+        "FR-005"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "75810f11053604e39c891d750110d986ec2adefe9001fb9550c3c8618320ae77"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Test ciblé et suite complète réussis à la révision corrigée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T055322037936Z/run.json",
+            "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/Spec093BridgeTests.swift",
+            "sha256": "67905c4846b4861cc0a06939b317e09120b6e5d17fa395bb7263a4c7df934727"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredBridge.swift",
+          "sha256": "e50f1723368f558991bcff6e27188e0d43252c4be05ff8e61a0f0ec1e9fc482a"
+        }
+      ],
+      "fingerprint": "360bf2a6ff0db005462d"
+    },
+    {
+      "rule_id": "audit092093.bridge-missing-running",
+      "file": "Sources/RoadieDaemon/AlfredBridge.swift",
+      "symbol": "AlfredBridge.javaScript",
+      "instance": "object-without-running",
+      "line": 1,
+      "category": "correctness",
+      "title": "running() absent de l'objet JavaScript",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "TypeError après traduction, alors que l'appel direct rendait true.",
+      "remediation": "running() rend vrai ; compté traduit dans la fiche.",
+      "requirements": [
+        "FR-002"
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme conservée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes.md",
+            "sha256": "75810f11053604e39c891d750110d986ec2adefe9001fb9550c3c8618320ae77"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Test ciblé et suite complète réussis à la révision corrigée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T055322037936Z/run.json",
+            "sha256": "1b96cece851d95aa7465e6073ef2e7f7ca27ef562923f54ca7467de894f60dc1"
+          },
+          {
+            "kind": "source",
+            "path": "Tests/RoadieDaemonTests/Spec093BridgeTests.swift",
+            "sha256": "67905c4846b4861cc0a06939b317e09120b6e5d17fa395bb7263a4c7df934727"
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "4131151e71af6db3ea9695c2f03d6e25a8c233ff83ffb39a79ba57b54ca49e2d"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/avant-F3-reproduction.txt",
+          "sha256": "8f8153d02d568f187fdd1fe47be33e4d8af1d3fc71a6c79f847da09117b1d42e"
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredBridge.swift",
+          "sha256": "e50f1723368f558991bcff6e27188e0d43252c4be05ff8e61a0f0ec1e9fc482a"
+        }
+      ],
+      "fingerprint": "eb8d7aa6a60ced70ba07"
+    }
+  ],
+  "suppressed": []
+}
