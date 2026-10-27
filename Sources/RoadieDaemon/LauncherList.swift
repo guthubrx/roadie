@@ -261,6 +261,13 @@ struct LauncherList: Equatable, Sendable {
         if best == nil { best = section.lazy.compactMap(\.id).first }
     }
 
+    /// Section en tête, sa première ligne choisie (`^texte` : recherches web, session 094). O(n).
+    mutating func prependSection(_ header: String, _ section: [Row]) {
+        guard !section.isEmpty else { return }
+        rows.insert(contentsOf: [.header(header)] + section, at: 0)
+        best = section.lazy.compactMap(\.id).first
+    }
+
     /// Phrase ou abréviation en tête, sous son titre, et choisie par défaut (SPEC-079). O(n).
     mutating func prepend(_ row: Row, header: String) {
         rows.insert(contentsOf: [.header(header), row], at: 0)

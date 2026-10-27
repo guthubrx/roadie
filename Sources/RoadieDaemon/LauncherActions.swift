@@ -281,7 +281,7 @@ struct LauncherVariant: Equatable, Sendable {
         }
         switch modifier {
         case .control:
-            let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = LauncherWeb.searchText(query)
             return text.isEmpty ? nil : LauncherVariant(title: "⌃ ↩ Rechercher « \(text) » sur le web", effect: .webSearch(text))
         case .command:
             let fresh = LauncherDestination(kind: .newStage(name: nil, newStageHome.0, newStageHome.1),

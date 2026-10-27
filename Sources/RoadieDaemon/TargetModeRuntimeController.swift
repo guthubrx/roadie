@@ -641,11 +641,12 @@ public final class TargetModeRuntimeController: NSObject {
             context.initialQuery = resumed
             context.restoredQuery = true
         }
-        context.webSearch = { [events] text in
+        context.webSearch = { [events, weak self] text in
             guard let url = LauncherWeb.searchURL(webSearchURL, query: text) else {
                 return TargetActionResult(changed: false, message: "launcher web: invalid url", error: "web_search_url")
             }
             NSWorkspace.shared.open(url)
+            self?.followBrowser(url)
             events.append(RoadieEvent(type: "launcher.web_search", details: ["host": url.host ?? ""]))
             return TargetActionResult(changed: true, message: "launcher web: \(url.host ?? "")")
         }
@@ -845,6 +846,7 @@ public final class TargetModeRuntimeController: NSObject {
         switch action.verb {
         case .open:
             NSWorkspace.shared.open(url)
+            followBrowser(url)
         case .openIn, .bringHere:
             guard let scope = action.verb == .openIn ? action.destination.flatMap(stageScope) : action.destination.flatMap(stageScope) ?? activeStageScope()
             else { return refused(label, "destination") }
@@ -857,6 +859,27 @@ public final class TargetModeRuntimeController: NSObject {
         }
         events.append(RoadieEvent(type: "launcher.url", details: ["verb": action.verb.rawValue, "host": url.host ?? ""]))
         return TargetActionResult(changed: true, message: "\(label): \(url.host ?? "")")
+    }
+
+    /// Après l'ouverture d'une adresse : Roadie va à la fenêtre du navigateur qui l'a reçue, dans sa stage
+    /// (session 094). Le navigateur passe au premier plan ; sa fenêtre active est celle de l'onglet. Sans
+    /// elle (lecture AX impossible), la fenêtre préférée de l'application, comme pour la lancer. O(w).
+    private func followBrowser(_ url: URL) {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: url), let bundle = Bundle(url: app)?.bundleIdentifier else { return }
+        let service = service
+        let events = events
+        let switcher = WindowSwitcherService(service: service)
+        Task { @MainActor in
+            // Laisser le navigateur prendre l'adresse et passer devant (délai choisi, non mesuré).
+            try? await Task.sleep(for: .milliseconds(450))
+            let loaded = await switcher.load()
+            let windows = loaded.entries.filter { $0.window.bundleID == bundle }
+            let active = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundle ? service.focusedWindowID() : nil
+            guard let entry = windows.first(where: { $0.id == active }) ?? LauncherPlacement.preferredWindow(windows, state: loaded.persisted) else { return }
+            let result = switcher.activate(entry)
+            events.append(RoadieEvent(type: "launcher.follow_browser", details: [
+                "bundleID": bundle, "windowID": String(entry.id.rawValue), "focused": String(entry.id == active), "message": result.message]))
+        }
     }
 
     /// Nouvelle fenêtre du navigateur par défaut avec l'adresse, puis placée dans la stage (R2) :

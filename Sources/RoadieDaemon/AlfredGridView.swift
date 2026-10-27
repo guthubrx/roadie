@@ -11,6 +11,9 @@ struct AlfredGridView: Equatable, Sendable {
     var titlesInFooter = false
     var subtitlesInFooter = false
     var filterable = true
+    /// « Sorting » d'Alfred : vrai si l'ordre est appris à l'usage (`fixedorder` faux et la réponse ne
+    /// demande pas `skipknowledge`) ; seules les tuiles qui ont un `uid` changent de place (session 094).
+    var learnsOrder = false
     var items: [AlfredItem]
     var preselect: String?
     var variables: [String: String]
@@ -57,8 +60,25 @@ struct AlfredGridView: Equatable, Sendable {
                               showTitles: object.config["showtitles"]?.bool ?? true,
                               showSubtitles: object.config["showsubtitles"]?.bool ?? true,
                               titlesInFooter: object.bool("titlesinfooter"), subtitlesInFooter: object.bool("subtitlesinfooter"),
-                              filterable: entry.filtersResults, items: response.items, preselect: response.preselect,
+                              filterable: entry.filtersResults,
+                              learnsOrder: !(object.config["fixedorder"]?.bool ?? false) && !response.skipKnowledge,
+                              items: response.items, preselect: response.preselect,
                               variables: variables.merging(response.variables) { $1 })
+    }
+
+    /// Ordre appris d'une grille (« Sorting » d'Alfred, session 094) : tuiles à `uid` d'abord par choix
+    /// après cette saisie, ou, sans saisie, par fréquence-récence (un choix sans saisie n'enregistre
+    /// aucune abréviation) ; ordre du script sinon (tri stable). O(n log n).
+    static func learned(_ items: [AlfredItem], entryID: String, ranking: LauncherRanking, query: String, now: Date = Date()) -> [AlfredItem] {
+        let typed = !LauncherMatch.fold(query).isEmpty
+        func score(_ item: AlfredItem) -> Double {
+            guard let uid = item.uid else { return 0 }
+            let key = "\(entryID):\(uid)"
+            return typed ? Double(ranking.exactUses(key, query: query)) : ranking.frecency(key, at: now) - 1
+        }
+        return items.enumerated().map { ($0.offset, $0.element, score($0.element)) }
+            .sorted { $0.2 != $1.2 ? $0.2 > $1.2 : $0.0 < $1.0 }
+            .map(\.1)
     }
 
     /// Tuile voisine choisissable : rang ± 1 (← →) ou ± colonnes (↑ ↓), espaceurs sautés ; nil au bord.

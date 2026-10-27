@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Recherche web : un `^` en tête est retiré (`^claude` cherche « claude », en tête de liste) et Roadie
+  va à la fenêtre du navigateur qui reçoit la recherche, dans sa stage. Grille : ordre appris à l'usage
+  quand le workflow le demande.
 - Ordres à Alfred traduits : un script de workflow qui s'adresse à Alfred (AppleScript, JavaScript,
   `osascript` d'un script shell) est servi par Roadie sans ouvrir Alfred (barre, déclencheur, réglages
   gardés dans `~/.roadies/workflows-settings/`, dossier, version) ; la fiche liste ces ordres.

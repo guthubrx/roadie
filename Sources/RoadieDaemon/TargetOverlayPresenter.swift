@@ -1357,18 +1357,23 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         // Recherches de repli et actions universelles sur texte des workflows, en bas (SPEC-089 FR-003, FR-004).
         launcherList.appendSection("Repli", fallbackRows(model.query))
         // Web (SPEC-090) : repli en bas ; recherche par mot-clé et adresse tapée en tête, choisies.
-        launcherList.appendSection("Web", LauncherWeb.fallbackRows(model.query, template: launcher.webSearchTemplate,
-                                                                   searches: launcher.webSearches, fallbacks: launcher.fallbackSearches)
-            .map(LauncherList.Row.web))
-        if let (search, text) = LauncherWeb.keywordSearch(model.query, in: launcher.webSearches) {
-            if text.isEmpty {
-                launcherList.prepend(.web(LauncherWebRow(kind: .hint(search), title: "\(search.title) : tapez la recherche")), header: "Web")
-            } else if let url = LauncherWeb.searchURL(search.url, query: text) {
-                launcherList.prepend(.web(LauncherWebRow(kind: .search(url), title: "Rechercher « \(text) » sur \(search.title)")), header: "Web")
+        let webRows = LauncherWeb.fallbackRows(model.query, template: launcher.webSearchTemplate,
+                                               searches: launcher.webSearches, fallbacks: launcher.fallbackSearches).map(LauncherList.Row.web)
+        if model.query.hasPrefix("^") {
+            // `^texte` (lu sur « ⌃ ↩ ») : les recherches web en tête, la première choisie (session 094).
+            launcherList.prependSection("Web", webRows)
+        } else {
+            launcherList.appendSection("Web", webRows)
+            if let (search, text) = LauncherWeb.keywordSearch(model.query, in: launcher.webSearches) {
+                if text.isEmpty {
+                    launcherList.prepend(.web(LauncherWebRow(kind: .hint(search), title: "\(search.title) : tapez la recherche")), header: "Web")
+                } else if let url = LauncherWeb.searchURL(search.url, query: text) {
+                    launcherList.prepend(.web(LauncherWebRow(kind: .search(url), title: "Rechercher « \(text) » sur \(search.title)")), header: "Web")
+                }
+            } else if let search = launcher.webSearches.first(where: { $0.keyword.lowercased() == model.query.lowercased() }) {
+                // Mot-clé seul : l'invite, sans prendre la sélection (`g` ne cache pas Ghostty).
+                launcherList.insertSection("Web", [.web(LauncherWebRow(kind: .hint(search), title: "\(search.title) : tapez la recherche"))])
             }
-        } else if let search = launcher.webSearches.first(where: { $0.keyword.lowercased() == model.query.lowercased() }) {
-            // Mot-clé seul : l'invite, sans prendre la sélection (`g` ne cache pas Ghostty).
-            launcherList.insertSection("Web", [.web(LauncherWebRow(kind: .hint(search), title: "\(search.title) : tapez la recherche"))])
         }
         if let url = LauncherWeb.address(model.query) {
             launcherList.prepend(.web(LauncherWebRow(kind: .address(url), title: "Ouvrir \(url.absoluteString)")), header: "Adresse")
@@ -1447,7 +1452,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let first = launcherQuery == nil
         guard first || model.query != launcherQuery else { return }
         launcherQuery = model.query
-        let items = grid.filterable ? AlfredScriptFilterResponse.filter(grid.items, query: model.query, mode: grid.entry.filterMode) : grid.items
+        var items = grid.filterable ? AlfredScriptFilterResponse.filter(grid.items, query: model.query, mode: grid.entry.filterMode) : grid.items
+        if grid.learnsOrder { items = AlfredGridView.learned(items, entryID: grid.entry.id, ranking: launcher.ranking, query: model.query) }
         launcherList = .idle(items.enumerated().map { .workflowItem(grid.entry, $0.element, index: $0.offset) })
         let preselected = first ? grid.preselect.flatMap { uid in items.firstIndex { $0.uid == uid } } : nil
         let index = preselected ?? items.firstIndex(where: AlfredGridView.isSelectable)

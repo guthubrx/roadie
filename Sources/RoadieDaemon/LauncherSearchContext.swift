@@ -249,6 +249,14 @@ enum LauncherWeb {
         return URL(string: template.replacingOccurrences(of: "{query}", with: encoded))
     }
 
+    /// Texte envoyé au moteur : un `^` en tête (lu sur le rappel « ⌃ ↩ ») est retiré, comme les espaces.
+    /// `^claude` cherche donc « claude » (session 094). O(q).
+    static func searchText(_ query: String) -> String {
+        var text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("^") { text = text.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines) }
+        return text
+    }
+
     /// Suffixes reconnus seuls (research R1 de la 090).
     static let suffixes: Set<String> = ["com", "net", "org", "io", "dev", "fr", "de", "uk", "eu", "be", "ch", "ca", "us", "info", "ai",
                                         "co", "me", "tv", "gg", "ly", "es", "it", "nl", "se", "no", "dk", "fi", "pl", "pt", "at", "jp",
@@ -301,7 +309,7 @@ enum LauncherWeb {
 
     /// Lignes de repli : la recherche de `web_search_url`, puis celles de `fallback_searches`. O(k).
     static func fallbackRows(_ text: String, template: String, searches: [WebSearch], fallbacks: [String]) -> [LauncherWebRow] {
-        let query = text.trimmingCharacters(in: .whitespaces)
+        let query = searchText(text)
         guard !query.isEmpty else { return [] }
         var rows: [LauncherWebRow] = []
         if let url = searchURL(template, query: query) {
