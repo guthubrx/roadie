@@ -271,6 +271,18 @@ public final class TargetModeRuntimeController: NSObject {
         case "workflow.run", "workflow.trigger":
             runWorkflowCommand(command)
             return
+        case "workflow.alfred":
+            // Ordre donné à Alfred par un script, traduit (SPEC-093 FR-004, FR-007).
+            let order = command.string("order") ?? ""
+            events.append(RoadieEvent(type: "launcher.alfred_call", details: ["order": order, "workflow": command.string("id") ?? ""]))
+            if order == "search" {
+                reopenSearch(command.string("text") ?? "")
+            } else if order == "trigger" {
+                var arguments = ["id": command.string("id") ?? "", "trigger": command.string("trigger") ?? ""]
+                if let argument = command.string("argument") { arguments["argument"] = argument }
+                runWorkflowCommand(TargetModeRuntimeCommand(name: "workflow.trigger", arguments: arguments))
+            }
+            return
         case "launcher.open_items":
             // Diagnostic SPEC-082 : comptes par application et par sorte, sans titre ni adresse.
             let service = service

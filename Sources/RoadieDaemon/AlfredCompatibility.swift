@@ -18,8 +18,11 @@ struct AlfredCompatibilityReport: Equatable, Sendable {
     let state: State
     /// Briques ou interpréteurs absents, triés.
     let missing: [String]
-    /// Le workflow parle à Alfred lui-même (AppleScript vers `com.runningwithcrayons.Alfred`).
-    let mentionsAlfred: Bool
+    /// Ordres donnés à Alfred par ses scripts (SPEC-093 FR-006) : traduits par Roadie, et non traduits.
+    var orders: [String] = []
+    var untranslated: [String] = []
+    /// Au moins un ordre à Alfred (une simple citation, comme un dossier de cache, ne compte pas).
+    var mentionsAlfred: Bool { !orders.isEmpty || !untranslated.isEmpty }
 }
 
 enum AlfredCompatibility {
@@ -64,22 +67,25 @@ enum AlfredCompatibility {
         let state: AlfredCompatibilityReport.State = missingByObject.isEmpty && !entries.isEmpty ? .complete
             : completeEntry ? .partial : .unusable
         let keywords = AlfredWorkflowIndex.entries([workflow]).map(\.keyword)
+        let alfredOrders = orders(workflow)
         return AlfredCompatibilityReport(id: workflow.id, name: workflow.name, bundleID: workflow.bundleID, source: workflow.source,
                                          keywords: Array(Set(keywords)).sorted(), state: state,
-                                         missing: Array(Set(missingByObject.values)).sorted(), mentionsAlfred: mentionsAlfred(workflow))
+                                         missing: Array(Set(missingByObject.values)).sorted(), orders: alfredOrders.translated,
+                                         untranslated: alfredOrders.untranslated)
     }
 
-    /// Recherche de l'identifiant d'Alfred dans `info.plist` et les scripts du dossier (1 Mo au plus chacun). O(f).
-    static func mentionsAlfred(_ workflow: AlfredWorkflow) -> Bool {
-        let markers = ["com.runningwithcrayons.Alfred", "application \"Alfred", "Application(\"com.runningwithcrayons", "Application('com.runningwithcrayons"]
+    /// Ordres à Alfred des scripts en ligne et des fichiers de script du dossier (1 Mo au plus chacun),
+    /// reconnus par les motifs de la traduction (SPEC-093 research R6). O(f × n).
+    static func orders(_ workflow: AlfredWorkflow) -> (translated: [String], untranslated: [String]) {
+        var texts = workflow.objects.values.flatMap { object in ["script", "applescript"].compactMap { object.string($0) } }
         let files = ((try? FileManager.default.contentsOfDirectory(at: workflow.folder.resolvingSymlinksInPath(), includingPropertiesForKeys: [.fileSizeKey])) ?? [])
-            .filter { ["plist", "sh", "zsh", "js", "py", "rb", "applescript", "scpt", ""].contains($0.pathExtension) }
+            .filter { ["sh", "zsh", "js", "py", "rb", "applescript", ""].contains($0.pathExtension) }
         for file in files {
             guard ((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) < 1_048_576,
                   let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
-            if markers.contains(where: text.contains) { return true }
+            texts.append(text)
         }
-        return false
+        return AlfredBridge.orders(in: texts.joined(separator: "\n"))
     }
 
     /// Fiches de tous les workflows d'un dossier, et totaux par état. O(W × (o + c)).

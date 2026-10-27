@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Ordres à Alfred traduits : un script de workflow qui s'adresse à Alfred (AppleScript, JavaScript,
+  `osascript` d'un script shell) est servi par Roadie sans ouvrir Alfred (barre, déclencheur, réglages
+  gardés dans `~/.roadies/workflows-settings/`, dossier, version) ; la fiche liste ces ordres.
 - Grille des workflows : une brique Grille d'Alfred ouvre la barre en tuiles (System Settings
   Explorer), colonnes réglées par le workflow, ← → ↑ ↓, filtre, Retour vers la suite du schéma ;
   déclencheur externe sur une brique quelconque (`inboundconfig`, Alfred 5.5).

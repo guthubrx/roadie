@@ -139,7 +139,8 @@ struct AlfredWorkflow: Equatable, Sendable {
     }
 
     /// Lit `info.plist` (et `prefs.plist`) d'un dossier de workflow ; nil s'il n'en est pas un. O(o + c).
-    static func load(folder: URL, source: Source) -> AlfredWorkflow? {
+    /// `kept` : réglages enregistrés par le workflow (`set configuration`, SPEC-093), après `prefs.plist`.
+    static func load(folder: URL, source: Source, kept: AlfredKeptSettings = .shared) -> AlfredWorkflow? {
         guard let data = try? Data(contentsOf: folder.appendingPathComponent("info.plist")),
               let raw = try? PropertyListSerialization.propertyList(from: data, format: nil),
               case .dict(let plist)? = PlistValue(raw) else { return nil }
@@ -169,6 +170,8 @@ struct AlfredWorkflow: Equatable, Sendable {
            case .dict(let values)? = PlistValue(raw) {
             for (key, value) in values { if let text = value.string { prefs[key] = text } }
         }
+        let bundleID = plist["bundleid"]?.string ?? ""
+        prefs.merge(kept.values(for: bundleID.isEmpty ? folder.lastPathComponent : bundleID)) { $1 }
         return AlfredWorkflow(
             id: folder.lastPathComponent, bundleID: plist["bundleid"]?.string ?? "", name: plist["name"]?.string ?? folder.lastPathComponent,
             description: plist["description"]?.string ?? "", version: plist["version"]?.string ?? "", folder: folder, source: source,

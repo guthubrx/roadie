@@ -508,8 +508,14 @@ into `~/.roadies/alfred-tasks`. Other bricks: simulated keys, large type, Termin
 dialog, file type, bar reopened on a path. **Grid**: a Grid brick opens the bar as tiles (large
 image, title, subtitle on the tile or in the footer), with the workflow's column count; ← → ↑ ↓
 move between tiles, typing filters, Tab keeps the verbs, Return sends the tile to the rest of the
-workflow. An external trigger can target any brick that declares it (Alfred 5.5). Never: Text,
-Image, PDF views, snippets, Alfred Remote, Alfred's buffer. A script run by a workflow gets Roadie's Accessibility permission
+workflow. An external trigger can target any brick that declares it (Alfred 5.5). **Orders to
+Alfred**: when a workflow script addresses Alfred (`tell application id "com.runningwithcrayons.Alfred"
+to …`, `Application("com.runningwithcrayons.Alfred")`), Roadie does what is asked itself, without
+opening Alfred: `search` opens the bar, `run trigger` runs the trigger, `set configuration` /
+`remove configuration` keep the setting in `~/.roadies/workflows-settings/` (never in Alfred's folder),
+`reveal workflow` shows the folder, `version` returns the version. `roadie workflow list` lists these
+« ordres à Alfred » and the « non traduits » ones. Never: Text, Image, PDF views, snippets, Alfred
+Remote, Alfred's buffer, compiled AppleScript. A script run by a workflow gets Roadie's Accessibility permission
 (measured). The log keeps neither input nor result.
 
 **Verbs and destinations**: Tab on the selected row opens its verbs. App: open or go

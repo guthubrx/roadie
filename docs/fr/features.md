@@ -531,7 +531,13 @@ Apple, dialogue, type de fichier, barre rouverte sur un chemin. **Grille** : une
 ouvre la barre en tuiles (grande image, titre, sous-titre sur la tuile ou en pied), au nombre de
 colonnes du workflow ; ← → ↑ ↓ changent de tuile, la frappe filtre, Tab garde les verbes, Retour
 envoie la tuile à la suite du workflow. Un déclencheur externe peut viser n'importe quelle brique
-qui le déclare (Alfred 5.5). Jamais : vues Texte, Image, PDF, snippets, Alfred Remote, tampon d'Alfred. Un script lancé par un workflow obtient
+qui le déclare (Alfred 5.5). **Ordres à Alfred** : quand un script de workflow s'adresse à Alfred
+(`tell application id "com.runningwithcrayons.Alfred" to …`, `Application("com.runningwithcrayons.Alfred")`),
+Roadie fait lui-même ce qui est demandé, sans ouvrir Alfred : `search` ouvre la barre, `run trigger`
+lance le déclencheur, `set configuration` / `remove configuration` gardent le réglage dans
+`~/.roadies/workflows-settings/` (jamais dans le dossier d'Alfred), `reveal workflow` montre le dossier,
+`version` rend la version. `roadie workflow list` liste ces « ordres à Alfred » et ceux « non traduits ».
+Jamais : vues Texte, Image, PDF, snippets, Alfred Remote, tampon d'Alfred, scripts AppleScript compilés. Un script lancé par un workflow obtient
 l'autorisation Accessibilité de Roadie (mesuré). Le journal ne garde ni saisie ni résultat.
 
 **Verbes et destinations** : Tab sur la ligne choisie ouvre ses verbes. Application :

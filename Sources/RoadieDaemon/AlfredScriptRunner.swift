@@ -148,11 +148,14 @@ enum AlfredScriptRunner {
     }
 
     /// Variables d'Alfred (documentées), du workflow et de l'appel ; `PATH` complété. O(v).
+    /// `bridge` : `osascript` de Roadie, dont le dossier passe en tête du `PATH` (SPEC-093 FR-003).
     static func environment(workflow: AlfredWorkflow, variables: [String: String], keyword: String?,
-                            base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
+                            base: [String: String] = ProcessInfo.processInfo.environment,
+                            bridge: String? = AlfredBridge.shim) -> [String: String] {
         var env = base
         let path = env["PATH"] ?? ""
-        env["PATH"] = ([path] + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]).filter { !$0.isEmpty }.joined(separator: ":")
+        let shimFolder = bridge.map { ($0 as NSString).deletingLastPathComponent }
+        env["PATH"] = ([shimFolder ?? ""] + [path] + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]).filter { !$0.isEmpty }.joined(separator: ":")
         for (key, value) in constants(workflow: workflow) { env[key] = value }
         if let keyword { env["alfred_workflow_keyword"] = keyword }
         for (key, value) in variables { env[key] = value }
@@ -190,13 +193,33 @@ enum AlfredScriptRunner {
         return (info?["CFBundleShortVersionString"] as? String ?? "5.5", info?["CFBundleVersion"] as? String ?? "0")
     }()
 
+    /// Ordres à Alfred traduits avant lancement (SPEC-093 FR-003) : AppleScript et JavaScript en ligne
+    /// traduits ; autres langages : `/usr/bin/osascript` remplacé par celui de Roadie dans un texte qui
+    /// donne un ordre à Alfred. Script externe (8) : seul le `PATH` s'applique. O(n).
+    static func bridged(_ script: AlfredScript, cli: String, shim: String?) -> AlfredScript {
+        let source: String
+        switch script.language {
+        case 6, 7:
+            guard let translated = AlfredBridge.translate(script.source, language: script.language == 6 ? .appleScript : .javaScript,
+                                                          cli: cli, version: alfredVersion) else { return script }
+            source = translated
+        case 8:
+            return script
+        default:
+            guard let shim else { return script }
+            source = AlfredBridge.redirectOsascript(script.source, shim: shim)
+            guard source != script.source else { return script }
+        }
+        return AlfredScript(language: script.language, source: source, file: script.file, usesArgv: script.usesArgv, escaping: script.escaping)
+    }
+
     /// Lance le script hors du fil principal ; `done` reçoit l'issue (sur une file quelconque). O(sortie).
     @discardableResult
     static func start(_ script: AlfredScript, query: String, arguments: [String], workflow: AlfredWorkflow,
                       variables: [String: String], keyword: String? = nil, timeout: TimeInterval = defaultTimeout,
                       directory: URL? = nil, done: @escaping @Sendable (AlfredScriptResult) -> Void) -> AlfredProcess {
         let process = AlfredProcess()
-        var script = script
+        var script = bridged(script, cli: BTTShortcutBindingService().executable, shim: AlfredBridge.shim)
         var arguments = arguments
         if !script.usesArgv {
             script = AlfredScript(language: script.language, source: script.source.replacingOccurrences(of: "{query}", with: escape(query, bits: script.escaping)),

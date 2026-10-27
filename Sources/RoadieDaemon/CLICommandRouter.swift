@@ -226,6 +226,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "launcher history [--clear] [--json]"),
         CLICommandSpec(usage: "workflow list [--json] [--hotkeys] | check FOLDER [--json] | install FILE.alfredworkflow [--replace] | remove ID"),
         CLICommandSpec(usage: "workflow run ID OBJECT [ARGUMENT] [--var NAME=VALUE] | trigger ID TRIGGER [ARGUMENT] [--var NAME=VALUE] | tasks update"),
+        CLICommandSpec(usage: "workflow alfred search TEXT | trigger WORKFLOW NAME [ARGUMENT] | set WORKFLOW KEY VALUE | remove WORKFLOW KEY | reload WORKFLOW | reveal WORKFLOW"),
         CLICommandSpec(usage: "launch --open-items [--tabs]"),
         CLICommandSpec(usage: "launch PATH [--stage NAME | --here | --new-stage] [--position left|right|full|float] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
@@ -881,6 +882,51 @@ public final class CLICommandRouter {
     }
 
     /// Workflows au format d'Alfred (SPEC-088 FR-010) : lus et installés ici, sans le démon.
+    /// Ordre donné à Alfred par un script de workflow (SPEC-093 FR-004) : barre et déclencheur par le
+    /// démon ; réglages gardés et dossier sur place. Journal sans texte de l'utilisateur (FR-007).
+    private func runAlfredOrder(_ args: [String], json: Bool) throws -> Int32 {
+        guard let order = args.first else { return usageError() }
+        let rest = Array(args.dropFirst())
+        func log(_ workflow: String) {
+            EventLog().append(RoadieEvent(type: "launcher.alfred_call", details: ["order": order, "workflow": workflow]))
+        }
+        switch order {
+        case "search":
+            return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "workflow.alfred", arguments: ["order": "search", "text": rest.first ?? ""]), json: json)
+        case "trigger":
+            guard rest.count >= 2 else { return usageError() }
+            var payload = ["order": "trigger", "id": rest[0], "trigger": rest[1]]
+            if rest.count >= 3 { payload["argument"] = rest[2] }
+            return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "workflow.alfred", arguments: payload), json: json)
+        case "set":
+            guard rest.count >= 3 else { return usageError() }
+            try AlfredKeptSettings.shared.set(rest[1], to: rest[2], workflow: rest[0])
+            log(rest[0])
+            return 0
+        case "remove":
+            guard rest.count >= 2 else { return usageError() }
+            try AlfredKeptSettings.shared.remove(rest[1], workflow: rest[0])
+            log(rest[0])
+            return 0
+        case "reload":
+            // L'index compare les dates à chaque lecture : rien à écrire (research R4).
+            log(rest.first ?? "")
+            return 0
+        case "reveal":
+            let config = configReload.currentConfig().experimental.targetMode
+            guard let id = rest.first, let workflow = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
+                .first(where: { $0.bundleID == id || $0.id == id }) else { err("workflow: introuvable : \(rest.first ?? "")"); return 2 }
+            let reveal = Process()
+            reveal.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            reveal.arguments = ["-R", workflow.folder.path]
+            try reveal.run()
+            log(id)
+            return 0
+        default:
+            return usageError()
+        }
+    }
+
     private func runWorkflowCommand(_ args: [String]) throws -> Int32 {
         let json = args.contains("--json")
         func show(_ reports: [AlfredCompatibilityReport], totals: Bool) throws {
@@ -888,7 +934,7 @@ public final class CLICommandRouter {
                 let rows: [[String: Any]] = reports.map { report in
                     ["id": report.id, "name": report.name, "bundleID": report.bundleID, "source": report.source.rawValue,
                      "keywords": report.keywords, "state": report.state.rawValue, "missing": report.missing,
-                     "mentionsAlfred": report.mentionsAlfred]
+                     "mentionsAlfred": report.mentionsAlfred, "alfredOrders": report.orders, "untranslated": report.untranslated]
                 }
                 out(String(data: try JSONSerialization.data(withJSONObject: rows, options: [.sortedKeys, .prettyPrinted]), encoding: .utf8) ?? "[]")
                 return
@@ -897,13 +943,15 @@ public final class CLICommandRouter {
             for report in reports {
                 let keywords = report.keywords.isEmpty ? "" : " [\(report.keywords.joined(separator: ", "))]"
                 let missing = report.missing.isEmpty ? "" : " · manque : \(report.missing.joined(separator: ", "))"
-                let alfred = report.mentionsAlfred ? " · parle à Alfred" : ""
+                // Ordres à Alfred (SPEC-093 FR-006) : traduits par Roadie, puis ceux qui ne le sont pas.
+                let alfred = (report.orders.isEmpty ? "" : " · ordres à Alfred : \(report.orders.joined(separator: ", "))")
+                    + (report.untranslated.isEmpty ? "" : " · non traduits : \(report.untranslated.joined(separator: ", "))")
                 out("\(state[report.state.rawValue] ?? report.state.rawValue)\t\(report.name)\(keywords) (\(report.source.rawValue))\(missing)\(alfred)")
             }
             if totals {
                 let total = max(1, reports.count)
                 let complete = reports.filter { $0.state == .complete }.count, partial = reports.filter { $0.state == .partial }.count
-                out("total \(reports.count) · complets \(complete) (\(100 * complete / total) %) · avec une entrée complète \(complete + partial) (\(100 * (complete + partial) / total) %) · sans mention d'Alfred et complets \(reports.filter { $0.state == .complete && !$0.mentionsAlfred }.count)")
+                out("total \(reports.count) · complets \(complete) (\(100 * complete / total) %) · avec une entrée complète \(complete + partial) (\(100 * (complete + partial) / total) %) · complets sans ordre non traduit \(reports.filter { $0.state == .complete && $0.untranslated.isEmpty }.count) · avec ordres à Alfred \(reports.filter(\.mentionsAlfred).count)")
             }
             if reports.isEmpty { out("aucun workflow") }
         }
@@ -934,6 +982,11 @@ public final class CLICommandRouter {
                 payload["variables"] = String(data: try JSONSerialization.data(withJSONObject: variables), encoding: .utf8)
             }
             return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "workflow.\(args[0])", arguments: payload), json: json)
+        case "alfred":
+            return try runAlfredOrder(Array(args.dropFirst()), json: json)
+        case "osascript":
+            // `osascript` de Roadie (SPEC-093 FR-003) : ordres à Alfred traduits, puis le vrai osascript.
+            AlfredBridge.execOsascript(Array(args.dropFirst()), cli: BTTShortcutBindingService().executable)
         case "tasks":
             guard args.count >= 2, args[1] == "update" else { return usageError() }
             let count = try AlfredAutomationTasks.update()

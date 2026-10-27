@@ -113,12 +113,14 @@ final class AlfredWorkflowIndex: @unchecked Sendable {
 
     /// Workflows de ces dossiers, relus seulement s'ils ont changé.
     func workflows(in folders: [(URL, AlfredWorkflow.Source)]) -> [AlfredWorkflow] {
-        lock.withLock {
+        // Réglages gardés par les workflows (SPEC-093) : leur dossier change à chaque écriture.
+        let kept = AlfredKeptSettings.shared.stamp
+        return lock.withLock {
             folders.compactMap { folder, source in
                 let key = "\(source.rawValue):\(folder.path)"
                 let stamp = ["info.plist", "prefs.plist"].map {
                     (try? FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent($0).path))?[.modificationDate] as? Date
-                }
+                } + [kept]
                 if let cached = cache[key], cached.stamp == stamp { return cached.workflow }
                 guard let workflow = AlfredWorkflow.load(folder: folder, source: source) else { return nil }
                 cache[key] = Cached(stamp: stamp, workflow: workflow)
