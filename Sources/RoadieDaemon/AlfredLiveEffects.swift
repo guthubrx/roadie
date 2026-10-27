@@ -9,13 +9,19 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
     private let webSearchURL: String
     private let reopen: @MainActor @Sendable (String) -> Void
     private let postKeyEvent: @Sendable (CGEvent) -> Void
+    private let writePasteboard: @MainActor @Sendable (String) -> Void
 
     init(events: EventLog, webSearchURL: String, reopen: @escaping @MainActor @Sendable (String) -> Void,
-         postKeyEvent: @escaping @Sendable (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }) {
+         postKeyEvent: @escaping @Sendable (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) },
+         writePasteboard: @escaping @MainActor @Sendable (String) -> Void = { text in
+             NSPasteboard.general.clearContents()
+             NSPasteboard.general.setString(text, forType: .string)
+         }) {
         self.events = events
         self.webSearchURL = webSearchURL
         self.reopen = reopen
         self.postKeyEvent = postKeyEvent
+        self.writePasteboard = writePasteboard
     }
 
     func openURL(_ url: String, browser: String?) async {
@@ -52,17 +58,15 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
 
     /// Copie ; `paste` : ⌘V simulé dans l'application au premier plan, une fois la barre fermée.
     func copy(_ text: String, paste: Bool) async {
-        await MainActor.run {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-        }
+        let writePasteboard = writePasteboard
+        await MainActor.run { writePasteboard(text) }
         guard paste else { return }
         try? await Task.sleep(for: .milliseconds(150))
         let source = CGEventSource(stateID: .hidSystemState)
         for down in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: down) else { continue }
             event.flags = .maskCommand
-            event.post(tap: .cghidEventTap)
+            postKeyEvent(event)
         }
     }
 

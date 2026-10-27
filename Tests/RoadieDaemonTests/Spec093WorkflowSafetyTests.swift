@@ -117,6 +117,26 @@ struct Spec093WorkflowSafetyTests {
                 == Set(["normal", ".autre", ".roadie-replacement-utilisateur"]))
     }
 
+    @Test func interruptedReplacementRemainsHiddenAndIsNotDiscardedByTheNextInstall() throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-leftover-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let workflows = sandbox.appendingPathComponent("workflows")
+        let previous = workflows.appendingPathComponent(".roadie-replacement-interrompu/item")
+        let target = workflows.appendingPathComponent("actif")
+        let source = sandbox.appendingPathComponent("source")
+        for folder in [previous, target, source] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data("workflow".utf8).write(to: folder.appendingPathComponent("info.plist"))
+        }
+        let retained = previous.appendingPathComponent("temoin")
+        try Data("ancienne installation".utf8).write(to: retained)
+
+        try StagedFileReplacement.install(from: source, to: target, replace: true)
+
+        #expect(try Data(contentsOf: retained) == Data("ancienne installation".utf8))
+        #expect(AlfredWorkflowIndex.children(of: workflows).map(\.lastPathComponent) == ["actif"])
+    }
+
     @Test func previouslyValidReplacementPrefixCanStillBeInstalledAndRemoved() throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-prefix-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: sandbox) }

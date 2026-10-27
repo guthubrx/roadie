@@ -3,6 +3,39 @@ import Testing
 @testable import RoadieDaemon
 
 struct Spec093PersistenceSafetyTests {
+    @Test @MainActor func clearHistoryReportsCorruptionAndPreservesTheFile() throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-cli-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let history = sandbox.appendingPathComponent("history.json")
+        let invalid = Data("{document abîmé".utf8)
+        try invalid.write(to: history)
+
+        let response = CLICommandRouter(launcherHistoryPath: history.path).run(["launcher", "history", "--clear"])
+
+        #expect(response.exitCode != 0)
+        #expect(!response.stderr.isEmpty)
+        #expect(!response.stdout.contains("historique effacé"))
+        #expect(try Data(contentsOf: history) == invalid)
+    }
+
+    @Test @MainActor func clearHistoryReportsAnInaccessibleDestination() throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-cli-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let blockedParent = sandbox.appendingPathComponent("regular-file")
+        let marker = Data("ne pas modifier".utf8)
+        try marker.write(to: blockedParent)
+
+        let response = CLICommandRouter(launcherHistoryPath: blockedParent.appendingPathComponent("history.json").path)
+            .run(["launcher", "history", "--clear"])
+
+        #expect(response.exitCode != 0)
+        #expect(!response.stderr.isEmpty)
+        #expect(!response.stdout.contains("historique effacé"))
+        #expect(try Data(contentsOf: blockedParent) == marker)
+    }
+
     @Test func corruptLauncherFilesAreNotOverwrittenByMutations() throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-state-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)

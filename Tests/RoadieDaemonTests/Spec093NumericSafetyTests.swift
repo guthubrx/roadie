@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import Testing
 @testable import RoadieDaemon
 
@@ -8,6 +9,25 @@ struct Spec093NumericSafetyTests {
         private var count = 0
         func increment() { lock.withLock { count += 1 } }
         var value: Int { lock.withLock { count } }
+    }
+
+    private final class PasteCapture: @unchecked Sendable {
+        struct Key: Equatable {
+            let type: CGEventType
+            let code: Int64
+            let command: Bool
+        }
+        private let lock = NSLock()
+        private var savedTexts: [String] = []
+        private var savedKeys: [Key] = []
+        func text(_ text: String) { lock.withLock { savedTexts.append(text) } }
+        func event(_ event: CGEvent) {
+            let key = Key(type: event.type, code: event.getIntegerValueField(.keyboardEventKeycode),
+                          command: event.flags.contains(.maskCommand))
+            lock.withLock { savedKeys.append(key) }
+        }
+        var texts: [String] { lock.withLock { savedTexts } }
+        var keys: [Key] { lock.withLock { savedKeys } }
     }
 
     @Test func plistNumbersOutsideIntegerRangeAreRejected() throws {
@@ -45,10 +65,39 @@ struct Spec093NumericSafetyTests {
                                         postKeyEvent: { _ in counter.increment() })
         // Le compteur remplace l'émission réelle et vérifie les deux chemins.
         await effects.keyCombo(keyCode: 65_536, character: "", modifiers: 0, count: 1)
-        await effects.keyCombo(keyCode: .max, character: "", modifiers: 0, count: 1)
+        await effects.keyCombo(keyCode: .max, character: "a", modifiers: 0, count: 1)
         #expect(counter.value == 0)
         await effects.keyCombo(keyCode: 0, character: "", modifiers: 0, count: 1)
         #expect(counter.value == 2)
+    }
+
+    @Test func negativeWorkflowKeyCodeFallsBackToTheGivenCharacter() async {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-log-\(UUID().uuidString)")
+        let capture = PasteCapture()
+        let effects = AlfredLiveEffects(events: EventLog(path: path.path), webSearchURL: "", reopen: { _ in },
+                                        postKeyEvent: { capture.event($0) })
+        await effects.keyCombo(keyCode: -1, character: "A", modifiers: 0, count: 1)
+        await effects.keyCombo(keyCode: -1, character: "🙂", modifiers: 0, count: 1)
+        #expect(capture.keys == [
+            .init(type: .keyDown, code: 0, command: false),
+            .init(type: .keyUp, code: 0, command: false)
+        ])
+    }
+
+    @Test func copyAndPasteEmitOnlyTheExpectedCommandV() async {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-log-\(UUID().uuidString)")
+        let capture = PasteCapture()
+        let effects = AlfredLiveEffects(events: EventLog(path: path.path), webSearchURL: "", reopen: { _ in },
+                                        postKeyEvent: { capture.event($0) }, writePasteboard: { capture.text($0) })
+        await effects.copy("copie", paste: false)
+        #expect(capture.texts == ["copie"])
+        #expect(capture.keys.isEmpty)
+        await effects.copy("collage", paste: true)
+        #expect(capture.texts == ["copie", "collage"])
+        #expect(capture.keys == [
+            .init(type: .keyDown, code: 9, command: true),
+            .init(type: .keyUp, code: 9, command: true)
+        ])
     }
 
     @Test func rankingCountersDoNotOverflowOnDamagedButValidData() {

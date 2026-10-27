@@ -97,6 +97,7 @@ public final class CLICommandRouter {
     private let configReload: ConfigReloadService
     private let railRuntimeStore: RailRuntimeStateStore
     private let workflowInstallationFolder: URL
+    private let launcherHistoryPath: String?
     private var cachedService: SnapshotService?
     private var stdoutBuffer = ""
     private var stderrBuffer = ""
@@ -114,13 +115,15 @@ public final class CLICommandRouter {
         streamSink: ((String) -> Void)? = nil,
         configReload: ConfigReloadService = .shared,
         railRuntimeStore: RailRuntimeStateStore = RailRuntimeStateStore(),
-        workflowInstallationFolder: URL? = nil
+        workflowInstallationFolder: URL? = nil,
+        launcherHistoryPath: String? = nil
     ) {
         self.makeService = makeService
         self.streamSink = streamSink
         self.configReload = configReload
         self.railRuntimeStore = railRuntimeStore
         self.workflowInstallationFolder = workflowInstallationFolder ?? AlfredWorkflowIndex.roadieFolder
+        self.launcherHistoryPath = launcherHistoryPath
     }
 
     /// Service par défaut. Une lecture n'écrit pas l'état et ne fait pas suivre le focus par la
@@ -654,7 +657,7 @@ public final class CLICommandRouter {
         case "launcher":
             // SPEC-090 : historique des saisies de la barre, gardé sur ce Mac.
             guard args.count >= 2, args[1] == "history" else { return usageError() }
-            let store = LauncherHistoryStore()
+            let store = launcherHistoryPath.map { LauncherHistoryStore(path: $0) } ?? LauncherHistoryStore()
             if args.contains("--clear") {
                 try store.clear()
                 out("historique effacé")
