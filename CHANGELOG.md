@@ -7,6 +7,17 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Thèmes de la barre à la manière d'Alfred : les neuf thèmes d'Alfred avec leurs couleurs, polices et flou,
+  thèmes exportés d'Alfred lus tels quels, thème du mode sombre, nombre de résultats montrés.
+- Barre déplaçable à la souris, place retenue (double-clic : place par défaut) ; place par défaut en bas,
+  au centre ou en haut ; écran de la souris, de la fenêtre active ou principal.
+- `> commande` : lancée dans Terminal, iTerm, Ghostty, Warp, kitty, WezTerm ou Alacritty.
+- Signets de Firefox (tous les profils, étiquettes, mots-clés, icônes), Safari et Chrome dans la barre ;
+  onglets ouverts de Firefox trouvés et choisis.
+- Commandes système (verrouiller, suspendre les écrans, tout quitter, corbeille, son, redémarrer…),
+  verbe « Forcer à quitter », ⌘L grand texte, ⌘⎋ ferme, ⌫ remonte d'un dossier, tri des dossiers,
+  dossiers d'applications ajoutés, apprentissage réglable (`roadie launcher reset`), calcul avancé complet.
+
 - Présentations des résultats : liste, grille ou grandes tuiles pour un workflow, un dossier exploré ou les
   fichiers d'une recherche ; ⌘G (réglable) ou le chip à droite de la barre ; choix retenu par source.
 - Barre vide : « Souvent ici » et « Recherches récentes » s'activent ou se retirent, avec leur
@@ -81,6 +92,7 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Le tilde (⌥N) et les accents tapés par touche morte ne sont plus effacés par la barre.
 - Barre vide : « Revenir » propose la fenêtre vue avant la fenêtre en cours, plus la fenêtre en cours.
   Après Échap, l'application restée au premier plan retrouve le clavier (zone de saisie de T3 Code).
 - Lanceur : la touche des raccourcis 1 à 9 se choisit (`pick_modifier` dans

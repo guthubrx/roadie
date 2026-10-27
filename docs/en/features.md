@@ -636,6 +636,31 @@ have a click handler.
 Classic label mode stays limited to the active window. To extend it to every
 visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
 
+#### Themes, bar placement, terminal, bookmarks and system commands (sessions 100 to 105)
+
+- **Dead keys**: `~` (⌥N on a French keyboard), `^` then `e` and other compositions are no longer erased
+  by the bar while typing.
+- **Themes** (`theme`, `theme_dark`): Roadie, or one of Alfred's themes (Alfred, Alfred Dark, Alfred Modern,
+  Alfred Modern Dark, Alfred macOS, Alfred macOS Dark, Frosty Teal, High Contrast Light, Large Avenir), with
+  colours, fonts, sizes, corner radius, width and blur. A theme exported from Alfred (`.alfredappearance`) in
+  `~/.config/roadies/themes`, or a custom theme made in Alfred, joins the list. `theme_dark` applies in macOS
+  dark mode. `visible_results` limits the number of visible rows (0: as many as fit).
+- **Bar placement**: drag the bar by its edge or the list background; it keeps that place
+  (`bar_save_position`). Double-click the edge to return to the default place (`bar_position`: bottom,
+  centre, or top like Alfred, the list opening on the free side). `bar_screen`: mouse, active window or main screen.
+- **Terminal**: `> command` then Return runs the command in a new window of the chosen terminal
+  (`terminal_app`: Terminal, iTerm, Ghostty, Warp, kitty, WezTerm, Alacritty).
+- **Bookmarks** (`bookmarks_enabled`, `bookmark_browsers`): Firefox bookmarks (all profiles, folders, tags,
+  site icons), Safari (Full Disk Access required) and Chrome, Brave or Edge, from two letters. Firefox
+  keywords work: `w cat` with a `w` keyword bookmark containing `%s`. Open Firefox tabs are found too;
+  Return selects the tab.
+- **System**: lock, sleep displays, quit all, empty trash, volume, restart, shut down… (second Return for
+  heavy commands); "Force quit" verb for an application.
+- **Typed folders**: ⌫ at the end of `…/` goes up one folder; `path_sort` sorts by name or date.
+- **Misc**: ⌘L shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
+  folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
+  knows sinh, cosh, tanh, trunc, dtor, rtod…
+
 ### Command mode (`/`) and settings window
 
 The search bar can also run commands, in the spirit of the `/` commands of Codex

@@ -665,6 +665,32 @@ Le mode lettres classique reste limite a la fenetre active. Pour l'etendre a
 toutes les fenetres visibles : `scope = "visible_windows"` dans
 `[experimental.app_targets]`.
 
+#### Thèmes, place de la barre, terminal, signets et commandes système (sessions 100 à 105)
+
+- **Touches mortes** : `~` (⌥N sur un clavier français), `^` puis `e` et les autres compositions ne sont
+  plus effacées par la barre pendant la frappe.
+- **Thèmes** (`theme`, `theme_dark`) : Roadie, ou l'un des thèmes d'Alfred (Alfred, Alfred Dark, Alfred Modern,
+  Alfred Modern Dark, Alfred macOS, Alfred macOS Dark, Frosty Teal, High Contrast Light, Large Avenir), avec
+  couleurs, polices, tailles, arrondis, largeur et flou. Un thème exporté d'Alfred (`.alfredappearance`) dans
+  `~/.config/roadies/themes`, ou un thème personnel créé dans Alfred, s'ajoute à la liste. `theme_dark` sert
+  quand macOS est en mode sombre. `visible_results` limite le nombre de lignes montrées (0 : selon la place).
+- **Place de la barre** : glissez-la par son bord ou par le fond de la liste ; elle garde cette place
+  (`bar_save_position`). Un double-clic sur le bord la remet à sa place par défaut (`bar_position` : en bas,
+  au centre ou en haut comme Alfred, la liste s'ouvrant du côté libre). `bar_screen` : écran de la souris, de
+  la fenêtre active ou principal.
+- **Terminal** : `> commande` puis Retour lance la commande dans une nouvelle fenêtre du terminal choisi
+  (`terminal_app` : Terminal, iTerm, Ghostty, Warp, kitty, WezTerm, Alacritty).
+- **Signets** (`bookmarks_enabled`, `bookmark_browsers`) : signets de Firefox (tous les profils, dossiers,
+  étiquettes, icônes des sites), Safari (accès complet au disque requis) et Chrome, Brave ou Edge, dès deux
+  lettres. Les mots-clés de Firefox fonctionnent : `w chat` avec un signet de mot-clé `w` et `%s`. Les
+  onglets ouverts de Firefox sont aussi trouvés ; Retour choisit l'onglet.
+- **Système** : verrouiller, suspendre les écrans, tout quitter, vider la corbeille, son, redémarrer,
+  éteindre… (second Retour pour les commandes lourdes) ; verbe « Forcer à quitter » d'une application.
+- **Dossiers tapés** : ⌫ à la fin de `…/` remonte d'un dossier ; `path_sort` trie par nom ou par date.
+- **Divers** : ⌘L montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
+  dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
+  la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…
+
 ### Mode commande (`/`) et fenêtre de réglages
 
 La barre du mode recherche sait aussi lancer des commandes, à la manière des
