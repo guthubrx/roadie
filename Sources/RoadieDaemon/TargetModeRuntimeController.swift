@@ -491,6 +491,20 @@ public final class TargetModeRuntimeController: NSObject {
 
     /// Lanceur de la barre (SPEC-073) : index des applications gardé en mémoire et rafraîchi à chaque
     /// ouverture, état des applications ouvertes, classement appris lu une fois par session.
+    /// Écran de la barre (session 102) : `main` le premier écran, `active` celui qui contient le plus de la
+    /// fenêtre active ; nil (écran du pointeur) pour `mouse` ou sans fenêtre active. O(e).
+    nonisolated static func barScreen(_ setting: String, focused: CGRect?, screens: [CGRect]) -> CGRect? {
+        switch setting {
+        case "main": return screens.first
+        case "active":
+            guard let focused else { return nil }
+            return screens.max { $0.intersection(focused).width * $0.intersection(focused).height
+                < $1.intersection(focused).width * $1.intersection(focused).height }
+                .flatMap { $0.intersects(focused) ? $0 : nil }
+        default: return nil
+        }
+    }
+
     private func launcherContext(initialSubject: LauncherSubject? = nil, targets: [RoadieTarget] = [], initialQuery: String? = nil) -> LauncherSearchContext {
         let catalog = LauncherAppCatalog.shared
         let rankingStore = LauncherRankingStore()
@@ -644,6 +658,16 @@ public final class TargetModeRuntimeController: NSObject {
         context.viewBook = viewStore.load()
         context.saveViews = { book in viewStore.save(book) }
         context.viewCycleKey = service.effectiveConfig.experimental.targetMode.viewCycleHotkey
+        // Place et écran de la barre (session 102).
+        let barConfig = service.effectiveConfig.experimental.targetMode
+        let positionStore = LauncherPositionStore()
+        context.defaultBarPlacement = SearchBarPlacement(setting: barConfig.barPosition)
+        context.barPlacement = (barConfig.barSavePosition ? positionStore.load() : nil) ?? context.defaultBarPlacement
+        let focusedFrame = snapshot.focusedWindowID.flatMap { id in snapshot.windows.first { $0.window.id == id } }
+            .map { RoadieScreenCoordinate.axRectToNS($0.window.frame.cgRect) }
+        context.barScreenFrame = Self.barScreen(barConfig.barScreen, focused: focusedFrame, screens: NSScreen.screens.map(\.frame))
+        let savesPosition = barConfig.barSavePosition
+        context.savePlacement = { placement in if savesPosition || placement == nil { positionStore.save(placement) } }
         if let grid = pendingGrid {
             let id = grid.entry.id
             context.subscribeGrid = { [weak self] update in self?.openGrid = (id, update) }

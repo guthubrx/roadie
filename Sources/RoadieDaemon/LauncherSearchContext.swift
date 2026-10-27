@@ -83,6 +83,13 @@ struct LauncherSearchContext {
     /// Web (SPEC-090) : recherches par mot-clé, adresse de ⌃ Retour, mots-clés de repli.
     var webSearches: [WebSearch] = WebSearch.defaults
     var webSearchTemplate = TargetModeConfig.defaultWebSearchURL
+    /// Place de la barre (session 102) : retenue après un glisser, sinon `bar_position` ; écran de
+    /// `bar_screen` en coordonnées AppKit (nil : écran du pointeur) ; `savePlacement` retient la place
+    /// (nil l'efface), sans effet si `bar_save_position` est faux.
+    var barPlacement = SearchBarPlacement.bottom
+    var defaultBarPlacement = SearchBarPlacement.bottom
+    var barScreenFrame: CGRect?
+    var savePlacement: (SearchBarPlacement?) -> Void = { _ in }
     var fallbackSearches: [String] = []
     /// Lot de la sélection multiple (SPEC-091) et annulation du dernier lot.
     var performBatch: @MainActor ([LauncherAction]) -> TargetActionResult = { _ in

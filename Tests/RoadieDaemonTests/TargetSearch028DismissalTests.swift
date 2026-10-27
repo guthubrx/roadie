@@ -34,7 +34,12 @@ struct TargetSearchDismissalTests {
             #expect((mask & (1 << type.rawValue) != 0) == searchMode)
             #expect(TargetSearchDismissal.isMouseDown(type))
         }
-        for type in [CGEventType.leftMouseUp, .rightMouseUp, .mouseMoved, .scrollWheel] {
+        // Glisser de la barre (session 102) : bouton gauche relâché et déplacé, en recherche seulement.
+        for type in [CGEventType.leftMouseUp, .leftMouseDragged] {
+            #expect((mask & (1 << type.rawValue) != 0) == searchMode)
+            #expect(!TargetSearchDismissal.isMouseDown(type))
+        }
+        for type in [CGEventType.rightMouseUp, .mouseMoved, .scrollWheel] {
             #expect(mask & (1 << type.rawValue) == 0)
             #expect(!TargetSearchDismissal.isMouseDown(type))
         }

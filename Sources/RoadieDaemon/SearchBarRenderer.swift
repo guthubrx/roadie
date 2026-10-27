@@ -1,9 +1,63 @@
 import AppKit
 import RoadieCore
 
-/// Mise en page de la barre de saisie et de la boîte de commandes (SPEC-023 R4), pure. La barre reste
-/// collée en bas de l'écran (y = minY + 48) ; la liste et le message s'empilent au-dessus d'elle,
-/// sans sortir de l'écran. Le message, réponse à Retour, est le plus près de la barre.
+/// Place de la barre (session 102) : en bas (historique, liste au-dessus), au centre ou en haut comme
+/// Alfred (liste dessous), ou place retenue après un glisser : centre de la barre en fractions de l'écran,
+/// y depuis le bas. La liste s'ouvre du côté où il y a le plus de place.
+enum SearchBarPlacement: Equatable, Sendable {
+    case bottom, center, top
+    case custom(x: CGFloat, y: CGFloat)
+
+    init(setting: String) {
+        switch setting {
+        case "top": self = .top
+        case "center": self = .center
+        default: self = .bottom
+        }
+    }
+
+    /// La liste s'ouvre sous la barre quand celle-ci est dans la moitié haute de l'écran.
+    var listBelow: Bool {
+        switch self {
+        case .bottom: false
+        case .center, .top: true
+        case .custom(_, let y): y > 0.5
+        }
+    }
+
+    /// Cadre de la barre, toujours entièrement dans `bounds`. O(1).
+    func bar(in bounds: CGRect, width: CGFloat, height: CGFloat) -> CGRect {
+        let height = min(bounds.height, height)
+        let x: CGFloat, y: CGFloat
+        switch self {
+        case .bottom:
+            x = bounds.midX - width / 2
+            y = bounds.minY + min(48, max(0, bounds.height - height))
+        case .center:
+            x = bounds.midX - width / 2
+            y = bounds.midY + bounds.height * 0.1 - height / 2
+        case .top:
+            x = bounds.midX - width / 2
+            y = bounds.maxY - bounds.height * 0.2 - height
+        case .custom(let fx, let fy):
+            x = bounds.minX + fx * bounds.width - width / 2
+            y = bounds.minY + fy * bounds.height - height / 2
+        }
+        return CGRect(x: min(max(x, bounds.minX), bounds.maxX - width), y: min(max(y, bounds.minY), bounds.maxY - height),
+                      width: width, height: height)
+    }
+
+    /// Place retenue d'une barre dont le centre est `center`. O(1).
+    static func custom(center: CGPoint, in bounds: CGRect) -> SearchBarPlacement {
+        guard bounds.width > 0, bounds.height > 0 else { return .bottom }
+        return .custom(x: min(1, max(0, (center.x - bounds.minX) / bounds.width)),
+                       y: min(1, max(0, (center.y - bounds.minY) / bounds.height)))
+    }
+}
+
+/// Mise en page de la barre de saisie et de la boîte de commandes (SPEC-023 R4), pure. La barre suit sa
+/// place (session 102) ; la liste et le message s'empilent au-dessus d'elle ou dessous, sans sortir de
+/// l'écran. Le message, réponse à Retour, est le plus près de la barre quand la liste est au-dessus.
 struct SearchBarLayout: Equatable {
     static let maxSuggestions = 8
     static let maxMessageLines = 12
@@ -39,19 +93,21 @@ struct SearchBarLayout: Equatable {
     static func make(
         bounds: CGRect, suggestions: Int, messageLines: Int,
         searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13,
-        width preferredWidth: CGFloat = 640, barHeight preferredHeight: CGFloat? = nil, maxRows: Int = 0
+        width preferredWidth: CGFloat = 640, barHeight preferredHeight: CGFloat? = nil, maxRows: Int = 0,
+        placement: SearchBarPlacement = .bottom
     ) -> SearchBarLayout {
         let lineHeight = Self.lineHeight * min(48, max(8, commandTextFontSize)) / 13
         let barHeight = preferredHeight ?? 40 * min(48, max(8, searchTextFontSize)) / 15
         let margin = min(20, bounds.width * 0.05)
         let width = max(0, min(preferredWidth, bounds.width - 2 * margin))
-        let bar = CGRect(x: bounds.midX - width / 2, y: bounds.minY + min(48, max(0, bounds.height - barHeight)), width: width, height: min(bounds.height, barHeight))
-        let room = max(0, Int((bounds.maxY - 8 - bar.maxY - gap - 2 * padding) / lineHeight))
+        let bar = placement.bar(in: bounds, width: width, height: barHeight)
+        let below = placement.listBelow
+        let room = max(0, Int(listRoom(bar: bar, bounds: bounds, below: below) / lineHeight))
         let messageCount = min(messageLines, maxMessageLines, room)
         let suggestionCount = min(suggestions, maxRows > 0 ? maxRows : maxSuggestions, room - messageCount)
         let total = messageCount + suggestionCount
         guard total > 0 else { return SearchBarLayout(bar: bar, panel: nil, suggestionRows: [], messageRows: []) }
-        let panel = CGRect(x: bar.minX, y: bar.maxY + gap, width: bar.width, height: CGFloat(total) * lineHeight + 2 * padding)
+        let panel = panelFrame(bar: bar, height: CGFloat(total) * lineHeight + 2 * padding, below: below)
         let rows = (0..<total).map { index in
             CGRect(x: panel.minX + 12, y: panel.maxY - padding - CGFloat(index + 1) * lineHeight, width: panel.width - 24, height: lineHeight)
         }
@@ -61,6 +117,16 @@ struct SearchBarLayout: Equatable {
             suggestionRows: Array(rows.prefix(suggestionCount)),
             messageRows: Array(rows.suffix(messageCount))
         )
+    }
+
+    /// Hauteur disponible pour la liste, au-dessus ou au-dessous de la barre. O(1).
+    static func listRoom(bar: CGRect, bounds: CGRect, below: Bool) -> CGFloat {
+        max(0, (below ? bar.minY - (bounds.minY + 8) : bounds.maxY - 8 - bar.maxY) - gap - 2 * padding)
+    }
+
+    /// Fond de la liste collé à la barre, du côté choisi. O(1).
+    static func panelFrame(bar: CGRect, height: CGFloat, below: Bool) -> CGRect {
+        CGRect(x: bar.minX, y: below ? bar.minY - gap - height : bar.maxY + gap, width: bar.width, height: height)
     }
 
     /// Tranche montrée, commune au dessin et au clic. O(1).
@@ -74,10 +140,11 @@ struct SearchBarLayout: Equatable {
     /// sélection visible. O(n), n lignes.
     /// `maxRows` borne la hauteur de la liste à autant de lignes de résultat (session 101).
     static func makeRich(bounds: CGRect, heights: [CGFloat], selected: Int?, searchTextFontSize: CGFloat = 15,
-                         width: CGFloat = 640, barHeight: CGFloat? = nil, maxRows: Int = 0) -> SearchBarLayout {
+                         width: CGFloat = 640, barHeight: CGFloat? = nil, maxRows: Int = 0,
+                         placement: SearchBarPlacement = .bottom) -> SearchBarLayout {
         let base = make(bounds: bounds, suggestions: 0, messageLines: 0, searchTextFontSize: searchTextFontSize,
-                        width: width, barHeight: barHeight)
-        var room = max(0, bounds.maxY - 8 - base.bar.maxY - gap - 2 * padding)
+                        width: width, barHeight: barHeight, placement: placement)
+        var room = listRoom(bar: base.bar, bounds: bounds, below: placement.listBelow)
         if maxRows > 0, let row = heights.max() { room = min(room, CGFloat(maxRows) * row) }
         guard !heights.isEmpty else { return base }
         var start = 0, end = 0, used: CGFloat = 0
@@ -89,7 +156,7 @@ struct SearchBarLayout: Equatable {
             while end < heights.count, used + heights[end] <= room { used += heights[end]; end += 1 }
         }
         guard end > start else { return base }
-        let panel = CGRect(x: base.bar.minX, y: base.bar.maxY + gap, width: base.bar.width, height: used + 2 * padding)
+        let panel = panelFrame(bar: base.bar, height: used + 2 * padding, below: placement.listBelow)
         var top = panel.maxY - padding
         let rows = heights[start..<end].map { height -> CGRect in
             top -= height
@@ -103,21 +170,22 @@ struct SearchBarLayout: Equatable {
     /// hauteur des textes sous l'image ; `footer` : une ligne en pied pour la tuile choisie. O(t), t
     /// tuiles montrées.
     static func makeGrid(bounds: CGRect, count: Int, columns: Int, selected: Int?, label: CGFloat = 20, footer: Bool,
-                         searchTextFontSize: CGFloat = 15, width: CGFloat = 640, barHeight: CGFloat? = nil) -> SearchBarLayout {
+                         searchTextFontSize: CGFloat = 15, width: CGFloat = 640, barHeight: CGFloat? = nil,
+                         placement: SearchBarPlacement = .bottom) -> SearchBarLayout {
         let base = make(bounds: bounds, suggestions: 0, messageLines: 0, searchTextFontSize: searchTextFontSize,
-                        width: width, barHeight: barHeight)
+                        width: width, barHeight: barHeight, placement: placement)
         let columns = max(1, columns)
         guard count > 0, base.bar.width > 2 * padding else { return base }
         let side = min(140, (base.bar.width - 2 * padding - 8) / CGFloat(columns))
         let tile = CGSize(width: side, height: side + label)
         let footerHeight = footer ? lineHeight : 0
-        let room = max(0, bounds.maxY - 8 - base.bar.maxY - gap - 2 * padding - footerHeight)
+        let room = max(0, listRoom(bar: base.bar, bounds: bounds, below: placement.listBelow) - footerHeight)
         let totalRows = (count + columns - 1) / columns
         let shownRows = min(totalRows, max(1, Int(room / tile.height)))
         let selectedRow = min(totalRows - 1, max(0, selected ?? 0) / columns)
         let startRow = min(max(0, selectedRow - shownRows + 1), totalRows - shownRows)
-        let panel = CGRect(x: base.bar.minX, y: base.bar.maxY + gap, width: base.bar.width,
-                           height: CGFloat(shownRows) * tile.height + 2 * padding + footerHeight)
+        let panel = panelFrame(bar: base.bar, height: CGFloat(shownRows) * tile.height + 2 * padding + footerHeight,
+                               below: placement.listBelow)
         let left = panel.minX + (panel.width - CGFloat(columns) * tile.width) / 2
         var tiles: [CGRect] = []
         for row in 0..<shownRows {
@@ -159,6 +227,8 @@ struct TargetSearchBar {
     var grid: SearchGrid?
     /// Chip de la présentation (session 099), en tête de la pastille du compteur ; un clic la change.
     var viewChip: String?
+    /// Place de la barre à l'écran (session 102), commune au dessin et aux clics.
+    var placement: SearchBarPlacement = .bottom
 
     var inputText: String {
         if let commandInput { return "/\(commandInput)▏" }
@@ -187,19 +257,20 @@ struct TargetSearchBar {
         if let grid {
             return SearchBarLayout.makeGrid(bounds: bounds, count: suggestions.count, columns: grid.columns, selected: selectedSuggestion,
                                             label: grid.labelHeight(fontSize: style.commandTextFontSize), footer: grid.footer != nil,
-                                            searchTextFontSize: style.searchTextFontSize, width: width, barHeight: barHeight)
+                                            searchTextFontSize: style.searchTextFontSize, width: width, barHeight: barHeight,
+                                            placement: placement)
         }
         if richRows {
             let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
             let heights = suggestions.map { $0.kind == .header ? metrics.header : metrics.row }
             return SearchBarLayout.makeRich(bounds: bounds, heights: heights, selected: selectedSuggestion,
                                             searchTextFontSize: style.searchTextFontSize, width: width, barHeight: barHeight,
-                                            maxRows: style.maxRows)
+                                            maxRows: style.maxRows, placement: placement)
         }
         return SearchBarLayout.make(bounds: bounds, suggestions: suggestions.count,
                                     messageLines: messageTextLines.count, searchTextFontSize: style.searchTextFontSize,
                                     commandTextFontSize: style.commandTextFontSize, width: width, barHeight: barHeight,
-                                    maxRows: style.maxRows)
+                                    maxRows: style.maxRows, placement: placement)
     }
 }
 

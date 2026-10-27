@@ -122,3 +122,31 @@ private extension JSONEncoder {
         return encoder
     }
 }
+
+/// Place de la barre déplacée à la souris (session 102) : centre en fractions de l'écran. Absente : place
+/// par défaut de `bar_position`.
+struct LauncherPositionStore: Sendable {
+    private struct Saved: Codable { var x: Double; var y: Double }
+    let path: String
+
+    init(path: String = TestEnvironment.launcherFile("launcher-position.json")) {
+        self.path = NSString(string: path).expandingTildeInPath
+    }
+
+    func load() -> SearchBarPlacement? {
+        guard let data = FileManager.default.contents(atPath: path),
+              let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return nil }
+        return .custom(x: min(1, max(0, saved.x)), y: min(1, max(0, saved.y)))
+    }
+
+    /// nil efface la place retenue.
+    func save(_ placement: SearchBarPlacement?) {
+        guard case .custom(let x, let y)? = placement else {
+            try? FileManager.default.removeItem(atPath: path)
+            return
+        }
+        try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        guard let data = try? JSONEncoder().encode(Saved(x: Double(x), y: Double(y))) else { return }
+        try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+    }
+}

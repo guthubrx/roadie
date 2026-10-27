@@ -105,6 +105,12 @@ public struct SettingDescriptor: Equatable, Sendable {
         }
         let label: String
         switch (id, value) {
+        case ("target_mode.bar_screen", "mouse"): return "Écran de la souris"
+        case ("target_mode.bar_screen", "active"): return "Écran de la fenêtre active"
+        case ("target_mode.bar_screen", "main"): return "Écran principal"
+        case ("target_mode.bar_position", "bottom"): return "En bas, liste au-dessus"
+        case ("target_mode.bar_position", "center"): return "Au centre, liste dessous"
+        case ("target_mode.bar_position", "top"): return "En haut, liste dessous (comme Alfred)"
         case ("overview.presentation", "archipelago"): return "Archipel"
         case ("overview.presentation", "bays"): return "Baies"
         case ("window_placement.new_apps_target", "focused_display"): return "Écran actif (recommandé)"
@@ -436,6 +442,15 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "visible_results", "Nombre de résultats montrés",
               "Lignes de résultats visibles sous la saisie ; les autres défilent. 0 : autant que la place de l'écran.",
               .int(0...20), .int(0)),
+        entry(.recherche, "experimental.target_mode", "bar_screen", "Écran de la barre",
+              "Écran où la barre s'ouvre : celui de la souris, celui de la fenêtre active, ou l'écran principal.",
+              .choice(TargetModeConfig.barScreens), .string("mouse")),
+        entry(.recherche, "experimental.target_mode", "bar_position", "Place de la barre",
+              "Place par défaut : en bas avec la liste au-dessus, au centre, ou en haut avec la liste dessous comme Alfred.",
+              .choice(TargetModeConfig.barPositions), .string("bottom")),
+        entry(.recherche, "experimental.target_mode", "bar_save_position", "Retenir la place de la barre",
+              "Glissez la barre par son bord ou le fond de la liste : elle garde cette place aux ouvertures suivantes. Un double-clic sur le bord la remet à sa place par défaut.",
+              .bool, .bool(true)),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

@@ -307,9 +307,15 @@ extension KeyEventTapSession {
             if TargetSearchDismissal.isMouseDown(type), let search = session as? TargetSearchSession {
                 // installEventTap est isolé sur MainActor : cette source appartient à la boucle
                 // principale. Fermer ici, avant un timer de Retour, sans consommer le clic.
-                let consumed = MainActor.assumeIsolated { search.handleMouseDown(at: event.location, type: type) }
+                let clicks = Int(event.getIntegerValueField(.mouseEventClickState))
+                let consumed = MainActor.assumeIsolated { search.handleMouseDown(at: event.location, type: type, clicks: clicks) }
                 if consumed { return nil }
                 return Unmanaged.passUnretained(event)
+            }
+            // Glisser de la barre (session 102) : seul un glisser commencé sur la barre est pris.
+            if type == .leftMouseDragged || type == .leftMouseUp, let search = session as? TargetSearchSession {
+                let consumed = MainActor.assumeIsolated { search.handleMouseDrag(at: event.location, ended: type == .leftMouseUp) }
+                return consumed ? nil : Unmanaged.passUnretained(event)
             }
             guard type == .keyDown else { return Unmanaged.passUnretained(event) }
             // La recherche possède un vrai champ key : AppKit reçoit texte, IME et raccourcis.
@@ -852,7 +858,7 @@ enum TargetSearchDismissal {
     static func eventMask(search: Bool) -> CGEventMask {
         let keyboard = CGEventMask(1 << CGEventType.keyDown.rawValue)
         guard search else { return keyboard }
-        let mouseTypes: [CGEventType] = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        let mouseTypes: [CGEventType] = [.leftMouseDown, .rightMouseDown, .otherMouseDown, .leftMouseDragged, .leftMouseUp]
         return mouseTypes.reduce(keyboard) { mask, type in
             mask | CGEventMask(1 << type.rawValue)
         }
@@ -896,8 +902,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var shownBar: TargetSearchBar?
     /// Résultats dont la présentation se choisit (session 099) ; nil : liste seule.
     private var viewSource: LauncherViewSource?
-    /// Écran du pointeur à l'ouverture, celui de la barre.
+    /// Écran du pointeur à l'ouverture : classement des cibles, et barre si `bar_screen` vaut `mouse`.
     private let pointerScreen: CGRect?
+    /// Place de la barre (session 102) et glisser en cours : point de départ, centre de la barre au départ,
+    /// déplacement réel.
+    private var placement: SearchBarPlacement = .bottom
+    private var drag: (start: CGPoint, center: CGPoint, moved: Bool)?
     /// Des fenêtres sont encore en cours de lecture.
     private var isLoading = true
     /// Lanceur (SPEC-073) : liste en sections au-dessus de la barre, et ligne choisie.
@@ -978,6 +988,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let mouse = NSEvent.mouseLocation
         let pointerScreen = NSScreen.screens.first { $0.frame.contains(mouse) }?.frame
         self.pointerScreen = pointerScreen
+        self.placement = launcher.barPlacement
         self.model = TargetSearchModel(targets: targets, alphabet: alphabet) { Self.rank($0, windowOrder: -1, pointerScreen: pointerScreen) }
         self.letters = LauncherList.letters(alphabet)
         self.style = style
@@ -1061,7 +1072,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         finish(TargetActionResult(changed: false, message: "target_search_cancelled", error: "cancelled"))
     }
 
-    fileprivate func handleMouseDown(at point: CGPoint, type: CGEventType) -> Bool {
+    fileprivate func handleMouseDown(at point: CGPoint, type: CGEventType, clicks: Int = 1) -> Bool {
         guard !finished else { return false }
         let nsPoint = RoadieScreenCoordinate.axRectToNS(CGRect(origin: point, size: .zero)).origin
         if let layout = searchBarLayout, layout.contains(nsPoint) {
@@ -1091,6 +1102,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                     commandModel = command
                     render()
                 }
+                // Hors d'une ligne (marges, titres) : le fond de la liste déplace la barre (session 102).
+                if type == .leftMouseDown { beginDrag(at: nsPoint, bar: layout.bar, clicks: clicks) }
                 return true
             }
             // Chip de la présentation (session 099) : un clic passe à la suivante.
@@ -1099,10 +1112,45 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 cycleView()
                 return true
             }
+            // Bord de la barre, hors du champ : glisser la déplace, double-clic la remet à sa place par défaut.
+            if type == .leftMouseDown, let bar = shownBar,
+               !SearchBarRenderer.inputFrame(bar, bar: layout.bar, style: style).contains(nsPoint) {
+                beginDrag(at: nsPoint, bar: layout.bar, clicks: clicks)
+                return true
+            }
             return false // Le champ natif reçoit clic, sélection et menu contextuel.
         }
         if TargetSearchDismissal.cancelIfOutside(at: nsPoint, layout: searchBarLayout, model: &model) { cancel() }
         return false
+    }
+
+    /// Début d'un glisser de la barre ; un double-clic oublie la place retenue (session 102).
+    private func beginDrag(at point: CGPoint, bar: CGRect, clicks: Int) {
+        if clicks >= 2 {
+            drag = nil
+            placement = launcher.defaultBarPlacement
+            launcher.savePlacement(nil)
+            render()
+            return
+        }
+        drag = (point, CGPoint(x: bar.midX, y: bar.midY), false)
+    }
+
+    /// Glisser de la barre : elle suit le pointeur ; au relâchement, sa place est retenue. Vrai si
+    /// l'événement appartient au glisser. O(rendu).
+    fileprivate func handleMouseDrag(at point: CGPoint, ended: Bool) -> Bool {
+        guard !finished, var current = drag else { return false }
+        let nsPoint = RoadieScreenCoordinate.axRectToNS(CGRect(origin: point, size: .zero)).origin
+        let dx = nsPoint.x - current.start.x, dy = nsPoint.y - current.start.y
+        if abs(dx) + abs(dy) > 2 { current.moved = true }
+        if current.moved, let screen = windows.first(where: { $0.frame.contains(current.center) })?.frame
+            ?? launcher.barScreenFrame ?? pointerScreen {
+            placement = .custom(center: CGPoint(x: current.center.x + dx, y: current.center.y + dy), in: screen)
+            render()
+        }
+        drag = ended ? nil : current
+        if ended, current.moved { launcher.savePlacement(placement) }
+        return true
     }
 
     private func replaceInput(_ text: String) {
@@ -2506,7 +2554,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         var bar = bar
         var badges = badges
         bar.usesNativeInput = true
-        let barWindow = pointerScreen.flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
+        bar.placement = placement
+        let barWindow = (launcher.barScreenFrame ?? pointerScreen).flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
         searchBarLayout = barWindow.map { bar.layout(in: $0.frame, style: style) }
         // ⌘1 à ⌘9 sur les lignes montrées ; le rang sert au dessin et à la touche (SPEC-075).
         pickRows = []
