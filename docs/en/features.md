@@ -505,7 +505,11 @@ with the command to bind in BetterTouchTool (Roadie does not capture these keys;
 argument is read through accessibility, else by ⌘C). Alfred's official automation tasks (public
 repository `alfredapp/automation-tasks`, BSD-3 license) install with `roadie workflow tasks update`
 into `~/.roadies/alfred-tasks`. Other bricks: simulated keys, large type, Terminal, Apple Shortcuts,
-dialog, file type, bar reopened on a path. **Grid**: a Grid brick opens the bar as tiles (large
+dialog, file type, bar reopened on a path. **Presentations**: the results of a workflow (for example `emoji`), of an explored folder (`~/Pictures/`) or
+the files of a search show as a list, a grid or large tiles. ⌘G (configurable: Settings > Search > « Touche des
+présentations ») or a click on the chip at the right of the input (☰ ▦ ▣) moves to the next presentation;
+Roadie remembers it per workflow, per folder and for files. In a grid, images show their content and ← → ↑ ↓
+move between tiles. **Grid**: a Grid brick opens the bar as tiles (large
 image, title, subtitle on the tile or in the footer), with the workflow's column count; ← → ↑ ↓
 move between tiles, typing filters, Tab keeps the verbs, Return sends the tile to the rest of the
 workflow. An external trigger can target any brick that declares it (Alfred 5.5). **Orders to

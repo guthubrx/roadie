@@ -40,6 +40,9 @@ struct AlfredGridView: Equatable, Sendable {
 
     private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "heic", "tiff", "tif", "webp", "bmp"]
 
+    /// Fichier image, montré par son contenu dans une grille. O(1).
+    static func isImage(_ path: String) -> Bool { imageExtensions.contains((path as NSString).pathExtension.lowercased()) }
+
     /// Liste de chemins (source « objet », research R8) : un par argument ou par ligne ; une image
     /// montre son contenu, un autre fichier son icône. O(n).
     static func fileItems(_ arguments: [String]) -> [AlfredItem] {

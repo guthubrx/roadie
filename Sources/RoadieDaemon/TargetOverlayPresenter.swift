@@ -880,6 +880,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var timer: Timer?
     private var windows: [TargetOverlayWindow] = []
     private var searchBarLayout: SearchBarLayout?
+    /// Dernière barre montrée : le clic sur le chip retrouve son rectangle (session 099).
+    private var shownBar: TargetSearchBar?
+    /// Résultats dont la présentation se choisit (session 099) ; nil : liste seule.
+    private var viewSource: LauncherViewSource?
     /// Écran du pointeur à l'ouverture, celui de la barre.
     private let pointerScreen: CGRect?
     /// Des fenêtres sont encore en cours de lecture.
@@ -1001,6 +1005,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: style) }
         windows.forEach { $0.orderFrontRegardless() }
         let input = SearchInputPanel()
+        input.viewCycle = SearchInputPanel.cycleKey(launcher.viewCycleKey, layout: TargetSearchHotkey.currentLayoutTable())
         input.onChange = { [weak self] text in self?.replaceInput(text) }
         input.onKey = { [weak self] key in self?.handleSearch(key) }
         input.onFlags = { [weak self] flags in self?.modifiersChanged(flags) }
@@ -1074,6 +1079,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                     commandModel = command
                     render()
                 }
+                return true
+            }
+            // Chip de la présentation (session 099) : un clic passe à la suivante.
+            if type == .leftMouseDown, step == .objects, viewSource != nil, let bar = shownBar,
+               let chip = SearchBarRenderer.counterFrame(bar, bar: layout.bar, style: style), chip.contains(nsPoint) {
+                cycleView()
                 return true
             }
             return false // Le champ natif reçoit clic, sélection et menu contextuel.
@@ -1237,6 +1248,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             selection.clear()
         case .move(let step):
             moveInGrid(step)
+        case .cycleView:
+            cycleView()
         case .preview:
             if case .file(let file)? = launcherList.row(for: launcherSelection) {
                 finishAction(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil))
@@ -1260,8 +1273,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func navigate(_ input: SearchKeyInput) {
         guard !launcherList.rows.isEmpty else { model.handleNavigation(input); return }
         // Grille (SPEC-092 FR-004) : ↑ ↓ changent de rangée ; Tab garde son rôle.
-        if let grid = launcher.workflowGrid, input.navigationSource != .tab {
-            if case .next = input.kind { moveInGrid(grid.columns) } else { moveInGrid(-grid.columns) }
+        if let columns = gridColumns, input.navigationSource != .tab {
+            if case .next = input.kind { moveInGrid(columns) } else { moveInGrid(-columns) }
             return
         }
         if input.navigationSource == .tab, case .next = input.kind {
@@ -1308,7 +1321,59 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     /// Recalcule la liste si la requête ou les cibles ont changé. Nouvelle requête : la meilleure
     /// ligne est choisie ; nouvelles cibles seulement : la ligne choisie est gardée si elle reste. O(a + n).
+    /// Lignes de la barre, puis la présentation choisie pour leur source (session 099).
     private func refreshLauncher() {
+        refreshLauncherRows()
+        viewSource = currentViewSource()
+        applyViewMode()
+    }
+
+    /// Présentation des résultats : celle retenue pour la source ; la grille d'un workflow (092) garde la
+    /// sienne. O(1).
+    private var viewMode: LauncherViewMode { launcher.workflowGrid == nil ? launcher.viewBook.mode(for: viewSource) : .list }
+
+    /// Colonnes de la grille montrée ; nil pour une liste.
+    private var gridColumns: Int? {
+        if let grid = launcher.workflowGrid { return grid.loadingText == nil ? grid.columns : nil }
+        return viewMode.columns
+    }
+
+    /// Source des résultats (FR-001) : une seule entrée de workflow à résultats, un chemin tapé, ou des
+    /// fichiers dans la recherche ordinaire. O(e + n).
+    private func currentViewSource() -> LauncherViewSource? {
+        guard launcher.workflowGrid == nil, step == .objects, commandModel == nil, !model.query.isEmpty else { return nil }
+        let runs = launcher.workflowEntries.filter { if case .run = $0.match(model.query) { return true } else { return false } }
+        if !runs.isEmpty {
+            guard runs.count == 1, let entry = runs.first, [.scriptFilter, .listFilter, .fileFilter].contains(entry.kind) else { return nil }
+            let files = entry.kind == .fileFilter || launcherList.rows.contains { if case .workflowItem(_, let item, _) = $0 { return item.isFile } else { return false } }
+            return .workflow(entry.id, itemsAreFiles: files)
+        }
+        if Self.isPath(model.query) { return .folder(LauncherPathRules.parts(model.query).directory) }
+        return launcherList.rows.contains { if case .file = $0 { return true } else { return false } } ? .files : nil
+    }
+
+    /// En grille : lignes sans titres de section, fichiers seuls pour la recherche ordinaire ; la ligne
+    /// choisie reste si elle est montrée. Sans effet en liste. O(n).
+    private func applyViewMode() {
+        guard let source = viewSource, viewMode != .list else { return }
+        let rows = source.gridRows(launcherList.rows)
+        guard rows != launcherList.rows else { return }
+        launcherList = .idle(rows)
+        if launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
+        syncHighlight()
+    }
+
+    /// Présentation suivante pour cette source (touche ou chip), retenue ; les lignes sont refaites. O(s).
+    private func cycleView() {
+        guard let source = viewSource else { return }
+        launcher.viewBook.set(viewMode.next, for: source)
+        launcher.saveViews(launcher.viewBook)
+        launcherQuery = nil
+        filesChanged = true
+        render()
+    }
+
+    private func refreshLauncherRows() {
         if let grid = launcher.workflowGrid {
             refreshGrid(grid)
             return
@@ -1484,7 +1549,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let rows = launcherList.rows
         let selectable: (Int) -> Bool = { index in
             if case .workflowItem(_, let item, _) = rows[index] { return AlfredGridView.isSelectable(item) }
-            return false
+            return rows[index].id != nil
         }
         if let next = AlfredGridView.neighbour(of: index, step: step, count: rows.count, selectable: selectable) {
             launcherSelection = rows[next].id
@@ -1965,7 +2030,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             confirmStep()
             return
         case .text, .labelCharacter, .ignored, .copy, .preview, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
-             .selectionVerbs, .selectClear, .move:
+             .selectionVerbs, .selectClear, .move, .cycleView:
             break
         }
         render()
@@ -2288,10 +2353,23 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 if let subject = Self.subject(of: row), selection.contains(subject) { suggestions[index].text = "✓ " + suggestions[index].text }
             }
         }
+        // Présentation en grille (session 099) : images montrées par leur contenu, noms sous la tuile ou en pied.
+        var viewGrid: SearchGrid?
+        if launcher.workflowGrid == nil, let columns = viewMode.columns, let source = viewSource {
+            for index in suggestions.indices {
+                if case .file(let path)? = suggestions[index].icon, AlfredGridView.isImage(path) { suggestions[index].icon = .image(path) }
+            }
+            let footer = selectedLauncherRow.map { suggestions[$0].text } ?? ""
+            viewGrid = SearchGrid(columns: columns, showTitles: !source.namesInFooter, showSubtitles: false,
+                                  footer: source.namesInFooter ? footer : nil)
+        }
         var bar = TargetSearchBar(
             query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading,
             suggestions: suggestions, selectedSuggestion: selectedLauncherRow,
             richRows: true)
+        bar.grid = viewGrid
+        // Chip de la présentation (session 099) : là où elle se choisit.
+        if viewSource != nil { bar.viewChip = "\(viewMode.symbol) \(viewMode.title)" }
         // Chip (SPEC-081) : une règle attend pendant une recherche ; ⌘R la montre.
         if launcher.pendingRules > 0, !model.query.isEmpty { bar.chip = "💡 \(launcher.pendingRules)" }
         if let grid = launcher.workflowGrid, grid.loadingText == nil {
@@ -2442,7 +2520,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         inputPanel?.labelLetters = Set(letterRows.keys)
         inputPanel?.pickModifier = launcher.pickModifier.flags
-        inputPanel?.gridColumns = step == .objects && launcher.workflowGrid?.loadingText == nil ? launcher.workflowGrid?.columns : nil
+        inputPanel?.gridColumns = step == .objects ? gridColumns : nil
+        shownBar = bar
         let selectable = Self.subject(of: launcherList.row(for: launcherSelection)).flatMap(LauncherSelection.key) != nil
         inputPanel?.selectionKeys = step == .objects ? SelectionKeys(hasSelection: !selection.isEmpty, rowSelectable: selectable) : SelectionKeys()
         inputPanel?.field.placeholderString = switch step {
@@ -2581,7 +2660,7 @@ extension SlashCommandModel {
         case .escape:
             return .close
         case .ignored, .pick, .actions, .copy, .preview, .save, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
-             .selectionVerbs, .selectClear, .move:
+             .selectionVerbs, .selectClear, .move, .cycleView:
             break
         }
         return .update
@@ -2628,6 +2707,8 @@ public struct SearchKeyInput: Sendable, Equatable {
         case selectToggle, selectAddNext, selectRemoveLast, selectionVerbs, selectClear
         /// Grille d'un workflow (SPEC-092) : ← (-1) et → (+1).
         case move(Int)
+        /// Touche des présentations (session 099) : liste → grille → grandes tuiles.
+        case cycleView
         case ignored
     }
 

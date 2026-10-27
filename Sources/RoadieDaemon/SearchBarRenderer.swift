@@ -150,6 +150,8 @@ struct TargetSearchBar {
     var usesNativeInput = false
     /// Grille d'un workflow (SPEC-092) : tuiles au lieu de lignes.
     var grid: SearchGrid?
+    /// Chip de la présentation (session 099), en tête de la pastille du compteur ; un clic la change.
+    var viewChip: String?
 
     var inputText: String {
         if let commandInput { return "/\(commandInput)▏" }
@@ -159,7 +161,7 @@ struct TargetSearchBar {
 
     var counterText: String? {
         guard commandInput == nil else { return nil }
-        return chip.map { "\($0)   \(max(0, matchCount))" } ?? String(max(0, matchCount))
+        return ([viewChip, chip].compactMap { $0 } + [String(max(0, matchCount))]).joined(separator: "   ")
     }
 
     /// Contenu commun au dessin et à la géométrie du panneau.
@@ -245,6 +247,12 @@ enum SearchBarRenderer {
     static func inputFrame(_ state: TargetSearchBar, bar: CGRect, style: TargetOverlayStyle) -> CGRect {
         let font = font(family: style.searchFontFamily, size: style.searchTextFontSize)
         return contentLayout(counter: counter(state, font: font), isLoading: state.isLoading, bar: bar).input
+    }
+
+    /// Rectangle de la pastille du compteur (et du chip), comme au dessin ; nil sans pastille.
+    static func counterFrame(_ state: TargetSearchBar, bar: CGRect, style: TargetOverlayStyle) -> CGRect? {
+        let font = font(family: style.searchFontFamily, size: style.searchTextFontSize)
+        return contentLayout(counter: counter(state, font: font), isLoading: state.isLoading, bar: bar).counter
     }
 
     private static func counter(_ state: TargetSearchBar, font: NSFont) -> NSAttributedString? {
@@ -518,13 +526,23 @@ enum SearchBarRenderer {
         // Lien résolu : sans la flèche d'alias (Safari est un lien vers le système).
         case .file(let path): NSWorkspace.shared.icon(forFile: URL(fileURLWithPath: path).resolvingSymlinksInPath().path)
         case .window(_, let app): app.map { NSWorkspace.shared.icon(forFile: URL(fileURLWithPath: $0).resolvingSymlinksInPath().path) }
-        case .image(let path): NSImage(contentsOfFile: path)
+        case .image(let path): thumbnailImage(path)
         case .symbol(let name): NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
                 .applying(.init(paletteColors: [NSColor(calibratedWhite: 0.9, alpha: 1)])))
         }
         icons[icon] = image
         return image
+    }
+
+    /// Vignette d'une image (512 points au plus) : une photo lourde n'est pas chargée en entier pour une
+    /// tuile ; repli sur l'image si macOS ne sait pas la réduire (session 099). O(taille de la vignette).
+    nonisolated static func thumbnailImage(_ path: String, maxPixels: Int = 512) -> NSImage? {
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageIfAbsent: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                                        kCGImageSourceThumbnailMaxPixelSize: maxPixels]
+        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return NSImage(contentsOfFile: path) }
+        return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
     private static func suggestionLine(_ suggestion: SlashSuggestion, font: NSFont) -> NSAttributedString {

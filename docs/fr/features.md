@@ -527,7 +527,11 @@ BetterTouchTool (Roadie ne capture pas ces touches ; argument « sélection » l
 sinon par ⌘C). Les tâches d'automatisation officielles d'Alfred (dépôt public
 `alfredapp/automation-tasks`, licence BSD-3) s'installent par `roadie workflow tasks update` dans
 `~/.roadies/alfred-tasks`. Autres briques : touches simulées, grand texte, Terminal, Raccourcis
-Apple, dialogue, type de fichier, barre rouverte sur un chemin. **Grille** : une brique Grille
+Apple, dialogue, type de fichier, barre rouverte sur un chemin. **Présentations** : les résultats d'un workflow (par exemple `emoji`), d'un dossier exploré (`~/Pictures/`) ou
+les fichiers d'une recherche s'affichent en liste, en grille ou en grandes tuiles. ⌘G (réglable : Paramètres >
+Recherche > « Touche des présentations ») ou un clic sur le chip à droite de la saisie (☰ ▦ ▣) passe à la
+présentation suivante ; Roadie la retient par workflow, par dossier et pour les fichiers. En grille, les images
+montrent leur contenu, ← → ↑ ↓ changent de tuile. **Grille** : une brique Grille
 ouvre la barre en tuiles (grande image, titre, sous-titre sur la tuile ou en pied), au nombre de
 colonnes du workflow ; ← → ↑ ↓ changent de tuile, la frappe filtre, Tab garde les verbes, Retour
 envoie la tuile à la suite du workflow. Un déclencheur externe peut viser n'importe quelle brique

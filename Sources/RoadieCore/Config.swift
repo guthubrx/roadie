@@ -681,6 +681,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var idleFrequentCount: Int
     public var idleRecentSearchesEnabled: Bool
     public var idleRecentSearchesCount: Int
+    /// Touche qui fait passer les résultats de la liste à la grille puis aux grandes tuiles (session 099) ;
+    /// vide : désactivée.
+    public var viewCycleHotkey: String
     /// Taille de police des étiquettes en points (SPEC-023). Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
     public var labelFontSize: Double
     public var searchLabelFontSize: Double
@@ -714,6 +717,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         idleFrequentCount: Int = 3,
         idleRecentSearchesEnabled: Bool = true,
         idleRecentSearchesCount: Int = 3,
+        viewCycleHotkey: String = "command+g",
         labelFontSize: Double = 13,
         searchLabelFontSize: Double = 13,
         searchTextFontSize: Double = 15,
@@ -740,6 +744,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.idleFrequentCount = min(10, max(1, idleFrequentCount))
         self.idleRecentSearchesEnabled = idleRecentSearchesEnabled
         self.idleRecentSearchesCount = min(20, max(1, idleRecentSearchesCount))
+        self.viewCycleHotkey = TargetGridConfig.normalizedKey(viewCycleHotkey, fallback: "")
         self.labelFontSize = min(48, max(8, labelFontSize))
         self.searchLabelFontSize = min(48, max(8, searchLabelFontSize))
         self.searchTextFontSize = min(48, max(8, searchTextFontSize))
@@ -779,6 +784,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case idleFrequentCount = "idle_frequent_count"
         case idleRecentSearchesEnabled = "idle_recent_searches_enabled"
         case idleRecentSearchesCount = "idle_recent_searches_count"
+        case viewCycleHotkey = "view_cycle_hotkey"
         case labelFontSize = "label_font_size"
         case searchLabelFontSize = "search_label_font_size"
         case searchTextFontSize = "search_text_font_size"
@@ -809,6 +815,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             idleFrequentCount: try c.decodeIfPresent(Int.self, forKey: .idleFrequentCount) ?? 3,
             idleRecentSearchesEnabled: try c.decodeIfPresent(Bool.self, forKey: .idleRecentSearchesEnabled) ?? true,
             idleRecentSearchesCount: try c.decodeIfPresent(Int.self, forKey: .idleRecentSearchesCount) ?? 3,
+            viewCycleHotkey: try c.decodeIfPresent(String.self, forKey: .viewCycleHotkey) ?? "command+g",
             labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? 13,
             searchLabelFontSize: try c.decodeFlexibleDouble(forKey: .searchLabelFontSize) ?? 13,
             searchTextFontSize: try c.decodeFlexibleDouble(forKey: .searchTextFontSize) ?? 15,
@@ -1484,7 +1491,7 @@ private enum ConfigValidationRules {
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
-            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
+            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],

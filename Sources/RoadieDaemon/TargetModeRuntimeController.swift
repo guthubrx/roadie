@@ -640,6 +640,10 @@ public final class TargetModeRuntimeController: NSObject {
         context.initialQuery = initialQuery
         workflowContext(&context, webSearchURL: webSearchURL)
         context.workflowGrid = pendingGrid
+        let viewStore = LauncherViewStore()
+        context.viewBook = viewStore.load()
+        context.saveViews = { book in viewStore.save(book) }
+        context.viewCycleKey = service.effectiveConfig.experimental.targetMode.viewCycleHotkey
         if let grid = pendingGrid {
             let id = grid.entry.id
             context.subscribeGrid = { [weak self] update in self?.openGrid = (id, update) }

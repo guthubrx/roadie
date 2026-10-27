@@ -7,6 +7,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Présentations des résultats : liste, grille ou grandes tuiles pour un workflow, un dossier exploré ou les
+  fichiers d'une recherche ; ⌘G (réglable) ou le chip à droite de la barre ; choix retenu par source.
 - Barre vide : « Souvent ici » et « Recherches récentes » s'activent ou se retirent, avec leur
   nombre de lignes (3 par défaut), dans Paramètres > Recherche.
 - Grille : texte d'attente (« Loading… » ou celui du workflow) pendant que son script tourne ; les

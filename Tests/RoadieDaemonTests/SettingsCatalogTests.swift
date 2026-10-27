@@ -20,9 +20,10 @@ struct SettingsCatalogTests {
     func catalogHas195SimpleSettings() {
         // Spec056 : 7 réglages du sélecteur ; les listes du sélecteur sont des collections.
         // Spec075 : raccourci des verbes et recherche web. Spec088 : deux réglages des workflows. Session 096 : quatre réglages de la barre vide.
-        #expect(simple.count == 207)
+        // Session 099 : touche des présentations.
+        #expect(simple.count == 208)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 127)
+        #expect(simple.count - railSimple.count == 128)
     }
 
     @Test
@@ -161,7 +162,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 207)
+        #expect(expected.count == 208)
     }
 
     // MARK: - Défauts

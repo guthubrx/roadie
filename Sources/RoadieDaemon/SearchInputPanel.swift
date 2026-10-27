@@ -1,4 +1,5 @@
 import AppKit
+import RoadieCore
 
 /// Le texte appartient à AppKit : caret, sélection, composition et édition ne sont pas simulés.
 /// Le panneau non activant prend le clavier sans activer Roadie ni modifier l'application ciblée.
@@ -19,6 +20,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     var selectionKeys = SelectionKeys()
     /// Grille d'un workflow (SPEC-092) : ← → changent de tuile au lieu de déplacer le curseur.
     var gridColumns: Int?
+    /// Touche des présentations (session 099) : code physique et modificateurs ; nil : désactivée.
+    var viewCycle: (keyCode: UInt16, flags: NSEvent.ModifierFlags)?
     private var updating = false
     private var closing = false
 
@@ -121,7 +124,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
            let input = Self.navigation(event, labels: labelLetters, pick: pickModifier, text: field.stringValue,
-                                       selection: selectionKeys, grid: gridColumns != nil) {
+                                       selection: selectionKeys, grid: gridColumns != nil, viewCycle: viewCycle) {
             onKey?(input)
             return
         }
@@ -170,8 +173,11 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     /// `text` : saisie du champ. Avec Maj pour les raccourcis, Maj + chiffre écrit le chiffre dans une
     /// saisie vide ou de calcul : en AZERTY, les chiffres se tapent avec Maj (SPEC-087 FR-009).
     static func navigation(_ event: NSEvent, labels: Set<String> = [], pick: NSEvent.ModifierFlags = .command,
-                           text: String = "", selection: SelectionKeys = SelectionKeys(), grid: Bool = false) -> SearchKeyInput? {
+                           text: String = "", selection: SelectionKeys = SelectionKeys(), grid: Bool = false,
+                           viewCycle: (keyCode: UInt16, flags: NSEvent.ModifierFlags)? = nil) -> SearchKeyInput? {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        // Touche des présentations (session 099), avant les autres rôles de la touche.
+        if let viewCycle, event.keyCode == viewCycle.keyCode, flags == viewCycle.flags { return SearchKeyInput(kind: .cycleView) }
         // Grille (SPEC-092 FR-004) : ← → passent à la tuile voisine ; Tab garde les verbes.
         if grid, flags.isEmpty, event.keyCode == 123 || event.keyCode == 124 {
             return SearchKeyInput(kind: .move(event.keyCode == 123 ? -1 : 1))
@@ -229,6 +235,21 @@ extension LauncherPickModifier {
         case .alt: .option
         case .control: .control
         }
+    }
+}
+
+extension SearchInputPanel {
+    /// `view_cycle_hotkey` normalisé → code physique et modificateurs selon la disposition ; nil si vide
+    /// ou introuvable (session 099). O(128).
+    static func cycleKey(_ normalized: String, layout: [UInt32: String]) -> (keyCode: UInt16, flags: NSEvent.ModifierFlags)? {
+        guard let parts = TargetModeConfig.hotkeyParts(normalized),
+              let code = TargetSearchHotkey.namedKeyCode(parts.key) ?? TargetSearchHotkey.keyCode(for: parts.key, in: layout) else { return nil }
+        var flags: NSEvent.ModifierFlags = []
+        if parts.modifiers.contains("command") { flags.insert(.command) }
+        if parts.modifiers.contains("control") { flags.insert(.control) }
+        if parts.modifiers.contains("alt") { flags.insert(.option) }
+        if parts.modifiers.contains("shift") { flags.insert(.shift) }
+        return (UInt16(code), flags)
     }
 }
 
