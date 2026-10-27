@@ -169,6 +169,8 @@ public final class TargetModeRuntimeController: NSObject {
     private let service: SnapshotService
     private let events: EventLog
     private let presenter: any TargetModeOverlayPresenting
+    private let memoryStore: LauncherMemoryStore
+    private let notifyRuleChoiceFailure: (String) -> Void
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
     private var currentCommand: String?
@@ -196,12 +198,19 @@ public final class TargetModeRuntimeController: NSObject {
         service: SnapshotService,
         events: EventLog,
         presenter: any TargetModeOverlayPresenting,
-        gridPostEvent: @escaping (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
+        gridPostEvent: @escaping (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) },
+        memoryStore: LauncherMemoryStore = LauncherMemoryStore(),
+        notifyRuleChoiceFailure: ((String) -> Void)? = nil
     ) {
         self.service = service
         self.events = events
         self.presenter = presenter
         self.gridPostEvent = gridPostEvent
+        self.memoryStore = memoryStore
+        self.notifyRuleChoiceFailure = notifyRuleChoiceFailure ?? { message in
+            let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
+            Task { await effects.notify(title: "Roadie", text: message) }
+        }
     }
 
     public func start() {
@@ -527,7 +536,7 @@ public final class TargetModeRuntimeController: NSObject {
         context.projects = StageProjectStore().load().projects.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         // Liste de la barre vide (SPEC-081).
         let now = Date()
-        let memory = LauncherMemoryStore().load()
+        let memory = memoryStore.load()
         let rules = service.effectiveConfig.rules
         let stageInfo: (StageScope) -> (key: String, title: String)? = { scope in
             guard let stage = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
@@ -1258,7 +1267,18 @@ public final class TargetModeRuntimeController: NSObject {
     /// Plus tard reporte d'un jour ; Jamais retire la proposition pour cette application et cette stage.
     private func chooseRule(_ suggestion: RuleSuggestion, _ choice: RuleChoice) -> TargetActionResult {
         let now = Date()
-        LauncherMemoryStore().update { $0.decline(suggestion, choice, at: now) }
+        if choice == .create {
+            memoryStore.update { $0.decline(suggestion, choice, at: now) }
+        } else {
+            do {
+                try memoryStore.updateChecked { $0.decline(suggestion, choice, at: now) }
+            } catch {
+                events.append(RoadieEvent(type: "launcher.rule_choice_failed", details: ["choice": choice.rawValue, "reason": "persistence"]))
+                let message = "Impossible d'enregistrer le choix de règle."
+                notifyRuleChoiceFailure(message)
+                return TargetActionResult(changed: false, message: message, error: "rule_choice_not_saved")
+            }
+        }
         events.append(RoadieEvent(type: "launcher.rule_choice", details: ["choice": choice.rawValue, "bundleID": suggestion.bundleID]))
         guard choice == .create else { return TargetActionResult(changed: true, message: "rule suggestion: \(choice.rawValue)") }
         let snapshot = service.snapshot(followFocus: false)
@@ -1275,7 +1295,7 @@ public final class TargetModeRuntimeController: NSObject {
     /// Annule le dernier déplacement, ou tout le dernier envoi groupé encore en place (SPEC-091 FR-006).
     private func undoLastMove() -> TargetActionResult {
         let snapshot = service.snapshot(followFocus: false)
-        let moves = LauncherMemoryStore().load().undoableBatch(at: Date(), currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope })
+        let moves = memoryStore.load().undoableBatch(at: Date(), currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope })
         guard !moves.isEmpty else { return refused("launcher undo", "nothing") }
         let actions = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
         var changed = 0
@@ -1318,7 +1338,7 @@ public final class TargetModeRuntimeController: NSObject {
         }
         if windows.count > 1 {
             let batch = UUID().uuidString
-            LauncherMemoryStore().update { $0.mark(batch: batch, windows: Set(windows), since: start) }
+            memoryStore.update { $0.mark(batch: batch, windows: Set(windows), since: start) }
         }
         if first.verb == .sendTo, case .stage? = resolved.first?.destination?.kind, let last = windows.last { focus(last) }
         events.append(RoadieEvent(type: "launcher.batch", details: ["verb": first.verb.rawValue, "done": String(done), "count": String(resolved.count)]))

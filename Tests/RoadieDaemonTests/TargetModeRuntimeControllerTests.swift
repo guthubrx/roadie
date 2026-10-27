@@ -8,6 +8,50 @@ import RoadieStages
 
 @Suite
 struct TargetModeRuntimeControllerTests {
+    @Test(arguments: [RuleChoice.later, .never]) @MainActor
+    func ruleChoiceReportsCorruptMemoryInsteadOfSuccess(_ choice: RuleChoice) throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-choice-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fixture = RuleChoiceFixture(sandbox: sandbox)
+        let invalid = Data("{mémoire abîmée".utf8)
+        try invalid.write(to: fixture.memory.url)
+        fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        let launcher = try #require(fixture.presenter.searchLauncher)
+
+        let result = launcher.ruleChoice(fixture.suggestion, choice)
+
+        #expect(!result.changed)
+        #expect(result.error == "rule_choice_not_saved")
+        #expect(fixture.notices.messages == ["Impossible d'enregistrer le choix de règle."])
+        #expect(try Data(contentsOf: fixture.memory.url) == invalid)
+        let journal = try String(contentsOf: fixture.eventURL, encoding: .utf8)
+        #expect(journal.contains("launcher.rule_choice_failed"))
+        #expect(!journal.contains("\"launcher.rule_choice\""))
+    }
+
+    @Test(arguments: [RuleChoice.later, .never]) @MainActor
+    func ruleChoicePersistsBeforeReportingSuccess(_ choice: RuleChoice) throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-choice-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fixture = RuleChoiceFixture(sandbox: sandbox)
+        fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        let launcher = try #require(fixture.presenter.searchLauncher)
+        let before = Date()
+
+        let result = launcher.ruleChoice(fixture.suggestion, choice)
+
+        #expect(result.changed && result.error == nil)
+        #expect(fixture.notices.messages.isEmpty)
+        let until = try #require(fixture.memory.load().declined[fixture.suggestion.declineKey])
+        if choice == .never { #expect(until == .distantFuture) }
+        else { #expect(until >= before.addingTimeInterval(23 * 3600) && until <= before.addingTimeInterval(25 * 3600)) }
+        let journal = try String(contentsOf: fixture.eventURL, encoding: .utf8)
+        #expect(journal.contains("\"launcher.rule_choice\""))
+        #expect(!journal.contains("launcher.rule_choice_failed"))
+    }
+
     @Test
     func commandRoundTripsThroughDistributedNotificationPayload() throws {
         let command = TargetModeRuntimeCommand(name: "targets.interactive", arguments: [
@@ -328,6 +372,7 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
     var searchCommands: SlashCommandRunner?
     var searchRunDeferred: (@MainActor ([String]) -> Void)?
     var searchOpenSettings: (@MainActor (SettingCategory?) -> Void)?
+    var searchLauncher: LauncherSearchContext?
 
     func startInteractive(
         _ state: TargetOverlayState,
@@ -378,7 +423,47 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
         searchCommands = commands
         searchRunDeferred = runDeferred
         searchOpenSettings = openSettings
+        searchLauncher = launcher
         return session
+    }
+}
+
+@MainActor
+private final class RuleChoiceNotices {
+    var messages: [String] = []
+}
+
+@MainActor
+private struct RuleChoiceFixture {
+    let controller: TargetModeRuntimeController
+    let presenter: SpyTargetModeOverlayPresenter
+    let memory: LauncherMemoryStore
+    let eventURL: URL
+    let notices: RuleChoiceNotices
+    let suggestion: RuleSuggestion
+
+    init(sandbox: URL) {
+        let display = powerDisplay()
+        let stageID = StageID(rawValue: "1")
+        let stage = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: stageID)
+        let store = StageStore(path: sandbox.appendingPathComponent("stages.json").path)
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: display.id, activeStageID: stageID,
+            stages: [PersistentStage(id: stageID, name: "Perso")])], activeDisplayID: display.id))
+        let provider = PowerUserProvider(displays: [display], windows: [])
+        let config = RoadieConfig(experimental: ExperimentalConfig(targetMode: TargetModeConfig(overlayEnabled: true)))
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: config, stageStore: store)
+        let presenter = SpyTargetModeOverlayPresenter()
+        let memory = LauncherMemoryStore(path: sandbox.appendingPathComponent("memory.json").path)
+        let eventURL = sandbox.appendingPathComponent("events.jsonl")
+        let notices = RuleChoiceNotices()
+        self.controller = TargetModeRuntimeController(service: service, events: EventLog(path: eventURL.path), presenter: presenter,
+                                                      memoryStore: memory, notifyRuleChoiceFailure: { notices.messages.append($0) })
+        self.presenter = presenter
+        self.memory = memory
+        self.eventURL = eventURL
+        self.notices = notices
+        self.suggestion = RuleSuggestion(bundleID: "exemple", appName: "Exemple", stage: stage, stageTitle: "Perso", count: 3,
+                                         declineKey: "exemple|stage:perso")
     }
 }
 

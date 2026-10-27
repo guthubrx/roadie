@@ -113,6 +113,11 @@ struct LauncherMemoryStore: Sendable {
         JSONPersistence.mutate(LauncherMemoryBook.self, at: url, default: LauncherMemoryBook(), label: "launcher memory", change)
     }
 
+    /// Les choix explicites doivent signaler toute modification non enregistrée.
+    func updateChecked(_ change: (inout LauncherMemoryBook) -> Void) throws {
+        try JSONPersistence.mutateChecked(LauncherMemoryBook.self, at: url, default: LauncherMemoryBook(), label: "launcher memory", change)
+    }
+
     /// Un déplacement réel d'une fenêtre connue ; rien si elle ne change pas de stage. Écrit à chaque
     /// déplacement, rare (un geste de l'utilisateur ou une commande).
     func record(window: WindowSnapshot, from: StageScope?, to: StageScope, at now: Date = Date()) {
