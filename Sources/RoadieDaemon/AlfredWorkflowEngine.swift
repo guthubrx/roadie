@@ -373,12 +373,20 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
                     response = AlfredScriptFilterResponse(items: AlfredGridView.fileItems(input))
                 }
             case 1:
+                // La barre s'ouvre tout de suite sur le texte d'attente ; les tuiles la remplacent (session 095).
+                var waiting = AlfredGridView.make(object: object, workflow: workflow, response: AlfredScriptFilterResponse(), variables: variables)
+                waiting.loadingText = AlfredGridView.loadingText(object)
+                waiting.isWaiting = true
+                await effects.showGrid(waiting)
+                waiting.isWaiting = false
                 let file = expand(object.string("inputfile") ?? "")
                 let result = await AlfredScriptRunner.run(AlfredScript(language: 8, source: "", file: file), query: query, arguments: input,
                                                           workflow: workflow, variables: variables)
                 guard result.failure == nil, !result.timedOut, let parsed = AlfredScriptFilterResponse.parse(result.output) else {
+                    let reason = result.failure ?? (result.timedOut ? "délai dépassé" : "réponse illisible")
                     run.outcome.errors.append(result.failure ?? (result.timedOut ? "timeout" : "grid"))
-                    await effects.notify(title: workflow.name, text: "Grille : \(result.failure ?? (result.timedOut ? "délai dépassé" : "réponse illisible"))")
+                    waiting.loadingText = "Grille : \(reason)"
+                    await effects.showGrid(waiting)
                     return .stop
                 }
                 response = parsed

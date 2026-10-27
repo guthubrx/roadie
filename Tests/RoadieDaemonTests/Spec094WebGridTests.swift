@@ -65,3 +65,25 @@ struct Spec094WebGridTests {
         #expect(try await view(["fixedorder": false], json: #"{"skipknowledge": true, "items": []}"#)?.learnsOrder == false)
     }
 }
+
+/// Session 095 : texte d'attente de la grille.
+struct Spec095GridLoadingTests {
+    @Test func waitingViewThenTilesOrFailure() async throws {
+        func run(_ config: [String: Any], script: String) async throws -> [AlfredGridView] {
+            var fixture = WorkflowFixture()
+            fixture.add("K", "input.keyword", ["keyword": "k"])
+            fixture.add("G", "userinterface.grid", config.merging(["inputtype": 1, "inputfile": "t.sh"]) { $1 })
+            fixture.link("K", "G")
+            let effects = RecordedEffects()
+            _ = await AlfredWorkflowEngine(effects: effects).run(try fixture.write(files: ["t.sh": script]), from: "K", arg: [""])
+            return effects.grids
+        }
+        let ok = try await run(["loadingtext": "Chargement des volets"], script: "#!/bin/sh\necho '{\"items\":[{\"title\":\"A\"}]}'\n")
+        #expect(ok.map(\.isWaiting) == [true, false])
+        #expect(ok.first?.loadingText == "Chargement des volets" && ok.last?.loadingText == nil && ok.last?.items.count == 1)
+        // Sans texte : « Loading… » ; réponse illisible : la ligne dit l'échec.
+        let failed = try await run([:], script: "#!/bin/sh\necho pas du json\n")
+        #expect(failed.first?.loadingText == "Loading…")
+        #expect(failed.last?.loadingText == "Grille : réponse illisible" && failed.last?.isWaiting == false)
+    }
+}

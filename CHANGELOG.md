@@ -7,6 +7,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Grille : texte d'attente (« Loading… » ou celui du workflow) pendant que son script tourne ; les
+  workflows qui ouvrent une adresse web amènent aussi au navigateur.
 - Recherche web : un `^` en tête est retiré (`^claude` cherche « claude », en tête de liste) et Roadie
   va à la fenêtre du navigateur qui reçoit la recherche, dans sa stage. Grille : ordre appris à l'usage
   quand le workflow le demande.

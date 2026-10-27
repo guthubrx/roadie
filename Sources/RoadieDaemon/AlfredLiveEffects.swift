@@ -9,23 +9,29 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
     private let webSearchURL: String
     private let reopen: @MainActor @Sendable (String) -> Void
     private let presentGrid: @MainActor @Sendable (AlfredGridView) -> Void
+    /// Roadie va à la fenêtre du navigateur qui reçoit une adresse web (session 095).
+    private let follow: @MainActor @Sendable (URL) -> Void
 
     init(events: EventLog, webSearchURL: String, reopen: @escaping @MainActor @Sendable (String) -> Void,
-         presentGrid: @escaping @MainActor @Sendable (AlfredGridView) -> Void = { _ in }) {
+         presentGrid: @escaping @MainActor @Sendable (AlfredGridView) -> Void = { _ in },
+         follow: @escaping @MainActor @Sendable (URL) -> Void = { _ in }) {
         self.events = events
         self.webSearchURL = webSearchURL
         self.reopen = reopen
         self.presentGrid = presentGrid
+        self.follow = follow
     }
 
     func openURL(_ url: String, browser: String?) async {
         guard let target = URL(string: url) ?? url.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed).flatMap(URL.init(string:)) else { return }
+        let follow = follow
         await MainActor.run {
             if let browser, let app = Self.application(browser) {
                 NSWorkspace.shared.open([target], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
             } else {
                 NSWorkspace.shared.open(target)
             }
+            if ["http", "https"].contains(target.scheme?.lowercased() ?? "") { follow(target) }
         }
     }
 
@@ -90,7 +96,11 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
 
     func webSearch(_ text: String) async {
         guard let url = LauncherWeb.searchURL(webSearchURL, query: text) else { return }
-        await MainActor.run { _ = NSWorkspace.shared.open(url) }
+        let follow = follow
+        await MainActor.run {
+            _ = NSWorkspace.shared.open(url)
+            follow(url)
+        }
     }
 
     func showBar(_ text: String) async {

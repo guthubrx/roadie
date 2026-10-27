@@ -17,6 +17,17 @@ struct AlfredGridView: Equatable, Sendable {
     var items: [AlfredItem]
     var preselect: String?
     var variables: [String: String]
+    /// Texte d'attente (« Loading Text » d'Alfred, session 095) : non nil tant que le script de la
+    /// grille tourne, ou message d'échec ; la barre montre alors cette ligne au lieu des tuiles.
+    var loadingText: String?
+    /// Vue d'attente : elle ouvre la barre ; la vue suivante (tuiles ou échec) remplace la grille ouverte.
+    var isWaiting = false
+
+    /// Texte d'attente d'une brique : le sien, sinon « Loading… ».
+    static func loadingText(_ object: AlfredObject) -> String {
+        let text = (object.string("loadingtext") ?? "").trimmingCharacters(in: .whitespaces)
+        return text.isEmpty ? "Loading…" : text
+    }
 
     /// `columncount` borné de 1 à 12 ; 5 sans réglage.
     static func columns(_ value: Int?) -> Int { min(12, max(1, value ?? 5)) }

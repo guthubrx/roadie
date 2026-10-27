@@ -174,6 +174,8 @@ public final class TargetModeRuntimeController: NSObject {
     private var currentCommand: String?
     /// Grille d'un workflow à montrer à la prochaine ouverture de la barre (SPEC-092).
     private var pendingGrid: AlfredGridView?
+    /// Barre ouverte sur une grille : son entrée et la fonction qui lui envoie les tuiles (session 095).
+    private var openGrid: (id: String, update: @MainActor (AlfredGridView) -> Void)?
     private var styleTimer: Timer?
     /// Aperçu actif du lanceur (SPEC-078) : cadres relevés avant, stage de départ si une bascule a eu lieu.
     private struct ActivePreview {
@@ -628,6 +630,10 @@ public final class TargetModeRuntimeController: NSObject {
         context.initialQuery = initialQuery
         workflowContext(&context, webSearchURL: webSearchURL)
         context.workflowGrid = pendingGrid
+        if let grid = pendingGrid {
+            let id = grid.entry.id
+            context.subscribeGrid = { [weak self] update in self?.openGrid = (id, update) }
+        }
         pendingGrid = nil
         // Web et historique (SPEC-090) : la dernière saisie revient sous 5 minutes, sélectionnée.
         let targetMode = service.effectiveConfig.experimental.targetMode
@@ -691,7 +697,8 @@ public final class TargetModeRuntimeController: NSObject {
                 return TargetActionResult(changed: false, message: "launcher workflow: absent", error: "workflow")
             }
             let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
-                                            presentGrid: { view in self?.presentGrid(view) })
+                                            presentGrid: { view in self?.presentGrid(view) },
+                                            follow: { url in self?.followBrowser(url) })
             Task.detached {
                 _ = await AlfredWorkflowEngine(effects: effects, workflows: workflows)
                     .run(workflow, from: entry.objectUID, arg: arg, variables: variables, modifiers: modifiers)
@@ -725,7 +732,8 @@ public final class TargetModeRuntimeController: NSObject {
             let arg: [String] = if let argument { [argument] }
                 else if object.type == "trigger.hotkey" { await Self.hotkeyArgument(object) } else { [] }
             let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
-                                            presentGrid: { view in self?.presentGrid(view) })
+                                            presentGrid: { view in self?.presentGrid(view) },
+                                            follow: { url in self?.followBrowser(url) })
             let engine = AlfredWorkflowEngine(effects: effects, workflows: workflows)
             _ = await engine.start(workflow, at: uid, arg: arg, variables: variables)
         }
@@ -775,8 +783,16 @@ public final class TargetModeRuntimeController: NSObject {
         handle(TargetModeRuntimeCommand(name: "targets.search", arguments: ["query": text]))
     }
 
-    /// Barre rouverte en grille (SPEC-092) : la vue attend la prochaine ouverture.
+    /// Barre rouverte en grille (SPEC-092) : la vue attend la prochaine ouverture. Tuiles d'une grille
+    /// déjà ouverte sur son texte d'attente : envoyées à cette barre, jamais rouverte si elle est fermée
+    /// (session 095).
     private func presentGrid(_ view: AlfredGridView) {
+        if !view.isWaiting, let open = openGrid, open.id == view.entry.id {
+            openGrid = nil
+            open.update(view)
+            events.append(RoadieEvent(type: "launcher.workflow_grid", details: ["workflow": view.entry.workflowID, "items": String(view.items.count), "update": "true"]))
+            return
+        }
         pendingGrid = view
         events.append(RoadieEvent(type: "launcher.workflow_grid", details: ["workflow": view.entry.workflowID, "items": String(view.items.count)]))
         // Une barre encore ouverte garderait sa liste (recherche répétée) : elle laisse la place à la grille.
@@ -870,15 +886,31 @@ public final class TargetModeRuntimeController: NSObject {
         let events = events
         let switcher = WindowSwitcherService(service: service)
         Task { @MainActor in
-            // Laisser le navigateur prendre l'adresse et passer devant (délai choisi, non mesuré).
-            try? await Task.sleep(for: .milliseconds(450))
-            let loaded = await switcher.load()
-            let windows = loaded.entries.filter { $0.window.bundleID == bundle }
-            let active = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundle ? service.focusedWindowID() : nil
-            guard let entry = windows.first(where: { $0.id == active }) ?? LauncherPlacement.preferredWindow(windows, state: loaded.persisted) else { return }
-            let result = switcher.activate(entry)
-            events.append(RoadieEvent(type: "launcher.follow_browser", details: [
-                "bundleID": bundle, "windowID": String(entry.id.rawValue), "focused": String(entry.id == active), "message": result.message]))
+            // Laisser le navigateur prendre l'adresse et passer devant (délais choisis, non mesurés) ;
+            // un second essai si aucune fenêtre n'est encore lisible (session 095).
+            for (attempt, delay) in [450, 700].enumerated() {
+                try? await Task.sleep(for: .milliseconds(delay))
+                let loaded = await switcher.load()
+                let windows = loaded.entries.filter { $0.window.bundleID == bundle }
+                let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+                let active = frontmost == bundle ? service.focusedWindowID() : nil
+                guard let entry = windows.first(where: { $0.id == active }) ?? LauncherPlacement.preferredWindow(windows, state: loaded.persisted) else {
+                    events.append(RoadieEvent(type: "launcher.follow_browser", details: [
+                        "bundleID": bundle, "outcome": "no_window", "attempt": String(attempt + 1), "entries": String(loaded.entries.count),
+                        "snapshot": String(loaded.snapshot != nil), "frontmost": frontmost]))
+                    continue
+                }
+                let result = switcher.activate(entry)
+                // Trace du focus clavier après l'activation : la fenêtre de l'onglet doit l'avoir.
+                try? await Task.sleep(for: .milliseconds(300))
+                let after = service.focusedWindowID()
+                events.append(RoadieEvent(type: "launcher.follow_browser", details: [
+                    "bundleID": bundle, "outcome": "activated", "attempt": String(attempt + 1), "windowID": String(entry.id.rawValue),
+                    "tabWindow": String(entry.id == active), "frontmost": frontmost,
+                    "focusAfter": after.map { String($0.rawValue) } ?? "", "keyboardFocus": String(after == entry.id),
+                    "message": result.message]))
+                return
+            }
         }
     }
 

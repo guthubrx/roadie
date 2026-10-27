@@ -63,8 +63,10 @@ struct Spec092GridTests {
         let workflow = try fixture.write(files: ["tiles.sh": script])
         let effects = RecordedEffects()
         _ = await AlfredWorkflowEngine(effects: effects).run(workflow, from: "K", arg: [""], variables: ["v": "2"])
-        #expect(effects.calls == ["grid:3:3"])
+        // Texte d'attente d'abord (session 095), puis les tuiles.
+        #expect(effects.calls == ["grid:0:3", "grid:3:3"])
         let view = try #require(effects.lastGrid)
+        #expect(view.loadingText == nil && !view.isWaiting)
         #expect(view.entry.kind == .grid && view.entry.objectUID == "G" && view.entry.workflowID == workflow.id)
         #expect(view.preselect == "b")
         #expect(view.subtitlesInFooter && view.filterable && view.showTitles)

@@ -70,6 +70,8 @@ struct LauncherSearchContext {
     }
     /// Grille d'un workflow (SPEC-092) : la barre s'ouvre en tuiles, Retour repart de la grille.
     var workflowGrid: AlfredGridView?
+    /// Mises à jour de cette grille (tuiles après le texte d'attente, session 095) : la barre s'abonne.
+    var subscribeGrid: (@escaping @MainActor (AlfredGridView) -> Void) -> Void = { _ in }
     /// Texte de départ de la barre (Show Alfred d'un workflow, ou dernière saisie reprise).
     var initialQuery: String?
     /// La saisie de départ est la dernière reprise (moins de 5 minutes) : elle est sélectionnée (SPEC-090).

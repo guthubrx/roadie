@@ -70,10 +70,11 @@ final class RecordedEffects: AlfredEffects, @unchecked Sendable {
     func terminal(folder: String) async { note("terminal-folder:\(folder)") }
     func shortcut(_ name: String, input: String?) async -> String { note("shortcut:\(name):\(input ?? "-")"); return "sortie" }
     func dialog(title: String, text: String, buttons: [String]) async -> Int? { note("dialog:\(title)"); return dialogChoice }
-    private var grids: [AlfredGridView] = []
-    var lastGrid: AlfredGridView? { lock.withLock { grids.last } }
+    private var recordedGrids: [AlfredGridView] = []
+    var lastGrid: AlfredGridView? { lock.withLock { recordedGrids.last } }
+    var grids: [AlfredGridView] { lock.withLock { recordedGrids } }
     func showGrid(_ view: AlfredGridView) async {
-        lock.withLock { grids.append(view) }
+        lock.withLock { recordedGrids.append(view) }
         note("grid:\(view.items.count):\(view.columns)")
     }
 }

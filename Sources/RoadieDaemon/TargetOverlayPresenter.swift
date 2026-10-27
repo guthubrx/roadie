@@ -1006,6 +1006,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         input.onFlags = { [weak self] flags in self?.modifiersChanged(flags) }
         if let subject = launcher.initialSubject { enterVerbs(subject) }
         input.onCancel = { [weak self] in self?.cancel() }
+        launcher.subscribeGrid { [weak self] view in self?.updateGrid(view) }
         inputPanel = input
         if let text = launcher.initialQuery, !text.isEmpty { model.replaceQuery(text) }
         render()
@@ -1452,12 +1453,28 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let first = launcherQuery == nil
         guard first || model.query != launcherQuery else { return }
         launcherQuery = model.query
+        if let text = grid.loadingText {
+            // Attente ou échec du script : une seule ligne, sans tuiles.
+            launcherList = .idle([.workflowItem(grid.entry, AlfredItem(title: text, subtitle: grid.entry.workflowName, valid: false), index: 0)])
+            launcherSelection = launcherList.best
+            return
+        }
         var items = grid.filterable ? AlfredScriptFilterResponse.filter(grid.items, query: model.query, mode: grid.entry.filterMode) : grid.items
         if grid.learnsOrder { items = AlfredGridView.learned(items, entryID: grid.entry.id, ranking: launcher.ranking, query: model.query) }
         launcherList = .idle(items.enumerated().map { .workflowItem(grid.entry, $0.element, index: $0.offset) })
         let preselected = first ? grid.preselect.flatMap { uid in items.firstIndex { $0.uid == uid } } : nil
         let index = preselected ?? items.firstIndex(where: AlfredGridView.isSelectable)
         launcherSelection = index.map { launcherList.rows[$0].id } ?? nil
+    }
+
+    /// Tuiles arrivées après le texte d'attente (session 095) : la grille ouverte est remplacée, la saisie
+    /// gardée, la présélection appliquée. Une autre grille ou une barre fermée l'ignorent.
+    private func updateGrid(_ view: AlfredGridView) {
+        guard !finished, launcher.workflowGrid?.entry.id == view.entry.id else { return }
+        launcher.workflowGrid = view
+        launcherQuery = nil
+        launcherSelection = nil
+        render()
     }
 
     /// Tuile voisine dans la grille (← → : ± 1, ↑ ↓ : ± colonnes), espaceurs sautés. O(n / |step|).
@@ -2276,7 +2293,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             richRows: true)
         // Chip (SPEC-081) : une règle attend pendant une recherche ; ⌘R la montre.
         if launcher.pendingRules > 0, !model.query.isEmpty { bar.chip = "💡 \(launcher.pendingRules)" }
-        if let grid = launcher.workflowGrid {
+        if let grid = launcher.workflowGrid, grid.loadingText == nil {
             // Grille (SPEC-092 FR-003) : titre et sous-titre sur la tuile, ou en pied pour la tuile choisie.
             var footer: [String] = []
             if case .workflowItem(_, let item, _)? = launcherList.row(for: launcherSelection) {
@@ -2424,7 +2441,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         inputPanel?.labelLetters = Set(letterRows.keys)
         inputPanel?.pickModifier = launcher.pickModifier.flags
-        inputPanel?.gridColumns = step == .objects ? launcher.workflowGrid?.columns : nil
+        inputPanel?.gridColumns = step == .objects && launcher.workflowGrid?.loadingText == nil ? launcher.workflowGrid?.columns : nil
         let selectable = Self.subject(of: launcherList.row(for: launcherSelection)).flatMap(LauncherSelection.key) != nil
         inputPanel?.selectionKeys = step == .objects ? SelectionKeys(hasSelection: !selection.isEmpty, rowSelectable: selectable) : SelectionKeys()
         inputPanel?.field.placeholderString = switch step {
