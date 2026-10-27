@@ -668,6 +668,7 @@ public final class TargetModeRuntimeController: NSObject {
         context.barScreenFrame = Self.barScreen(barConfig.barScreen, focused: focusedFrame, screens: NSScreen.screens.map(\.frame))
         let savesPosition = barConfig.barSavePosition
         context.savePlacement = { placement in if savesPosition || placement == nil { positionStore.save(placement) } }
+        context.terminalApp = barConfig.terminalApp
         if let grid = pendingGrid {
             let id = grid.entry.id
             context.subscribeGrid = { [weak self] update in self?.openGrid = (id, update) }

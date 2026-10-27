@@ -1346,7 +1346,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .phrase(let action, _), .alias(_, let action, _): enterVerbs(action.subject)
             case .project(let project): enterVerbs(.project(project.name))
             case .action(_, let action, _, _): enterVerbs(action.subject)
-            case .rule, .openItem, .calc: break
+            case .rule, .openItem, .calc, .terminal: break
             case .workflowKeyword(let entry): completeWorkflow(entry, nil)
             case .web(let row):
                 if let url = row.url { enterVerbs(.url(url)) } else if case .hint(let search) = row.kind { model.replaceQuery(search.keyword + " ") }
@@ -1373,7 +1373,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func syncHighlight() {
         switch launcherList.row(for: launcherSelection) {
         case .target(let target): model.highlight(targetID: target.id)
-        case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .web, .history:
+        case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .web, .history,
+             .terminal:
             model.highlight(targetID: nil)
         case .header, nil: break
         }
@@ -1436,6 +1437,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func refreshLauncherRows() {
         if let grid = launcher.workflowGrid {
             refreshGrid(grid)
+            return
+        }
+        // `>` : la commande pour le terminal, seule (session 103), comme le préfixe d'Alfred.
+        if let command = LauncherTerminal.command(model.query) {
+            pruneWorkflows(keeping: [])
+            launcherQuery = model.query
+            launcherList = .idle([.header("Terminal"), .terminal(command)])
+            launcherSelection = launcherList.best
+            syncHighlight()
             return
         }
         let runs = launcher.workflowEntries.compactMap { entry -> (entry: AlfredEntry, argument: String)? in
@@ -1718,9 +1728,25 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             model.replaceQuery(query)
             render()
             return true
+        case .terminal(let command):
+            runTerminal(command)
+            return true
         default:
             return false
         }
+    }
+
+    /// Retour sur la ligne du terminal : la commande part dans une nouvelle fenêtre, la barre se ferme ;
+    /// invite vide ou terminal absent : un message, la barre reste (session 103).
+    private func runTerminal(_ command: String) {
+        let name = LauncherTerminal.appName(launcher.terminalApp)
+        guard !command.isEmpty else { return }
+        guard LauncherTerminal.isInstalled(launcher.terminalApp), LauncherTerminal.run(launcher.terminalApp, command: command) else {
+            finish(TargetActionResult(changed: false, message: "launcher terminal: \(name) introuvable", error: "terminal_unavailable"))
+            return
+        }
+        launcher.recordQuery(model.query)
+        finish(TargetActionResult(changed: true, message: "launcher terminal: \(name)"))
     }
 
     /// Tab : `autocomplete` d'une ligne après le mot-clé (research R7), ou le mot-clé seul.
@@ -1822,7 +1848,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .project(let project): .project(project.name)
         case .action(_, let action, _, _): action.subject
         case .web(let row): row.url.map(LauncherSubject.url)
-        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .header, nil: nil
+        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .header, nil: nil
         }
     }
 
@@ -1841,6 +1867,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .workflowItem(_, let item, _): item.copyText ?? (item.arg.isEmpty ? item.title : item.arg.joined(separator: "\n"))
         case .web(let row): row.url?.absoluteString
         case .history(let query): query
+        case .terminal(let command): command
         case .rule, .header, nil: nil
         }
         guard let text else { return }
@@ -1864,7 +1891,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .openItem(let item): finishOpenItem(item)
         case .calc(let calc): finishCalc(calc)
         case .workflowKeyword, .workflowItem: _ = confirmWorkflow(modifiers: 0)
-        case .web, .history: _ = confirmWeb()
+        case .web, .history, .terminal: _ = confirmWeb()
         case .header, nil: break
         }
     }
@@ -1902,7 +1929,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .project(let project): LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil)
         case .action(_, let action, _, _): action
         case .web(let row): row.url.map { LauncherAction(subject: .url($0), verb: .open, destination: nil) }
-        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .header, nil: nil
+        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .header, nil: nil
         }
     }
 
@@ -2169,7 +2196,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .web(let row):
             guard let url = row.url else { return nil }
             subject = .url(url)
-        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .header, nil: return nil
+        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
                                   newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
@@ -2392,7 +2419,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         refreshLauncher()
         // Icône d'une fenêtre : celle de son application, retrouvée par son nom. O(a).
         let appPaths = Dictionary(launcher.apps.map { ($0.name, $0.path) }, uniquingKeysWith: { first, _ in first })
-        var suggestions = launcherList.rows.map { Self.suggestion($0, appPaths: appPaths) }
+        var suggestions = launcherList.rows.map { Self.suggestion($0, appPaths: appPaths, terminal: launcher.terminalApp) }
         // Touche tenue : la ligne choisie annonce ce que Retour fera (SPEC-075).
         if let modifier = heldModifier, let index = selectedLauncherRow, let variant = currentVariant(modifier) {
             suggestions[index].detail = variant.title
@@ -2474,7 +2501,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     /// Ligne du lanceur dessinée par la barre : en-tête, application avec son icône, ou cible.
-    private static func suggestion(_ row: LauncherList.Row, appPaths: [String: String]) -> SlashSuggestion {
+    private static func suggestion(_ row: LauncherList.Row, appPaths: [String: String], terminal: String = "terminal") -> SlashSuggestion {
         switch row {
         case .header(let title):
             return SlashSuggestion(text: title, kind: .header)
@@ -2518,6 +2545,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return SlashSuggestion(text: row.title, detail: detail, kind: .result, icon: .symbol(symbol))
         case .history(let query):
             return SlashSuggestion(text: query, detail: "Recherche récente", kind: .result, icon: .symbol("clock.arrow.circlepath"))
+        case .terminal(let command):
+            let name = LauncherTerminal.appName(terminal)
+            if command.isEmpty { return SlashSuggestion(text: "\(name) : tapez une commande après >", detail: "", kind: .result, icon: .symbol("terminal")) }
+            let detail = terminal == "warp" ? "Retour ouvre Warp et copie la commande" : "Retour lance dans \(name)"
+            return SlashSuggestion(text: command, detail: detail, kind: .result, icon: .symbol("terminal"))
         case .workflowKeyword(let entry):
             return SlashSuggestion(text: entry.title, detail: entry.subtitle.isEmpty ? "\(entry.keyword) · \(entry.workflowName)" : entry.subtitle,
                                    kind: .result, icon: workflowIcon(nil, entry: entry))

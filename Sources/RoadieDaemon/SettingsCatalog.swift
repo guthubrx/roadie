@@ -111,6 +111,7 @@ public struct SettingDescriptor: Equatable, Sendable {
         case ("target_mode.bar_position", "bottom"): return "En bas, liste au-dessus"
         case ("target_mode.bar_position", "center"): return "Au centre, liste dessous"
         case ("target_mode.bar_position", "top"): return "En haut, liste dessous (comme Alfred)"
+        case ("target_mode.terminal_app", let app): return LauncherTerminal.appName(app)
         case ("overview.presentation", "archipelago"): return "Archipel"
         case ("overview.presentation", "bays"): return "Baies"
         case ("window_placement.new_apps_target", "focused_display"): return "Écran actif (recommandé)"
@@ -451,6 +452,9 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "bar_save_position", "Retenir la place de la barre",
               "Glissez la barre par son bord ou le fond de la liste : elle garde cette place aux ouvertures suivantes. Un double-clic sur le bord la remet à sa place par défaut.",
               .bool, .bool(true)),
+        entry(.recherche, "experimental.target_mode", "terminal_app", "Terminal de >",
+              "Tapez > puis une commande dans la barre : Retour la lance dans une nouvelle fenêtre de ce terminal, depuis votre dossier personnel. Warp ne reçoit pas de commande : il s'ouvre et la commande est copiée.",
+              .choice(TargetModeConfig.terminalApps), .string("terminal")),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

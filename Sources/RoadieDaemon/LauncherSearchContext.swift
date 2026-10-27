@@ -90,6 +90,8 @@ struct LauncherSearchContext {
     var defaultBarPlacement = SearchBarPlacement.bottom
     var barScreenFrame: CGRect?
     var savePlacement: (SearchBarPlacement?) -> Void = { _ in }
+    /// Terminal du préfixe `>` (session 103).
+    var terminalApp = "terminal"
     var fallbackSearches: [String] = []
     /// Lot de la sélection multiple (SPEC-091) et annulation du dernier lot.
     var performBatch: @MainActor ([LauncherAction]) -> TargetActionResult = { _ in

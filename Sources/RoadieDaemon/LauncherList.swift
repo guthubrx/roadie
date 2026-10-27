@@ -31,6 +31,8 @@ struct LauncherList: Equatable, Sendable {
         /// Web (SPEC-090) : adresse tapée, recherche, invite d'un mot-clé ; recherche récente.
         case web(LauncherWebRow)
         case history(String)
+        /// Commande tapée après `>` (session 103) ; vide : invite.
+        case terminal(String)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -50,6 +52,7 @@ struct LauncherList: Equatable, Sendable {
             case .workflowItem(let entry, let item, let index): "wfi:\(entry.id):\(item.uid ?? String(index))"
             case .web(let row): row.id
             case .history(let query): "history:\(query)"
+            case .terminal: "terminal"
             }
         }
 
@@ -67,7 +70,7 @@ struct LauncherList: Equatable, Sendable {
             case .workflowKeyword(let entry): entry.id
             case .workflowItem(let entry, let item, _): item.uid.map { "\(entry.id):\($0)" }
             case .web(let row): row.url.map { "url:\($0.host ?? $0.absoluteString)" }
-            case .history: nil
+            case .history, .terminal: nil
             case .openItem(let item): "open:\(item.kind.rawValue):\(item.bundleID):\(item.title)"
             }
         }
