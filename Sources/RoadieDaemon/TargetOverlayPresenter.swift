@@ -958,6 +958,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var openItems: [LauncherOpenItem] = []
     /// Signets des navigateurs (session 104), arrivés après l'ouverture.
     private var bookmarks: [LauncherBookmark] = []
+    /// Commande système en attente du second Retour (session 105).
+    private var pendingSystem: String?
     /// Chemin tapé (SPEC-087) : lecture du dossier en fond, éléments de la saisie `pathFor`.
     private let pathListing = LauncherPathListing()
     private var pathFiles: [LauncherFile] = []
@@ -1187,12 +1189,19 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         render()
     }
 
+    private static func isConfirm(_ input: SearchKeyInput) -> Bool {
+        if case .confirm = input.kind { return true }
+        return false
+    }
+
     /// Exigé par `KeyEventTapSession` ; la recherche reçoit `SearchKeyInput` via `handleSearch`.
     func handle(_ input: KeyInput) {}
 
     fileprivate func handleSearch(_ input: SearchKeyInput) {
         guard !finished else { return }
         lastInputAt = Date()
+        // Toute autre touche que Retour annule une confirmation en attente (session 105).
+        if pendingSystem != nil, !Self.isConfirm(input) { pendingSystem = nil }
         if step != .objects {
             handleStep(input)
             return
@@ -1321,6 +1330,17 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             moveInGrid(step)
         case .cycleView:
             cycleView()
+        case .parentFolder:
+            if let parent = LauncherPathRules.parent(model.query) { model.replaceQuery(parent) }
+        case .largeType:
+            // ⌘L : la ligne en grand texte, la barre se ferme comme chez Alfred (session 105).
+            guard let text = selectionText else { return }
+            finish(TargetActionResult(changed: true, message: "launcher large type"))
+            LargeTypePanel.show(text)
+            return
+        case .closeAll:
+            finish(TargetActionResult(changed: false, message: "target_search_escaped", error: "cancelled"))
+            return
         case .preview:
             if case .file(let file)? = launcherList.row(for: launcherSelection) {
                 finishAction(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil))
@@ -1357,7 +1377,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .phrase(let action, _), .alias(_, let action, _): enterVerbs(action.subject)
             case .project(let project): enterVerbs(.project(project.name))
             case .action(_, let action, _, _): enterVerbs(action.subject)
-            case .rule, .openItem, .calc, .terminal: break
+            case .rule, .openItem, .calc, .terminal, .system: break
             case .workflowKeyword(let entry): completeWorkflow(entry, nil)
             case .web(let row):
                 if let url = row.url { enterVerbs(.url(url)) } else if case .hint(let search) = row.kind { model.replaceQuery(search.keyword + " ") }
@@ -1385,7 +1405,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch launcherList.row(for: launcherSelection) {
         case .target(let target): model.highlight(targetID: target.id)
         case .app, .file, .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .web, .history,
-             .terminal:
+             .terminal, .system:
             model.highlight(targetID: nil)
         case .header, nil: break
         }
@@ -1499,6 +1519,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         if let (name, alias) = launcher.aliases.alias(for: model.query), let action = launcher.aliasAction(alias) {
             launcherList.prepend(.alias(name, action, LauncherPhrase.title(action)), header: "Abréviation")
         }
+        // Commandes système (session 105), après la première section.
+        launcherList.insertSection("Système", LauncherSystemCommand.matches(model.query, in: launcher.systemCommands).map(LauncherList.Row.system))
         // Mots-clés de workflows en cours de frappe (SPEC-088), après la première section.
         let keywords = launcher.workflowEntries.filter { $0.match(model.query) == .suggest }
         launcherList.insertSection("Workflows", keywords.prefix(4).map(LauncherList.Row.workflowKeyword))
@@ -1757,6 +1779,17 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .terminal(let command):
             runTerminal(command)
             return true
+        case .system(let command):
+            // Commande lourde : un premier Retour l'annonce, le second la lance (session 105).
+            if command.confirms, pendingSystem != command.id {
+                pendingSystem = command.id
+                render()
+                return true
+            }
+            launcher.recordQuery(model.query)
+            finish(TargetActionResult(changed: true, message: "launcher system: \(command.id)"))
+            command.run()
+            return true
         default:
             return false
         }
@@ -1818,7 +1851,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         if query != pathFor {
             pathFor = query
             fileSearch.cancel()
-            pathListing.list(LauncherPathRules.parts(query)) { [weak self] files in
+            pathListing.list(LauncherPathRules.parts(query), sort: launcher.pathSort) { [weak self] files in
                 guard let self, !self.finished, self.model.query == query, self.step == .objects else { return }
                 self.pathFiles = files
                 self.filesChanged = true
@@ -1874,13 +1907,14 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .project(let project): .project(project.name)
         case .action(_, let action, _, _): action.subject
         case .web(let row): row.url.map(LauncherSubject.url)
-        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .header, nil: nil
+        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .system, .header, nil: nil
         }
     }
 
     /// ⌘C : chemin d'un fichier ou d'une application, titre d'une fenêtre ou d'une cible (SPEC-077).
-    private func copySelection() {
-        let text: String? = switch launcherList.row(for: launcherSelection) {
+    /// Texte de la ligne choisie : copié par ⌘C, montré en grand par ⌘L (session 105).
+    private var selectionText: String? {
+        switch launcherList.row(for: launcherSelection) {
         case .app(let app, _): app.path
         case .file(let file): file.path
         case .target(let target): target.subtitle.isEmpty ? target.title : "\(target.title) - \(target.subtitle)"
@@ -1894,8 +1928,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .web(let row): row.url?.absoluteString
         case .history(let query): query
         case .terminal(let command): command
+        case .system(let command): command.title
         case .rule, .header, nil: nil
         }
+    }
+
+    private func copySelection() {
+        let text = selectionText
         guard let text else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -1917,7 +1956,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .openItem(let item): finishOpenItem(item)
         case .calc(let calc): finishCalc(calc)
         case .workflowKeyword, .workflowItem: _ = confirmWorkflow(modifiers: 0)
-        case .web, .history, .terminal: _ = confirmWeb()
+        case .web, .history, .terminal, .system: _ = confirmWeb()
         case .header, nil: break
         }
     }
@@ -1955,7 +1994,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .project(let project): LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil)
         case .action(_, let action, _, _): action
         case .web(let row): row.url.map { LauncherAction(subject: .url($0), verb: .open, destination: nil) }
-        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .header, nil: nil
+        case .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .system, .header, nil: nil
         }
     }
 
@@ -2142,8 +2181,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             guard !isRepeat else { return }
             confirmStep()
             return
+        case .closeAll:
+            finish(TargetActionResult(changed: false, message: "target_search_escaped", error: "cancelled"))
+            return
         case .text, .labelCharacter, .ignored, .copy, .preview, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
-             .selectionVerbs, .selectClear, .move, .cycleView:
+             .selectionVerbs, .selectClear, .move, .cycleView, .parentFolder, .largeType:
             break
         }
         render()
@@ -2222,7 +2264,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .web(let row):
             guard let url = row.url else { return nil }
             subject = .url(url)
-        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .header, nil: return nil
+        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .system, .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
                                   newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
@@ -2445,7 +2487,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         refreshLauncher()
         // Icône d'une fenêtre : celle de son application, retrouvée par son nom. O(a).
         let appPaths = Dictionary(launcher.apps.map { ($0.name, $0.path) }, uniquingKeysWith: { first, _ in first })
-        var suggestions = launcherList.rows.map { Self.suggestion($0, appPaths: appPaths, terminal: launcher.terminalApp) }
+        var suggestions = launcherList.rows.map { Self.suggestion($0, appPaths: appPaths, terminal: launcher.terminalApp, pendingSystem: pendingSystem) }
         // Touche tenue : la ligne choisie annonce ce que Retour fera (SPEC-075).
         if let modifier = heldModifier, let index = selectedLauncherRow, let variant = currentVariant(modifier) {
             suggestions[index].detail = variant.title
@@ -2527,7 +2569,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     /// Ligne du lanceur dessinée par la barre : en-tête, application avec son icône, ou cible.
-    private static func suggestion(_ row: LauncherList.Row, appPaths: [String: String], terminal: String = "terminal") -> SlashSuggestion {
+    private static func suggestion(_ row: LauncherList.Row, appPaths: [String: String], terminal: String = "terminal",
+                                   pendingSystem: String? = nil) -> SlashSuggestion {
         switch row {
         case .header(let title):
             return SlashSuggestion(text: title, kind: .header)
@@ -2577,6 +2620,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return SlashSuggestion(text: row.title, detail: detail, kind: .result, icon: .symbol(symbol))
         case .history(let query):
             return SlashSuggestion(text: query, detail: "Recherche récente", kind: .result, icon: .symbol("clock.arrow.circlepath"))
+        case .system(let command):
+            let detail = command.id == pendingSystem ? "Retour encore pour confirmer · Échap annule"
+                : command.confirms ? "Système · Retour deux fois" : "Système"
+            return SlashSuggestion(text: command.title, detail: detail, kind: .result, icon: .symbol(command.symbol))
         case .terminal(let command):
             let name = LauncherTerminal.appName(terminal)
             if command.isEmpty { return SlashSuggestion(text: "\(name) : tapez une commande après >", detail: "", kind: .result, icon: .symbol("terminal")) }
@@ -2646,6 +2693,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         inputPanel?.labelLetters = Set(letterRows.keys)
         inputPanel?.pickModifier = launcher.pickModifier.flags
         inputPanel?.gridColumns = step == .objects ? gridColumns : nil
+        inputPanel?.pathNavigation = step == .objects && commandModel == nil && Self.isPath(model.query)
         shownBar = bar
         let selectable = Self.subject(of: launcherList.row(for: launcherSelection)).flatMap(LauncherSelection.key) != nil
         inputPanel?.selectionKeys = step == .objects ? SelectionKeys(hasSelection: !selection.isEmpty, rowSelectable: selectable) : SelectionKeys()
@@ -2783,10 +2831,10 @@ extension SlashCommandModel {
                 acceptSelectedSuggestion()
                 return .submit(submit())
             }
-        case .escape:
+        case .escape, .closeAll:
             return .close
         case .ignored, .pick, .actions, .copy, .preview, .save, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
-             .selectionVerbs, .selectClear, .move, .cycleView:
+             .selectionVerbs, .selectClear, .move, .cycleView, .parentFolder, .largeType:
             break
         }
         return .update
@@ -2835,6 +2883,9 @@ public struct SearchKeyInput: Sendable, Equatable {
         case move(Int)
         /// Touche des présentations (session 099) : liste → grille → grandes tuiles.
         case cycleView
+        /// Session 105 : ⌫ sur un chemin de dossier remonte d'un dossier ; ⌘L montre la ligne en grand ;
+        /// ⌘⎋ ferme la barre d'un coup.
+        case parentFolder, largeType, closeAll
         case ignored
     }
 

@@ -90,6 +90,10 @@ struct LauncherSearchContext {
     var defaultBarPlacement = SearchBarPlacement.bottom
     var barScreenFrame: CGRect?
     var savePlacement: (SearchBarPlacement?) -> Void = { _ in }
+    /// Commandes système proposées (session 105).
+    var systemCommands = LauncherSystemCommand.all()
+    /// Ordre des éléments d'un chemin tapé (session 105) : `name`, `modified` ou `created`.
+    var pathSort = "name"
     /// Terminal du préfixe `>` (session 103).
     var terminalApp = "terminal"
     /// Signets des navigateurs (session 104), lus hors du fil principal ; rien si `bookmarks_enabled` est faux.

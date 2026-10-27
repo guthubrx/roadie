@@ -22,6 +22,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     var gridColumns: Int?
     /// Touche des présentations (session 099) : code physique et modificateurs ; nil : désactivée.
     var viewCycle: (keyCode: UInt16, flags: NSEvent.ModifierFlags)?
+    /// Saisie d'un chemin de dossier (session 105) : ⌫ en fin de `…/` remonte d'un dossier.
+    var pathNavigation = false
     private var updating = false
     private var closing = false
 
@@ -124,6 +126,15 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
             onKey?(SearchKeyInput(kind: .actions))
             return
         }
+        // ⌫ en fin d'un chemin `…/` : le dossier parent, comme la navigation d'Alfred (session 105).
+        if event.type == .keyDown, event.keyCode == 51, pathNavigation,
+           event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
+           let editor = field.currentEditor() as? NSTextView, !editor.hasMarkedText(),
+           editor.selectedRange() == NSRange(location: (editor.string as NSString).length, length: 0),
+           LauncherPathRules.parent(field.stringValue) != nil {
+            onKey?(SearchKeyInput(kind: .parentFolder))
+            return
+        }
         // Effacement dans un champ vide : rien ne change pour AppKit, la barre revient d'une étape (SPEC-074).
         if event.type == .keyDown, event.keyCode == 51, field.stringValue.isEmpty,
            event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
@@ -159,6 +170,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         // ⌘C sans texte sélectionné copie la ligne choisie ; ⌘Y montre son aperçu (SPEC-077).
         if key == "c", editor.selectedRange().length == 0 { onKey?(SearchKeyInput(kind: .copy)); return true }
         if key == "y" { onKey?(SearchKeyInput(kind: .preview)); return true }
+        // ⌘L : la ligne choisie en grand texte (session 105).
+        if key == "l" { onKey?(SearchKeyInput(kind: .largeType)); return true }
         // ⌘S : garder l'action choisie (SPEC-079).
         if key == "s" { onKey?(SearchKeyInput(kind: .save)); return true }
         // ⌘R : la règle proposée (SPEC-081).
@@ -214,6 +227,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
             }
         }
         switch event.keyCode {
+        case 53 where flags == .command: return SearchKeyInput(kind: .closeAll)
         case 53: return SearchKeyInput(kind: .escape)
         case 36, 76:
             return SearchKeyInput(kind: .confirm(shift: flags.contains(.shift), command: flags.contains(.command),

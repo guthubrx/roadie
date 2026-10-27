@@ -112,6 +112,9 @@ public struct SettingDescriptor: Equatable, Sendable {
         case ("target_mode.bar_position", "center"): return "Au centre, liste dessous"
         case ("target_mode.bar_position", "top"): return "En haut, liste dessous (comme Alfred)"
         case ("target_mode.terminal_app", let app): return LauncherTerminal.appName(app)
+        case ("target_mode.path_sort", "name"): return "Par nom"
+        case ("target_mode.path_sort", "modified"): return "Modifiés récemment d'abord"
+        case ("target_mode.path_sort", "created"): return "Créés récemment d'abord"
         case ("overview.presentation", "archipelago"): return "Archipel"
         case ("overview.presentation", "bays"): return "Baies"
         case ("window_placement.new_apps_target", "focused_display"): return "Écran actif (recommandé)"
@@ -460,6 +463,17 @@ extension SettingsCatalog {
               .bool, .bool(true)),
         readOnlyEntry(.recherche, "experimental.target_mode", "bookmark_browsers", "Navigateurs dont les signets sont lus",
                       "Firefox (tous les profils), Safari, Chrome, Brave ou Edge."),
+        readOnlyEntry(.recherche, "experimental.target_mode", "app_search_paths", "Dossiers d'applications ajoutés",
+                      "Dossiers parcourus en plus des dossiers d'applications de macOS (un niveau de sous-dossier), par exemple ~/Applications/Chrome Apps.localized. Pris en compte à la prochaine ouverture de la barre."),
+        entry(.recherche, "experimental.target_mode", "path_sort", "Ordre des éléments d'un dossier tapé",
+              "Quand vous tapez un chemin (~/ ou /) : par nom, ou les plus récents d'abord. Les dossiers restent en tête. ⌫ à la fin d'un chemin remonte d'un dossier.",
+              .choice(TargetModeConfig.pathSorts), .string("name")),
+        entry(.recherche, "experimental.target_mode", "learning_enabled", "Apprendre vos choix",
+              "Les résultats que vous choisissez souvent passent en tête. Désactivé : ordre sans apprentissage et rien n'est enregistré. « roadie launcher reset » efface ce qui a été appris.",
+              .bool, .bool(true)),
+        entry(.recherche, "experimental.target_mode", "confirm_quit_all", "Confirmer « Tout quitter »",
+              "La commande système « Tout quitter » demande un second Retour. Redémarrer, Éteindre, Fermer la session et Vider la corbeille le demandent toujours.",
+              .bool, .bool(true)),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

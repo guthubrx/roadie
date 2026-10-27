@@ -507,6 +507,7 @@ public final class TargetModeRuntimeController: NSObject {
 
     private func launcherContext(initialSubject: LauncherSubject? = nil, targets: [RoadieTarget] = [], initialQuery: String? = nil) -> LauncherSearchContext {
         let catalog = LauncherAppCatalog.shared
+        catalog.setExtraRoots(service.effectiveConfig.experimental.targetMode.appSearchPaths)
         let rankingStore = LauncherRankingStore()
         let state = service.effectiveStageStore.state()
         let running = Set(NSWorkspace.shared.runningApplications
@@ -523,13 +524,15 @@ public final class TargetModeRuntimeController: NSObject {
                 .stages.first { $0.id == scope.stageID })
         }
         let webSearchURL = service.effectiveConfig.experimental.targetMode.webSearchURL
+        // Apprentissage coupé (session 105) : classement vide, aucune visite enregistrée.
+        let learns = service.effectiveConfig.experimental.targetMode.learningEnabled
         var context = LauncherSearchContext(
             apps: catalog.current,
             details: LauncherPlacement.details(runningBundleIDs: running, state: state, stageNames: names),
-            ranking: rankingStore.load(),
+            ranking: learns ? rankingStore.load() : LauncherRanking(),
             refreshApps: { done in catalog.refresh(done: done) },
             launch: { [weak self] app in self?.launch(app) ?? TargetActionResult(changed: false, message: "launcher_unavailable") },
-            recordVisit: { key, query in rankingStore.recordVisit(key, query: query, context: rankingContext) },
+            recordVisit: { key, query in if learns { rankingStore.recordVisit(key, query: query, context: rankingContext) } },
             destinations: LauncherPlacement.destinations(state: state, displays: snapshot.displays, stageNames: names),
             newStageHome: (homeDisplay, homeDesktop),
             perform: { [weak self] action in
@@ -669,6 +672,8 @@ public final class TargetModeRuntimeController: NSObject {
         let savesPosition = barConfig.barSavePosition
         context.savePlacement = { placement in if savesPosition || placement == nil { positionStore.save(placement) } }
         context.terminalApp = barConfig.terminalApp
+        context.pathSort = barConfig.pathSort
+        context.systemCommands = LauncherSystemCommand.all(confirmQuitAll: barConfig.confirmQuitAll)
         if barConfig.bookmarksEnabled {
             let browsers = barConfig.bookmarkBrowsers
             context.loadBookmarks = { done in
@@ -873,6 +878,8 @@ public final class TargetModeRuntimeController: NSObject {
                 NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).forEach { $0.hide() }
             case .quit:
                 NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).forEach { $0.terminate() }
+            case .forceQuit:
+                NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).forEach { $0.forceTerminate() }
             case .bringHere:
                 bringHere(app, into: action.destination.flatMap(stageScope) ?? activeStageScope())
             default:

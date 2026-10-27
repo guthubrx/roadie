@@ -33,6 +33,18 @@ final class LauncherAppCatalog: @unchecked Sendable {
     private let lock = NSLock()
     private var apps: [LauncherApp] = []
     private var refreshing = false
+    /// Dossiers ajoutés par `app_search_paths` (session 105), parcourus après ceux par défaut.
+    private var extraRoots: [String] = []
+
+    /// Change les dossiers ajoutés ; vrai s'ils ont changé (l'index sera refait au prochain parcours).
+    @discardableResult
+    func setExtraRoots(_ roots: [String]) -> Bool {
+        lock.withLock {
+            guard extraRoots != roots else { return false }
+            extraRoots = roots
+            return true
+        }
+    }
 
     /// Dernier index connu ; vide avant le premier parcours.
     var current: [LauncherApp] { lock.withLock { apps } }
@@ -51,7 +63,7 @@ final class LauncherAppCatalog: @unchecked Sendable {
             return
         }
         DispatchQueue.global(qos: .utility).async { [self] in
-            let scanned = Self.scan(roots: Self.defaultRoots)
+            let scanned = Self.scan(roots: Self.defaultRoots + lock.withLock { extraRoots })
             lock.withLock { apps = scanned; refreshing = false }
             if let done { DispatchQueue.main.async { MainActor.assumeIsolated { done(scanned) } } }
         }

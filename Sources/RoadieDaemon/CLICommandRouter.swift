@@ -224,6 +224,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "project save [NAME] | open NAME | list [--json] | delete NAME"),
         CLICommandSpec(usage: "undo"),
         CLICommandSpec(usage: "launcher history [--clear] [--json]"),
+        CLICommandSpec(usage: "launcher reset"),
         CLICommandSpec(usage: "workflow list [--json] [--hotkeys] | check FOLDER [--json] | install FILE.alfredworkflow [--replace] | remove ID"),
         CLICommandSpec(usage: "workflow run ID OBJECT [ARGUMENT] [--var NAME=VALUE] | trigger ID TRIGGER [ARGUMENT] [--var NAME=VALUE] | tasks update"),
         CLICommandSpec(usage: "workflow alfred search TEXT | trigger WORKFLOW NAME [ARGUMENT] | set WORKFLOW KEY VALUE | remove WORKFLOW KEY | reload WORKFLOW | reveal WORKFLOW"),
@@ -650,6 +651,13 @@ public final class CLICommandRouter {
         case "workflow":
             return try runWorkflowCommand(Array(args.dropFirst()))
         case "launcher":
+            // Session 105 : effacer la connaissance (classement appris), comme le bouton d'Alfred.
+            if args.count >= 2, args[1] == "reset" {
+                let url = LauncherRankingStore().url
+                if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+                out("classement appris effacé")
+                return 0
+            }
             // SPEC-090 : historique des saisies de la barre, gardé sur ce Mac.
             guard args.count >= 2, args[1] == "history" else { return usageError() }
             let store = LauncherHistoryStore()

@@ -60,6 +60,8 @@ struct LauncherTilingState: Equatable, Sendable {
 enum LauncherVerb: String, CaseIterable, Sendable {
     // Application
     case open, newWindow, openIn, gatherIn, hide, quit
+    /// Session 105 : comme le Forcer à quitter de macOS.
+    case forceQuit
     // Application et fenêtre : vers la stage active, sans changer la stage affichée (SPEC-075).
     case bringHere
     // Fenêtre
@@ -83,6 +85,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .gatherIn: "Réunir ses fenêtres dans…"
         case .hide: "Masquer l'application"
         case .quit: "Quitter l'application"
+        case .forceQuit: "Forcer à quitter"
         case .focus: "Aller à la fenêtre"
         case .sendTo: "Envoyer vers…"
         case .bringHere: "Amener ici"
@@ -136,7 +139,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     /// dépendent de `tiling` ; sans état connu, « Faire flotter » seul (bascule SPEC-047). O(1).
     static func verbs(for subject: LauncherSubject, tiling: LauncherTilingState? = nil) -> [LauncherVerb] {
         switch subject {
-        case .app: return [.open, .openIn, .bringHere, .newWindow, .gatherIn, .hide, .quit]
+        case .app: return [.open, .openIn, .bringHere, .newWindow, .gatherIn, .hide, .quit, .forceQuit]
         case .file: return [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath]
         case .project: return [.reopenProject, .deleteProject]
         case .url: return [.open, .openIn, .bringHere, .copyPath]

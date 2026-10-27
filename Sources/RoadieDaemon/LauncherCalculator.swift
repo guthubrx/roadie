@@ -19,6 +19,11 @@ enum LauncherCalculator {
         "ln": { Foundation.log($0) }, "log": { Foundation.log10($0) }, "log2": { Foundation.log2($0) },
         "sin": { Foundation.sin($0) }, "cos": { Foundation.cos($0) }, "tan": { Foundation.tan($0) },
         "asin": { Foundation.asin($0) }, "acos": { Foundation.acos($0) }, "atan": { Foundation.atan($0) },
+        // Session 105 : le reste du calcul avancé d'Alfred.
+        "sinh": { Foundation.sinh($0) }, "cosh": { Foundation.cosh($0) }, "tanh": { Foundation.tanh($0) },
+        "asinh": { Foundation.asinh($0) }, "acosh": { Foundation.acosh($0) }, "atanh": { Foundation.atanh($0) },
+        "trunc": { $0.rounded(.towardZero) }, "rint": { $0.rounded(.toNearestOrEven) }, "near": { $0.rounded(.toNearestOrEven) },
+        "dtor": { $0 * .pi / 180 }, "rtod": { $0 * 180 / .pi },
     ]
     static let constants: [String: Double] = ["pi": .pi, "e": M_E]
 

@@ -33,6 +33,8 @@ struct LauncherList: Equatable, Sendable {
         case history(String)
         /// Commande tapée après `>` (session 103) ; vide : invite.
         case terminal(String)
+        /// Commande système (session 105).
+        case system(LauncherSystemCommand)
 
         /// Identité unique d'une ligne choisissable : sert à la sélection.
         var id: String? {
@@ -53,6 +55,7 @@ struct LauncherList: Equatable, Sendable {
             case .web(let row): row.id
             case .history(let query): "history:\(query)"
             case .terminal: "terminal"
+            case .system(let command): "system:\(command.id)"
             }
         }
 
@@ -71,6 +74,7 @@ struct LauncherList: Equatable, Sendable {
             case .workflowItem(let entry, let item, _): item.uid.map { "\(entry.id):\($0)" }
             case .web(let row): row.url.map { "url:\($0.host ?? $0.absoluteString)" }
             case .history, .terminal: nil
+            case .system(let command): "system:\(command.id)"
             case .openItem(let item): "open:\(item.kind.rawValue):\(item.bundleID):\(item.title)"
             }
         }
