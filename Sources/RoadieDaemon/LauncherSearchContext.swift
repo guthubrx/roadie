@@ -92,6 +92,8 @@ struct LauncherSearchContext {
     var savePlacement: (SearchBarPlacement?) -> Void = { _ in }
     /// Terminal du préfixe `>` (session 103).
     var terminalApp = "terminal"
+    /// Signets des navigateurs (session 104), lus hors du fil principal ; rien si `bookmarks_enabled` est faux.
+    var loadBookmarks: (@escaping @MainActor @Sendable ([LauncherBookmark]) -> Void) -> Void = { _ in }
     var fallbackSearches: [String] = []
     /// Lot de la sélection multiple (SPEC-091) et annulation du dernier lot.
     var performBatch: @MainActor ([LauncherAction]) -> TargetActionResult = { _ in
@@ -345,6 +347,8 @@ struct LauncherWebRow: Equatable, Sendable {
         case address(URL)
         case search(URL)
         case hint(WebSearch)
+        /// Signet d'un navigateur (session 104).
+        case bookmark(LauncherBookmark)
     }
 
     let kind: Kind
@@ -355,12 +359,14 @@ struct LauncherWebRow: Equatable, Sendable {
         case .address(let url): "web:open:\(url.absoluteString)"
         case .search(let url): "web:search:\(url.absoluteString)"
         case .hint(let search): "web:hint:\(search.keyword)"
+        case .bookmark(let bookmark): bookmark.id
         }
     }
 
     var url: URL? {
         switch kind {
         case .address(let url), .search(let url): url
+        case .bookmark(let bookmark): URL(string: bookmark.url)
         case .hint: nil
         }
     }

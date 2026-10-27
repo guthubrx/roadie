@@ -41,6 +41,11 @@ extension SettingsCatalog {
             return list(.text, [])
         case "switcher.excluded_bundles":
             return list(.text, [], unique: true)
+        case "target_mode.bookmark_browsers":
+            return list(.choice(["firefox", "safari", "chrome", "brave", "edge"]),
+                        TargetModeConfig().bookmarkBrowsers.map(SettingValue.string), unique: true)
+        case "target_mode.app_search_paths":
+            return list(.text, [], suggestions: ["~/Applications/Chrome Apps.localized", "/Applications/Utilities"], unique: true)
         case "switcher.shortcuts":
             let profile = WindowSwitcherShortcutConfig()
             var fields = [

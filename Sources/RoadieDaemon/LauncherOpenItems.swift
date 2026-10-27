@@ -1,3 +1,4 @@
+import ApplicationServices
 import CoreGraphics
 import Foundation
 import RoadieCore
@@ -143,5 +144,37 @@ enum LauncherBrowsers {
                 continuation.resume(returning: process.terminationStatus == 0 ? String(data: data, encoding: .utf8) : nil)
             }
         }
+    }
+}
+
+/// Choix d'un onglet de Firefox (session 104) : Firefox n'a pas de dictionnaire AppleScript, mais ses
+/// onglets sont des boutons d'accessibilité (`AXRadioButton`) titrés comme l'onglet. Un appui le choisit.
+enum FirefoxTabSelector {
+    /// Cherche dans la fenêtre donnée, sinon dans toutes les fenêtres de Firefox ; vrai si un onglet a été
+    /// pressé. Parcours en largeur borné : 14 niveaux, 4 000 éléments par fenêtre.
+    static func select(title: String, in windows: [AXUIElement]) -> Bool {
+        for window in windows {
+            var queue: [(element: AXUIElement, depth: Int)] = [(window, 0)]
+            var visited = 0
+            while !queue.isEmpty, visited < 4_000 {
+                let (element, depth) = queue.removeFirst()
+                visited += 1
+                if string(element, kAXRoleAttribute) == kAXRadioButtonRole, string(element, kAXTitleAttribute) == title {
+                    return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
+                }
+                guard depth < 14 else { continue }
+                var children: CFTypeRef?
+                guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children) == .success,
+                      let list = children as? [AXUIElement] else { continue }
+                queue += list.map { ($0, depth + 1) }
+            }
+        }
+        return false
+    }
+
+    private static func string(_ element: AXUIElement, _ attribute: String) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+        return value as? String
     }
 }

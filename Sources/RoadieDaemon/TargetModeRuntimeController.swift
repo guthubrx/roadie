@@ -669,6 +669,15 @@ public final class TargetModeRuntimeController: NSObject {
         let savesPosition = barConfig.barSavePosition
         context.savePlacement = { placement in if savesPosition || placement == nil { positionStore.save(placement) } }
         context.terminalApp = barConfig.terminalApp
+        if barConfig.bookmarksEnabled {
+            let browsers = barConfig.bookmarkBrowsers
+            context.loadBookmarks = { done in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let bookmarks = LauncherBookmarkStore.shared.load(browsers: browsers)
+                    DispatchQueue.main.async { MainActor.assumeIsolated { done(bookmarks) } }
+                }
+            }
+        }
         if let grid = pendingGrid {
             let id = grid.entry.id
             context.subscribeGrid = { [weak self] update in self?.openGrid = (id, update) }
@@ -1327,6 +1336,32 @@ public final class TargetModeRuntimeController: NSObject {
                                               detail: "\(host) · \(appName)\(stage)", url: tab.url, browserWindow: tab.window, tabIndex: tab.index))
             }
         }
+        // Firefox (session 104) : sa session enregistrée, profils ouverts depuis son lancement.
+        for bundle in tabs ? LauncherBookmarkBrowsers.bundleIDs("firefox") : [] {
+            guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first else { continue }
+            let since = running.launchDate ?? .distantPast
+            let found = await Task.detached(priority: .userInitiated) { FirefoxSession.openTabs(since: since) }.value
+            let windows = entries.filter { $0.window.bundleID == bundle }
+            let frames = windows.map { ($0.id, $0.window.frame.cgRect) }
+            let appName = running.localizedName ?? "Firefox"
+            // Fenêtre de chaque fenêtre de la session : même cadre, sinon titre de son onglet actif.
+            var byWindow: [String: WindowID] = [:]
+            for tab in found where tab.isActive {
+                let id = LauncherBrowsers.window(matching: tab.bounds, among: frames)
+                    ?? windows.first { $0.window.title == tab.title || $0.window.title.hasPrefix(tab.title + " ") }?.id
+                if let id { byWindow["\(tab.profile)#\(tab.window)"] = id }
+            }
+            for tab in found {
+                let id = byWindow["\(tab.profile)#\(tab.window)"]
+                let stage = stageTitle(windows.first { $0.id == id }?.scope).map { " · \($0)" } ?? ""
+                let host = URL(string: tab.url)?.host ?? tab.url
+                let profile = tab.profile.isEmpty ? "" : " · \(tab.profile)"
+                items.append(LauncherOpenItem(kind: .tab, windowID: id, bundleID: bundle, appName: appName, title: tab.title,
+                                              detail: "\(host) · \(appName)\(profile)\(stage)", url: tab.url,
+                                              browserWindow: tab.window, tabIndex: tab.index))
+            }
+            break
+        }
         return items
     }
 
@@ -1334,7 +1369,17 @@ public final class TargetModeRuntimeController: NSObject {
     private func activate(_ item: LauncherOpenItem) -> TargetActionResult {
         let events = events
         Task { @MainActor in
-            if item.kind == .tab, let window = item.browserWindow, let tab = item.tabIndex {
+            if item.kind == .tab, LauncherBookmarkBrowsers.bundleIDs("firefox").contains(item.bundleID),
+               let pid = NSRunningApplication.runningApplications(withBundleIdentifier: item.bundleID).first?.processIdentifier {
+                // Firefox : l'onglet est pressé par l'accessibilité, dans sa fenêtre si elle est connue.
+                let windowID = item.windowID, title = item.title
+                let pressed = await Task.detached(priority: .userInitiated) { () -> Bool in
+                    let elements = axWindowElements(pid: pid)
+                    let known = windowID.flatMap { elements[CGWindowID($0.rawValue)] }
+                    return FirefoxTabSelector.select(title: title, in: known.map { [$0] } ?? Array(elements.values))
+                }.value
+                events.append(RoadieEvent(type: "launcher.firefox_tab", details: ["pressed": String(pressed), "window": String(windowID != nil)]))
+            } else if item.kind == .tab, let window = item.browserWindow, let tab = item.tabIndex {
                 _ = await LauncherBrowsers.run(LauncherBrowsers.activateScript(bundleID: item.bundleID, window: window, tab: tab))
             }
             if let id = item.windowID {

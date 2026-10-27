@@ -956,6 +956,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var copiedRowID: String?
     /// Documents et onglets ouverts (SPEC-082), arrivés en fond après l'ouverture.
     private var openItems: [LauncherOpenItem] = []
+    /// Signets des navigateurs (session 104), arrivés après l'ouverture.
+    private var bookmarks: [LauncherBookmark] = []
     /// Chemin tapé (SPEC-087) : lecture du dossier en fond, éléments de la saisie `pathFor`.
     private let pathListing = LauncherPathListing()
     private var pathFiles: [LauncherFile] = []
@@ -1043,6 +1045,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         launcher.loadOpenItems { [weak self] items in
             guard let self, !self.finished else { return }
             self.openItems = items
+            self.filesChanged = true
+            self.render()
+        }
+        launcher.loadBookmarks { [weak self] bookmarks in
+            guard let self, !self.finished else { return }
+            self.bookmarks = bookmarks
+            // Mots-clés Firefox avec %s : des recherches par mot-clé de plus (« w chat »).
+            let taken = Set(self.launcher.webSearches.map { $0.keyword.lowercased() })
+            self.launcher.webSearches += LauncherBookmark.keywordSearches(bookmarks, taken: taken)
             self.filesChanged = true
             self.render()
         }
@@ -1491,6 +1502,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         // Mots-clés de workflows en cours de frappe (SPEC-088), après la première section.
         let keywords = launcher.workflowEntries.filter { $0.match(model.query) == .suggest }
         launcherList.insertSection("Workflows", keywords.prefix(4).map(LauncherList.Row.workflowKeyword))
+        // Signets des navigateurs (session 104), avant les replis ; un mot-clé Firefox tapé seul passe en tête.
+        if phrase == nil {
+            launcherList.appendSection("Signets", LauncherBookmark.matches(model.query, in: bookmarks).map {
+                .web(LauncherWebRow(kind: .bookmark($0), title: $0.title))
+            })
+            let typed = model.query.trimmingCharacters(in: .whitespaces).lowercased()
+            if let keyword = bookmarks.first(where: { $0.keyword?.lowercased() == typed && !$0.url.contains("%s") }) {
+                launcherList.prepend(.web(LauncherWebRow(kind: .bookmark(keyword), title: keyword.title)), header: "Signet")
+            }
+        }
         // Recherches de repli et actions universelles sur texte des workflows, en bas (SPEC-089 FR-003, FR-004).
         launcherList.appendSection("Repli", fallbackRows(model.query))
         // Web (SPEC-090) : repli en bas ; recherche par mot-clé et adresse tapée en tête, choisies.
@@ -1717,7 +1738,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func confirmWeb() -> Bool {
         switch launcherList.row(for: launcherSelection) {
         case .web(let row):
-            if let url = row.url {
+            if case .bookmark(let bookmark) = row.kind, let url = row.url, let app = LauncherBookmarkBrowsers.otherThanDefault(bookmark.browser, for: url) {
+                // Signet d'un navigateur qui n'est pas celui par défaut : il s'ouvre dans son navigateur.
+                launcher.recordQuery(model.query)
+                NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+                finish(TargetActionResult(changed: true, message: "launcher bookmark: \(bookmark.browser)"))
+            } else if let url = row.url {
                 finishAction(LauncherAction(subject: .url(url), verb: .open, destination: nil))
             } else if case .hint(let search) = row.kind {
                 model.replaceQuery(search.keyword + " ")
@@ -2537,10 +2563,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 ?? appPaths[item.appName].map(SlashSuggestion.Icon.file) ?? .symbol(item.kind == .tab ? "globe" : "doc")
             return SlashSuggestion(text: item.title, detail: item.detail, kind: .result, icon: icon)
         case .web(let row):
+            if case .bookmark(let bookmark) = row.kind {
+                let icon: SlashSuggestion.Icon = bookmark.icon.map(SlashSuggestion.Icon.image)
+                    ?? LauncherBookmarkBrowsers.appPath(bookmark.browser).map(SlashSuggestion.Icon.file) ?? .symbol("bookmark")
+                return SlashSuggestion(text: row.title, detail: bookmark.detail, kind: .result, icon: icon)
+            }
             let (detail, symbol): (String, String) = switch row.kind {
             case .address: ("Retour ouvre · Tab : ouvrir dans une stage", "globe")
             case .search(let url): (url.host ?? "", "magnifyingglass")
             case .hint(let search): ("Tab ou Retour : « \(search.keyword) »", "keyboard")
+            case .bookmark: ("", "bookmark")
             }
             return SlashSuggestion(text: row.title, detail: detail, kind: .result, icon: .symbol(symbol))
         case .history(let query):

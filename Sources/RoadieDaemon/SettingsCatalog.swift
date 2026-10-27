@@ -455,6 +455,11 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "terminal_app", "Terminal de >",
               "Tapez > puis une commande dans la barre : Retour la lance dans une nouvelle fenêtre de ce terminal, depuis votre dossier personnel. Warp ne reçoit pas de commande : il s'ouvre et la commande est copiée.",
               .choice(TargetModeConfig.terminalApps), .string("terminal")),
+        entry(.recherche, "experimental.target_mode", "bookmarks_enabled", "Signets des navigateurs",
+              "Les signets de Firefox, Safari et Chrome apparaissent dans la barre dès deux lettres, avec l'icône du site. Les mots-clés de Firefox (« w » + texte) servent aussi de recherches. Safari demande l'accès complet au disque pour Roadie.",
+              .bool, .bool(true)),
+        readOnlyEntry(.recherche, "experimental.target_mode", "bookmark_browsers", "Navigateurs dont les signets sont lus",
+                      "Firefox (tous les profils), Safari, Chrome, Brave ou Edge."),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [
