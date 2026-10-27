@@ -691,11 +691,45 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var commandTextFontSize: Double
     public var searchFontFamily: String
     public var commandFontFamily: String
+    /// Thème de la barre (session 101) : identifiant d'un thème fourni (`roadie`, `alfred`, `alfred-dark`…)
+    /// ou nom d'un fichier `.alfredappearance` importé. `themeDark` : thème quand macOS est en mode sombre ;
+    /// vide = `theme`.
+    public var theme: String
+    public var themeDark: String
+    /// Nombre de résultats montrés (session 101) ; 0 = autant que la place, sinon 3…20.
+    public var visibleResults: Int
+    /// Écran de la barre (session 102) : `mouse` (écran du pointeur), `active` (écran de la fenêtre
+    /// active) ou `main` (écran principal). Une autre valeur revient à `mouse`.
+    public var barScreen: String
+    /// Place par défaut de la barre (session 102) : `bottom`, `center` ou `top`.
+    public var barPosition: String
+    /// La barre déplacée à la souris garde sa place d'une ouverture à l'autre (session 102).
+    public var barSavePosition: Bool
+    /// Terminal qui lance une commande tapée après `>` (session 103) : `terminal`, `iterm`, `ghostty`,
+    /// `warp`, `kitty`, `wezterm` ou `alacritty`.
+    public var terminalApp: String
+    /// Signets des navigateurs dans la barre (session 104) et navigateurs lus (`firefox`, `safari`, `chrome`,
+    /// `brave`, `edge`, `arc`).
+    public var bookmarksEnabled: Bool
+    public var bookmarkBrowsers: [String]
+    /// Dossiers d'applications ajoutés à la portée par défaut (session 105), `~` accepté.
+    public var appSearchPaths: [String]
+    /// Classement appris des résultats (session 105) ; faux : ordre sans apprentissage, rien n'est enregistré.
+    public var learningEnabled: Bool
+    /// Ordre des éléments d'un chemin tapé (session 105) : `name`, `modified` ou `created` ; dossiers en tête.
+    public var pathSort: String
+    /// « Tout quitter » demande une confirmation (session 105).
+    public var confirmQuitAll: Bool
 
     public static let defaultSearchHotkey = "command+control+alt+f"
     public static let defaultActionsHotkey = "command+control+alt+shift+f"
     public static let defaultWebSearchURL = "https://www.google.com/search?q={query}"
     public static let pickModifiers = ["command", "shift", "alt", "control"]
+    public static let barScreens = ["mouse", "active", "main"]
+    public static let barPositions = ["bottom", "center", "top"]
+    public static let terminalApps = ["terminal", "iterm", "ghostty", "warp", "kitty", "wezterm", "alacritty"]
+    public static let bookmarkBrowserIDs = ["firefox", "safari", "chrome", "brave", "edge", "arc"]
+    public static let pathSorts = ["name", "modified", "created"]
 
     public init(
         enabled: Bool = true,
@@ -723,7 +757,20 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         searchTextFontSize: Double = 15,
         commandTextFontSize: Double = 13,
         searchFontFamily: String = "system",
-        commandFontFamily: String = "system"
+        commandFontFamily: String = "system",
+        theme: String = "roadie",
+        themeDark: String = "",
+        visibleResults: Int = 0,
+        barScreen: String = "mouse",
+        barPosition: String = "bottom",
+        barSavePosition: Bool = true,
+        terminalApp: String = "terminal",
+        bookmarksEnabled: Bool = true,
+        bookmarkBrowsers: [String] = ["firefox", "safari", "chrome"],
+        appSearchPaths: [String] = [],
+        learningEnabled: Bool = true,
+        pathSort: String = "name",
+        confirmQuitAll: Bool = true
     ) {
         self.enabled = enabled
         self.pickerEnabled = pickerEnabled
@@ -751,6 +798,19 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.commandTextFontSize = min(48, max(8, commandTextFontSize))
         self.searchFontFamily = searchFontFamily
         self.commandFontFamily = commandFontFamily
+        self.theme = theme.isEmpty ? "roadie" : theme
+        self.themeDark = themeDark
+        self.visibleResults = visibleResults <= 0 ? 0 : min(20, max(3, visibleResults))
+        self.barScreen = TargetModeConfig.barScreens.contains(barScreen) ? barScreen : "mouse"
+        self.barPosition = TargetModeConfig.barPositions.contains(barPosition) ? barPosition : "bottom"
+        self.barSavePosition = barSavePosition
+        self.terminalApp = TargetModeConfig.terminalApps.contains(terminalApp) ? terminalApp : "terminal"
+        self.bookmarksEnabled = bookmarksEnabled
+        self.bookmarkBrowsers = bookmarkBrowsers.filter { TargetModeConfig.bookmarkBrowserIDs.contains($0) }
+        self.appSearchPaths = appSearchPaths
+        self.learningEnabled = learningEnabled
+        self.pathSort = TargetModeConfig.pathSorts.contains(pathSort) ? pathSort : "name"
+        self.confirmQuitAll = confirmQuitAll
     }
 
     /// Modificateurs (`command`, `control`, `alt`, `shift`) et touche d'un raccourci normalisé ;
@@ -791,6 +851,19 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case commandTextFontSize = "command_text_font_size"
         case searchFontFamily = "search_font_family"
         case commandFontFamily = "command_font_family"
+        case theme
+        case themeDark = "theme_dark"
+        case visibleResults = "visible_results"
+        case barScreen = "bar_screen"
+        case barPosition = "bar_position"
+        case barSavePosition = "bar_save_position"
+        case terminalApp = "terminal_app"
+        case bookmarksEnabled = "bookmarks_enabled"
+        case bookmarkBrowsers = "bookmark_browsers"
+        case appSearchPaths = "app_search_paths"
+        case learningEnabled = "learning_enabled"
+        case pathSort = "path_sort"
+        case confirmQuitAll = "confirm_quit_all"
     }
 
     public init(from decoder: Decoder) throws {
@@ -821,7 +894,20 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             searchTextFontSize: try c.decodeFlexibleDouble(forKey: .searchTextFontSize) ?? 15,
             commandTextFontSize: try c.decodeFlexibleDouble(forKey: .commandTextFontSize) ?? 13,
             searchFontFamily: try c.decodeIfPresent(String.self, forKey: .searchFontFamily) ?? "system",
-            commandFontFamily: try c.decodeIfPresent(String.self, forKey: .commandFontFamily) ?? "system"
+            commandFontFamily: try c.decodeIfPresent(String.self, forKey: .commandFontFamily) ?? "system",
+            theme: try c.decodeIfPresent(String.self, forKey: .theme) ?? "roadie",
+            themeDark: try c.decodeIfPresent(String.self, forKey: .themeDark) ?? "",
+            visibleResults: try c.decodeIfPresent(Int.self, forKey: .visibleResults) ?? 0,
+            barScreen: try c.decodeIfPresent(String.self, forKey: .barScreen) ?? "mouse",
+            barPosition: try c.decodeIfPresent(String.self, forKey: .barPosition) ?? "bottom",
+            barSavePosition: try c.decodeIfPresent(Bool.self, forKey: .barSavePosition) ?? true,
+            terminalApp: try c.decodeIfPresent(String.self, forKey: .terminalApp) ?? "terminal",
+            bookmarksEnabled: try c.decodeIfPresent(Bool.self, forKey: .bookmarksEnabled) ?? true,
+            bookmarkBrowsers: try c.decodeIfPresent([String].self, forKey: .bookmarkBrowsers) ?? ["firefox", "safari", "chrome"],
+            appSearchPaths: try c.decodeIfPresent([String].self, forKey: .appSearchPaths) ?? [],
+            learningEnabled: try c.decodeIfPresent(Bool.self, forKey: .learningEnabled) ?? true,
+            pathSort: try c.decodeIfPresent(String.self, forKey: .pathSort) ?? "name",
+            confirmQuitAll: try c.decodeIfPresent(Bool.self, forKey: .confirmQuitAll) ?? true
         )
     }
 }
@@ -1491,7 +1577,7 @@ private enum ConfigValidationRules {
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
-            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family"],
+            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family", "theme", "theme_dark", "visible_results", "bar_screen", "bar_position", "bar_save_position", "terminal_app", "bookmarks_enabled", "bookmark_browsers", "app_search_paths", "learning_enabled", "path_sort", "confirm_quit_all"],
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],
