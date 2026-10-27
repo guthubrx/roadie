@@ -41,7 +41,18 @@ struct Spec088WorkflowModelTests {
         #expect(entry(.required).match("emoji  heart ") == .run("heart"))
         #expect(entry(.none).match("emoji") == .run(""))
         #expect(entry(.none).match("emoji x") == .none)
-        #expect(entry(.optional, space: false).match("emojiheart") == .run("heart"))
+        // Sans espace exigée : un mot collé n'est pas un argument (« outlook » n'appelle pas `out`), un
+        // séparateur ou une espace l'est (correction 088 du 27 octobre 2026).
+        #expect(entry(.optional, space: false).match("emojiheart") == .none)
+        #expect(entry(.optional, space: false).match("emoji heart") == .run("heart"))
+        #expect(entry(.optional, space: false).match("emoji") == .run(""))
+        let out = AlfredEntry(workflowID: "w", workflowName: "Audio Switcher", objectUID: "o", kind: .scriptFilter, keyword: "out",
+                              withSpace: false, argument: .optional, title: "Switch output", subtitle: "", icon: nil)
+        #expect(out.match("outlook") == .none && out.match("Outlook") == .none)
+        #expect(out.match("out") == .run("") && out.match("out spk") == .run("spk"))
+        let equal = AlfredEntry(workflowID: "w", workflowName: "Calc", objectUID: "o", kind: .scriptFilter, keyword: "=",
+                                withSpace: false, argument: .required, title: "Calculer", subtitle: "", icon: nil)
+        #expect(equal.match("=2+2") == .run("2+2"))
     }
 
     @Test func placeholdersAndPlistValues() {

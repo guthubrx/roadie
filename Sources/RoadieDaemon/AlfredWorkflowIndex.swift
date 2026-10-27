@@ -45,6 +45,14 @@ struct AlfredEntry: Equatable, Sendable {
 
     var id: String { "wf:\(workflowID):\(objectUID)" }
 
+    /// Mot-clé sans espace suivi d'un mot (« outlook » pour `out`, correction 088) : lettre ou chiffre
+    /// des deux côtés, ce n'est pas un argument mais un autre mot, la recherche normale garde la main.
+    /// `=2+2` ou `|f` restent des arguments : le mot-clé finit par un séparateur. O(1).
+    static func gluedWord(_ keyword: String, _ rest: String) -> Bool {
+        guard let last = keyword.last, let first = rest.first else { return false }
+        return (last.isLetter || last.isNumber) && (first.isLetter || first.isNumber)
+    }
+
     /// Ce que la saisie fait de cette entrée : rien, la proposer (mot-clé en cours, argument manquant),
     /// ou la lancer avec l'argument tapé. Casse ignorée sur le mot-clé. O(k).
     enum Match: Equatable { case none, suggest, run(String) }
@@ -57,7 +65,7 @@ struct AlfredEntry: Equatable, Sendable {
             rest = ""
         } else if withSpace, lower.hasPrefix(key + " ") {
             rest = String(query.dropFirst(key.count + 1))
-        } else if !withSpace, lower.hasPrefix(key) {
+        } else if !withSpace, lower.hasPrefix(key), !Self.gluedWord(key, String(query.dropFirst(key.count))) {
             rest = String(query.dropFirst(key.count))
         }
         guard let rest else {

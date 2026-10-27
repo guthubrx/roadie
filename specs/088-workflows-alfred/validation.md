@@ -39,3 +39,11 @@ PID 80109 puis réinstallation après convergence ; santé 5/5, signature conser
   `roadie workflow run`, qui lance un workflow dans le démon.
 - Contre-revue Bridget refusée (`project_mapping_unknown`).
 - Preuves : diaporama non produit (frappe impossible à simuler, écrans privés).
+
+## Correction du 27 octobre 2026 - mot-clé collé
+- Signalé : « outlook » appelait Audio Switcher (mot-clé `out`, « with space » décoché, argument
+  « look ») ; le workflow prenait toute la liste et Outlook n'apparaissait plus.
+- Corrigé : sans espace exigée, un argument collé ne compte que si le mot-clé ou le texte commence par
+  un séparateur (`=2+2`, `|f`) ; lettre ou chiffre des deux côtés : autre mot, recherche normale
+  (`AlfredEntry.gluedWord`). `out` seul ou `out spk` appellent toujours le workflow.
+- Tests : `keywordMatching` (cas `outlook`, `=2+2`, `emoji heart` sans espace exigée).
