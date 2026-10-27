@@ -1,4 +1,5 @@
 import CoreGraphics
+import Darwin
 import Foundation
 import Testing
 import RoadieAX
@@ -31,6 +32,60 @@ struct TargetModeRuntimeControllerTests {
     }
 
     @Test(arguments: [RuleChoice.later, .never]) @MainActor
+    func ruleChoiceReportsAnInaccessibleMemoryLock(_ choice: RuleChoice) throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-lock-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fixture = RuleChoiceFixture(sandbox: sandbox)
+        let original = try JSONEncoder().encode(LauncherMemoryBook())
+        try original.write(to: fixture.memory.url)
+        try FileManager.default.createDirectory(atPath: fixture.memory.url.path + ".lock", withIntermediateDirectories: false)
+        fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        let launcher = try #require(fixture.presenter.searchLauncher)
+
+        let result = launcher.ruleChoice(fixture.suggestion, choice)
+
+        #expect(!result.changed && result.error == "rule_choice_not_saved")
+        #expect(fixture.notices.messages == ["Impossible d'enregistrer le choix de règle."])
+        #expect(try Data(contentsOf: fixture.memory.url) == original)
+        let journal = try String(contentsOf: fixture.eventURL, encoding: .utf8)
+        #expect(journal.contains("launcher.rule_choice_failed"))
+        #expect(!journal.contains("\"launcher.rule_choice\""))
+    }
+
+    @Test(.enabled(if: geteuid() != 0, "Requires a non-root account"), arguments: [RuleChoice.later, .never]) @MainActor
+    func ruleChoiceReportsAWriteFailureAfterAcquiringTheLock(_ choice: RuleChoice) throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-write-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let restricted = sandbox.appendingPathComponent("restricted")
+        try FileManager.default.createDirectory(at: restricted, withIntermediateDirectories: true)
+        let fixture = RuleChoiceFixture(sandbox: sandbox, memoryURL: restricted.appendingPathComponent("memory.json"))
+        let original = try JSONEncoder().encode(LauncherMemoryBook())
+        try original.write(to: fixture.memory.url)
+        try Data().write(to: URL(fileURLWithPath: fixture.memory.url.path + ".lock"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: restricted.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: restricted.path) }
+        do {
+            try fixture.memory.updateChecked { $0.declined["probe"] = .distantFuture }
+            Issue.record("L'écriture aurait dû échouer dans le dossier non modifiable")
+        } catch let error as JSONPersistence.PersistenceError {
+            #expect(error.description.contains("failed to persist"))
+        }
+        fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        let launcher = try #require(fixture.presenter.searchLauncher)
+
+        let result = launcher.ruleChoice(fixture.suggestion, choice)
+
+        #expect(!result.changed && result.error == "rule_choice_not_saved")
+        #expect(fixture.notices.messages == ["Impossible d'enregistrer le choix de règle."])
+        #expect(try Data(contentsOf: fixture.memory.url) == original)
+        let journal = try String(contentsOf: fixture.eventURL, encoding: .utf8)
+        #expect(journal.contains("launcher.rule_choice_failed"))
+        #expect(!journal.contains("\"launcher.rule_choice\""))
+    }
+
+    @Test(arguments: [RuleChoice.later, .never]) @MainActor
     func ruleChoicePersistsBeforeReportingSuccess(_ choice: RuleChoice) throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-choice-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
@@ -50,6 +105,31 @@ struct TargetModeRuntimeControllerTests {
         let journal = try String(contentsOf: fixture.eventURL, encoding: .utf8)
         #expect(journal.contains("\"launcher.rule_choice\""))
         #expect(!journal.contains("launcher.rule_choice_failed"))
+    }
+
+    @Test @MainActor
+    func createRuleStillChecksTheDisplayWhenMemoryIsCorrupt() throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-create-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fixture = RuleChoiceFixture(sandbox: sandbox)
+        let invalid = Data("{mémoire abîmée".utf8)
+        try invalid.write(to: fixture.memory.url)
+        fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        let launcher = try #require(fixture.presenter.searchLauncher)
+        let missing = StageScope(displayID: DisplayID(rawValue: "ecran-absent"), desktopID: DesktopID(rawValue: 1),
+                                 stageID: StageID(rawValue: "1"))
+        let suggestion = RuleSuggestion(bundleID: "exemple", appName: "Exemple", stage: missing, stageTitle: "Perso", count: 3,
+                                        declineKey: "exemple|stage:perso")
+
+        let result = launcher.ruleChoice(suggestion, .create)
+
+        #expect(!result.changed && result.error == "display")
+        #expect(fixture.notices.messages.isEmpty)
+        #expect(try Data(contentsOf: fixture.memory.url) == invalid)
+        let journal = try String(contentsOf: fixture.eventURL, encoding: .utf8)
+        #expect(journal.contains("\"launcher.rule_choice\""))
+        #expect(!journal.contains("rule.affinity_saved"))
     }
 
     @Test
@@ -442,7 +522,7 @@ private struct RuleChoiceFixture {
     let notices: RuleChoiceNotices
     let suggestion: RuleSuggestion
 
-    init(sandbox: URL) {
+    init(sandbox: URL, memoryURL: URL? = nil) {
         let display = powerDisplay()
         let stageID = StageID(rawValue: "1")
         let stage = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: stageID)
@@ -453,7 +533,7 @@ private struct RuleChoiceFixture {
         let config = RoadieConfig(experimental: ExperimentalConfig(targetMode: TargetModeConfig(overlayEnabled: true)))
         let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: config, stageStore: store)
         let presenter = SpyTargetModeOverlayPresenter()
-        let memory = LauncherMemoryStore(path: sandbox.appendingPathComponent("memory.json").path)
+        let memory = LauncherMemoryStore(path: (memoryURL ?? sandbox.appendingPathComponent("memory.json")).path)
         let eventURL = sandbox.appendingPathComponent("events.jsonl")
         let notices = RuleChoiceNotices()
         self.controller = TargetModeRuntimeController(service: service, events: EventLog(path: eventURL.path), presenter: presenter,
