@@ -1773,8 +1773,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func confirmSaving(_ alias: LauncherAlias) {
         let name = stepQuery.trimmingCharacters(in: .whitespaces)
         guard LauncherAlias.isValidName(name) else { return }
-        _ = launcher.saveAlias(alias, name)
-        finish(TargetActionResult(changed: true, message: "launcher alias saved: \(LauncherMatch.fold(name))"))
+        switch launcher.saveAlias(alias, name) {
+        case .success:
+            finish(TargetActionResult(changed: true, message: "launcher alias saved: \(LauncherMatch.fold(name))"))
+        case .failure:
+            finish(TargetActionResult(changed: false, message: "Abréviation non enregistrée", error: "alias_not_saved"))
+        }
     }
 
     private func enterDestinations(_ subject: LauncherSubject, _ verb: LauncherVerb) {

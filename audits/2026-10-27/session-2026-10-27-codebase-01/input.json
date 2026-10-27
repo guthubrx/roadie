@@ -1,0 +1,1415 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s).  Les quatre nouveaux fichiers ont été analysés séparément avec les mêmes règles figées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060109890894Z/run.json",
+          "sha256": "46c89688b95693b4d5c2d77d59b28ccc6b9b38f68c4f85b35bda6c67e1237130"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060122775256Z/stdout.json",
+          "sha256": "e61ceca3d4fef8c7ee8907af529862468ba197b49ba8a079975c2213e55c68b2"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060137200327Z/run.json",
+          "sha256": "09b6295b86ffb179554bc19b9feac60c26b60269cf9ce9d4a87d53459234982d"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s).  Historique limité à 5ab0ab9544de68edbd6642f58ac6140ef8a07f1e..5ed75b0532c4179c2b6b7d6a4a88e5e2ec2e92fd; les commits antérieurs sont hors périmètre.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060144671471Z/run.json",
+          "sha256": "8f088e84fb33bec60590a43fbdf248209661679ce314e726c89b295a2c95a6bb"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060155620354Z/run.json",
+          "sha256": "06881a4f55ce8b717e352db673230aeb1b63cb6f66affb64b9b38b63970e2ec3"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "unknown",
+      "rationale": "Contrôle partiel : le dépôt entier n'a pas été lu fonction par fonction ; voir les limites.",
+      "evidence": []
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "unknown",
+      "rationale": "Contrôle partiel : le dépôt entier n'a pas été lu fonction par fonction ; voir les limites.",
+      "evidence": []
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "unknown",
+      "rationale": "Contrôle partiel : le dépôt entier n'a pas été lu fonction par fonction ; voir les limites.",
+      "evidence": []
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "unknown",
+      "rationale": "Contrôle partiel : le dépôt entier n'a pas été lu fonction par fonction ; voir les limites.",
+      "evidence": []
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pass",
+      "rationale": "Suite Swift séquentielle et tests de scripts exécutés sur la dernière révision ; trois suites Swift exclues pour les signaux et notifications système.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060051088229Z/stderr.log",
+          "sha256": "6a22f134764d5235fbcbc9ed6f748480ba709d48a2ee8ef975e8974d2595aeef"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/cycles-et-limites.md",
+          "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+        }
+      ]
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "unknown",
+      "rationale": "Contrôle partiel : le dépôt entier n'a pas été lu fonction par fonction ; voir les limites.",
+      "evidence": []
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "unknown",
+      "rationale": "Contrôle partiel : le dépôt entier n'a pas été lu fonction par fonction ; voir les limites.",
+      "evidence": []
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "unknown",
+      "rationale": "Contrôle partiel : le dépôt entier n'a pas été lu fonction par fonction ; voir les limites.",
+      "evidence": []
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "unknown",
+      "rationale": "Contrôle partiel : le dépôt entier n'a pas été lu fonction par fonction ; voir les limites.",
+      "evidence": []
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "unknown",
+      "rationale": "Contrôle partiel : le dépôt entier n'a pas été lu fonction par fonction ; voir les limites.",
+      "evidence": []
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "SEC-WORKFLOW-PATH",
+      "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "symbol": "workflowDirectoryName",
+      "instance": "reserved-component",
+      "line": 975,
+      "category": "security",
+      "title": "Suppression hors du dossier des workflows",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Les composants . et .. pouvaient viser le dossier des workflows ou son parent.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T051758802868Z/stdout.json",
+          "sha256": "8427a5bedc35c1c8f27c2a7450c915530b718103d3d2876d19025a03e53f36a7"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-workflow.md",
+          "sha256": "d578fd8d635ab89f53823cc9cac87e67aef5d4d402531c62cbf082b83cd1c4d7"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-workflow.md",
+            "sha256": "d578fd8d635ab89f53823cc9cac87e67aef5d4d402531c62cbf082b83cd1c4d7"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "security",
+        "reliability"
+      ],
+      "counter_audit": {
+        "reviewer": "Bridget : revue indépendante documentée",
+        "independent": true,
+        "verdict": "confirmed",
+        "rationale": "Revue indépendante par lecture ; reproduction locale distincte.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/contre-audit-workflow.md",
+            "sha256": "75b2892036e78071ccf5060ee9fa79de3f0d86f6c8ac82eecacbb63bf74a624e"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "REL-WORKFLOW-REPLACE",
+      "file": "Sources/RoadieDaemon/StagedFileReplacement.swift",
+      "symbol": "install",
+      "instance": "delete-before-move",
+      "line": 17,
+      "category": "reliability",
+      "title": "Perte de l'ancien workflow si le remplacement échoue",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "L'ancien dossier était supprimé avant le déplacement ; l'échange prépare maintenant la copie et conserve l'ancienne en cas d'échec.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055413350536Z/stdout.json",
+          "sha256": "8edb02d72fb144e8ac1cc36aa3af31a6d23478f6c2305fa0c44dc57b6f89062c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/revue-independante.md",
+          "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-remplacement.md",
+            "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "counter_audit": {
+        "reviewer": "Bridget : revue indépendante documentée",
+        "independent": true,
+        "verdict": "confirmed",
+        "rationale": "Revue indépendante par lecture ; reproduction locale distincte.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/revue-independante.md",
+            "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "REL-TASKS-REPLACE",
+      "file": "Sources/RoadieDaemon/AlfredAutomationTasks.swift",
+      "symbol": "install",
+      "instance": "delete-before-move-tasks",
+      "line": 62,
+      "category": "reliability",
+      "title": "Mise à jour incomplète des tâches d'automatisation",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "La variante Tasks et LICENSE supprimait les éléments installés avant leur remplacement.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-remplacement.md",
+          "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/original/AlfredAutomationTasks.swift",
+          "sha256": "7afa866271f0587ae8679c739f7bb7d528ec2f9bb44c051bb1975871a6fdd56a"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-remplacement.md",
+            "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    },
+    {
+      "rule_id": "SEC-PLIST-INTEGER",
+      "file": "Sources/RoadieDaemon/AlfredWorkflow.swift",
+      "symbol": "int",
+      "instance": "double-out-of-range",
+      "line": 7,
+      "category": "security",
+      "title": "Arrêt sur un nombre de workflow hors plage",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Un réel plist de 1e100 provoquait une conversion fatale ; les valeurs hors plage sont refusées.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052400497903Z/stdout.json",
+          "sha256": "51ffdce354ddad829e05b727c555669c80dbbb530d72f2278e2081d03599eb8e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-valeurs.md",
+          "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "security",
+        "quality"
+      ]
+    },
+    {
+      "rule_id": "REL-KEYCODE",
+      "file": "Sources/RoadieDaemon/AlfredLiveEffects.swift",
+      "symbol": "keyCombo",
+      "instance": "keycode-out-of-range",
+      "line": 116,
+      "category": "reliability",
+      "title": "Arrêt sur un code de touche hors plage",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "La conversion d'un entier supérieur à UInt16 arrêtait le processus ; le test remplace l'émetteur réel.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052400497903Z/stdout.json",
+          "sha256": "51ffdce354ddad829e05b727c555669c80dbbb530d72f2278e2081d03599eb8e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-valeurs.md",
+          "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "tests"
+      ]
+    },
+    {
+      "rule_id": "REL-CALCULATOR-DEPTH",
+      "file": "Sources/RoadieDaemon/LauncherCalculator.swift",
+      "symbol": "unary",
+      "instance": "unbounded-recursion",
+      "line": 127,
+      "category": "reliability",
+      "title": "Arrêt sur une expression très imbriquée",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Une expression de 50 000 parenthèses arrêtait le sous-processus ; la profondeur est bornée.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052400497903Z/stdout.json",
+          "sha256": "51ffdce354ddad829e05b727c555669c80dbbb530d72f2278e2081d03599eb8e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-valeurs.md",
+          "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "performance"
+      ]
+    },
+    {
+      "rule_id": "REL-RANK-OVERFLOW",
+      "file": "Sources/RoadieDaemon/LauncherRanking.swift",
+      "symbol": "prefixUses",
+      "instance": "counter-overflow",
+      "line": 62,
+      "category": "reliability",
+      "title": "Débordement des compteurs de classement",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Un compteur Int.max pouvait provoquer un arrêt à l'incrément ou à la somme.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T053013479366Z/stdout.json",
+          "sha256": "a4e8a5d79954aae1679e54e2ed204b31be4e0bf6153895b16c546ef374424b76"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "700cd23c4df5d6d31b926efab5722fcbae6286193a05f01b304d9040ccbd4536"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "complexity"
+      ]
+    },
+    {
+      "rule_id": "REL-RANK-ANCHOR",
+      "file": "Sources/RoadieDaemon/LauncherRanking.swift",
+      "symbol": "updatedAnchor",
+      "instance": "nonfinite-anchor",
+      "line": 77,
+      "category": "reliability",
+      "title": "Ancre extrême rendant le classement non encodable",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Une ancre finie extrême produisait une valeur infinie ; les scores et ancres restent finis.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055413350536Z/stdout.json",
+          "sha256": "8edb02d72fb144e8ac1cc36aa3af31a6d23478f6c2305fa0c44dc57b6f89062c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/revue-independante.md",
+          "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/LauncherHistory.swift",
+      "symbol": "record",
+      "instance": "history",
+      "line": 18,
+      "category": "reliability",
+      "title": "Historique de saisie : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/LauncherMemory.swift",
+      "symbol": "update",
+      "instance": "memory",
+      "line": 112,
+      "category": "reliability",
+      "title": "Mémoire des déplacements : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/LauncherAliases.swift",
+      "symbol": "save",
+      "instance": "aliases",
+      "line": 118,
+      "category": "reliability",
+      "title": "Abréviations enregistrées : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/LauncherRanking.swift",
+      "symbol": "recordVisit",
+      "instance": "ranking",
+      "line": 74,
+      "category": "reliability",
+      "title": "Classement du lanceur : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/StageProjects.swift",
+      "symbol": "save",
+      "instance": "projects",
+      "line": 19,
+      "category": "reliability",
+      "title": "Projets de stages : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    }
+  ],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Semgrep et cinq règles SwiftLint ; une seule règle Semgrep Swift, lecture manuelle partielle.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "700cd23c4df5d6d31b926efab5722fcbae6286193a05f01b304d9040ccbd4536"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060122775256Z/stdout.json",
+          "sha256": "e61ceca3d4fef8c7ee8907af529862468ba197b49ba8a079975c2213e55c68b2"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Semgrep et cinq règles SwiftLint ; une seule règle Semgrep Swift, lecture manuelle partielle. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Recherche locale des secrets des fichiers ; configuration d'exclusion figée, pas de contrôle continu démontré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060137200327Z/raw.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Recherche locale des secrets des fichiers ; configuration d'exclusion figée, pas de contrôle continu démontré. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Historique examiné depuis v0.4.0 ; commits antérieurs exclus.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060144671471Z/raw.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Historique examiné depuis v0.4.0 ; commits antérieurs exclus. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Socket local 0600 examiné ; scripts de workflow exécutés avec les droits de l'utilisateur, sans isolement démontré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Socket local 0600 examiné ; scripts de workflow exécutés avec les droits de l'utilisateur, sans isolement démontré. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "OSV a examiné une dépendance Swift verrouillée ; suivi continu non démontré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060155620354Z/stdout.json",
+          "sha256": "54345d5194d238b6017d0f3181f392109ce35023cc6b4bdfa8c134943dcb578e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "OSV a examiné une dépendance Swift verrouillée ; suivi continu non démontré. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM trouvé dans les sources et dépendances du produit.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM trouvé dans les sources et dépendances du produit.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM trouvé dans les sources et dépendances du produit.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "pass",
+      "rationale": "Fichiers illisibles conservés et écritures transactionnelles testées sur cinq magasins ; restauration globale non testée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Fichiers illisibles conservés et écritures transactionnelles testées sur cinq magasins ; restauration globale non testée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pass",
+      "rationale": "Échange atomique et panne injectée testés ; interruption réelle pendant l'échange non testée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-remplacement.md",
+          "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Échange atomique et panne injectée testés ; interruption réelle pendant l'échange non testée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Sources et tests Swift compilés ; avertissements existants et suites exclues conservés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Sources et tests Swift compilés ; avertissements existants et suites exclues conservés. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Semgrep et SwiftLint ciblé exécutés ; toutes les règles Swift et tous les signaux ne sont pas qualifiés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "700cd23c4df5d6d31b926efab5722fcbae6286193a05f01b304d9040ccbd4536"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Semgrep et SwiftLint ciblé exécutés ; toutes les règles Swift et tous les signaux ne sont pas qualifiés. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Suite Swift et tests ciblés réussis ; trois suites exclues et parcours graphique non exécuté.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/cycles-et-limites.md",
+          "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Suite Swift et tests ciblés réussis ; trois suites exclues et parcours graphique non exécuté. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Délai et annulation du lanceur lus ; tests de signaux groupés exclus.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/cycles-et-limites.md",
+          "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Délai et annulation du lanceur lus ; tests de signaux groupés exclus. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Quelques chemins critiques lus ; inventaire des complexités de tous les points d'entrée incomplet.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "700cd23c4df5d6d31b926efab5722fcbae6286193a05f01b304d9040ccbd4536"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/cycles-et-limites.md",
+          "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Quelques chemins critiques lus ; inventaire des complexités de tous les points d'entrée incomplet. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Borne de récursion et allocations examinées sur les calculs et sorties de scripts ; reste du dépôt partiel.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-valeurs.md",
+          "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Borne de récursion et allocations examinées sur les calculs et sorties de scripts ; reste du dépôt partiel. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Erreurs explicites de stockage et notifications ajoutées ; résultat CLI de projet toujours asynchrone.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/revue-independante.md",
+          "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Erreurs explicites de stockage et notifications ajoutées ; résultat CLI de projet toujours asynchrone. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Échec de remplacement injecté et ancienne donnée conservée ; interruption réelle non simulée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-remplacement.md",
+          "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Échec de remplacement injecté et ancienne donnée conservée ; interruption réelle non simulée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Dépendances de modules et accès aux fichiers lus sur les chemins audités ; frontières internes non exhaustives.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Dépendances de modules et accès aux fichiers lus sur les chemins audités ; frontières internes non exhaustives. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Graphe des cibles Swift lu ; aucune analyse complète des cycles internes.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Graphe des cibles Swift lu ; aucune analyse complète des cycles internes. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Invariants et limites des corrections expliqués ; tous les invariants historiques ne sont pas relus.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/cycles-et-limites.md",
+          "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Invariants et limites des corrections expliqués ; tous les invariants historiques ne sont pas relus. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Patch ciblé avec tests ; la maintenabilité globale reste partiellement examinée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/revue-independante.md",
+          "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Patch ciblé avec tests ; la maintenabilité globale reste partiellement examinée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Contre-audit et revues indépendantes documentés ; aucun essai macOS côté relecteurs.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/revue-independante.md",
+          "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contre-audit-workflow.md",
+          "sha256": "75b2892036e78071ccf5060ee9fa79de3f0d86f6c8ac82eecacbb63bf74a624e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Contre-audit et revues indépendantes documentés ; aucun essai macOS côté relecteurs. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Une dépendance Swift directe verrouillée ; aucune preuve exhaustive d'absence de dépendances évitables.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Une dépendance Swift directe verrouillée ; aucune preuve exhaustive d'absence de dépendances évitables. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Conservation des fichiers et lecture de workflows testées sur des données synthétiques ; usage réel non rejoué.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Conservation des fichiers et lecture de workflows testées sur des données synthétiques ; usage réel non rejoué. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Installation, remplacement et suppression ordinaires testés ; idempotence générale non démontrée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-workflow.md",
+          "sha256": "d578fd8d635ab89f53823cc9cac87e67aef5d4d402531c62cbf082b83cd1c4d7"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Installation, remplacement et suppression ordinaires testés ; idempotence générale non démontrée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Reproductions, corrections et tests reliés ; couverture des spécifications historiques incomplète.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/cycles-et-limites.md",
+          "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T060004411512Z/stdout.json",
+          "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Reproductions, corrections et tests reliés ; couverture des spécifications historiques incomplète. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "unknown",
+      "rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+      "evidence": []
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : non mesuré pour tout le dépôt ; une suppression présumée a été annulée après échec de compilation.",
+  "responsibility": "Correctifs ciblés, reproductions et revues conservées ; l'ensemble des invariants du dépôt et la compréhension de l'auteur humain ne sont pas démontrés."
+}

@@ -34,7 +34,8 @@ enum PlistValue: Equatable, Sendable {
     var int: Int? {
         switch self {
         case .int(let value): value
-        case .double(let value): Int(value)
+        // Une valeur plist hors de la plage de Int ne doit pas arrêter le démon.
+        case .double(let value): Int(exactly: value.rounded(.towardZero))
         case .bool(let value): value ? 1 : 0
         case .string(let value): Int(value.trimmingCharacters(in: .whitespaces))
         default: nil

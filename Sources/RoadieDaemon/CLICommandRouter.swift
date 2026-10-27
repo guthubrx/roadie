@@ -96,6 +96,7 @@ public final class CLICommandRouter {
     /// les composants (REL-014), donc l'instance partagée par défaut.
     private let configReload: ConfigReloadService
     private let railRuntimeStore: RailRuntimeStateStore
+    private let workflowInstallationFolder: URL
     private var cachedService: SnapshotService?
     private var stdoutBuffer = ""
     private var stderrBuffer = ""
@@ -112,12 +113,14 @@ public final class CLICommandRouter {
         makeService: @escaping (_ readOnly: Bool) -> SnapshotService = CLICommandRouter.defaultService,
         streamSink: ((String) -> Void)? = nil,
         configReload: ConfigReloadService = .shared,
-        railRuntimeStore: RailRuntimeStateStore = RailRuntimeStateStore()
+        railRuntimeStore: RailRuntimeStateStore = RailRuntimeStateStore(),
+        workflowInstallationFolder: URL? = nil
     ) {
         self.makeService = makeService
         self.streamSink = streamSink
         self.configReload = configReload
         self.railRuntimeStore = railRuntimeStore
+        self.workflowInstallationFolder = workflowInstallationFolder ?? AlfredWorkflowIndex.roadieFolder
     }
 
     /// Service par défaut. Une lecture n'écrit pas l'état et ne fait pas suivre le focus par la
@@ -653,7 +656,7 @@ public final class CLICommandRouter {
             guard args.count >= 2, args[1] == "history" else { return usageError() }
             let store = LauncherHistoryStore()
             if args.contains("--clear") {
-                store.clear()
+                try store.clear()
                 out("historique effacé")
                 return 0
             }
@@ -953,45 +956,61 @@ public final class CLICommandRouter {
             guard args.count >= 2, !args[1].hasPrefix("--") else { return usageError() }
             let file = URL(fileURLWithPath: NSString(string: args[1]).expandingTildeInPath)
             guard FileManager.default.fileExists(atPath: file.path) else { err("workflow: introuvable : \(args[1])"); return 2 }
-            // Décompression dans un dossier temporaire, puis rangement sous le nom de son identifiant.
-            let staging = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-workflow-\(UUID().uuidString)")
-            defer { try? FileManager.default.removeItem(at: staging) }
-            let unzip = Process()
-            unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-            unzip.arguments = ["-x", "-k", file.path, staging.path]
-            try unzip.run()
-            unzip.waitUntilExit()
-            let root = FileManager.default.fileExists(atPath: staging.appendingPathComponent("info.plist").path) ? staging
-                : AlfredWorkflowIndex.children(of: staging).first
-            guard unzip.terminationStatus == 0, let root, let workflow = AlfredWorkflow.load(folder: root, source: .roadie) else {
-                err("workflow: archive illisible (info.plist absent)")
-                return 1
+            return try StagedFileReplacement.withDirectoryLock(workflowInstallationFolder) {
+                // Décompression dans un dossier temporaire, puis rangement sous le nom de son identifiant.
+                let staging = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-workflow-\(UUID().uuidString)")
+                defer { try? FileManager.default.removeItem(at: staging) }
+                let unzip = Process()
+                unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+                unzip.arguments = ["-x", "-k", file.path, staging.path]
+                try unzip.run()
+                unzip.waitUntilExit()
+                let root = FileManager.default.fileExists(atPath: staging.appendingPathComponent("info.plist").path) ? staging
+                    : AlfredWorkflowIndex.children(of: staging).first
+                guard unzip.terminationStatus == 0, let root, let workflow = AlfredWorkflow.load(folder: root, source: .roadie) else {
+                    err("workflow: archive illisible (info.plist absent)")
+                    return 1
+                }
+                let identifier = workflow.bundleID.isEmpty ? file.deletingPathExtension().lastPathComponent : workflow.bundleID
+                guard let name = Self.workflowDirectoryName(identifier) else {
+                    err("workflow: identifiant de dossier invalide")
+                    return 2
+                }
+                let target = workflowInstallationFolder.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: target.path) {
+                    guard args.contains("--replace") else { err("workflow: déjà installé : \(name) (--replace pour remplacer)"); return 1 }
+                }
+                try StagedFileReplacement.install(from: root, to: target, replace: args.contains("--replace"))
+                let report = AlfredCompatibility.report(AlfredWorkflow.load(folder: target, source: .roadie) ?? workflow)
+                out("installé : \(workflow.name) → \(target.path) (\(report.state.rawValue))")
+                return 0
             }
-            let name = (workflow.bundleID.isEmpty ? file.deletingPathExtension().lastPathComponent : workflow.bundleID)
-                .replacingOccurrences(of: "/", with: "-")
-            let target = AlfredWorkflowIndex.roadieFolder.appendingPathComponent(name)
-            if FileManager.default.fileExists(atPath: target.path) {
-                guard args.contains("--replace") else { err("workflow: déjà installé : \(name) (--replace pour remplacer)"); return 1 }
-                try FileManager.default.removeItem(at: target)
-            }
-            try FileManager.default.createDirectory(at: AlfredWorkflowIndex.roadieFolder, withIntermediateDirectories: true)
-            try FileManager.default.moveItem(at: root, to: target)
-            let report = AlfredCompatibility.report(AlfredWorkflow.load(folder: target, source: .roadie) ?? workflow)
-            out("installé : \(workflow.name) → \(target.path) (\(report.state.rawValue))")
-            return 0
         case "remove":
             guard args.count >= 2 else { return usageError() }
-            let target = AlfredWorkflowIndex.roadieFolder.appendingPathComponent(args[1].replacingOccurrences(of: "/", with: "-"))
-            guard FileManager.default.fileExists(atPath: target.appendingPathComponent("info.plist").path) else {
-                err("workflow: absent du dossier de Roadie : \(args[1]) (les workflows d'Alfred se retirent dans Alfred)")
+            guard let name = Self.workflowDirectoryName(args[1]) else {
+                err("workflow: identifiant de dossier invalide")
                 return 2
             }
-            try FileManager.default.removeItem(at: target)
-            out("retiré : \(args[1])")
-            return 0
+            return try StagedFileReplacement.withDirectoryLock(workflowInstallationFolder) {
+                let target = workflowInstallationFolder.appendingPathComponent(name)
+                guard FileManager.default.fileExists(atPath: target.appendingPathComponent("info.plist").path) else {
+                    err("workflow: absent du dossier de Roadie : \(args[1]) (les workflows d'Alfred se retirent dans Alfred)")
+                    return 2
+                }
+                try FileManager.default.removeItem(at: target)
+                out("retiré : \(args[1])")
+                return 0
+            }
         default:
             return usageError()
         }
+    }
+
+    /// Un identifiant ne doit jamais désigner le dossier des workflows ou son parent.
+    private static func workflowDirectoryName(_ identifier: String) -> String? {
+        let name = identifier.replacingOccurrences(of: "/", with: "-")
+        guard !name.isEmpty, name != ".", name != "..", !name.contains("\0") else { return nil }
+        return name
     }
 
     private func value(after flag: String, in args: [String]) -> String? {

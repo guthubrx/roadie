@@ -1,0 +1,735 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": true,
+    "decision": "inconclusive"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "SEC-WORKFLOW-PATH",
+      "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "symbol": "workflowDirectoryName",
+      "instance": "reserved-component",
+      "line": 975,
+      "category": "security",
+      "title": "Suppression hors du dossier des workflows",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Les composants . et .. pouvaient viser le dossier des workflows ou son parent.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T051758802868Z/stdout.json",
+          "sha256": "8427a5bedc35c1c8f27c2a7450c915530b718103d3d2876d19025a03e53f36a7"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-workflow.md",
+          "sha256": "d578fd8d635ab89f53823cc9cac87e67aef5d4d402531c62cbf082b83cd1c4d7"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-workflow.md",
+            "sha256": "d578fd8d635ab89f53823cc9cac87e67aef5d4d402531c62cbf082b83cd1c4d7"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "security",
+        "reliability"
+      ],
+      "counter_audit": {
+        "reviewer": "Bridget : revue indépendante documentée",
+        "independent": true,
+        "verdict": "confirmed",
+        "rationale": "Revue indépendante par lecture ; reproduction locale distincte.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/contre-audit-workflow.md",
+            "sha256": "75b2892036e78071ccf5060ee9fa79de3f0d86f6c8ac82eecacbb63bf74a624e"
+          }
+        ]
+      },
+      "fingerprint": "3f97992ebae1926f57fd"
+    },
+    {
+      "rule_id": "REL-WORKFLOW-REPLACE",
+      "file": "Sources/RoadieDaemon/StagedFileReplacement.swift",
+      "symbol": "install",
+      "instance": "delete-before-move",
+      "line": 17,
+      "category": "reliability",
+      "title": "Perte de l'ancien workflow si le remplacement échoue",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "L'ancien dossier était supprimé avant le déplacement ; l'échange prépare maintenant la copie et conserve l'ancienne en cas d'échec.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055413350536Z/stdout.json",
+          "sha256": "8edb02d72fb144e8ac1cc36aa3af31a6d23478f6c2305fa0c44dc57b6f89062c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/revue-independante.md",
+          "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-remplacement.md",
+            "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "counter_audit": {
+        "reviewer": "Bridget : revue indépendante documentée",
+        "independent": true,
+        "verdict": "confirmed",
+        "rationale": "Revue indépendante par lecture ; reproduction locale distincte.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/revue-independante.md",
+            "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+          }
+        ]
+      },
+      "fingerprint": "5721844f49ae3b638a61"
+    },
+    {
+      "rule_id": "REL-TASKS-REPLACE",
+      "file": "Sources/RoadieDaemon/AlfredAutomationTasks.swift",
+      "symbol": "install",
+      "instance": "delete-before-move-tasks",
+      "line": 62,
+      "category": "reliability",
+      "title": "Mise à jour incomplète des tâches d'automatisation",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "La variante Tasks et LICENSE supprimait les éléments installés avant leur remplacement.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-remplacement.md",
+          "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/original/AlfredAutomationTasks.swift",
+          "sha256": "7afa866271f0587ae8679c739f7bb7d528ec2f9bb44c051bb1975871a6fdd56a"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-remplacement.md",
+            "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "14982e1e8bde259a88c7"
+    },
+    {
+      "rule_id": "SEC-PLIST-INTEGER",
+      "file": "Sources/RoadieDaemon/AlfredWorkflow.swift",
+      "symbol": "int",
+      "instance": "double-out-of-range",
+      "line": 7,
+      "category": "security",
+      "title": "Arrêt sur un nombre de workflow hors plage",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Un réel plist de 1e100 provoquait une conversion fatale ; les valeurs hors plage sont refusées.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052400497903Z/stdout.json",
+          "sha256": "51ffdce354ddad829e05b727c555669c80dbbb530d72f2278e2081d03599eb8e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-valeurs.md",
+          "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "security",
+        "quality"
+      ],
+      "fingerprint": "49bf8e4666be13ab11c2"
+    },
+    {
+      "rule_id": "REL-KEYCODE",
+      "file": "Sources/RoadieDaemon/AlfredLiveEffects.swift",
+      "symbol": "keyCombo",
+      "instance": "keycode-out-of-range",
+      "line": 116,
+      "category": "reliability",
+      "title": "Arrêt sur un code de touche hors plage",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "La conversion d'un entier supérieur à UInt16 arrêtait le processus ; le test remplace l'émetteur réel.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052400497903Z/stdout.json",
+          "sha256": "51ffdce354ddad829e05b727c555669c80dbbb530d72f2278e2081d03599eb8e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-valeurs.md",
+          "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "tests"
+      ],
+      "fingerprint": "b3b59a4d83bc1d642626"
+    },
+    {
+      "rule_id": "REL-CALCULATOR-DEPTH",
+      "file": "Sources/RoadieDaemon/LauncherCalculator.swift",
+      "symbol": "unary",
+      "instance": "unbounded-recursion",
+      "line": 127,
+      "category": "reliability",
+      "title": "Arrêt sur une expression très imbriquée",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Une expression de 50 000 parenthèses arrêtait le sous-processus ; la profondeur est bornée.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052400497903Z/stdout.json",
+          "sha256": "51ffdce354ddad829e05b727c555669c80dbbb530d72f2278e2081d03599eb8e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-valeurs.md",
+          "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "performance"
+      ],
+      "fingerprint": "e382d0eba769e38eed53"
+    },
+    {
+      "rule_id": "REL-RANK-OVERFLOW",
+      "file": "Sources/RoadieDaemon/LauncherRanking.swift",
+      "symbol": "prefixUses",
+      "instance": "counter-overflow",
+      "line": 62,
+      "category": "reliability",
+      "title": "Débordement des compteurs de classement",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Un compteur Int.max pouvait provoquer un arrêt à l'incrément ou à la somme.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T053013479366Z/stdout.json",
+          "sha256": "a4e8a5d79954aae1679e54e2ed204b31be4e0bf6153895b16c546ef374424b76"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "700cd23c4df5d6d31b926efab5722fcbae6286193a05f01b304d9040ccbd4536"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "complexity"
+      ],
+      "fingerprint": "1c68b69e1c4d8b093062"
+    },
+    {
+      "rule_id": "REL-RANK-ANCHOR",
+      "file": "Sources/RoadieDaemon/LauncherRanking.swift",
+      "symbol": "updatedAnchor",
+      "instance": "nonfinite-anchor",
+      "line": 77,
+      "category": "reliability",
+      "title": "Ancre extrême rendant le classement non encodable",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Une ancre finie extrême produisait une valeur infinie ; les scores et ancres restent finis.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T055413350536Z/stdout.json",
+          "sha256": "8edb02d72fb144e8ac1cc36aa3af31a6d23478f6c2305fa0c44dc57b6f89062c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/revue-independante.md",
+          "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-valeurs.md",
+            "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "d1a708dba11299bb2db5"
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/LauncherHistory.swift",
+      "symbol": "record",
+      "instance": "history",
+      "line": 18,
+      "category": "reliability",
+      "title": "Historique de saisie : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "197a278f4d8d481d25bc"
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/LauncherMemory.swift",
+      "symbol": "update",
+      "instance": "memory",
+      "line": 112,
+      "category": "reliability",
+      "title": "Mémoire des déplacements : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "a00058d9c5a6f2bfb526"
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/LauncherAliases.swift",
+      "symbol": "save",
+      "instance": "aliases",
+      "line": 118,
+      "category": "reliability",
+      "title": "Abréviations enregistrées : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "ef7cebf56e4758da03ee"
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/LauncherRanking.swift",
+      "symbol": "recordVisit",
+      "instance": "ranking",
+      "line": 74,
+      "category": "reliability",
+      "title": "Classement du lanceur : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "16700b9eda3f46c6bb48"
+    },
+    {
+      "rule_id": "DATA-TRANSACTION",
+      "file": "Sources/RoadieDaemon/StageProjects.swift",
+      "symbol": "save",
+      "instance": "projects",
+      "line": 19,
+      "category": "reliability",
+      "title": "Projets de stages : écriture non transactionnelle",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Lecture et écriture séparées pouvaient écraser une modification concurrente ou un état illisible.",
+      "remediation": "Correction ciblée appliquée et vérifiée par les tests référencés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-persistance.md",
+          "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261027T052611780366Z/stdout.json",
+          "sha256": "05890ec2aacc7bf88af42ef3f033be64ade74e75de76feb39986c96881696b2f"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche des variantes documentée ; limites conservées.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-persistance.md",
+            "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Reproduction ou code initial conservé ; test du correctif dans un environnement synthétique, sans installation.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "runs/20261027T060004411512Z/stdout.json",
+            "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "2a985ff83084ebfe4526"
+    }
+  ],
+  "suppressed": []
+}

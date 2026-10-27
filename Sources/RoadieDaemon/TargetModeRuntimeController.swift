@@ -283,8 +283,14 @@ public final class TargetModeRuntimeController: NSObject {
             }
             return
         case "project.delete":
-            let deleted = command.string("name").map { StageProjectStore().delete($0) } ?? false
-            events.append(RoadieEvent(type: "project.command", details: ["command": "delete", "deleted": String(deleted)]))
+            do {
+                let deleted = try command.string("name").map { try StageProjectStore().delete($0) } ?? false
+                events.append(RoadieEvent(type: "project.command", details: ["command": "delete", "deleted": String(deleted)]))
+            } catch {
+                events.append(RoadieEvent(type: "project.delete_failed", details: ["reason": "persistence"]))
+                let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
+                Task { await effects.notify(title: "Roadie", text: "Impossible de supprimer le projet.") }
+            }
             return
         default:
             break
@@ -604,9 +610,14 @@ public final class TargetModeRuntimeController: NSObject {
                 .flatMap { StagePresentationOrder.isNamed($0) ? $0.name : nil }
         }
         context.saveAlias = { [events] alias, name in
-            let previous = aliasStore.save(alias, as: name)
-            events.append(RoadieEvent(type: "launcher.alias_saved", details: ["replaced": String(previous != nil)]))
-            return previous
+            do {
+                let previous = try aliasStore.save(alias, as: name)
+                events.append(RoadieEvent(type: "launcher.alias_saved", details: ["replaced": String(previous != nil)]))
+                return .success(previous)
+            } catch {
+                events.append(RoadieEvent(type: "launcher.alias_save_failed", details: ["reason": "persistence"]))
+                return .failure(error)
+            }
         }
         context.endPreview = { [weak self] commit in self?.endPreview(commit: commit) }
         context.performBatch = { [weak self] actions in self?.performBatch(actions) ?? TargetActionResult(changed: false, message: "launcher_unavailable") }
@@ -793,8 +804,12 @@ public final class TargetModeRuntimeController: NSObject {
             switch action.verb {
             case .reopenProject: return openProject(named: name)
             case .deleteProject:
-                let deleted = StageProjectStore().delete(name)
-                return TargetActionResult(changed: deleted, message: "project delete: \(deleted)")
+                do {
+                    let deleted = try StageProjectStore().delete(name)
+                    return TargetActionResult(changed: deleted, message: "project delete: \(deleted)")
+                } catch {
+                    return TargetActionResult(changed: false, message: "Projet non supprimé", error: "project_not_deleted")
+                }
             default: return refused(label, "verb")
             }
         case .target(let target):
@@ -1075,13 +1090,19 @@ public final class TargetModeRuntimeController: NSObject {
             let windows = await Self.projectWindows(entries)
             let project = StageProject.capture(name: stage.name, members: stage.members.map(\.windowID), windows: windows,
                                                tree: stage.bspTree, at: Date())
-            StageProjectStore().save(project)
-            events.append(RoadieEvent(type: "project.saved", details: [
-                "windows": String(project.windows.count),
-                "documents": String(project.windows.filter { $0.document != nil || $0.url != nil }.count),
-                "tree": String(project.tree != nil)]))
+            do {
+                try StageProjectStore().save(project)
+                events.append(RoadieEvent(type: "project.saved", details: [
+                    "windows": String(project.windows.count),
+                    "documents": String(project.windows.filter { $0.document != nil || $0.url != nil }.count),
+                    "tree": String(project.tree != nil)]))
+            } catch {
+                events.append(RoadieEvent(type: "project.save_failed", details: ["reason": "persistence"]))
+                let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
+                await effects.notify(title: "Roadie", text: "Impossible d'enregistrer le projet « \(stage.name) ».")
+            }
         }
-        return TargetActionResult(changed: true, message: "project saved: \(stage.name)")
+        return TargetActionResult(changed: false, message: "project save scheduled: \(stage.name)")
     }
 
     /// De quoi rouvrir chaque fenêtre : application, document ou adresse, lus hors du fil principal. O(w).
