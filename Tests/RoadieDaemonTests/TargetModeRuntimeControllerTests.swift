@@ -132,6 +132,28 @@ struct TargetModeRuntimeControllerTests {
         #expect(!journal.contains("rule.affinity_saved"))
     }
 
+    @Test @MainActor
+    func createRuleCanSucceedWhenMemoryIsCorrupt() throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-create-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fixture = RuleChoiceFixture(sandbox: sandbox)
+        let invalid = Data("{mémoire abîmée".utf8)
+        try invalid.write(to: fixture.memory.url)
+        fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        let launcher = try #require(fixture.presenter.searchLauncher)
+
+        let result = launcher.ruleChoice(fixture.suggestion, .create)
+
+        #expect(result.changed && result.error == nil)
+        #expect(fixture.notices.messages.isEmpty)
+        #expect(try Data(contentsOf: fixture.memory.url) == invalid)
+        let rules = try RoadieConfigLoader.loadRulesFile(from: fixture.rulesURL.path)
+        #expect(rules.contains { $0.match.app == "Exemple" && $0.action.assignStage == "1" })
+        let journal = try String(contentsOf: fixture.eventURL, encoding: .utf8)
+        #expect(journal.contains("rule.affinity_saved"))
+    }
+
     @Test
     func commandRoundTripsThroughDistributedNotificationPayload() throws {
         let command = TargetModeRuntimeCommand(name: "targets.interactive", arguments: [
@@ -519,6 +541,7 @@ private struct RuleChoiceFixture {
     let presenter: SpyTargetModeOverlayPresenter
     let memory: LauncherMemoryStore
     let eventURL: URL
+    let rulesURL: URL
     let notices: RuleChoiceNotices
     let suggestion: RuleSuggestion
 
@@ -535,12 +558,16 @@ private struct RuleChoiceFixture {
         let presenter = SpyTargetModeOverlayPresenter()
         let memory = LauncherMemoryStore(path: (memoryURL ?? sandbox.appendingPathComponent("memory.json")).path)
         let eventURL = sandbox.appendingPathComponent("events.jsonl")
+        let rulesURL = sandbox.appendingPathComponent("rules.generated.toml")
         let notices = RuleChoiceNotices()
-        self.controller = TargetModeRuntimeController(service: service, events: EventLog(path: eventURL.path), presenter: presenter,
-                                                      memoryStore: memory, notifyRuleChoiceFailure: { notices.messages.append($0) })
+        let events = EventLog(path: eventURL.path)
+        self.controller = TargetModeRuntimeController(service: service, events: events, presenter: presenter,
+                                                      memoryStore: memory, notifyRuleChoiceFailure: { notices.messages.append($0) },
+                                                      ruleAffinity: WindowRuleAffinityService(path: rulesURL.path, eventLog: events))
         self.presenter = presenter
         self.memory = memory
         self.eventURL = eventURL
+        self.rulesURL = rulesURL
         self.notices = notices
         self.suggestion = RuleSuggestion(bundleID: "exemple", appName: "Exemple", stage: stage, stageTitle: "Perso", count: 3,
                                          declineKey: "exemple|stage:perso")

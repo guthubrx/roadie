@@ -171,6 +171,7 @@ public final class TargetModeRuntimeController: NSObject {
     private let presenter: any TargetModeOverlayPresenting
     private let memoryStore: LauncherMemoryStore
     private let notifyRuleChoiceFailure: (String) -> Void
+    private let ruleAffinity: WindowRuleAffinityService
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
     private var currentCommand: String?
@@ -200,13 +201,15 @@ public final class TargetModeRuntimeController: NSObject {
         presenter: any TargetModeOverlayPresenting,
         gridPostEvent: @escaping (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) },
         memoryStore: LauncherMemoryStore = LauncherMemoryStore(),
-        notifyRuleChoiceFailure: ((String) -> Void)? = nil
+        notifyRuleChoiceFailure: ((String) -> Void)? = nil,
+        ruleAffinity: WindowRuleAffinityService? = nil
     ) {
         self.service = service
         self.events = events
         self.presenter = presenter
         self.gridPostEvent = gridPostEvent
         self.memoryStore = memoryStore
+        self.ruleAffinity = ruleAffinity ?? WindowRuleAffinityService(eventLog: events)
         self.notifyRuleChoiceFailure = notifyRuleChoiceFailure ?? { message in
             let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
             Task { await effects.notify(title: "Roadie", text: message) }
@@ -1286,7 +1289,7 @@ public final class TargetModeRuntimeController: NSObject {
         let window = snapshot.windows.first { $0.window.bundleID == suggestion.bundleID }?.window
             ?? WindowSnapshot(id: WindowID(rawValue: 1), pid: 0, appName: suggestion.appName, bundleID: suggestion.bundleID, title: "",
                               frame: Rect(x: 0, y: 0, width: 1, height: 1), isOnScreen: false, isTileCandidate: true)
-        let result = WindowRuleAffinityService(eventLog: events).saveAffinity(kind: .app, window: window, scope: suggestion.stage, display: display)
+        let result = ruleAffinity.saveAffinity(kind: .app, window: window, scope: suggestion.stage, display: display)
         return TargetActionResult(changed: result.changed, message: result.message)
     }
 
