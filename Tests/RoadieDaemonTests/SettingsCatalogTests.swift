@@ -20,10 +20,11 @@ struct SettingsCatalogTests {
     func catalogHas195SimpleSettings() {
         // Spec056 : 7 réglages du sélecteur ; les listes du sélecteur sont des collections.
         // Spec075 : raccourci des verbes et recherche web. Spec088 : deux réglages des workflows. Session 096 : quatre réglages de la barre vide.
-        // Session 099 : touche des présentations.
-        #expect(simple.count == 208)
+        // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
+        // terminal, signets, tri, apprentissage, confirmation).
+        #expect(simple.count == 219)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 128)
+        #expect(simple.count - railSimple.count == 139)
     }
 
     @Test
@@ -78,6 +79,7 @@ struct SettingsCatalogTests {
             "width_adjustment.presets", "app_targets.include_roles", "app_targets.additional_boost_bundle_ids",
             "tiling.display_overrides", "stage_manager.workspaces", "borders.stage_overrides",
             "rail.preview.stage_overrides", "rules", "signals.hooks",
+            "target_mode.bookmark_browsers", "target_mode.app_search_paths",
             "switcher.excluded_bundles", "switcher.shortcuts",
         ])
         for descriptor in SettingsCatalog.all where descriptor.collection != nil {
@@ -162,7 +164,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 208)
+        #expect(expected.count == 219)
     }
 
     // MARK: - Défauts
@@ -255,8 +257,9 @@ struct SettingsCatalogTests {
             }
             checked += 1
         }
-        // 34 réglages hors rail ont une plage (session 096 : deux nombres de lignes de la barre vide).
-        #expect(checked == 34)
+        // 35 réglages hors rail ont une plage (session 096 : deux nombres de lignes de la barre vide ;
+        // session 101 : nombre de résultats montrés).
+        #expect(checked == 35)
     }
 
     // MARK: - Recherche

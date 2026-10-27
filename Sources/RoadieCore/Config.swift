@@ -1346,7 +1346,7 @@ public enum RoadieConfigLoader {
         "fx.borders": ["stage_overrides"],
         "width_adjustment": ["presets"],
         "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"],
-        "experimental.target_mode": ["web_searches", "fallback_searches"],
+        "experimental.target_mode": ["web_searches", "fallback_searches", "bookmark_browsers", "app_search_paths"],
         "switcher": ["excluded_bundles", "shortcuts"]
     ]
 
