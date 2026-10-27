@@ -542,7 +542,10 @@ Escape first clears the selection. In this field, ⌥ + arrows no longer move by
 **Empty bar**: before you type, the bar offers what is useful now: a proposed rule, Back
 (previous window), Undo (put the window of the last move back, within 10 minutes; also
 `roadie undo`), Recently closed (reopen in its stage a window closed less than 12 h ago),
-Often here (apps chosen most often in this stage). **Proposed rules**: three or more moves of
+Often here (apps chosen most often in this stage), Recent searches. Settings > Search turns
+Often here and Recent searches on or off and sets their number of rows (3 by default):
+`idle_frequent_enabled`, `idle_frequent_count`, `idle_recent_searches_enabled`,
+`idle_recent_searches_count`. **Proposed rules**: three or more moves of
 an app to the same stage in a week propose "Create the rule" (open affinity), "Later" or
 "Never". While searching, the counter capsule shows "💡 1"; ⌘R shows the proposal. Recorded
 moves: `~/.roadies/launcher-moves.json` (200 at most).

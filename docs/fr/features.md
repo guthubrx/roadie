@@ -566,7 +566,10 @@ flèches ne déplace plus le curseur par mot (⌃A, ⌃E restent).
 proposée, Revenir (fenêtre précédente), Annuler (remettre la fenêtre du dernier
 déplacement, 10 minutes au plus ; aussi `roadie undo`), Fermées récemment (rouvrir dans
 sa stage une fenêtre fermée depuis moins de 12 h), Souvent ici (applications choisies le
-plus souvent dans cette stage). **Règles proposées** : trois déplacements au moins d'une
+plus souvent dans cette stage), Recherches récentes. Paramètres > Recherche active ou retire
+Souvent ici et Recherches récentes, et règle leur nombre de lignes (3 par défaut) :
+`idle_frequent_enabled`, `idle_frequent_count`, `idle_recent_searches_enabled`,
+`idle_recent_searches_count`. **Règles proposées** : trois déplacements au moins d'une
 application vers une même stage en une semaine font proposer « Créer la règle »
 (affinité d'ouverture), « Plus tard » ou « Jamais ». Pendant une recherche, la capsule du
 compteur affiche « 💡 1 » ; ⌘R montre la proposition. Déplacements notés :

@@ -588,17 +588,19 @@ public final class TargetModeRuntimeController: NSObject {
                            "fermée \(ClosedWindow.ago(closed.closedAt, now: now)) · \(info.title)")
         }
         if !closedRows.isEmpty { idle += [.header("Fermées récemment")] + closedRows }
-        if let rankingContext {
+        let targetModeConfig = service.effectiveConfig.experimental.targetMode
+        if targetModeConfig.idleFrequentEnabled, let rankingContext {
             let ranking = context.ranking
             let focusedBundle = snapshot.windows.first { $0.window.id == focused }?.window.bundleID
             let habits = ranking.entries.filter { $0.key.hasPrefix("app:") && $0.value.contexts?[rankingContext] != nil }
                 .sorted { ranking.frecency($0.key, at: now, context: rankingContext) > ranking.frecency($1.key, at: now, context: rankingContext) }
                 .compactMap { entry in catalog.current.first { $0.rankingKey == entry.key } }
                 .filter { $0.bundleID != focusedBundle }
-                .prefix(3)
+                .prefix(targetModeConfig.idleFrequentCount)
             if !habits.isEmpty { idle += [.header("Souvent ici")] + habits.map { .app($0, detail: "souvent dans cette stage") } }
         }
-        let recent = LauncherHistoryStore().load().recent(3)
+        let recent = targetModeConfig.idleRecentSearchesEnabled
+            ? LauncherHistoryStore().load().recent(targetModeConfig.idleRecentSearchesCount) : []
         if !recent.isEmpty { idle += [.header("Recherches récentes")] + recent.map(LauncherList.Row.history) }
         context.idleRows = idle
         context.loadOpenItems = { [service] done in

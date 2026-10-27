@@ -19,10 +19,10 @@ struct SettingsCatalogTests {
     @Test
     func catalogHas195SimpleSettings() {
         // Spec056 : 7 réglages du sélecteur ; les listes du sélecteur sont des collections.
-        // Spec075 : raccourci des verbes et recherche web. Spec088 : deux réglages des workflows.
-        #expect(simple.count == 203)
+        // Spec075 : raccourci des verbes et recherche web. Spec088 : deux réglages des workflows. Session 096 : quatre réglages de la barre vide.
+        #expect(simple.count == 207)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 123)
+        #expect(simple.count - railSimple.count == 127)
     }
 
     @Test
@@ -161,7 +161,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 203)
+        #expect(expected.count == 207)
     }
 
     // MARK: - Défauts
@@ -254,8 +254,8 @@ struct SettingsCatalogTests {
             }
             checked += 1
         }
-        // 32 réglages hors rail ont une plage.
-        #expect(checked == 32)
+        // 34 réglages hors rail ont une plage (session 096 : deux nombres de lignes de la barre vide).
+        #expect(checked == 34)
     }
 
     // MARK: - Recherche

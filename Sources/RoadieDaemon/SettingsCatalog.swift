@@ -409,6 +409,16 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "alfred_workflows", "Workflows installés dans Alfred",
               "Lit aussi, sans les modifier, les workflows installés dans Alfred. Ceux de ~/.config/roadies/workflows restent lus.",
               .bool, .bool(true)),
+        entry(.recherche, "experimental.target_mode", "idle_frequent_enabled", "Barre vide : Souvent ici",
+              "Avant la saisie, propose les applications que vous ouvrez le plus souvent depuis la stage active.",
+              .bool, .bool(true)),
+        entry(.recherche, "experimental.target_mode", "idle_frequent_count", "Souvent ici : nombre de lignes",
+              "Nombre d'applications proposées dans « Souvent ici ».", .int(1...10), .int(3)),
+        entry(.recherche, "experimental.target_mode", "idle_recent_searches_enabled", "Barre vide : Recherches récentes",
+              "Avant la saisie, propose vos dernières recherches qui ont mené à une action.",
+              .bool, .bool(true)),
+        entry(.recherche, "experimental.target_mode", "idle_recent_searches_count", "Recherches récentes : nombre de lignes",
+              "Nombre de recherches proposées. Roadie garde les 20 dernières.", .int(1...20), .int(3)),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [
