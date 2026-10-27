@@ -176,6 +176,8 @@ public final class TargetModeRuntimeController: NSObject {
     private var pendingGrid: AlfredGridView?
     /// Barre ouverte sur une grille : son entrée et la fonction qui lui envoie les tuiles (session 095).
     private var openGrid: (id: String, update: @MainActor (AlfredGridView) -> Void)?
+    /// Application au premier plan à l'ouverture de la barre, rendue au clavier après Échap (session 097).
+    private var escapeFocus: LauncherFocusSnapshot?
     private var styleTimer: Timer?
     /// Aperçu actif du lanceur (SPEC-078) : cadres relevés avant, stage de départ si une bascule a eu lieu.
     private struct ActivePreview {
@@ -420,6 +422,9 @@ public final class TargetModeRuntimeController: NSObject {
             finish(TargetActionResult(changed: false, message: "target_overlay_disabled", error: "target_overlay_disabled"), command: command.name)
             return
         }
+        // Focus clavier rendu après Échap (session 097) : lu avant que le panneau prenne le clavier.
+        escapeFocus = NSWorkspace.shared.frontmostApplication
+            .flatMap { $0.processIdentifier == getpid() ? nil : LauncherFocusSnapshot.capture($0) }
         // Barre immédiate (FR-009) : cibles Roadie tout de suite, puis toutes les fenêtres visibles, lues
         // en arrière-plan, chacune affichée dès qu'elle est lue. 2 s par fenêtre au moins : la barre
         // n'attend plus la plus lente, une page chargée peut donc être lue en entier.
@@ -555,10 +560,13 @@ public final class TargetModeRuntimeController: NSObject {
         }
         let windowTargets = Dictionary(targets.filter { $0.kind == .window }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let focused = snapshot.focusedWindowID
-        if let previous = WindowSwitcherFocusHistory.shared.recentIDs.lazy.filter({ $0 != focused })
-            .compactMap({ windowTargets["window:\($0.rawValue)"] }).first {
-            idle += [.header("Revenir"), .target(previous)]
-        }
+        let recentIDs = WindowSwitcherFocusHistory.shared.recentIDs
+        let previous = Self.previousWindow(recent: recentIDs, focused: focused, targets: windowTargets)
+        events.append(RoadieEvent(type: "launcher.idle_back", details: [
+            "focused": focused.map { String($0.rawValue) } ?? "none",
+            "recent": recentIDs.prefix(3).map { String($0.rawValue) }.joined(separator: ","),
+            "previous": previous?.id ?? "none"]))
+        if let previous { idle += [.header("Revenir"), .target(previous)] }
         let batchMoves = memory.undoableBatch(at: now, currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope })
         if batchMoves.count > 1, let move = batchMoves.last, let from = move.from, let info = stageInfo(from) {
             // Envoi groupé (SPEC-091) : une ligne pour tout le lot.
@@ -1867,10 +1875,38 @@ public final class TargetModeRuntimeController: NSObject {
         return displays.first(where: \.isMain) ?? displays.first
     }
 
+    /// « Revenir » (SPEC-081) : la fenêtre vue avant celle de l'ouverture de la barre. La fenêtre en cours
+    /// est la fenêtre active si Roadie la connaît, sinon la plus récente de l'historique : une fenêtre active
+    /// absente des cibles (lecture AX vide, fenêtre auxiliaire) ne doit pas faire proposer la fenêtre en cours
+    /// (session 097). O(n), n = taille de l'historique (512 au plus).
+    nonisolated static func previousWindow(recent: [WindowID], focused: WindowID?, targets: [String: RoadieTarget]) -> RoadieTarget? {
+        let known = recent.lazy.compactMap { targets["window:\($0.rawValue)"] }
+        let current = focused.flatMap { targets["window:\($0.rawValue)"] } ?? known.first
+        return known.first { $0.id != current?.id }
+    }
+
+    /// Après Échap, la fenêtre et l'élément qui avaient le clavier le retrouvent, si leur application est
+    /// toujours au premier plan. Écritures AX hors fil principal ; relecture 200 ms après (délai choisi,
+    /// non mesuré) pour l'événement `launcher.focus_restore`.
+    private func restoreFocusAfterEscape(_ saved: LauncherFocusSnapshot) {
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == saved.pid else { return }
+        let events = events
+        DispatchQueue.global(qos: .userInitiated).async {
+            var details = saved.restore()
+            Thread.sleep(forTimeInterval: 0.2)
+            details["after"] = String(saved.focusIsSaved())
+            events.append(RoadieEvent(type: "launcher.focus_restore", details: details))
+        }
+    }
+
     private func finish(_ result: TargetActionResult, command: String) {
         stopStyleUpdates()
         currentSession = nil
         currentCommand = nil
+        if let saved = escapeFocus, command == "targets.search" || command == "targets.actions" {
+            escapeFocus = nil
+            if result.message == "target_search_escaped" { restoreFocusAfterEscape(saved) }
+        }
         events.append(RoadieEvent(type: "target_mode.finished", details: [
             "command": command,
             "changed": String(result.changed),

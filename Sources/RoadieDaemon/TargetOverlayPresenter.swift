@@ -1129,7 +1129,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 render()
                 return
             }
-            cancel()
+            // Message distinct : le contrôleur rend le focus clavier à l'application (session 097).
+            finish(TargetActionResult(changed: false, message: "target_search_escaped", error: "cancelled"))
             return
         }
         if case .confirm(let shift, let command, let option, let control, let isRepeat) = input.kind {
