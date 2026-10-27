@@ -3,6 +3,13 @@ import Testing
 @testable import RoadieDaemon
 
 struct Spec093PersistenceSafetyTests {
+    private final class FailureCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func increment() { lock.withLock { count += 1 } }
+        var value: Int { lock.withLock { count } }
+    }
+
     @Test @MainActor func clearHistoryReportsCorruptionAndPreservesTheFile() throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-cli-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
@@ -100,5 +107,41 @@ struct Spec093PersistenceSafetyTests {
         proceed.signal()
         try #require(group.wait(timeout: .now() + 5) == .success)
         #expect(Set(store.load().declined.keys) == Set(["a", "b"]))
+    }
+
+    @Test func concurrentRankingVisitsKeepEveryCount() throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-ranking-race-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let path = sandbox.appendingPathComponent("ranking.json").path
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let visits = 32
+
+        DispatchQueue.concurrentPerform(iterations: visits) { _ in
+            LauncherRankingStore(path: path).recordVisit("exemple", query: "ex", at: now, context: "stage")
+        }
+
+        let ranking = LauncherRankingStore(path: path).load(at: now)
+        #expect(ranking.exactUses("exemple", query: "ex") == visits)
+        #expect(ranking.exactUses("exemple", query: "ex", context: "stage") == visits)
+    }
+
+    @Test func concurrentAliasSavesKeepEveryName() throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-alias-race-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let path = sandbox.appendingPathComponent("aliases.json").path
+        let alias = LauncherAlias(path: "/tmp/exemple", isApp: false, bundleID: nil, name: "Exemple", stage: nil,
+                                  here: false, newStage: false, position: nil)
+        let failures = FailureCounter()
+        let names = (0..<32).map { "ex\($0)" }
+
+        DispatchQueue.concurrentPerform(iterations: names.count) { index in
+            do { try LauncherAliasStore(path: path).save(alias, as: names[index]) }
+            catch { failures.increment() }
+        }
+
+        #expect(failures.value == 0)
+        #expect(Set(LauncherAliasStore(path: path).load().aliases.keys) == Set(names))
     }
 }

@@ -20,3 +20,19 @@ Une nouvelle demande, `roadie-audit-integration-review-20261027-v3`, a été ref
 Pendant cette vérification, la branche principale locale a avancé à `71b12a5c41125c716302099e8e6612c84ef3e219` (session 097). La branche distante est toujours à `65ea4c8e898443ff37b6322d41eda34830c2dad6` après récupération. Les quatre commits locaux supplémentaires appartiennent à d'autres travaux. Les tests de la combinaison préparée ne couvrent pas la session 097 ; il faudra examiner à nouveau l'intégration sur le nouvel état avant toute livraison.
 
 La décision de l'audit reste `inconclusive` et bloque la livraison. Aucun push ni déploiement n'est attesté par ce complément.
+
+## Suite de la revue de la combinaison
+
+La mission `e2749bde-9314-471a-a169-76c1f5c60635` (`roadie-audit-integration-review-20261027-v4`) a reçu les 20 fichiers du diff de sources et de tests sous une forme compacte. Son verdict reste non favorable : le relecteur n'a pas pu tout relire ni exécuter la combinaison. Il demande notamment de vérifier les alias, la concurrence, la profondeur du calculateur et l'archive des tâches.
+
+- `LauncherAliasStore.save` de la combinaison est bien `throws` et utilise `mutateChecked`. Le test existant vérifie l'erreur sur fichier corrompu. Deux tests concurrents ajoutés créent 32 visites dans le classement et 32 abréviations distinctes. Ils vérifient tous les résultats sur le même fichier avec des instances distinctes et des threads dans un seul processus ; ils ne démontrent pas la concurrence entre processus.
+- Le test existant refuse 50 000 parenthèses, 200 signes unaires et 200 puissances imbriquées. Le contrôle de profondeur est dans `unary` et s'applique aussi aux appels récursifs des parenthèses et des puissances. Ce test a réussi.
+- L'archive officielle téléchargée le 27 octobre 2026 depuis `https://github.com/alfredapp/automation-tasks/archive/refs/heads/main.zip` contient `Tasks` et `LICENSE`, ainsi que 232 fichiers `alfredtask.json`. Empreinte SHA-256 de l'archive contrôlée : `0454174304797865a56ea0527977df9f23f897b9b404bd854ebafe6f6d61c9a2`. Son contenu peut évoluer.
+- La décision pour la sauvegarde asynchrone reste `changed: false` avec `project save scheduled`, car aucune écriture n'est encore confirmée à ce moment. L'événement `project.saved` ne suit que l'écriture réussie. Le champ `changed` du journal de fin décrit donc la mise en file, pas le résultat ultérieur. La CLI confirme elle aussi la mise en file ; elle ne fournit pas le résultat final de persistance.
+- Le verrou de remplacement est partagé par les processus Roadie. Il ne protège pas d'un autre programme qui modifierait les mêmes fichiers sans prendre ce verrou. La récupération après interruption brutale entre les échanges reste non démontrée.
+
+La compilation et la suite Swift ont été relancées sur l'arbre préparé `dda85a9a8c92a1c30c22510413a9178c2130a990` : 2 127 tests dans 297 suites ont réussi. Les arbres Git de `Sources` et `Tests` étaient respectivement `f5847c2466931a26a175eb05e416166f6d40e189` et `45a268ce59a6eb444a588a7ad1247a87214222aa`, inchangés après les tests. Cette préparation n'est pas un commit de fusion et ne comprend pas la session 097.
+
+Trois suites restent exclues : `Audit022R4LotT6Tests` emploie des arrêts forcés de processus ; `Spec088ScriptRunnerTests` envoie des signaux à des groupes de processus ; `Settings027IPCTests` publie des notifications système globales. L'absence de ces tests et de revue complète reste une limite.
+
+Une récupération distante ultérieure donne `origin/main` à `b77ffa58d719b6229a9a4a97d8aee5252df8562c`. À cet instant, `main` local reste à `71b12a5c41125c716302099e8e6612c84ef3e219` et contient encore les sessions 096 et 097 non présentes sur la branche distante. Ces travaux restent hors de la présente livraison.
