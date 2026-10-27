@@ -1270,27 +1270,37 @@ public final class TargetModeRuntimeController: NSObject {
     /// Plus tard reporte d'un jour ; Jamais retire la proposition pour cette application et cette stage.
     private func chooseRule(_ suggestion: RuleSuggestion, _ choice: RuleChoice) -> TargetActionResult {
         let now = Date()
-        if choice == .create {
-            memoryStore.update { $0.decline(suggestion, choice, at: now) }
-        } else {
+        if choice != .create {
             do {
                 try memoryStore.updateChecked { $0.decline(suggestion, choice, at: now) }
             } catch {
-                events.append(RoadieEvent(type: "launcher.rule_choice_failed", details: ["choice": choice.rawValue, "reason": "persistence"]))
-                let message = "Impossible d'enregistrer le choix de règle."
-                notifyRuleChoiceFailure(message)
-                return TargetActionResult(changed: false, message: message, error: "rule_choice_not_saved")
+                return failedRuleChoice(choice, reason: "persistence", error: "rule_choice_not_saved",
+                                        message: "Impossible d'enregistrer le choix de règle.")
             }
         }
         events.append(RoadieEvent(type: "launcher.rule_choice", details: ["choice": choice.rawValue, "bundleID": suggestion.bundleID]))
         guard choice == .create else { return TargetActionResult(changed: true, message: "rule suggestion: \(choice.rawValue)") }
         let snapshot = service.snapshot(followFocus: false)
-        guard let display = snapshot.displays.first(where: { $0.id == suggestion.stage.displayID }) else { return refused("rule create", "display") }
+        guard let display = snapshot.displays.first(where: { $0.id == suggestion.stage.displayID }) else {
+            return failedRuleChoice(choice, reason: "display", error: "display",
+                                    message: "Impossible de créer la règle : écran indisponible.")
+        }
         let window = snapshot.windows.first { $0.window.bundleID == suggestion.bundleID }?.window
             ?? WindowSnapshot(id: WindowID(rawValue: 1), pid: 0, appName: suggestion.appName, bundleID: suggestion.bundleID, title: "",
                               frame: Rect(x: 0, y: 0, width: 1, height: 1), isOnScreen: false, isTileCandidate: true)
         let result = ruleAffinity.saveAffinity(kind: .app, window: window, scope: suggestion.stage, display: display)
-        return TargetActionResult(changed: result.changed, message: result.message)
+        guard result.changed else {
+            return failedRuleChoice(choice, reason: "affinity", error: "rule_create_not_saved",
+                                    message: "Impossible de créer la règle.")
+        }
+        memoryStore.update { $0.decline(suggestion, choice, at: now) }
+        return TargetActionResult(changed: true, message: result.message)
+    }
+
+    private func failedRuleChoice(_ choice: RuleChoice, reason: String, error: String, message: String) -> TargetActionResult {
+        events.append(RoadieEvent(type: "launcher.rule_choice_failed", details: ["choice": choice.rawValue, "reason": reason]))
+        notifyRuleChoiceFailure(message)
+        return TargetActionResult(changed: false, message: message, error: error)
     }
 
     /// `roadie undo` et la ligne Annuler : la fenêtre du dernier déplacement revient dans sa stage
