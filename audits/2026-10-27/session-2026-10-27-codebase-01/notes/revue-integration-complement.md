@@ -40,3 +40,11 @@ La revue indépendante ciblée de ce commit (`roadie-audit-persistence-review-20
 Trois suites restent exclues : `Audit022R4LotT6Tests` emploie des arrêts forcés de processus ; `Spec088ScriptRunnerTests` envoie des signaux à des groupes de processus ; `Settings027IPCTests` publie des notifications système globales. L'absence de ces tests et de revue complète reste une limite.
 
 Une récupération distante ultérieure donne `origin/main` à `b77ffa58d719b6229a9a4a97d8aee5252df8562c`. À cet instant, `main` local reste à `71b12a5c41125c716302099e8e6612c84ef3e219` et contient encore les sessions 096 et 097 non présentes sur la branche distante. Ces travaux restent hors de la présente livraison.
+
+## Vérification du dernier correctif
+
+Sur le commit exact `5ec38f7250c74282583f2ff77eb64a968de7fa83`, la suite Swift a réussi avec 2 096 tests dans 292 suites, avec les trois exclusions indiquées plus haut. Les arbres de `Sources` et `Tests` sont respectivement `d1decdb479a483635a6343ac5712b7cba2b89423` et `9cc3251e525f629cbc346ec52ea14f0c0baa859a`.
+
+Sur la combinaison préparée, la suite a réussi avec 2 129 tests dans 297 suites, avec les mêmes exclusions. L'arbre testé était `77c93f4338c004a15cb269182e6de5439a22e0ac` ; ses arbres `Sources` et `Tests` étaient respectivement `15fb70b90d05582c6989e3ae7e1ed482a9c9fdfb` et `ddf10a4a00d9938a8373b36a177cfaf3e3caf78f`. Cet arbre n'est pas un commit de fusion et ne comprend pas la session 097.
+
+La revue indépendante du correctif a été demandée sur le commit `5ec38f7` (`roadie-audit-rule-choice-review-20261027-v1`, tâche `ee99f578-70ae-4508-a8b1-ea4d87ffdb74`). Elle est toujours en cours à la rédaction de cette note. Aucun avis favorable n'est présumé.
