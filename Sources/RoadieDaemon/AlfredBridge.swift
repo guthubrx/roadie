@@ -33,7 +33,8 @@ enum AlfredBridge {
     /// Méthodes JavaScript traduites par l'objet de Roadie, avec leur nom d'Alfred.
     private static let methods = ["search": "search", "runTrigger": "run trigger", "setConfiguration": "set configuration",
                                   "removeConfiguration": "remove configuration", "reloadWorkflow": "reload workflow",
-                                  "revealWorkflow": "reveal workflow", "version": "version", "activate": "activate", "quit": "quit"]
+                                  "revealWorkflow": "reveal workflow", "version": "version", "activate": "activate", "quit": "quit",
+                                  "running": "running"]
 
     /// Texte traduit, ou nil s'il ne donne aucun ordre à Alfred (le texte reste alors tel quel). O(n).
     static func translate(_ source: String, language: Language, cli: String, version: String) -> String? {
@@ -104,7 +105,7 @@ enum AlfredBridge {
             + #"setConfiguration: function (k, o) { o = o || {}; call(["set", o.inWorkflow, k, o.toValue]); }, "#
             + #"removeConfiguration: function (k, o) { o = o || {}; call(["remove", o.inWorkflow, k]); }, "#
             + #"reloadWorkflow: function (w) { call(["reload", w]); }, revealWorkflow: function (w) { call(["reveal", w]); }, "#
-            + #"version: function () { return ""# + version + #""; }, activate: function () {}, quit: function () {} }; })();"#
+            + #"version: function () { return ""# + version + #""; }, running: function () { return true; }, activate: function () {}, quit: function () {} }; })();"#
         // Une ligne `#!` reste la première.
         if body.hasPrefix("#!"), let end = body.firstIndex(of: "\n") {
             return String(body[...end]) + object + "\n" + body[body.index(after: end)...]
@@ -229,9 +230,11 @@ enum AlfredBridge {
             }
         }
 
-        /// Arguments de `/usr/bin/osascript` avec le texte traduit à la place des `-e` ou du fichier.
+        /// Arguments de `/usr/bin/osascript` avec le texte traduit à la place des `-e` ou du fichier. Un
+        /// fichier `.js` sans `-l` garde le JavaScript : `-e` ne le déduit plus de l'extension (audit F1).
         func rebuilt(source: String) -> [String] {
-            (language.map { ["-l", $0] } ?? []) + options + ["-e", source] + arguments
+            let language = language ?? (isJavaScript ? "JavaScript" : nil)
+            return (language.map { ["-l", $0] } ?? []) + options + ["-e", source] + arguments
         }
 
         var isJavaScript: Bool { language?.lowercased() == "javascript" || (file.map { $0.hasSuffix(".js") || $0.hasSuffix(".jxa") } ?? false) }
@@ -253,9 +256,16 @@ struct AlfredKeptSettings: Sendable {
         return (try? JSONSerialization.jsonObject(with: data) as? [String: String]) ?? [:]
     }
 
-    func set(_ key: String, to value: String, workflow: String) throws { try write(values(for: workflow).merging([key: value]) { $1 }, workflow) }
+    /// Sans workflow (`inWorkflow` vide), rien n'est écrit (audit F2).
+    struct MissingWorkflow: Error {}
+
+    func set(_ key: String, to value: String, workflow: String) throws {
+        guard !workflow.isEmpty else { throw MissingWorkflow() }
+        try write(values(for: workflow).merging([key: value]) { $1 }, workflow)
+    }
 
     func remove(_ key: String, workflow: String) throws {
+        guard !workflow.isEmpty else { throw MissingWorkflow() }
         var values = values(for: workflow)
         values[key] = nil
         try write(values, workflow)

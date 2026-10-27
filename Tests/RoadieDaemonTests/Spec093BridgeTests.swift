@@ -142,6 +142,29 @@ struct Spec093BridgeTests {
         #expect(result.text.trimmingCharacters(in: .whitespacesAndNewlines) == "workflow alfred trigger w go it's")
     }
 
+    // MARK: Audit V15 (F1 à F3)
+
+    /// F1 : fichier `.js` sans `-l` ; F3 : `running()` ; exécutés pour de vrai par osascript.
+    @Test func auditFixesKeepJavaScriptFilesAndRunning() async throws {
+        #expect(AlfredBridge.OsascriptCall(["/tmp/a.js", "x"]).rebuilt(source: "z") == ["-l", "JavaScript", "-e", "z", "x"])
+        #expect(AlfredBridge.OsascriptCall(["/tmp/a.applescript"]).rebuilt(source: "z") == ["-e", "z"])
+        let source = #"Application("com.runningwithcrayons.Alfred").running() ? "oui" : "non""#
+        let translated = try #require(AlfredBridge.translate(source, language: .javaScript, cli: "/bin/echo", version: "5.5"))
+        let workflow = try WorkflowFixture().write()
+        let result = await AlfredScriptRunner.run(AlfredScript(language: 7, source: translated), query: "", arguments: [], workflow: workflow, variables: [:])
+        #expect(result.text.trimmingCharacters(in: .whitespacesAndNewlines) == "oui")
+        #expect(AlfredBridge.orders(in: source).translated == ["running"])
+    }
+
+    /// F2 : sans workflow, aucun fichier `.json` sans nom n'est écrit.
+    @Test func keptSettingsNeedAWorkflow() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-\(UUID().uuidString)")
+        let store = AlfredKeptSettings(folder: folder)
+        #expect(throws: AlfredKeptSettings.MissingWorkflow.self) { try store.set("k", to: "v", workflow: "") }
+        #expect(throws: AlfredKeptSettings.MissingWorkflow.self) { try store.remove("k", workflow: "") }
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent(".json").path))
+    }
+
     // MARK: Réglages gardés
 
     @Test func keptSettingsOverridePrefs() throws {
