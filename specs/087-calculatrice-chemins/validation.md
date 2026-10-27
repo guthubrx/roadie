@@ -20,3 +20,11 @@
 - Le choix « Maj + chiffre écrit dans une saisie vide » retire Maj + 1 sur la barre vide (lignes de la
   081) : les flèches et le clic restent.
 - Preuves : diaporama non produit (frappe impossible à simuler, écrans privés).
+
+## Correction du 27 octobre 2026
+- Signalé : `=sqrt(2)` impossible à taper en AZERTY avec Maj pour les raccourcis. Maj + é choisissait
+  la 2e ligne, parce que les lettres de `sqrt` faisaient sortir la saisie des « caractères de calcul ».
+- Corrigé : une saisie commencée par `=` compte comme un calcul en cours (`LauncherCalculator.isTyping`).
+- Tests : `shiftDigitTypesInACalculation` couvre `=sqrt(` et `=2*pi+` ; suite complète 2 086 tests /
+  292 suites réussis. Installé : PID 9780, santé 5/5, certificat `roadied-cert` conservé.
+- Non vérifié : frappe réelle dans la barre (essai utilisateur).

@@ -43,7 +43,8 @@ SPEC-075 (variantes et raccourcis 1 à 9), SPEC-085 (touche des raccourcis).
   garde son rôle.
 - **FR-009 Chiffres et touche Maj.** Avec `pick_modifier = "shift"` (réglage de l'utilisateur,
   085), Maj + chiffre de la rangée du haut écrit le chiffre quand la saisie est vide ou n'est
-  faite que de caractères de calcul (chiffres, espaces, `+ - * / ^ % , . ( ) = × ÷`) : en AZERTY,
+  faite que de caractères de calcul (chiffres, espaces, `+ - * / ^ % , . ( ) = × ÷`), ou commence
+  par `=` (calcul avancé, `=sqrt(2)`, correction du 27 octobre) : en AZERTY,
   les chiffres se tapent avec Maj. Ailleurs, Maj + chiffre reste le raccourci de la ligne.
 - **FR-007 Ouvrir.** Retour, les verbes, ⌘C, ⌘Y et les variantes ⌘/⌥/⌃ se comportent comme pour un
   fichier trouvé par Spotlight (SPEC-077). Un dossier s'ouvre dans le Finder.

@@ -54,6 +54,9 @@ struct Spec087CalculatorTests {
         // Saisie vide ou de calcul : le chiffre s'écrit (AZERTY).
         #expect(SearchInputPanel.navigation(try key(18), pick: shift, text: "") == nil)
         #expect(SearchInputPanel.navigation(try key(18), pick: shift, text: "12*(4,5") == nil)
+        // Calcul avancé : les lettres des fonctions n'empêchent pas d'écrire le chiffre.
+        #expect(SearchInputPanel.navigation(try key(18), pick: shift, text: "=sqrt(") == nil)
+        #expect(SearchInputPanel.navigation(try key(18), pick: shift, text: "=2*pi+") == nil)
         // Recherche ordinaire : Maj + 1 reste le raccourci de la première ligne.
         #expect(SearchInputPanel.navigation(try key(18), pick: shift, text: "fire")?.kind == .pick(1))
         // Commande pour les raccourcis : rien ne change.

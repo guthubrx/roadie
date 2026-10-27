@@ -25,6 +25,12 @@ enum LauncherCalculator {
     /// Caractères d'un calcul en cours de frappe (FR-009 : Maj + chiffre y écrit le chiffre).
     static let typingCharacters = Set("0123456789 +-*/^%,.()=×÷")
 
+    /// Calcul en cours de frappe : saisie vide, faite de caractères de calcul, ou calcul avancé
+    /// commencé par `=` (fonctions et constantes en lettres, `=sqrt(2)`). O(n).
+    static func isTyping(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespaces).hasPrefix("=") || text.allSatisfy(typingCharacters.contains)
+    }
+
     /// Calcul complet et fini, sinon nil (texte ordinaire, saisie incomplète, division par zéro). O(n).
     static func evaluate(_ raw: String, locale: Locale = .current) -> LauncherCalculation? {
         let text = raw.trimmingCharacters(in: .whitespaces)

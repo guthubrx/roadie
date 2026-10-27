@@ -169,7 +169,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
         // ⌘1 à ⌘9 (ou la touche de `pick_modifier`), rangée du haut ou pavé numérique, quelle que soit
         // la disposition : le code physique compte, pas le caractère.
-        let typesDigit = pick == .shift && text.allSatisfy(LauncherCalculator.typingCharacters.contains)
+        let typesDigit = pick == .shift && LauncherCalculator.isTyping(text)
         if flags == pick, !typesDigit, let rank = digitKeys[event.keyCode] {
             return SearchKeyInput(kind: .pick(rank))
         }
