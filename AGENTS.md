@@ -257,6 +257,11 @@ diagnostic `roadie launch --open-items`. 2 028 tests, santé 5/5.
 Session 086 installée : échec d'écriture identique répété gardé durable (boucle T3 Code à 31 s
 en `bsp`), applications lentes nommées dans `live_tick.axSlowApps` pour les passes d'au moins 1 s.
 2 037 tests / 280 suites, santé 5/5. Reçu : specs/086-echecs-durables/validation.md.
+Session 096 installée : « Souvent ici » et « Recherches récentes » de la barre vide réglables
+(`idle_frequent_*`, `idle_recent_searches_*`, Paramètres > Recherche). 2 119 tests, santé 5/5.
+Session 097 installée : « Revenir » saute la fenêtre en cours ; après Échap, la fenêtre et l'élément
+qui avaient le clavier le retrouvent (AX). Essai réel dans T3 Code à confirmer (`launcher.focus_restore`).
+2 121 tests, santé 5/5. Reçus : specs/096-barre-vide-reglages/, specs/097-focus-apres-barre/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

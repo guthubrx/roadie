@@ -7,6 +7,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Barre vide : « Souvent ici » et « Recherches récentes » s'activent ou se retirent, avec leur
+  nombre de lignes (3 par défaut), dans Paramètres > Recherche.
 - Grille : texte d'attente (« Loading… » ou celui du workflow) pendant que son script tourne ; les
   workflows qui ouvrent une adresse web amènent aussi au navigateur.
 - Recherche web : un `^` en tête est retiré (`^claude` cherche « claude », en tête de liste) et Roadie
@@ -77,6 +79,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Barre vide : « Revenir » propose la fenêtre vue avant la fenêtre en cours, plus la fenêtre en cours.
+  Après Échap, l'application restée au premier plan retrouve le clavier (zone de saisie de T3 Code).
 - Lanceur : la touche des raccourcis 1 à 9 se choisit (`pick_modifier` dans
   `[experimental.target_mode]`, ou Paramètres > Recherche) : Commande par défaut, ou Maj,
   Option, Contrôle. Le rappel à droite des lignes suit (« ⇧2 »).
