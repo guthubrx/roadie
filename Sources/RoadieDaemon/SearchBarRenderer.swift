@@ -35,18 +35,20 @@ struct SearchBarLayout: Equatable {
 
     /// La largeur du contenu ne déplace plus la barre. Faute de place, les suggestions cèdent la
     /// place au message. Complexité : O(s + m), s ≤ 8 et m ≤ 12.
+    /// `width`, `barHeight` : ceux du thème (session 101) ; `maxRows` : nombre de résultats montrés, 0 sans limite.
     static func make(
         bounds: CGRect, suggestions: Int, messageLines: Int,
-        searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13
+        searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13,
+        width preferredWidth: CGFloat = 640, barHeight preferredHeight: CGFloat? = nil, maxRows: Int = 0
     ) -> SearchBarLayout {
         let lineHeight = Self.lineHeight * min(48, max(8, commandTextFontSize)) / 13
-        let barHeight = 40 * min(48, max(8, searchTextFontSize)) / 15
+        let barHeight = preferredHeight ?? 40 * min(48, max(8, searchTextFontSize)) / 15
         let margin = min(20, bounds.width * 0.05)
-        let width = max(0, min(640, bounds.width - 2 * margin))
+        let width = max(0, min(preferredWidth, bounds.width - 2 * margin))
         let bar = CGRect(x: bounds.midX - width / 2, y: bounds.minY + min(48, max(0, bounds.height - barHeight)), width: width, height: min(bounds.height, barHeight))
         let room = max(0, Int((bounds.maxY - 8 - bar.maxY - gap - 2 * padding) / lineHeight))
         let messageCount = min(messageLines, maxMessageLines, room)
-        let suggestionCount = min(suggestions, maxSuggestions, room - messageCount)
+        let suggestionCount = min(suggestions, maxRows > 0 ? maxRows : maxSuggestions, room - messageCount)
         let total = messageCount + suggestionCount
         guard total > 0 else { return SearchBarLayout(bar: bar, panel: nil, suggestionRows: [], messageRows: []) }
         let panel = CGRect(x: bar.minX, y: bar.maxY + gap, width: bar.width, height: CGFloat(total) * lineHeight + 2 * padding)
@@ -70,9 +72,13 @@ struct SearchBarLayout: Equatable {
     /// Liste du lanceur (SPEC-073) : lignes de hauteurs différentes (titres de section fins, résultats
     /// sur deux niveaux). La tranche montrée commence au début et glisse juste assez pour garder la
     /// sélection visible. O(n), n lignes.
-    static func makeRich(bounds: CGRect, heights: [CGFloat], selected: Int?, searchTextFontSize: CGFloat = 15) -> SearchBarLayout {
-        let base = make(bounds: bounds, suggestions: 0, messageLines: 0, searchTextFontSize: searchTextFontSize)
-        let room = max(0, bounds.maxY - 8 - base.bar.maxY - gap - 2 * padding)
+    /// `maxRows` borne la hauteur de la liste à autant de lignes de résultat (session 101).
+    static func makeRich(bounds: CGRect, heights: [CGFloat], selected: Int?, searchTextFontSize: CGFloat = 15,
+                         width: CGFloat = 640, barHeight: CGFloat? = nil, maxRows: Int = 0) -> SearchBarLayout {
+        let base = make(bounds: bounds, suggestions: 0, messageLines: 0, searchTextFontSize: searchTextFontSize,
+                        width: width, barHeight: barHeight)
+        var room = max(0, bounds.maxY - 8 - base.bar.maxY - gap - 2 * padding)
+        if maxRows > 0, let row = heights.max() { room = min(room, CGFloat(maxRows) * row) }
         guard !heights.isEmpty else { return base }
         var start = 0, end = 0, used: CGFloat = 0
         while end < heights.count, used + heights[end] <= room { used += heights[end]; end += 1 }
@@ -97,8 +103,9 @@ struct SearchBarLayout: Equatable {
     /// hauteur des textes sous l'image ; `footer` : une ligne en pied pour la tuile choisie. O(t), t
     /// tuiles montrées.
     static func makeGrid(bounds: CGRect, count: Int, columns: Int, selected: Int?, label: CGFloat = 20, footer: Bool,
-                         searchTextFontSize: CGFloat = 15) -> SearchBarLayout {
-        let base = make(bounds: bounds, suggestions: 0, messageLines: 0, searchTextFontSize: searchTextFontSize)
+                         searchTextFontSize: CGFloat = 15, width: CGFloat = 640, barHeight: CGFloat? = nil) -> SearchBarLayout {
+        let base = make(bounds: bounds, suggestions: 0, messageLines: 0, searchTextFontSize: searchTextFontSize,
+                        width: width, barHeight: barHeight)
         let columns = max(1, columns)
         guard count > 0, base.bar.width > 2 * padding else { return base }
         let side = min(140, (base.bar.width - 2 * padding - 8) / CGFloat(columns))
@@ -175,20 +182,24 @@ struct TargetSearchBar {
 
     /// Même géométrie pour le dessin et les clics, y compris après un réglage de police.
     func layout(in bounds: CGRect, style: TargetOverlayStyle) -> SearchBarLayout {
+        let width = CGFloat(style.theme.width)
+        let barHeight = style.theme.barHeight(fontSize: style.searchTextFontSize)
         if let grid {
             return SearchBarLayout.makeGrid(bounds: bounds, count: suggestions.count, columns: grid.columns, selected: selectedSuggestion,
                                             label: grid.labelHeight(fontSize: style.commandTextFontSize), footer: grid.footer != nil,
-                                            searchTextFontSize: style.searchTextFontSize)
+                                            searchTextFontSize: style.searchTextFontSize, width: width, barHeight: barHeight)
         }
         if richRows {
             let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
             let heights = suggestions.map { $0.kind == .header ? metrics.header : metrics.row }
             return SearchBarLayout.makeRich(bounds: bounds, heights: heights, selected: selectedSuggestion,
-                                            searchTextFontSize: style.searchTextFontSize)
+                                            searchTextFontSize: style.searchTextFontSize, width: width, barHeight: barHeight,
+                                            maxRows: style.maxRows)
         }
         return SearchBarLayout.make(bounds: bounds, suggestions: suggestions.count,
                                     messageLines: messageTextLines.count, searchTextFontSize: style.searchTextFontSize,
-                                    commandTextFontSize: style.commandTextFontSize)
+                                    commandTextFontSize: style.commandTextFontSize, width: width, barHeight: barHeight,
+                                    maxRows: style.maxRows)
     }
 }
 
@@ -246,19 +257,21 @@ struct SearchBarContentLayout: Equatable {
 enum SearchBarRenderer {
     static func inputFrame(_ state: TargetSearchBar, bar: CGRect, style: TargetOverlayStyle) -> CGRect {
         let font = font(family: style.searchFontFamily, size: style.searchTextFontSize)
-        return contentLayout(counter: counter(state, font: font), isLoading: state.isLoading, bar: bar).input
+        return contentLayout(counter: counter(state, font: font, theme: style.theme), isLoading: state.isLoading, bar: bar).input
     }
 
     /// Rectangle de la pastille du compteur (et du chip), comme au dessin ; nil sans pastille.
     static func counterFrame(_ state: TargetSearchBar, bar: CGRect, style: TargetOverlayStyle) -> CGRect? {
         let font = font(family: style.searchFontFamily, size: style.searchTextFontSize)
-        return contentLayout(counter: counter(state, font: font), isLoading: state.isLoading, bar: bar).counter
+        return contentLayout(counter: counter(state, font: font, theme: style.theme), isLoading: state.isLoading, bar: bar).counter
     }
 
-    private static func counter(_ state: TargetSearchBar, font: NSFont) -> NSAttributedString? {
+    /// Le compteur garde la taille du texte de la recherche moins 2 points, plafonnée à 15 : les grands
+    /// textes des thèmes d'Alfred ne l'agrandissent pas.
+    private static func counter(_ state: TargetSearchBar, font: NSFont, theme: LauncherTheme) -> NSAttributedString? {
         state.counterText.map {
-            line($0, font: NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 2)),
-                 color: NSColor(calibratedWhite: 0.72, alpha: 1))
+            line($0, font: NSFontManager.shared.convert(font, toSize: max(8, min(15, font.pointSize - 2))),
+                 color: theme.ownsSizes ? LauncherTheme.color(theme.headerColor) : NSColor(calibratedWhite: 0.72, alpha: 1))
         }
     }
 
@@ -274,26 +287,30 @@ enum SearchBarRenderer {
         // Résoudre les deux familles une fois par dessin, hors des boucles de suggestions.
         let inputFont = font(family: style.searchFontFamily, size: style.searchTextFontSize)
         let commandFont = font(family: style.commandFontFamily, size: style.commandTextFontSize)
-        let messageColor: NSColor = if case .error = state.message { .systemRed } else { .white }
+        let theme = style.theme
+        let messageColor: NSColor = if case .error = state.message { .systemRed } else { LauncherTheme.color(theme.title.color) }
         let messages = state.messageTextLines.map { line($0, font: commandFont, color: messageColor) }
         let layout = state.layout(in: bounds, style: style)
         guard layout.bar.width > 0, layout.bar.height > 0 else { return }
-        drawSurface(layout.bar)
-        let counter = counter(state, font: inputFont)
+        drawSurface(layout.bar, theme: theme)
+        drawSearchBackground(layout.bar, theme: theme)
+        let counter = counter(state, font: inputFont, theme: theme)
         let content = contentLayout(counter: counter, isLoading: state.isLoading, bar: layout.bar)
         let placeholder = state.commandInput == nil && state.properties == nil && state.query.isEmpty
+        let inputColor = LauncherTheme.color(theme.searchText.color)
         let text = line(state.inputText, font: inputFont,
-                        color: NSColor(calibratedWhite: placeholder ? 0.52 : 0.94, alpha: 1), truncation: .byTruncatingHead)
+                        color: placeholder ? inputColor.withAlphaComponent(inputColor.alphaComponent * 0.55) : inputColor,
+                        truncation: .byTruncatingHead)
         if !state.usesNativeInput { draw(text, in: content.input) }
         if let counter, let rect = content.counter {
-            NSColor.white.withAlphaComponent(0.08).setFill()
+            inputColor.withAlphaComponent(0.08).setFill()
             NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
             var textRect = rect.insetBy(dx: min(6, rect.width / 4), dy: 0)
             if state.isLoading {
                 let diameter = min(4, rect.width / 8, rect.height / 2)
                 let dot = CGRect(x: rect.minX + min(8, rect.width / 4), y: rect.midY - diameter / 2,
                                  width: diameter, height: diameter)
-                NSColor.white.withAlphaComponent(0.55).setFill()
+                inputColor.withAlphaComponent(0.55).setFill()
                 NSBezierPath(ovalIn: dot).fill()
                 let inset = min(10, textRect.width / 2)
                 textRect.origin.x += inset
@@ -302,55 +319,71 @@ enum SearchBarRenderer {
             draw(counter, in: textRect, centered: true)
         }
         guard let panel = layout.panel else { return }
-        drawSurface(panel)
+        drawSurface(panel, theme: theme)
         let shown = layout.visibleRange(count: state.suggestions.count, selected: state.selectedSuggestion)
         if let grid = state.grid {
             let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
             for (rect, index) in zip(layout.suggestionRows, shown) {
-                drawTile(state.suggestions[index], in: rect, selected: index == state.selectedSuggestion, grid: grid, font: commandFont, metrics: metrics)
+                drawTile(state.suggestions[index], in: rect, selected: index == state.selectedSuggestion, grid: grid, font: commandFont,
+                         metrics: metrics, theme: theme)
             }
             if let footer = grid.footer, let row = layout.messageRows.first {
                 draw(line(footer, font: NSFontManager.shared.convert(commandFont, toSize: metrics.detail),
-                          color: NSColor(calibratedWhite: 0.72, alpha: 1), truncation: .byTruncatingMiddle), in: row, centered: true)
+                          color: LauncherTheme.color(theme.subtitle.color), truncation: .byTruncatingMiddle), in: row, centered: true)
             }
             return
         }
         if state.richRows {
             let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
             for (row, index) in zip(layout.suggestionRows, shown) {
-                drawRich(state.suggestions[index], in: row, selected: index == state.selectedSuggestion, font: commandFont, metrics: metrics)
+                drawRich(state.suggestions[index], in: row, selected: index == state.selectedSuggestion, font: commandFont,
+                         metrics: metrics, theme: theme)
             }
             return
         }
         for (row, index) in zip(layout.suggestionRows, shown) {
             if index == state.selectedSuggestion {
-                NSColor.white.withAlphaComponent(0.08).setFill()
+                (theme.ownsSizes ? LauncherTheme.color(theme.selectedBackground) : NSColor.white.withAlphaComponent(0.08)).setFill()
                 NSBezierPath(roundedRect: row.insetBy(dx: -6, dy: 1), xRadius: 6, yRadius: 6).fill()
             }
             let suggestion = state.suggestions[index]
             var textRow = row
-            if let image = icon(suggestion.icon) {
+            if let image = icon(suggestion.icon, tint: symbolTint(theme)) {
                 let side = min(row.height - 4, 18)
                 image.draw(in: CGRect(x: row.minX, y: row.midY - side / 2, width: side, height: side))
                 textRow = CGRect(x: row.minX + side + 8, y: row.minY, width: max(0, row.width - side - 8), height: row.height)
             }
-            draw(suggestionLine(suggestion, font: commandFont), in: textRow)
+            draw(suggestionLine(suggestion, font: commandFont, theme: theme, selected: index == state.selectedSuggestion), in: textRow)
         }
         for (row, message) in zip(layout.messageRows, messages) { draw(message, in: row) }
     }
 
-    private static func drawSurface(_ rect: CGRect) {
-        let path = NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12)
-        NSColor(calibratedWhite: 0.10, alpha: 0.96).setFill()
+    /// Fond et contour du thème ; le flou éventuel est posé dessous par la fenêtre (`SearchBarBlur`).
+    private static func drawSurface(_ rect: CGRect, theme: LauncherTheme) {
+        let radius = min(CGFloat(theme.roundness), rect.height / 2)
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        LauncherTheme.color(theme.windowColor).setFill()
         path.fill()
-        NSColor.white.withAlphaComponent(0.18).setStroke()
-        path.lineWidth = 0.5
+        LauncherTheme.color(theme.borderColor).setStroke()
+        path.lineWidth = theme.borderWidth > 0 ? min(CGFloat(theme.borderWidth), rect.height / 4) : 0.5
         path.stroke()
     }
 
+    /// Fond du champ de saisie d'un thème d'Alfred, en retrait du bord de la barre. Rien s'il est transparent.
+    private static func drawSearchBackground(_ bar: CGRect, theme: LauncherTheme) {
+        let color = LauncherTheme.color(theme.searchBackground)
+        guard color.alphaComponent > 0 else { return }
+        let rect = bar.insetBy(dx: min(8, bar.width / 8), dy: min(6, bar.height / 4))
+        let radius = min(CGFloat(theme.searchRoundness), rect.height / 2)
+        color.setFill()
+        NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+    }
+
     /// O(1) : AppKit résout la famille ; une famille absente garde la taille et utilise le système.
+    /// `System` et `System Light` : noms des polices système dans les thèmes d'Alfred.
     static func font(family: String, size: CGFloat) -> NSFont {
-        guard family != "system",
+        if family.lowercased() == "system light" { return NSFont.systemFont(ofSize: size, weight: .light) }
+        guard family.lowercased() != "system",
               let font = NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: size) else {
             return NSFont.systemFont(ofSize: size, weight: .regular)
         }
@@ -369,22 +402,25 @@ enum SearchBarRenderer {
 
     /// Ligne du lanceur à la manière d'Alfred : grande icône, nom en graisse normale et chemin plus
     /// petit serrés l'un sous l'autre, sélection pleine largeur en couleur d'accent, rappel des touches.
-    private static func drawRich(_ suggestion: SlashSuggestion, in row: CGRect, selected: Bool, font: NSFont, metrics: LauncherRowMetrics) {
+    private static func drawRich(_ suggestion: SlashSuggestion, in row: CGRect, selected: Bool, font: NSFont, metrics: LauncherRowMetrics,
+                                 theme: LauncherTheme = .roadie) {
+        let titleColor = LauncherTheme.color(selected ? theme.title.colorSelected : theme.title.color)
         let fonts = NSFontManager.shared
         let iconX = row.minX + 4
         let textX = iconX + metrics.icon + 10
         if suggestion.kind == .header {
             let small = fonts.convert(fonts.convert(font, toSize: max(9, metrics.detail - 1)), toHaveTrait: .boldFontMask)
             let text = NSMutableAttributedString(attributedString: line(suggestion.text.uppercased(), font: small,
-                                                                        color: NSColor(calibratedWhite: 0.52, alpha: 1)))
+                                                                        color: theme.ownsSizes ? LauncherTheme.color(theme.headerColor) : NSColor(calibratedWhite: 0.52, alpha: 1)))
             text.addAttribute(.kern, value: 0.8, range: NSRange(location: 0, length: text.length))
             let height = text.size().height
             draw(text, in: CGRect(x: iconX + 2, y: row.minY + 2, width: row.width - 8, height: height + 2))
             return
         }
         if selected {
-            NSColor.controlAccentColor.withAlphaComponent(0.9).setFill()
-            NSBezierPath(roundedRect: row.insetBy(dx: -4, dy: 1), xRadius: 9, yRadius: 9).fill()
+            LauncherTheme.color(theme.selectedBackground).setFill()
+            let radius = CGFloat(theme.rowRoundness)
+            NSBezierPath(roundedRect: row.insetBy(dx: -4, dy: 1), xRadius: radius, yRadius: radius).fill()
         }
         let side = metrics.icon
         let iconRect = CGRect(x: iconX, y: row.midY - side / 2, width: side, height: side)
@@ -395,9 +431,9 @@ enum SearchBarRenderer {
         case .symbol?:
             // Tuile de la taille d'une icône d'application : même poids visuel dans la liste.
             let tile = iconRect.insetBy(dx: side * 0.06, dy: side * 0.06)
-            NSColor.white.withAlphaComponent(selected ? 0.2 : 0.1).setFill()
+            titleColor.withAlphaComponent(selected ? 0.2 : 0.1).setFill()
             NSBezierPath(roundedRect: tile, xRadius: tile.width * 0.24, yRadius: tile.width * 0.24).fill()
-            if let image = icon(suggestion.icon) {
+            if let image = icon(suggestion.icon, tint: symbolTint(theme)) {
                 let box = side * 0.5
                 let scale = min(box / max(1, image.size.width), box / max(1, image.size.height))
                 let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
@@ -410,23 +446,23 @@ enum SearchBarRenderer {
         }
         // Ligne choisie : Tab et Retour ; les autres, leur ⌘ + chiffre (SPEC-075).
         let hint = selected ? line("⇥ actions   ↩", font: fonts.convert(font, toSize: metrics.detail),
-                                   color: NSColor.white.withAlphaComponent(0.75))
+                                   color: LauncherTheme.color(theme.shortcut.colorSelected))
             : suggestion.shortcut.isEmpty ? nil : line(suggestion.shortcut, font: fonts.convert(font, toSize: metrics.detail),
-                                                       color: NSColor(calibratedWhite: 0.5, alpha: 1))
+                                                       color: LauncherTheme.color(theme.shortcut.color))
         // Pastille de la lettre Maj (SPEC-084), au-dessus du rappel de touche.
         let letter = suggestion.letter.isEmpty ? nil
             : line(suggestion.letter, font: fonts.convert(fonts.convert(font, toSize: metrics.detail), toHaveTrait: .boldFontMask),
-                   color: NSColor(calibratedWhite: 0.97, alpha: 1))
+                   color: titleColor)
         let chip = letter.map { CGSize(width: $0.size().width + 10, height: $0.size().height + 2) }
         let hintWidth = max(hint.map { $0.size().width + 12 } ?? 0, chip.map { $0.width + 12 } ?? 0)
         let width = max(0, row.maxX - 8 - hintWidth - textX)
         let title = line(suggestion.text.trimmingCharacters(in: .whitespaces), font: fonts.convert(font, toSize: metrics.title),
-                         color: NSColor(calibratedWhite: 0.97, alpha: 1))
+                         color: titleColor)
         if suggestion.detail.isEmpty {
             draw(title, in: CGRect(x: textX, y: row.minY, width: width, height: row.height))
         } else {
             let detail = line(suggestion.detail, font: fonts.convert(font, toSize: metrics.detail),
-                              color: selected ? NSColor.white.withAlphaComponent(0.78) : NSColor(calibratedWhite: 0.58, alpha: 1),
+                              color: LauncherTheme.color(selected ? theme.subtitle.colorSelected : theme.subtitle.color),
                               truncation: .byTruncatingMiddle)
             // Les deux lignes forment un bloc centré, sans espace entre elles.
             let titleHeight = title.size().height, detailHeight = detail.size().height
@@ -444,7 +480,7 @@ enum SearchBarRenderer {
         let hintSize = hint?.size() ?? .zero
         let top = row.midY + (chip.height + hintSize.height) / 2
         let capsule = CGRect(x: right - chip.width, y: top - chip.height, width: chip.width, height: chip.height)
-        (selected ? NSColor.white.withAlphaComponent(0.28) : NSColor(calibratedWhite: 1, alpha: 0.16)).setFill()
+        titleColor.withAlphaComponent(selected ? 0.28 : 0.16).setFill()
         NSBezierPath(roundedRect: capsule, xRadius: chip.height / 2, yRadius: chip.height / 2).fill()
         draw(letter, in: capsule, centered: true)
         if let hint { draw(hint, in: CGRect(x: right - hintSize.width, y: capsule.minY - hintSize.height, width: hintSize.width, height: hintSize.height)) }
@@ -453,15 +489,16 @@ enum SearchBarRenderer {
     /// Tuile d'une grille (SPEC-092) : image ajustée sans déformation (research R5), titre et sous-titre
     /// centrés dessous ; une tuile sans titre ni icône (espaceur) reste vide.
     private static func drawTile(_ suggestion: SlashSuggestion, in rect: CGRect, selected: Bool, grid: SearchGrid, font: NSFont,
-                                 metrics: LauncherRowMetrics) {
+                                 metrics: LauncherRowMetrics, theme: LauncherTheme = .roadie) {
         let label = grid.labelHeight(fontSize: metrics.title)
         let cell = rect.insetBy(dx: 3, dy: 3)
         if selected {
-            NSColor.controlAccentColor.withAlphaComponent(0.9).setFill()
-            NSBezierPath(roundedRect: cell, xRadius: 9, yRadius: 9).fill()
+            LauncherTheme.color(theme.selectedBackground).setFill()
+            let radius = max(CGFloat(theme.rowRoundness), 4)
+            NSBezierPath(roundedRect: cell, xRadius: radius, yRadius: radius).fill()
         }
         let box = CGRect(x: cell.minX + 6, y: cell.minY + label, width: cell.width - 12, height: max(0, cell.height - label - 6))
-        if let image = icon(suggestion.icon), image.size.width > 0, image.size.height > 0 {
+        if let image = icon(suggestion.icon, tint: symbolTint(theme)), image.size.width > 0, image.size.height > 0 {
             let scale = min(box.width / image.size.width, box.height / image.size.height)
             let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
             image.draw(in: CGRect(x: box.midX - size.width / 2, y: box.midY - size.height / 2, width: size.width, height: size.height),
@@ -471,8 +508,8 @@ enum SearchBarRenderer {
         let fonts = NSFontManager.shared
         let small = fonts.convert(font, toSize: metrics.detail)
         var top = box.minY
-        for (text, shown, color) in [(suggestion.text, grid.showTitles, NSColor(calibratedWhite: 0.97, alpha: 1)),
-                                     (suggestion.detail, grid.showSubtitles, selected ? NSColor.white.withAlphaComponent(0.78) : NSColor(calibratedWhite: 0.58, alpha: 1))]
+        for (text, shown, color) in [(suggestion.text, grid.showTitles, LauncherTheme.color(selected ? theme.title.colorSelected : theme.title.color)),
+                                     (suggestion.detail, grid.showSubtitles, LauncherTheme.color(selected ? theme.subtitle.colorSelected : theme.subtitle.color))]
         where shown {
             let height = (metrics.detail * 1.35).rounded()
             top -= height
@@ -517,11 +554,22 @@ enum SearchBarRenderer {
     }
 
     /// Icônes des lignes du lanceur, gardées pendant la vie du processus. O(1) après la première lecture.
-    private static var icons: [SlashSuggestion.Icon: NSImage] = [:]
+    /// Un symbole se teinte à la couleur du thème (session 101) : la teinte fait partie de la clé.
+    private struct IconKey: Hashable {
+        let icon: SlashSuggestion.Icon
+        let tint: String
+    }
 
-    private static func icon(_ icon: SlashSuggestion.Icon?) -> NSImage? {
+    private static var icons: [IconKey: NSImage] = [:]
+
+    private static func symbolTint(_ theme: LauncherTheme) -> String {
+        theme.ownsSizes ? theme.title.color : "#E6E6E6FF"
+    }
+
+    private static func icon(_ icon: SlashSuggestion.Icon?, tint: String = "#E6E6E6FF") -> NSImage? {
         guard let icon else { return nil }
-        if let cached = icons[icon] { return cached }
+        let key = IconKey(icon: icon, tint: tint)
+        if let cached = icons[key] { return cached }
         let image: NSImage? = switch icon {
         // Lien résolu : sans la flèche d'alias (Safari est un lien vers le système).
         case .file(let path): NSWorkspace.shared.icon(forFile: URL(fileURLWithPath: path).resolvingSymlinksInPath().path)
@@ -529,9 +577,9 @@ enum SearchBarRenderer {
         case .image(let path): thumbnailImage(path)
         case .symbol(let name): NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
-                .applying(.init(paletteColors: [NSColor(calibratedWhite: 0.9, alpha: 1)])))
+                .applying(.init(paletteColors: [LauncherTheme.color(tint)])))
         }
-        icons[icon] = image
+        icons[key] = image
         return image
     }
 
@@ -545,16 +593,22 @@ enum SearchBarRenderer {
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
-    private static func suggestionLine(_ suggestion: SlashSuggestion, font: NSFont) -> NSAttributedString {
+    private static func suggestionLine(_ suggestion: SlashSuggestion, font: NSFont, theme: LauncherTheme = .roadie,
+                                       selected: Bool = false) -> NSAttributedString {
+        // `roadie` garde ses gris d'origine ; un thème d'Alfred donne ses couleurs, sélection comprise.
+        let alfred = theme.ownsSizes
         if suggestion.kind == .header {
             let small = NSFontManager.shared.convert(font, toSize: max(8, font.pointSize - 2))
             return line(suggestion.text.uppercased(), font: NSFontManager.shared.convert(small, toHaveTrait: .boldFontMask),
-                        color: NSColor(calibratedWhite: 0.5, alpha: 1))
+                        color: alfred ? LauncherTheme.color(theme.headerColor) : NSColor(calibratedWhite: 0.5, alpha: 1))
         }
         let name = (suggestion.kind == .command ? "/" : "") + suggestion.text.trimmingCharacters(in: .whitespaces)
-        let result = NSMutableAttributedString(attributedString: line(name, font: font, color: NSColor(calibratedWhite: 0.94, alpha: 1)))
+        let nameColor = alfred ? LauncherTheme.color(selected ? theme.title.colorSelected : theme.title.color) : NSColor(calibratedWhite: 0.94, alpha: 1)
+        let result = NSMutableAttributedString(attributedString: line(name, font: font, color: nameColor))
         if !suggestion.detail.isEmpty {
-            result.append(line("   " + suggestion.detail, font: font, color: NSColor(calibratedWhite: 0.55, alpha: 1)))
+            let detailColor = alfred ? LauncherTheme.color(selected ? theme.subtitle.colorSelected : theme.subtitle.color)
+                : NSColor(calibratedWhite: 0.55, alpha: 1)
+            result.append(line("   " + suggestion.detail, font: font, color: detailColor))
         }
         return result
     }

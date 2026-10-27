@@ -336,7 +336,7 @@ public final class TargetModeRuntimeController: NSObject {
         let config = suppliedConfig ?? service.effectiveConfig
         let style: TargetOverlayStyle
         switch currentCommand {
-        case "targets.search", "targets.actions": style = .search(config.experimental.targetMode)
+        case "targets.search", "targets.actions": style = .launcher(config.experimental.targetMode)
         case "grid.interactive": style = .grid(config.experimental.targetGrid)
         default: style = .labels(config.experimental.targetMode)
         }
@@ -453,7 +453,7 @@ public final class TargetModeRuntimeController: NSObject {
         currentSession = presenter.startSearch(
             targets: roadieTargets,
             alphabet: appTargets.hintCharacters,
-            style: .search(config),
+            style: .launcher(config),
             commands: commands,
             runDeferred: { argv in commands.runDeferred(argv) },
             openSettings: { category in SettingsWindowController.shared.show(category: category) },

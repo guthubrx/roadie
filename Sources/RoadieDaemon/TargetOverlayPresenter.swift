@@ -17,6 +17,9 @@ public struct TargetOverlayStyle: Sendable, Equatable {
     public var commandTextFontSize: CGFloat
     public var searchFontFamily: String
     public var commandFontFamily: String
+    /// Thème de la barre (session 101) et nombre de résultats montrés (0 : autant que la place).
+    var theme: LauncherTheme = .roadie
+    var maxRows = 0
 
     public init(
         drawTargetFrames: Bool = false,
@@ -58,14 +61,23 @@ public struct TargetOverlayStyle: Sendable, Equatable {
         TargetOverlayStyle(labelFontSize: CGFloat(config.labelFontSize))
     }
 
-    public static func search(_ config: TargetModeConfig) -> TargetOverlayStyle {
-        TargetOverlayStyle(
+    /// Un thème autre que `roadie` apporte ses tailles et ses polices (session 101).
+    static func search(_ config: TargetModeConfig, theme: LauncherTheme = .roadie) -> TargetOverlayStyle {
+        var style = TargetOverlayStyle(
             labelFontSize: CGFloat(config.searchLabelFontSize),
-            searchTextFontSize: CGFloat(config.searchTextFontSize),
-            commandTextFontSize: CGFloat(config.commandTextFontSize),
-            searchFontFamily: config.searchFontFamily,
-            commandFontFamily: config.commandFontFamily
+            searchTextFontSize: CGFloat(theme.ownsSizes ? theme.searchText.size : config.searchTextFontSize),
+            commandTextFontSize: CGFloat(theme.ownsSizes ? theme.title.size : config.commandTextFontSize),
+            searchFontFamily: theme.ownsSizes ? theme.searchText.font : config.searchFontFamily,
+            commandFontFamily: theme.ownsSizes ? theme.title.font : config.commandFontFamily
         )
+        style.theme = theme
+        style.maxRows = config.visibleResults
+        return style
+    }
+
+    /// Style de la barre avec le thème du moment (clair ou sombre). O(f), f fichiers de thèmes importés.
+    @MainActor static func launcher(_ config: TargetModeConfig) -> TargetOverlayStyle {
+        search(config, theme: LauncherThemeCatalog.resolve(config, dark: LauncherThemeCatalog.systemIsDark))
     }
 
     public static func grid(_ config: TargetGridConfig) -> TargetOverlayStyle {
@@ -2535,7 +2547,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             let text = step != .objects ? stepQuery : commandModel.map { "/" + $0.input } ?? model.query
             inputPanel?.update(text: text,
                 frame: SearchBarRenderer.inputFrame(bar, bar: layout.bar, style: style),
-                font: SearchBarRenderer.font(family: style.searchFontFamily, size: style.searchTextFontSize))
+                font: SearchBarRenderer.font(family: style.searchFontFamily, size: style.searchTextFontSize),
+                color: LauncherTheme.color(style.theme.searchText.color))
         }
         for window in windows {
             window.update(badges: badges, searchBar: window === barWindow ? bar : nil, ghost: ghost)
@@ -2942,6 +2955,10 @@ private struct TargetOverlayBadge {
 
 @MainActor
 private final class TargetOverlayWindow: NSPanel {
+    private let overlay: TargetOverlayView
+    /// Flou derrière la barre et la liste d'un thème translucide (session 101), sous la vue dessinée.
+    private var blurViews: [NSVisualEffectView] = []
+
     init(frame: CGRect, badges: [TargetOverlayBadge], style: TargetOverlayStyle) {
         let content = TargetOverlayView(
             frame: CGRect(origin: .zero, size: frame.size),
@@ -2949,6 +2966,7 @@ private final class TargetOverlayWindow: NSPanel {
             screenOrigin: frame.origin,
             style: style
         )
+        overlay = content
         super.init(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -2961,21 +2979,52 @@ private final class TargetOverlayWindow: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         ignoresMouseEvents = true
         hasShadow = false
-        contentView = content
+        let container = NSView(frame: CGRect(origin: .zero, size: frame.size))
+        content.autoresizingMask = [.width, .height]
+        container.addSubview(content)
+        contentView = container
     }
 
     func updateStyle(_ style: TargetOverlayStyle) {
-        guard let view = contentView as? TargetOverlayView else { return }
-        view.updateStyle(style)
+        overlay.updateStyle(style)
     }
 
     /// Mode recherche : nouvelles étiquettes et barre de saisie (nil = pas de barre sur cet écran).
     func update(badges: [TargetOverlayBadge], searchBar: TargetSearchBar?, ghost: LauncherGhost? = nil) {
-        guard let view = contentView as? TargetOverlayView else { return }
+        let view = overlay
         view.badges = badges
         view.searchBar = searchBar
         view.ghost = ghost
         view.needsDisplay = true
+        updateBlur(searchBar)
+    }
+
+    /// O(2) : une vue de flou par surface (barre, liste), réutilisées d'un rendu à l'autre.
+    private func updateBlur(_ searchBar: TargetSearchBar?) {
+        let theme = overlay.currentStyle.theme
+        guard let container = contentView, let searchBar, let appearance = theme.blurAppearance else {
+            blurViews.forEach { $0.isHidden = true }
+            return
+        }
+        let layout = searchBar.layout(in: overlay.bounds, style: overlay.currentStyle)
+        let rects = [layout.bar] + (layout.panel.map { [$0] } ?? [])
+        while blurViews.count < rects.count {
+            let blur = NSVisualEffectView()
+            blur.blendingMode = .behindWindow
+            blur.state = .active
+            blur.wantsLayer = true
+            blur.layer?.masksToBounds = true
+            container.addSubview(blur, positioned: .below, relativeTo: overlay)
+            blurViews.append(blur)
+        }
+        for (index, blur) in blurViews.enumerated() {
+            guard index < rects.count else { blur.isHidden = true; continue }
+            blur.isHidden = false
+            blur.frame = rects[index]
+            blur.appearance = NSAppearance(named: appearance)
+            blur.material = appearance == .aqua ? .popover : .hudWindow
+            blur.layer?.cornerRadius = min(CGFloat(theme.roundness), rects[index].height / 2)
+        }
     }
 }
 
@@ -2986,6 +3035,7 @@ private final class TargetOverlayView: NSView {
     fileprivate var ghost: LauncherGhost?
     private let screenOrigin: CGPoint
     private var style: TargetOverlayStyle
+    var currentStyle: TargetOverlayStyle { style }
     // Réutilisés pour mesurer et dessiner chaque badge : aucune allocation de police dans la boucle.
     private var textAttributes: [NSAttributedString.Key: Any]
 

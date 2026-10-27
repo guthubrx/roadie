@@ -98,6 +98,11 @@ public struct SettingDescriptor: Equatable, Sendable {
         if id == "switcher.presentation", let presentation = WindowSwitcherPresentation(rawValue: value) {
             return presentation.label
         }
+        // Thèmes de la barre (session 101) : leur nom, comme dans Alfred.
+        if id == "target_mode.theme" || id == "target_mode.theme_dark" {
+            if value.isEmpty { return "Comme le thème clair" }
+            return LauncherThemeCatalog.all().first { $0.id == value }?.name ?? value
+        }
         let label: String
         switch (id, value) {
         case ("overview.presentation", "archipelago"): return "Archipel"
@@ -422,6 +427,15 @@ extension SettingsCatalog {
               .bool, .bool(true)),
         entry(.recherche, "experimental.target_mode", "idle_recent_searches_count", "Recherches récentes : nombre de lignes",
               "Nombre de recherches proposées. Roadie garde les 20 dernières.", .int(1...20), .int(3)),
+        entry(.recherche, "experimental.target_mode", "theme", "Thème de la barre",
+              "Aspect de la barre : Roadie, ou l'un des thèmes d'Alfred (couleurs, polices, flou, largeur). Un thème exporté d'Alfred (.alfredappearance) placé dans ~/.config/roadies/themes, ou créé dans Alfred, s'ajoute à la liste au prochain lancement. Un thème autre que Roadie apporte ses tailles de texte.",
+              .choice(LauncherThemeCatalog.all().map(\.id)), .string("roadie")),
+        entry(.recherche, "experimental.target_mode", "theme_dark", "Thème en mode sombre",
+              "Thème utilisé quand macOS est en mode sombre, comme le réglage d'Alfred. « Comme le thème clair » garde le même thème.",
+              .choice([""] + LauncherThemeCatalog.all().map(\.id)), .string("")),
+        entry(.recherche, "experimental.target_mode", "visible_results", "Nombre de résultats montrés",
+              "Lignes de résultats visibles sous la saisie ; les autres défilent. 0 : autant que la place de l'écran.",
+              .int(0...20), .int(0)),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

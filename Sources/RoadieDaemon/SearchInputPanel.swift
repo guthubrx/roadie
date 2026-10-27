@@ -55,9 +55,14 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     /// O(l) seulement si le contenu change ; un rafraîchissement des cibles garde la sélection.
-    func update(text: String, frame: CGRect, font: NSFont) {
+    /// `color` : texte et curseur du thème de la barre (session 101) ; nil garde la couleur actuelle.
+    func update(text: String, frame: CGRect, font: NSFont, color: NSColor? = nil) {
         if self.frame != frame { setFrame(frame, display: true) }
         field.font = font
+        if let color, field.textColor != color {
+            field.textColor = color
+            (field.currentEditor() as? NSTextView)?.insertionPointColor = color
+        }
         let height = min(frame.height, field.fittingSize.height)
         field.frame = CGRect(x: 0, y: (frame.height - height) / 2, width: frame.width, height: height)
         guard field.stringValue != text else { return }
@@ -84,7 +89,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         makeFirstResponder(field)
         if let editor = field.currentEditor() as? NSTextView {
             editor.allowsUndo = true
-            editor.insertionPointColor = .white
+            editor.insertionPointColor = field.textColor ?? .white
             editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
         }
     }
