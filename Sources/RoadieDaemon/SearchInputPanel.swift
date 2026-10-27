@@ -61,9 +61,13 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         let height = min(frame.height, field.fittingSize.height)
         field.frame = CGRect(x: 0, y: (frame.height - height) / 2, width: frame.width, height: height)
         guard field.stringValue != text else { return }
+        // Composition en cours (touche morte : ⌥N pour ~, ^ puis e) : le texte marqué n'est pas encore
+        // transmis au modèle, qui garde l'ancienne saisie. Un rendu (⌥ relâchée, rafraîchissement) l'effacerait :
+        // AppKit garde la main, le modèle reçoit le texte validé (session 100).
+        if (field.currentEditor() as? NSTextView)?.hasMarkedText() == true { return }
         updating = true
         defer { updating = false }
-        if let editor = field.currentEditor() as? NSTextView, !editor.hasMarkedText() {
+        if let editor = field.currentEditor() as? NSTextView {
             editor.insertText(text, replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
         } else {
             field.stringValue = text
