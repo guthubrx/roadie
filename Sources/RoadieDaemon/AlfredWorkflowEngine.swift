@@ -26,6 +26,8 @@ protocol AlfredEffects: Sendable {
     func shortcut(_ name: String, input: String?) async -> String
     /// Boutons non vides ; rend le numéro du bouton choisi (1 à 3), nil si fermé.
     func dialog(title: String, text: String, buttons: [String]) async -> Int?
+    /// Grille (SPEC-092) : la barre s'ouvre en tuiles ; Retour repart de la brique Grille.
+    func showGrid(_ view: AlfredGridView) async
 }
 
 /// Bilan d'une exécution : étapes, briques manquantes, erreurs (sans contenu de l'utilisateur).
@@ -54,6 +56,8 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         "input.listfilter", "input.filefilter", "output.callexternaltrigger", "output.dispatchkeycombo", "output.largetype",
         "action.browseinterminal", "action.terminalcommand", "automation.runshortcut", "automation.task", "utility.dialog",
         "utility.file", "action.browseinalfred", "action.actioninalfred",
+        // SPEC-092.
+        "userinterface.grid",
     ]
 
     let effects: AlfredEffects
@@ -67,9 +71,11 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         self.workflows = workflows
     }
 
-    /// Déclencheur externe d'un workflow par son `triggerid`. O(o).
+    /// Déclencheur externe d'un workflow par son `triggerid`, sinon la brique qui déclare ce nom
+    /// (`inboundconfig.externalid`, Alfred 5.5, SPEC-092 FR-009). O(o).
     static func externalTrigger(_ id: String, in workflow: AlfredWorkflow) -> AlfredObject? {
         workflow.objects.values.first { $0.type == "trigger.external" && $0.string("triggerid") == id }
+            ?? workflow.objects.values.first { $0.externalID == id }
     }
 
     private final class Run: @unchecked Sendable {
@@ -77,8 +83,8 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
     }
 
     /// Ce qu'une brique rend : continuer avec un argument et des variables (et la branche d'une
-    /// condition), ou s'arrêter.
-    private enum Step { case next([String], [String: String], branch: String?), stop }
+    /// condition, et la surcharge `config` de la brique suivante, SPEC-092 FR-008), ou s'arrêter.
+    private enum Step { case next([String], [String: String], branch: String?, config: [String: PlistValue] = [:]), stop }
 
     func run(_ workflow: AlfredWorkflow, from uid: String, arg: [String], variables: [String: String] = [:],
              modifiers: Int = 0) async -> AlfredRunOutcome {
@@ -111,20 +117,23 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
     }
 
     private func follow(_ workflow: AlfredWorkflow, from uid: String, input: [String], variables: [String: String],
-                        modifiers: Int, branch: String?, run: Run) async {
+                        modifiers: Int, branch: String?, config: [String: PlistValue] = [:], run: Run) async {
         let isConditional = ["utility.conditional", "utility.dialog"].contains(workflow.objects[uid]?.type ?? "")
         for link in Self.next(workflow, from: uid, modifiers: modifiers, branch: branch, isConditional: isConditional) {
-            await execute(workflow, uid: link.destination, input: input, variables: variables, run: run)
+            await execute(workflow, uid: link.destination, input: input, variables: variables, config: config, run: run)
         }
     }
 
-    private func execute(_ workflow: AlfredWorkflow, uid: String, input: [String], variables: [String: String], run: Run) async {
-        guard run.outcome.steps < Self.maxSteps, let object = workflow.objects[uid] else { return }
+    /// `config` : réglages qui remplacent ceux de la brique pour ce passage (sortie d'une brique JSON).
+    private func execute(_ workflow: AlfredWorkflow, uid: String, input: [String], variables: [String: String],
+                         config: [String: PlistValue] = [:], run: Run) async {
+        guard run.outcome.steps < Self.maxSteps, var object = workflow.objects[uid] else { return }
         run.outcome.steps += 1
+        object.config.merge(config) { $1 }
         switch await process(object, workflow: workflow, input: input, variables: variables, run: run) {
         case .stop: return
-        case .next(let arg, let vars, let branch):
-            await follow(workflow, from: uid, input: arg, variables: vars, modifiers: 0, branch: branch, run: run)
+        case .next(let arg, let vars, let branch, let override):
+            await follow(workflow, from: uid, input: arg, variables: vars, modifiers: 0, branch: branch, config: override, run: run)
         }
     }
 
@@ -152,7 +161,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
                 return .stop
             }
             let output = AlfredRunScriptOutput.parse(result.text)
-            return .next(output.arg, variables.merging(output.variables) { $1 }, branch: nil)
+            return .next(output.arg, variables.merging(output.variables) { $1 }, branch: nil, config: Self.plist(output.config))
         case "action.applescript":
             var source = object.string("applescript") ?? ""
             if source.contains("alfred_script") { source += "\non run argv\nreturn alfred_script(item 1 of argv)\nend run" }
@@ -263,7 +272,8 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             let json = AlfredPlaceholders.expand(object.string("json") ?? "", query: query, variables: variables, constants: constants,
                                                  encode: Self.jsonEscape, encodeVariables: true)
             let output = AlfredRunScriptOutput.parse(json)
-            return .next(json.contains("\"arg\"") ? output.arg : input, variables.merging(output.variables) { $1 }, branch: nil)
+            return .next(json.contains("\"arg\"") ? output.arg : input, variables.merging(output.variables) { $1 }, branch: nil,
+                         config: Self.plist(output.config))
         case "utility.expression":
             let expression = expand(object.string("expression") ?? "")
             guard let value = LauncherCalculator.evaluate("=" + expression, locale: Locale(identifier: "en_US_POSIX")) else {
@@ -297,7 +307,12 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             }
             let arg = (object.config["passinputasargument"]?.bool ?? true) ? input : []
             let vars = (object.config["passvariables"]?.bool ?? false) ? variables : destination.configuredVariables
-            await follow(destination, from: trigger.uid, input: arg, variables: vars, modifiers: 0, branch: nil, run: run)
+            if trigger.type == "trigger.external" {
+                await follow(destination, from: trigger.uid, input: arg, variables: vars, modifiers: 0, branch: nil, run: run)
+            } else {
+                // Brique visée par son `externalid` : elle s'exécute elle-même (SPEC-092 FR-009).
+                await execute(destination, uid: trigger.uid, input: arg, variables: vars, run: run)
+            }
             return .stop
         case "output.dispatchkeycombo":
             await effects.keyCombo(keyCode: object.int("keycode") ?? -1, character: object.string("keychar") ?? "",
@@ -345,6 +360,33 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             var vars = variables
             if let name = object.string("fileutivariablename"), !name.isEmpty { vars[name] = uti }
             return .next(object.bool("outputfileuti") ? [uti] : input, vars, branch: nil)
+        // MARK: SPEC-092
+        case "userinterface.grid":
+            let response: AlfredScriptFilterResponse
+            switch object.int("inputtype") ?? 0 {
+            case 0:
+                // Argument reçu : JSON d'un Script Filter, sinon une liste de chemins (research R1).
+                if let first = input.first, first.hasPrefix("{"), let data = first.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    response = AlfredScriptFilterResponse.parse(json: json)
+                } else {
+                    response = AlfredScriptFilterResponse(items: AlfredGridView.fileItems(input))
+                }
+            case 1:
+                let file = expand(object.string("inputfile") ?? "")
+                let result = await AlfredScriptRunner.run(AlfredScript(language: 8, source: "", file: file), query: query, arguments: input,
+                                                          workflow: workflow, variables: variables)
+                guard result.failure == nil, !result.timedOut, let parsed = AlfredScriptFilterResponse.parse(result.output) else {
+                    run.outcome.errors.append(result.failure ?? (result.timedOut ? "timeout" : "grid"))
+                    await effects.notify(title: workflow.name, text: "Grille : \(result.failure ?? (result.timedOut ? "délai dépassé" : "réponse illisible"))")
+                    return .stop
+                }
+                response = parsed
+            case let other:
+                return missing("userinterface.grid:inputtype:\(other)", workflow, run)
+            }
+            await effects.showGrid(AlfredGridView.make(object: object, workflow: workflow, response: response, variables: variables))
+            return .stop
         case "action.browseinalfred", "action.actioninalfred":
             // Barre rouverte sur le chemin : mode chemin (SPEC-087), → y ouvre ses verbes.
             let raw = object.string("path") ?? ""
@@ -391,6 +433,9 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
     }
 
     // MARK: - Outils purs
+
+    /// Surcharge `config` d'une sortie JSON, en valeurs de plist. O(k).
+    static func plist(_ config: [String: Any]) -> [String: PlistValue] { config.compactMapValues(PlistValue.init) }
 
     /// Conditions d'Alfred (relevé du corpus) : 0 égal, 1 différent, 2 plus grand, 3 plus petit,
     /// 4 expression régulière, 5 vide, 6 non vide, 7 contient. O(n).

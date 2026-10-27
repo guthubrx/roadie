@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Grille des workflows : une brique Grille d'Alfred ouvre la barre en tuiles (System Settings
+  Explorer), colonnes réglées par le workflow, ← → ↑ ↓, filtre, Retour vers la suite du schéma ;
+  déclencheur externe sur une brique quelconque (`inboundconfig`, Alfred 5.5).
 - Sélection multiple dans le lanceur : ⌥↑ ⌥↓ ⌥← ⌥→ ⌥⌫ réunissent applications, fenêtres et fichiers,
   un seul verbe agit sur tous (nouvelle stage créée une fois) ; « Annuler » remet tout le lot.
 - Web dans le lanceur : adresse tapée ouverte (ou dans une stage, nouvelle fenêtre placée), recherches

@@ -37,6 +37,8 @@ struct AlfredScriptFilterResponse: Equatable, Sendable {
     var variables: [String: String] = [:]
     var rerun: Double?
     var skipKnowledge = false
+    /// Grille (SPEC-092 FR-007) : `uid` de la tuile choisie à l'ouverture.
+    var preselect: String?
 
     /// JSON d'Alfred, sinon ancien format XML `<items>` ; nil si ni l'un ni l'autre. O(n).
     static func parse(_ data: Data) -> AlfredScriptFilterResponse? {
@@ -49,6 +51,7 @@ struct AlfredScriptFilterResponse: Equatable, Sendable {
         response.variables = strings(json["variables"])
         response.rerun = (json["rerun"] as? NSNumber)?.doubleValue.clamped(to: 0.1...5)
         response.skipKnowledge = (json["skipknowledge"] as? Bool) ?? false
+        response.preselect = (json["preselect"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         response.items = (json["items"] as? [[String: Any]] ?? []).compactMap(item)
         return response
     }

@@ -505,8 +505,11 @@ with the command to bind in BetterTouchTool (Roadie does not capture these keys;
 argument is read through accessibility, else by ⌘C). Alfred's official automation tasks (public
 repository `alfredapp/automation-tasks`, BSD-3 license) install with `roadie workflow tasks update`
 into `~/.roadies/alfred-tasks`. Other bricks: simulated keys, large type, Terminal, Apple Shortcuts,
-dialog, file type, bar reopened on a path. Never: Text, Grid, Image, PDF views, snippets, Alfred
-Remote, Alfred's buffer. A script run by a workflow gets Roadie's Accessibility permission
+dialog, file type, bar reopened on a path. **Grid**: a Grid brick opens the bar as tiles (large
+image, title, subtitle on the tile or in the footer), with the workflow's column count; ← → ↑ ↓
+move between tiles, typing filters, Tab keeps the verbs, Return sends the tile to the rest of the
+workflow. An external trigger can target any brick that declares it (Alfred 5.5). Never: Text,
+Image, PDF views, snippets, Alfred Remote, Alfred's buffer. A script run by a workflow gets Roadie's Accessibility permission
 (measured). The log keeps neither input nor result.
 
 **Verbs and destinations**: Tab on the selected row opens its verbs. App: open or go

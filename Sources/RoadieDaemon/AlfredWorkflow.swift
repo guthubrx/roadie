@@ -73,7 +73,9 @@ enum PlistValue: Equatable, Sendable {
 struct AlfredObject: Equatable, Sendable {
     let uid: String
     let type: String
-    let config: [String: PlistValue]
+    var config: [String: PlistValue]
+    /// Nom d'un déclencheur externe qui vise cette brique (`inboundconfig.externalid`, Alfred 5.5, SPEC-092).
+    var externalID: String? = nil
 
     func string(_ key: String) -> String? { config[key]?.string }
     func int(_ key: String) -> Int? { config[key]?.int }
@@ -145,7 +147,8 @@ struct AlfredWorkflow: Equatable, Sendable {
         for case .dict(let object) in plist["objects"]?.array ?? [] {
             guard let uid = object["uid"]?.string, let type = object["type"]?.string else { continue }
             let short = type.hasPrefix("alfred.workflow.") ? String(type.dropFirst("alfred.workflow.".count)) : type
-            objects[uid] = AlfredObject(uid: uid, type: short, config: object["config"]?.dict ?? [:])
+            let externalID = object["inboundconfig"]?.dict?["externalid"]?.string.flatMap { $0.isEmpty ? nil : $0 }
+            objects[uid] = AlfredObject(uid: uid, type: short, config: object["config"]?.dict ?? [:], externalID: externalID)
         }
         var connections: [String: [AlfredConnection]] = [:]
         for (source, links) in plist["connections"]?.dict ?? [:] {

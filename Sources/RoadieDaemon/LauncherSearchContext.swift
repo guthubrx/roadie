@@ -68,6 +68,8 @@ struct LauncherSearchContext {
     var runWorkflow: @MainActor (AlfredEntry, [String], [String: String], Int) -> TargetActionResult = { _, _, _, _ in
         TargetActionResult(changed: false, message: "launcher_disabled")
     }
+    /// Grille d'un workflow (SPEC-092) : la barre s'ouvre en tuiles, Retour repart de la grille.
+    var workflowGrid: AlfredGridView?
     /// Texte de départ de la barre (Show Alfred d'un workflow, ou dernière saisie reprise).
     var initialQuery: String?
     /// La saisie de départ est la dernière reprise (moins de 5 minutes) : elle est sélectionnée (SPEC-090).

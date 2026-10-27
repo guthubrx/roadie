@@ -8,11 +8,14 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
     private let events: EventLog
     private let webSearchURL: String
     private let reopen: @MainActor @Sendable (String) -> Void
+    private let presentGrid: @MainActor @Sendable (AlfredGridView) -> Void
 
-    init(events: EventLog, webSearchURL: String, reopen: @escaping @MainActor @Sendable (String) -> Void) {
+    init(events: EventLog, webSearchURL: String, reopen: @escaping @MainActor @Sendable (String) -> Void,
+         presentGrid: @escaping @MainActor @Sendable (AlfredGridView) -> Void = { _ in }) {
         self.events = events
         self.webSearchURL = webSearchURL
         self.reopen = reopen
+        self.presentGrid = presentGrid
     }
 
     func openURL(_ url: String, browser: String?) async {
@@ -93,6 +96,12 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
     func showBar(_ text: String) async {
         let reopen = reopen
         await MainActor.run { reopen(text) }
+    }
+
+    /// Grille (SPEC-092) : la barre se rouvre en tuiles.
+    func showGrid(_ view: AlfredGridView) async {
+        let presentGrid = presentGrid
+        await MainActor.run { presentGrid(view) }
     }
 
     func log(_ type: String, _ details: [String: String]) {

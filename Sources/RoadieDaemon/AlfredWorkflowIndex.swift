@@ -7,6 +7,8 @@ struct AlfredEntry: Equatable, Sendable {
         case scriptFilter, keyword, listFilter, fileFilter
         /// Déclencheurs (SPEC-089) : pas de mot-clé tapé.
         case hotkey, external, fileAction, universalAction, fallback
+        /// Grille ouverte par un schéma (SPEC-092) : jamais indexée par mot-clé.
+        case grid
     }
     enum Argument: Int, Sendable { case required = 0, optional = 1, none = 2 }
 

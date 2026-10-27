@@ -92,6 +92,37 @@ struct SearchBarLayout: Equatable {
         return SearchBarLayout(bar: base.bar, panel: panel, suggestionRows: rows, messageRows: [], firstVisible: start)
     }
 
+    /// Grille d'un workflow (SPEC-092) : un rectangle par tuile montrée, rangée par rangée depuis le
+    /// haut ; la grille défile par rangées entières pour garder la tuile choisie visible. `label` :
+    /// hauteur des textes sous l'image ; `footer` : une ligne en pied pour la tuile choisie. O(t), t
+    /// tuiles montrées.
+    static func makeGrid(bounds: CGRect, count: Int, columns: Int, selected: Int?, label: CGFloat = 20, footer: Bool,
+                         searchTextFontSize: CGFloat = 15) -> SearchBarLayout {
+        let base = make(bounds: bounds, suggestions: 0, messageLines: 0, searchTextFontSize: searchTextFontSize)
+        let columns = max(1, columns)
+        guard count > 0, base.bar.width > 2 * padding else { return base }
+        let side = min(140, (base.bar.width - 2 * padding - 8) / CGFloat(columns))
+        let tile = CGSize(width: side, height: side + label)
+        let footerHeight = footer ? lineHeight : 0
+        let room = max(0, bounds.maxY - 8 - base.bar.maxY - gap - 2 * padding - footerHeight)
+        let totalRows = (count + columns - 1) / columns
+        let shownRows = min(totalRows, max(1, Int(room / tile.height)))
+        let selectedRow = min(totalRows - 1, max(0, selected ?? 0) / columns)
+        let startRow = min(max(0, selectedRow - shownRows + 1), totalRows - shownRows)
+        let panel = CGRect(x: base.bar.minX, y: base.bar.maxY + gap, width: base.bar.width,
+                           height: CGFloat(shownRows) * tile.height + 2 * padding + footerHeight)
+        let left = panel.minX + (panel.width - CGFloat(columns) * tile.width) / 2
+        var tiles: [CGRect] = []
+        for row in 0..<shownRows {
+            for column in 0..<columns where (startRow + row) * columns + column < count {
+                tiles.append(CGRect(x: left + CGFloat(column) * tile.width, y: panel.maxY - padding - CGFloat(row + 1) * tile.height,
+                                    width: tile.width, height: tile.height))
+            }
+        }
+        let footerRows = footer ? [CGRect(x: panel.minX + 12, y: panel.minY + padding, width: panel.width - 24, height: lineHeight)] : []
+        return SearchBarLayout(bar: base.bar, panel: panel, suggestionRows: tiles, messageRows: footerRows, firstVisible: startRow * columns)
+    }
+
     /// Suggestions montrées dans `rows` lignes, sélection comprise. O(1).
     static func visibleSuggestions(count: Int, selected: Int?, rows: Int) -> Range<Int> {
         let shown = max(0, min(count, rows))
@@ -117,6 +148,8 @@ struct TargetSearchBar {
     var chip: String?
     /// Le champ AppKit affiche le texte à l'exécution ; les rendus hors écran le dessinent encore.
     var usesNativeInput = false
+    /// Grille d'un workflow (SPEC-092) : tuiles au lieu de lignes.
+    var grid: SearchGrid?
 
     var inputText: String {
         if let commandInput { return "/\(commandInput)▏" }
@@ -140,6 +173,11 @@ struct TargetSearchBar {
 
     /// Même géométrie pour le dessin et les clics, y compris après un réglage de police.
     func layout(in bounds: CGRect, style: TargetOverlayStyle) -> SearchBarLayout {
+        if let grid {
+            return SearchBarLayout.makeGrid(bounds: bounds, count: suggestions.count, columns: grid.columns, selected: selectedSuggestion,
+                                            label: grid.labelHeight(fontSize: style.commandTextFontSize), footer: grid.footer != nil,
+                                            searchTextFontSize: style.searchTextFontSize)
+        }
         if richRows {
             let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
             let heights = suggestions.map { $0.kind == .header ? metrics.header : metrics.row }
@@ -149,6 +187,20 @@ struct TargetSearchBar {
         return SearchBarLayout.make(bounds: bounds, suggestions: suggestions.count,
                                     messageLines: messageTextLines.count, searchTextFontSize: style.searchTextFontSize,
                                     commandTextFontSize: style.commandTextFontSize)
+    }
+}
+
+/// Réglages d'affichage d'une grille (SPEC-092 FR-003) ; `footer` : texte en pied de la tuile choisie.
+struct SearchGrid: Equatable {
+    var columns: Int
+    var showTitles = true
+    var showSubtitles = false
+    var footer: String?
+
+    /// Titre (et sous-titre) sous l'image, à la taille des détails du lanceur.
+    func labelHeight(fontSize: CGFloat) -> CGFloat {
+        let line = (LauncherRowMetrics(fontSize: fontSize).detail * 1.35).rounded()
+        return (showTitles ? line : 0) + (showSubtitles ? line : 0) + 4
     }
 }
 
@@ -244,6 +296,17 @@ enum SearchBarRenderer {
         guard let panel = layout.panel else { return }
         drawSurface(panel)
         let shown = layout.visibleRange(count: state.suggestions.count, selected: state.selectedSuggestion)
+        if let grid = state.grid {
+            let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
+            for (rect, index) in zip(layout.suggestionRows, shown) {
+                drawTile(state.suggestions[index], in: rect, selected: index == state.selectedSuggestion, grid: grid, font: commandFont, metrics: metrics)
+            }
+            if let footer = grid.footer, let row = layout.messageRows.first {
+                draw(line(footer, font: NSFontManager.shared.convert(commandFont, toSize: metrics.detail),
+                          color: NSColor(calibratedWhite: 0.72, alpha: 1), truncation: .byTruncatingMiddle), in: row, centered: true)
+            }
+            return
+        }
         if state.richRows {
             let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
             for (row, index) in zip(layout.suggestionRows, shown) {
@@ -377,6 +440,36 @@ enum SearchBarRenderer {
         NSBezierPath(roundedRect: capsule, xRadius: chip.height / 2, yRadius: chip.height / 2).fill()
         draw(letter, in: capsule, centered: true)
         if let hint { draw(hint, in: CGRect(x: right - hintSize.width, y: capsule.minY - hintSize.height, width: hintSize.width, height: hintSize.height)) }
+    }
+
+    /// Tuile d'une grille (SPEC-092) : image ajustée sans déformation (research R5), titre et sous-titre
+    /// centrés dessous ; une tuile sans titre ni icône (espaceur) reste vide.
+    private static func drawTile(_ suggestion: SlashSuggestion, in rect: CGRect, selected: Bool, grid: SearchGrid, font: NSFont,
+                                 metrics: LauncherRowMetrics) {
+        let label = grid.labelHeight(fontSize: metrics.title)
+        let cell = rect.insetBy(dx: 3, dy: 3)
+        if selected {
+            NSColor.controlAccentColor.withAlphaComponent(0.9).setFill()
+            NSBezierPath(roundedRect: cell, xRadius: 9, yRadius: 9).fill()
+        }
+        let box = CGRect(x: cell.minX + 6, y: cell.minY + label, width: cell.width - 12, height: max(0, cell.height - label - 6))
+        if let image = icon(suggestion.icon), image.size.width > 0, image.size.height > 0 {
+            let scale = min(box.width / image.size.width, box.height / image.size.height)
+            let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            image.draw(in: CGRect(x: box.midX - size.width / 2, y: box.midY - size.height / 2, width: size.width, height: size.height),
+                       from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
+                       hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        }
+        let fonts = NSFontManager.shared
+        let small = fonts.convert(font, toSize: metrics.detail)
+        var top = box.minY
+        for (text, shown, color) in [(suggestion.text, grid.showTitles, NSColor(calibratedWhite: 0.97, alpha: 1)),
+                                     (suggestion.detail, grid.showSubtitles, selected ? NSColor.white.withAlphaComponent(0.78) : NSColor(calibratedWhite: 0.58, alpha: 1))]
+        where shown {
+            let height = (metrics.detail * 1.35).rounded()
+            top -= height
+            if !text.isEmpty { draw(line(text, font: small, color: color), in: CGRect(x: cell.minX + 2, y: top, width: cell.width - 4, height: height), centered: true) }
+        }
     }
 
     /// Dernière vignette nette, sinon celle du rail ou du sélecteur ; jamais l'icône de repli du cache.

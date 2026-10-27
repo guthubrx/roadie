@@ -527,8 +527,11 @@ BetterTouchTool (Roadie ne capture pas ces touches ; argument « sélection » l
 sinon par ⌘C). Les tâches d'automatisation officielles d'Alfred (dépôt public
 `alfredapp/automation-tasks`, licence BSD-3) s'installent par `roadie workflow tasks update` dans
 `~/.roadies/alfred-tasks`. Autres briques : touches simulées, grand texte, Terminal, Raccourcis
-Apple, dialogue, type de fichier, barre rouverte sur un chemin. Jamais : vues Texte, Grille, Image,
-PDF, snippets, Alfred Remote, tampon d'Alfred. Un script lancé par un workflow obtient
+Apple, dialogue, type de fichier, barre rouverte sur un chemin. **Grille** : une brique Grille
+ouvre la barre en tuiles (grande image, titre, sous-titre sur la tuile ou en pied), au nombre de
+colonnes du workflow ; ← → ↑ ↓ changent de tuile, la frappe filtre, Tab garde les verbes, Retour
+envoie la tuile à la suite du workflow. Un déclencheur externe peut viser n'importe quelle brique
+qui le déclare (Alfred 5.5). Jamais : vues Texte, Image, PDF, snippets, Alfred Remote, tampon d'Alfred. Un script lancé par un workflow obtient
 l'autorisation Accessibilité de Roadie (mesuré). Le journal ne garde ni saisie ni résultat.
 
 **Verbes et destinations** : Tab sur la ligne choisie ouvre ses verbes. Application :

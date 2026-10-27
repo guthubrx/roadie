@@ -11,8 +11,11 @@ struct WorkflowFixture {
     var name = "Essai"
     var bundleID = "test.roadie.essai"
 
-    mutating func add(_ uid: String, _ type: String, _ config: [String: Any] = [:]) {
-        objects.append(["uid": uid, "type": "alfred.workflow.\(type)", "config": config])
+    /// `externalID` : brique visée par un déclencheur externe (`inboundconfig`, Alfred 5.5, SPEC-092).
+    mutating func add(_ uid: String, _ type: String, _ config: [String: Any] = [:], externalID: String? = nil) {
+        var object: [String: Any] = ["uid": uid, "type": "alfred.workflow.\(type)", "config": config]
+        if let externalID { object["inboundconfig"] = ["externalid": externalID] }
+        objects.append(object)
     }
 
     mutating func link(_ from: String, _ to: String, modifiers: Int = 0, branch: String? = nil) {
@@ -67,6 +70,12 @@ final class RecordedEffects: AlfredEffects, @unchecked Sendable {
     func terminal(folder: String) async { note("terminal-folder:\(folder)") }
     func shortcut(_ name: String, input: String?) async -> String { note("shortcut:\(name):\(input ?? "-")"); return "sortie" }
     func dialog(title: String, text: String, buttons: [String]) async -> Int? { note("dialog:\(title)"); return dialogChoice }
+    private var grids: [AlfredGridView] = []
+    var lastGrid: AlfredGridView? { lock.withLock { grids.last } }
+    func showGrid(_ view: AlfredGridView) async {
+        lock.withLock { grids.append(view) }
+        note("grid:\(view.items.count):\(view.columns)")
+    }
 }
 
 enum FixtureError: Error { case missing }

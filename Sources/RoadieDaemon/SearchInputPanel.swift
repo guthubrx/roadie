@@ -17,6 +17,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     var pickModifier: NSEvent.ModifierFlags = .command
     /// Quand ⌥ + flèches servent à la sélection multiple (SPEC-091) ; sinon elles déplacent le curseur.
     var selectionKeys = SelectionKeys()
+    /// Grille d'un workflow (SPEC-092) : ← → changent de tuile au lieu de déplacer le curseur.
+    var gridColumns: Int?
     private var updating = false
     private var closing = false
 
@@ -103,7 +105,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     override func sendEvent(_ event: NSEvent) {
         if event.type == .flagsChanged { onFlags?(event.modifierFlags) }
         // → en fin de saisie : les verbes de la ligne choisie, comme Tab (SPEC-075). Ailleurs, le curseur.
-        if event.type == .keyDown, event.keyCode == 124, !field.stringValue.isEmpty,
+        if event.type == .keyDown, event.keyCode == 124, gridColumns == nil, !field.stringValue.isEmpty,
            event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
            let editor = field.currentEditor() as? NSTextView, !editor.hasMarkedText(),
            editor.selectedRange() == NSRange(location: (editor.string as NSString).length, length: 0) {
@@ -119,7 +121,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
            let input = Self.navigation(event, labels: labelLetters, pick: pickModifier, text: field.stringValue,
-                                       selection: selectionKeys) {
+                                       selection: selectionKeys, grid: gridColumns != nil) {
             onKey?(input)
             return
         }
@@ -168,8 +170,12 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     /// `text` : saisie du champ. Avec Maj pour les raccourcis, Maj + chiffre écrit le chiffre dans une
     /// saisie vide ou de calcul : en AZERTY, les chiffres se tapent avec Maj (SPEC-087 FR-009).
     static func navigation(_ event: NSEvent, labels: Set<String> = [], pick: NSEvent.ModifierFlags = .command,
-                           text: String = "", selection: SelectionKeys = SelectionKeys()) -> SearchKeyInput? {
+                           text: String = "", selection: SelectionKeys = SelectionKeys(), grid: Bool = false) -> SearchKeyInput? {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        // Grille (SPEC-092 FR-004) : ← → passent à la tuile voisine ; Tab garde les verbes.
+        if grid, flags.isEmpty, event.keyCode == 123 || event.keyCode == 124 {
+            return SearchKeyInput(kind: .move(event.keyCode == 123 ? -1 : 1))
+        }
         // ⌘1 à ⌘9 (ou la touche de `pick_modifier`), rangée du haut ou pavé numérique, quelle que soit
         // la disposition : le code physique compte, pas le caractère.
         let typesDigit = pick == .shift && LauncherCalculator.isTyping(text)

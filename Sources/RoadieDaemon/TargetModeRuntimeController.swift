@@ -172,6 +172,8 @@ public final class TargetModeRuntimeController: NSObject {
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
     private var currentCommand: String?
+    /// Grille d'un workflow à montrer à la prochaine ouverture de la barre (SPEC-092).
+    private var pendingGrid: AlfredGridView?
     private var styleTimer: Timer?
     /// Aperçu actif du lanceur (SPEC-078) : cadres relevés avant, stage de départ si une bascule a eu lieu.
     private struct ActivePreview {
@@ -613,6 +615,8 @@ public final class TargetModeRuntimeController: NSObject {
         context.undo = { [weak self] in self?.undoLastMove() ?? TargetActionResult(changed: false, message: "launcher_unavailable") }
         context.initialQuery = initialQuery
         workflowContext(&context, webSearchURL: webSearchURL)
+        context.workflowGrid = pendingGrid
+        pendingGrid = nil
         // Web et historique (SPEC-090) : la dernière saisie revient sous 5 minutes, sélectionnée.
         let targetMode = service.effectiveConfig.experimental.targetMode
         context.webSearches = targetMode.webSearches ?? WebSearch.defaults
@@ -621,7 +625,7 @@ public final class TargetModeRuntimeController: NSObject {
         let historyStore = LauncherHistoryStore()
         let history = historyStore.load()
         context.recordQuery = { query in historyStore.record(query) }
-        if initialQuery == nil, initialSubject == nil, let resumed = history.resumable(at: now) {
+        if initialQuery == nil, initialSubject == nil, context.workflowGrid == nil, let resumed = history.resumable(at: now) {
             context.initialQuery = resumed
             context.restoredQuery = true
         }
@@ -673,9 +677,11 @@ public final class TargetModeRuntimeController: NSObject {
             guard let workflow = byID[entry.workflowID] else {
                 return TargetActionResult(changed: false, message: "launcher workflow: absent", error: "workflow")
             }
-            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL) { text in self?.reopenSearch(text) }
+            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
+                                            presentGrid: { view in self?.presentGrid(view) })
             Task.detached {
-                _ = await AlfredWorkflowEngine(effects: effects).run(workflow, from: entry.objectUID, arg: arg, variables: variables, modifiers: modifiers)
+                _ = await AlfredWorkflowEngine(effects: effects, workflows: workflows)
+                    .run(workflow, from: entry.objectUID, arg: arg, variables: variables, modifiers: modifiers)
             }
             return TargetActionResult(changed: true, message: "launcher workflow: \(workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID)")
         }
@@ -705,7 +711,8 @@ public final class TargetModeRuntimeController: NSObject {
         Task { @MainActor [weak self] in
             let arg: [String] = if let argument { [argument] }
                 else if object.type == "trigger.hotkey" { await Self.hotkeyArgument(object) } else { [] }
-            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL) { text in self?.reopenSearch(text) }
+            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
+                                            presentGrid: { view in self?.presentGrid(view) })
             let engine = AlfredWorkflowEngine(effects: effects, workflows: workflows)
             _ = await engine.start(workflow, at: uid, arg: arg, variables: variables)
         }
@@ -753,6 +760,16 @@ public final class TargetModeRuntimeController: NSObject {
     /// Barre rouverte sur un texte (Show Alfred, Script Filter atteint par un schéma).
     private func reopenSearch(_ text: String) {
         handle(TargetModeRuntimeCommand(name: "targets.search", arguments: ["query": text]))
+    }
+
+    /// Barre rouverte en grille (SPEC-092) : la vue attend la prochaine ouverture.
+    private func presentGrid(_ view: AlfredGridView) {
+        pendingGrid = view
+        events.append(RoadieEvent(type: "launcher.workflow_grid", details: ["workflow": view.entry.workflowID, "items": String(view.items.count)]))
+        // Une barre encore ouverte garderait sa liste (recherche répétée) : elle laisse la place à la grille.
+        currentSession?.cancel()
+        currentSession = nil
+        handle(TargetModeRuntimeCommand(name: "targets.search"))
     }
 
     // MARK: - Verbes du lanceur (SPEC-074)

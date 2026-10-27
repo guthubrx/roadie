@@ -1233,6 +1233,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             if !selection.isEmpty { enterBatch() }
         case .selectClear:
             selection.clear()
+        case .move(let step):
+            moveInGrid(step)
         case .preview:
             if case .file(let file)? = launcherList.row(for: launcherSelection) {
                 finishAction(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil))
@@ -1255,6 +1257,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Flèches et Ctrl-N/P parcourent la liste du lanceur ; Tab complète la ligne choisie.
     private func navigate(_ input: SearchKeyInput) {
         guard !launcherList.rows.isEmpty else { model.handleNavigation(input); return }
+        // Grille (SPEC-092 FR-004) : ↑ ↓ changent de rangée ; Tab garde son rôle.
+        if let grid = launcher.workflowGrid, input.navigationSource != .tab {
+            if case .next = input.kind { moveInGrid(grid.columns) } else { moveInGrid(-grid.columns) }
+            return
+        }
         if input.navigationSource == .tab, case .next = input.kind {
             switch launcherList.row(for: launcherSelection) {
             case .app(let app, _): enterVerbs(.app(app))
@@ -1269,7 +1276,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .web(let row):
                 if let url = row.url { enterVerbs(.url(url)) } else if case .hint(let search) = row.kind { model.replaceQuery(search.keyword + " ") }
             case .history(let query): model.replaceQuery(query)
-            case .workflowItem(let entry, let item, _): if let text = item.autocomplete { completeWorkflow(entry, text) }
+            case .workflowItem(let entry, let item, _):
+                // Fichier rendu par un workflow (filtre de fichiers, grille de fichiers) : ses verbes de Roadie.
+                if item.isFile, let path = item.arg.first, path.hasPrefix("/") {
+                    enterVerbs(.file(LauncherFile(path: path, name: (path as NSString).lastPathComponent, isFolder: false, lastUsed: nil)))
+                } else if let text = item.autocomplete { completeWorkflow(entry, text) }
             case .header, nil: model.handleNavigation(input)
             }
             return
@@ -1296,6 +1307,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Recalcule la liste si la requête ou les cibles ont changé. Nouvelle requête : la meilleure
     /// ligne est choisie ; nouvelles cibles seulement : la ligne choisie est gardée si elle reste. O(a + n).
     private func refreshLauncher() {
+        if let grid = launcher.workflowGrid {
+            refreshGrid(grid)
+            return
+        }
         let runs = launcher.workflowEntries.compactMap { entry -> (entry: AlfredEntry, argument: String)? in
             if case .run(let argument) = entry.match(model.query) { return (entry, argument) }
             return nil
@@ -1426,6 +1441,32 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         syncHighlight()
     }
 
+    /// Grille d'un workflow (SPEC-092) : ses tuiles, filtrées par la saisie si la grille l'est ; à
+    /// l'ouverture, la tuile `preselect`, sinon la première choisissable. O(n × m).
+    private func refreshGrid(_ grid: AlfredGridView) {
+        let first = launcherQuery == nil
+        guard first || model.query != launcherQuery else { return }
+        launcherQuery = model.query
+        let items = grid.filterable ? AlfredScriptFilterResponse.filter(grid.items, query: model.query, mode: grid.entry.filterMode) : grid.items
+        launcherList = .idle(items.enumerated().map { .workflowItem(grid.entry, $0.element, index: $0.offset) })
+        let preselected = first ? grid.preselect.flatMap { uid in items.firstIndex { $0.uid == uid } } : nil
+        let index = preselected ?? items.firstIndex(where: AlfredGridView.isSelectable)
+        launcherSelection = index.map { launcherList.rows[$0].id } ?? nil
+    }
+
+    /// Tuile voisine dans la grille (← → : ± 1, ↑ ↓ : ± colonnes), espaceurs sautés. O(n / |step|).
+    private func moveInGrid(_ step: Int) {
+        guard let index = selectedLauncherRow else { return }
+        let rows = launcherList.rows
+        let selectable: (Int) -> Bool = { index in
+            if case .workflowItem(_, let item, _) = rows[index] { return AlfredGridView.isSelectable(item) }
+            return false
+        }
+        if let next = AlfredGridView.neighbour(of: index, step: step, count: rows.count, selectable: selectable) {
+            launcherSelection = rows[next].id
+        }
+    }
+
     /// Lignes de repli : texte du workflow avec la saisie, ou nom de l'action universelle. O(t).
     private func fallbackRows(_ query: String) -> [LauncherList.Row] {
         let text = query.trimmingCharacters(in: .whitespaces)
@@ -1501,7 +1542,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 if let text = item.autocomplete { completeWorkflow(entry, text); render() }
                 return true
             }
-            var variables = workflowResponses[entry.id]?.response?.variables ?? [:]
+            // Grille : variables du schéma au moment de la grille et de sa réponse (SPEC-092 FR-006).
+            var variables = entry.kind == .grid ? launcher.workflowGrid?.variables ?? [:] : workflowResponses[entry.id]?.response?.variables ?? [:]
             variables.merge(item.variables) { $1 }
             variables.merge(mod?.variables ?? [:]) { $1 }
             finishWorkflow(entry, arg: mod?.arg ?? item.arg, variables: variables, modifiers: modifiers,
@@ -1899,7 +1941,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             confirmStep()
             return
         case .text, .labelCharacter, .ignored, .copy, .preview, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
-             .selectionVerbs, .selectClear:
+             .selectionVerbs, .selectClear, .move:
             break
         }
         render()
@@ -2228,6 +2270,17 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             richRows: true)
         // Chip (SPEC-081) : une règle attend pendant une recherche ; ⌘R la montre.
         if launcher.pendingRules > 0, !model.query.isEmpty { bar.chip = "💡 \(launcher.pendingRules)" }
+        if let grid = launcher.workflowGrid {
+            // Grille (SPEC-092 FR-003) : titre et sous-titre sur la tuile, ou en pied pour la tuile choisie.
+            var footer: [String] = []
+            if case .workflowItem(_, let item, _)? = launcherList.row(for: launcherSelection) {
+                if grid.titlesInFooter, grid.showTitles, !item.title.isEmpty { footer.append(item.title) }
+                if grid.subtitlesInFooter, grid.showSubtitles, !item.subtitle.isEmpty { footer.append(item.subtitle) }
+            }
+            bar.grid = SearchGrid(columns: grid.columns, showTitles: grid.showTitles && !grid.titlesInFooter,
+                                  showSubtitles: grid.showSubtitles && !grid.subtitlesInFooter,
+                                  footer: grid.titlesInFooter || grid.subtitlesInFooter ? footer.joined(separator: " · ") : nil)
+        }
         if !selection.isEmpty {
             let chosen = "\(selection.count) choisi\(selection.count > 1 ? "s" : "")"
             bar.chip = bar.chip.map { "\($0) · \(chosen)" } ?? chosen
@@ -2365,10 +2418,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         inputPanel?.labelLetters = Set(letterRows.keys)
         inputPanel?.pickModifier = launcher.pickModifier.flags
+        inputPanel?.gridColumns = step == .objects ? launcher.workflowGrid?.columns : nil
         let selectable = Self.subject(of: launcherList.row(for: launcherSelection)).flatMap(LauncherSelection.key) != nil
         inputPanel?.selectionKeys = step == .objects ? SelectionKeys(hasSelection: !selection.isEmpty, rowSelectable: selectable) : SelectionKeys()
         inputPanel?.field.placeholderString = switch step {
-        case .objects: "Rechercher ou saisir /commande"
+        case .objects: launcher.workflowGrid.map { "Filtrer : \($0.entry.workflowName)" } ?? "Rechercher ou saisir /commande"
         case .verbs: "Verbe ou destination…"
         case .destinations, .batchDestinations: "Stage, bureau ou écran…"
         case .saving: "Abréviation (12 caractères au plus)…"
@@ -2503,7 +2557,7 @@ extension SlashCommandModel {
         case .escape:
             return .close
         case .ignored, .pick, .actions, .copy, .preview, .save, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
-             .selectionVerbs, .selectClear:
+             .selectionVerbs, .selectClear, .move:
             break
         }
         return .update
@@ -2548,6 +2602,8 @@ public struct SearchKeyInput: Sendable, Equatable {
         /// Sélection multiple (SPEC-091) : ⌥↑ ajoute ou retire, ⌥↓ ajoute et descend, ⌥← retire la
         /// dernière, ⌥→ verbes du lot, ⌥⌫ vide.
         case selectToggle, selectAddNext, selectRemoveLast, selectionVerbs, selectClear
+        /// Grille d'un workflow (SPEC-092) : ← (-1) et → (+1).
+        case move(Int)
         case ignored
     }
 

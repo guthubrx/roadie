@@ -38,6 +38,14 @@ enum AlfredCompatibility {
                 missingByObject[object.uid] = object.type
             } else if object.type == "automation.task", AlfredAutomationTasks.task(object.string("taskuid") ?? "", root: tasksRoot) == nil {
                 missingByObject[object.uid] = "tâches d'automatisation absentes (roadie workflow tasks update)"
+            } else if object.type == "userinterface.grid", let source = object.int("inputtype"), source != 0 {
+                // Source de la grille (SPEC-092 FR-002) : 1 = script du dossier ; toute autre est inconnue.
+                if source != 1 {
+                    missingByObject[object.uid] = "userinterface.grid:inputtype:\(source)"
+                } else if case .failure(let failure) = AlfredScriptRunner.argv(for: AlfredScript(language: 8, source: "", file: object.string("inputfile") ?? ""),
+                                                                               arguments: [], folder: workflow.folder) {
+                    missingByObject[object.uid] = failure.message
+                }
             } else if let script = AlfredScript(object: object),
                       case .failure(let failure) = AlfredScriptRunner.argv(for: script, arguments: [], folder: workflow.folder) {
                 missingByObject[object.uid] = failure.message
