@@ -262,6 +262,10 @@ Session 096 installée : « Souvent ici » et « Recherches récentes » de la b
 Session 097 installée : « Revenir » saute la fenêtre en cours ; après Échap, la fenêtre et l'élément
 qui avaient le clavier le retrouvent (AX). Essai réel dans T3 Code à confirmer (`launcher.focus_restore`).
 2 121 tests, santé 5/5. Reçus : specs/096-barre-vide-reglages/, specs/097-focus-apres-barre/validation.md.
+Sessions 100 à 105 installées : tilde et accents par touche morte gardés ; thèmes d'Alfred (thème sombre,
+nombre de résultats) ; barre déplaçable, place retenue ; `> commande` dans le terminal choisi ; signets de
+Firefox (profils, étiquettes, mots-clés, icônes), Safari, Chrome et onglets Firefox ; commandes système, ⌘L,
+⌫ dossier, tri, `roadie launcher reset`. 2 158 tests / 305 suites, PID 33419, santé 5/5. Reçus : specs/100 à 105.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
