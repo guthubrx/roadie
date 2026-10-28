@@ -98,6 +98,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Audit de la base de code (session 093) : fichiers du lanceur remplacés d'un bloc (historique, classement,
+  alias, projets), écritures concurrentes protégées, erreurs de création de règle et des choix « Plus tard »
+  ou « Jamais » signalées au lieu d'un faux succès, calculs et workflows bornés. Rapport :
+  `audits/2026-10-27/session-2026-10-27-codebase-01/`.
+- Après Échap, le clavier revient à l'élément de la fenêtre clé qui l'avait (session 098).
 - Sélecteur : Cmd+Tab passe d'un plein écran natif au bureau ordinaire et revient, au lieu de
   « Action refusée par l'application » et d'une liste vide (réglage macOS « passer à un espace avec des
   fenêtres ouvertes pour l'application » requis, ADR 020).
@@ -108,7 +113,7 @@ jour et les limites connues ; les README décrivent la version courante.
 - Barre vide : « Revenir » propose la fenêtre vue avant la fenêtre en cours, plus la fenêtre en cours.
   Après Échap, l'application restée au premier plan retrouve le clavier (zone de saisie de T3 Code).
 - Lanceur : la touche des raccourcis 1 à 9 se choisit (`pick_modifier` dans
-  `[experimental.target_mode]`, ou Paramètres > Recherche) : Commande par défaut, ou Maj,
+  `[experimental.target_mode]`, ou Paramètres > Raccourcis) : Commande par défaut, ou Maj,
   Option, Contrôle. Le rappel à droite des lignes suit (« ⇧2 »).
 - Lanceur : les lettres des fenêtres, stages et bureaux sont dans une pastille à droite
   (« ⇧K »), une seule lettre par ligne, dans l'ordre affiché. Maj + la lettre ouvre la

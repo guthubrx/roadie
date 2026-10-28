@@ -275,6 +275,10 @@ paresseux : « p » 4,6 s → 0,2 s) ; Paramètres > Raccourcis réunit toutes l
 commandes `roadie` de BTT avec leur gestionnaire (BTT, Roadie `[[shortcuts]]`, personne) et les conflits.
 ⌘L était pris par BTT (`roadie focus right`) : `btt_pause_keys` met BTT en pause pendant la barre.
 2 170 tests / 308 suites. Reçus : specs/107-recherche-parametres/, specs/108-raccourcis-reunis/.
+Session 093 (audit V15 de la base de code, specs/093-audit-codebase/) et session 098 (focus clavier après
+Échap) intégrées dans main le 28 octobre 2026 : 2 205 tests / 312 suites et 28 tests de scripts réussis.
+Fusion préparée par Codex conservée sous l'étiquette `archive/093-fusion-preparee-20261027`. Le numéro 093
+reste partagé avec specs/093-ordres-alfred.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
