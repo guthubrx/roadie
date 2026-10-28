@@ -2559,7 +2559,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             }
             bar.grid = SearchGrid(columns: grid.columns, showTitles: grid.showTitles && !grid.titlesInFooter,
                                   showSubtitles: grid.showSubtitles && !grid.subtitlesInFooter,
-                                  footer: grid.titlesInFooter || grid.subtitlesInFooter ? footer.joined(separator: " · ") : nil)
+                                  footer: grid.titlesInFooter || grid.subtitlesInFooter ? footer.joined(separator: " · ") : nil,
+                                  aspect: grid.imageAspect)
         }
         if !selection.isEmpty {
             let chosen = "\(selection.count) choisi\(selection.count > 1 ? "s" : "")"

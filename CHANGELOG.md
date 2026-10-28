@@ -7,6 +7,7 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Grille des workflows : tuiles carrées, en portrait ou en paysage selon le réglage d'images du workflow (`imageaspect`).
 - Verbes de la barre : après Tab, les plus choisis pour un type d'objet passent en tête (`learn_verb_order`).
 - Calcul dans la barre : Retour copie toujours le résultat et peut aussi ouvrir Calculette (ou revenir à sa
   fenêtre), réglage « Calcul : ouvrir aussi Calculette » dans Paramètres > Recherche (`calc_opens_calculator`).

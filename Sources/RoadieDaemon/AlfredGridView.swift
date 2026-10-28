@@ -11,6 +11,8 @@ struct AlfredGridView: Equatable, Sendable {
     var titlesInFooter = false
     var subtitlesInFooter = false
     var filterable = true
+    /// Largeur sur hauteur de l'image d'une tuile (`imageaspect`, session 112) : 1 carré, 2/3 portrait, 3/2 paysage.
+    var imageAspect: Double = 1
     /// « Sorting » d'Alfred : vrai si l'ordre est appris à l'usage (`fixedorder` faux et la réponse ne
     /// demande pas `skipknowledge`) ; seules les tuiles qui ont un `uid` changent de place (session 094).
     var learnsOrder = false
@@ -27,6 +29,16 @@ struct AlfredGridView: Equatable, Sendable {
     static func loadingText(_ object: AlfredObject) -> String {
         let text = (object.string("loadingtext") ?? "").trimmingCharacters(in: .whitespaces)
         return text.isEmpty ? "Loading…" : text
+    }
+
+    /// `imageaspect` d'Alfred : 0 Carré, 1 Portrait, 2 Paysage, dans l'ordre du menu de la brique Grille
+    /// (Alfred 5, `AlfredWorkflowUserInterfaceGrid.nib`) ; carré pour une autre valeur. O(1).
+    static func imageAspect(_ value: Int?) -> Double {
+        switch value {
+        case 1: 2.0 / 3
+        case 2: 3.0 / 2
+        default: 1
+        }
     }
 
     /// `columncount` borné de 1 à 12 ; 5 sans réglage.
@@ -74,7 +86,7 @@ struct AlfredGridView: Equatable, Sendable {
                               showTitles: object.config["showtitles"]?.bool ?? true,
                               showSubtitles: object.config["showsubtitles"]?.bool ?? true,
                               titlesInFooter: object.bool("titlesinfooter"), subtitlesInFooter: object.bool("subtitlesinfooter"),
-                              filterable: entry.filtersResults,
+                              filterable: entry.filtersResults, imageAspect: imageAspect(object.int("imageaspect")),
                               learnsOrder: !(object.config["fixedorder"]?.bool ?? false) && !response.skipKnowledge,
                               items: response.items, preselect: response.preselect,
                               variables: variables.merging(response.variables) { $1 })

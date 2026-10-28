@@ -665,6 +665,8 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
   nobody. A bar key taken by BTT is flagged; `btt_pause_keys` pauses that BTT shortcut while the bar is open.
 - **Verbs**: after Tab, the verbs you choose most for a kind of object (application, file, window, stage…)
   come first; `learn_verb_order = false` keeps the fixed order.
+- **Tile shape**: a workflow grid follows its Alfred image setting (`imageaspect`: square, portrait or
+  landscape); tile width does not change.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

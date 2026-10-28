@@ -696,6 +696,8 @@ toutes les fenetres visibles : `scope = "visible_windows"` dans
   `btt_pause_keys` met ce raccourci BTT en pause tant que la barre est ouverte.
 - **Verbes** : après Tab, les verbes les plus choisis pour un type d'objet (application, fichier, fenêtre,
   stage…) passent en tête ; `learn_verb_order = false` garde l'ordre fixe.
+- **Forme des tuiles** : une grille de workflow suit son réglage d'images d'Alfred (`imageaspect` : carré,
+  portrait ou paysage) ; la largeur des tuiles ne change pas.
 - **Divers** : ⌘L (réglable) montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
   dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
   la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…

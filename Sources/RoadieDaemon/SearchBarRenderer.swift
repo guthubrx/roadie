@@ -169,15 +169,16 @@ struct SearchBarLayout: Equatable {
     /// haut ; la grille défile par rangées entières pour garder la tuile choisie visible. `label` :
     /// hauteur des textes sous l'image ; `footer` : une ligne en pied pour la tuile choisie. O(t), t
     /// tuiles montrées.
+    /// `aspect` : largeur sur hauteur de l'image (session 112), la largeur de la tuile ne change pas.
     static func makeGrid(bounds: CGRect, count: Int, columns: Int, selected: Int?, label: CGFloat = 20, footer: Bool,
                          searchTextFontSize: CGFloat = 15, width: CGFloat = 640, barHeight: CGFloat? = nil,
-                         placement: SearchBarPlacement = .bottom) -> SearchBarLayout {
+                         placement: SearchBarPlacement = .bottom, aspect: CGFloat = 1) -> SearchBarLayout {
         let base = make(bounds: bounds, suggestions: 0, messageLines: 0, searchTextFontSize: searchTextFontSize,
                         width: width, barHeight: barHeight, placement: placement)
         let columns = max(1, columns)
         guard count > 0, base.bar.width > 2 * padding else { return base }
         let side = min(140, (base.bar.width - 2 * padding - 8) / CGFloat(columns))
-        let tile = CGSize(width: side, height: side + label)
+        let tile = CGSize(width: side, height: (side / max(0.25, aspect)).rounded() + label)
         let footerHeight = footer ? lineHeight : 0
         let room = max(0, listRoom(bar: base.bar, bounds: bounds, below: placement.listBelow) - footerHeight)
         let totalRows = (count + columns - 1) / columns
@@ -258,7 +259,7 @@ struct TargetSearchBar {
             return SearchBarLayout.makeGrid(bounds: bounds, count: suggestions.count, columns: grid.columns, selected: selectedSuggestion,
                                             label: grid.labelHeight(fontSize: style.commandTextFontSize), footer: grid.footer != nil,
                                             searchTextFontSize: style.searchTextFontSize, width: width, barHeight: barHeight,
-                                            placement: placement)
+                                            placement: placement, aspect: grid.aspect)
         }
         if richRows {
             let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
@@ -280,6 +281,8 @@ struct SearchGrid: Equatable {
     var showTitles = true
     var showSubtitles = false
     var footer: String?
+    /// Largeur sur hauteur des images (`imageaspect` d'un workflow, session 112).
+    var aspect: CGFloat = 1
 
     /// Titre (et sous-titre) sous l'image, à la taille des détails du lanceur.
     func labelHeight(fontSize: CGFloat) -> CGFloat {
