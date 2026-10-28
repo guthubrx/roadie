@@ -2131,7 +2131,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .objects: return
         case .verbs(let subject):
             actionList = .verbs(for: subject, query: stepQuery, destinations: launcher.destinations, newStageHome: launcher.newStageHome,
-                                tiling: stepTiling)
+                                tiling: stepTiling, ranking: launcher.learnsVerbOrder ? launcher.ranking : nil)
             if case .file(let file) = subject {
                 actionList.appendWorkflows(launcher.workflowTriggers.filter { AlfredWorkflowIndex.accepts($0, path: file.path) }, query: stepQuery)
             }
@@ -2355,6 +2355,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Verbes d'une cible déjà connus du mode recherche : exécutés comme avant (clics, aller à).
     /// Les autres passent au lanceur, après la fermeture de la barre.
     private func finishAction(_ action: LauncherAction) {
+        // Verbe choisi à la deuxième étape : il remonte pour ce type d'objet (session 111).
+        switch step {
+        case .verbs, .destinations where !finished: launcher.recordVisit(action.verb.rankingKey(for: action.subject), "")
+        default: break
+        }
         if action.position == nil, case .target(let target) = action.subject, let verb = Self.searchVerb(action.verb, for: target) {
             finishActivating(target, verb)
             return

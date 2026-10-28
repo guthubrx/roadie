@@ -98,6 +98,8 @@ struct LauncherSearchContext {
     var systemCommands = LauncherSystemCommand.all()
     /// Ordre des éléments d'un chemin tapé (session 105) : `name`, `modified` ou `created`.
     var pathSort = "name"
+    /// Les verbes les plus choisis passent en tête (session 111, `learn_verb_order`).
+    var learnsVerbOrder = true
     /// Retour sur un calcul ouvre aussi Calculette (session 110, `calc_opens_calculator`).
     var calcOpensCalculator = false
     /// Terminal du préfixe `>` (session 103).

@@ -7,6 +7,7 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Verbes de la barre : après Tab, les plus choisis pour un type d'objet passent en tête (`learn_verb_order`).
 - Calcul dans la barre : Retour copie toujours le résultat et peut aussi ouvrir Calculette (ou revenir à sa
   fenêtre), réglage « Calcul : ouvrir aussi Calculette » dans Paramètres > Recherche (`calc_opens_calculator`).
 - Rail : clic droit sur une stage > « Supprimer la stage », nommée ou non, dès qu'elle n'a plus de fenêtre.

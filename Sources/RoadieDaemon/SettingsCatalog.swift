@@ -499,6 +499,9 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "calc_opens_calculator", "Calcul : ouvrir aussi Calculette",
               "Retour sur un calcul copie toujours le résultat. Activé : il ouvre aussi Calculette, ou va à sa fenêtre déjà ouverte ; ⌘V y colle le résultat. ⌘C copie sans ouvrir.",
               .bool, .bool(false)),
+        entry(.recherche, "experimental.target_mode", "learn_verb_order", "Verbes : ordre appris",
+              "Après Tab, les verbes que vous choisissez le plus pour un type d'objet (application, fichier, fenêtre, stage…) passent en tête. Désactivé : ordre fixe. Suit aussi « Apprendre vos choix ».",
+              .bool, .bool(true)),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

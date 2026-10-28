@@ -809,6 +809,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var confirmQuitAll: Bool
     /// Retour sur un calcul ouvre aussi Calculette, en plus de copier le résultat (session 110).
     public var calcOpensCalculator: Bool
+    /// Les verbes les plus choisis pour un type d'objet passent en tête (session 111).
+    public var learnVerbOrder: Bool
     /// Touches de la barre (session 108), par action de `LauncherBarKeys.actions` ; forme normalisée,
     /// vide : touche désactivée. Clés TOML `<action>_key`.
     public var barKeys: [String: String]
@@ -867,6 +869,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         pathSort: String = "name",
         confirmQuitAll: Bool = true,
         calcOpensCalculator: Bool = false,
+        learnVerbOrder: Bool = true,
         barKeys: [String: String] = [:],
         bttPauseKeys: [String] = []
     ) {
@@ -910,6 +913,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.pathSort = TargetModeConfig.pathSorts.contains(pathSort) ? pathSort : "name"
         self.confirmQuitAll = confirmQuitAll
         self.calcOpensCalculator = calcOpensCalculator
+        self.learnVerbOrder = learnVerbOrder
         self.barKeys = LauncherBarKeys.resolved(barKeys)
         self.bttPauseKeys = bttPauseKeys.map { TargetGridConfig.normalizedKey($0, fallback: "") }.filter { !$0.isEmpty }
     }
@@ -966,6 +970,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case pathSort = "path_sort"
         case confirmQuitAll = "confirm_quit_all"
         case calcOpensCalculator = "calc_opens_calculator"
+        case learnVerbOrder = "learn_verb_order"
         case bttPauseKeys = "btt_pause_keys"
     }
 
@@ -1020,6 +1025,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             pathSort: try c.decodeIfPresent(String.self, forKey: .pathSort) ?? "name",
             confirmQuitAll: try c.decodeIfPresent(Bool.self, forKey: .confirmQuitAll) ?? true,
             calcOpensCalculator: try c.decodeIfPresent(Bool.self, forKey: .calcOpensCalculator) ?? false,
+            learnVerbOrder: try c.decodeIfPresent(Bool.self, forKey: .learnVerbOrder) ?? true,
             barKeys: try Self.decodeBarKeys(decoder),
             bttPauseKeys: try c.decodeIfPresent([String].self, forKey: .bttPauseKeys) ?? []
         )
@@ -1705,7 +1711,7 @@ private enum ConfigValidationRules {
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
-            "experimental.target_mode": Set<String>(["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family", "theme", "theme_dark", "visible_results", "bar_screen", "bar_position", "bar_save_position", "terminal_app", "bookmarks_enabled", "bookmark_browsers", "app_search_paths", "learning_enabled", "path_sort", "confirm_quit_all", "calc_opens_calculator", "btt_pause_keys"]).union(LauncherBarKeys.actions.map(\.configKey)),
+            "experimental.target_mode": Set<String>(["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family", "theme", "theme_dark", "visible_results", "bar_screen", "bar_position", "bar_save_position", "terminal_app", "bookmarks_enabled", "bookmark_browsers", "app_search_paths", "learning_enabled", "path_sort", "confirm_quit_all", "calc_opens_calculator", "learn_verb_order", "btt_pause_keys"]).union(LauncherBarKeys.actions.map(\.configKey)),
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],

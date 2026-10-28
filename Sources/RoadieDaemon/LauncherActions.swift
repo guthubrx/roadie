@@ -34,6 +34,17 @@ enum LauncherSubject: Equatable, Sendable {
         }
     }
 
+    /// Type d'objet dont l'ordre des verbes est appris (session 111) : `app`, `file`, `window`, `stage`…
+    var verbKind: String {
+        switch self {
+        case .app: "app"
+        case .file: "file"
+        case .project: "project"
+        case .url: "url"
+        case .target(let target): target.kind.rawValue
+        }
+    }
+
     /// Nom de l'application : celui de l'application, ou celui que porte une fenêtre ; d'un fichier, son nom.
     var appName: String {
         switch self {
@@ -134,6 +145,19 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     }
 
     var needsDestination: Bool { [.openIn, .gatherIn, .sendTo, .moveTo].contains(self) }
+
+    /// Clé du classement appris pour ce verbe sur ce type d'objet (session 111) : `verb:app:quit`.
+    func rankingKey(for subject: LauncherSubject) -> String { "verb:\(subject.verbKind):\(rawValue)" }
+
+    /// Verbes les plus choisis pour ce type d'objet d'abord, par fréquence-récence ; à égalité, l'ordre
+    /// par défaut reste. O(v log v), v ≤ 12.
+    static func learnedOrder(_ verbs: [LauncherVerb], for subject: LauncherSubject, ranking: LauncherRanking,
+                             at now: Date = Date()) -> [LauncherVerb] {
+        verbs.enumerated()
+            .map { (verb: $0.element, index: $0.offset, score: ranking.frecency($0.element.rankingKey(for: subject), at: now)) }
+            .sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }
+            .map(\.verb)
+    }
 
     /// Verbes proposés pour un objet, le verbe par défaut en premier. Fenêtre : ses verbes de flottement
     /// dépendent de `tiling` ; sans état connu, « Faire flotter » seul (bascule SPEC-047). O(1).
@@ -333,12 +357,15 @@ struct LauncherActionList: Equatable, Sendable {
     private(set) var best: String?
 
     /// Deuxième étape. `newStageHome` : bureau où une nouvelle stage est créée (celui affiché).
+    /// `ranking` : classement appris, qui ordonne les verbes (session 111) ; nil : ordre par défaut.
     static func verbs(for subject: LauncherSubject, query: String, destinations: [LauncherDestination],
-                      newStageHome: (DisplayID, DesktopID), tiling: LauncherTilingState? = nil) -> LauncherActionList {
+                      newStageHome: (DisplayID, DesktopID), tiling: LauncherTilingState? = nil,
+                      ranking: LauncherRanking? = nil) -> LauncherActionList {
         var list = LauncherActionList()
         list.rows.append(.header("\(subject.title) ›"))
         let folded = LauncherMatch.fold(query)
-        let verbs = LauncherVerb.verbs(for: subject, tiling: tiling)
+        let defaults = LauncherVerb.verbs(for: subject, tiling: tiling)
+        let verbs = (ranking.map { LauncherVerb.learnedOrder(defaults, for: subject, ranking: $0) } ?? defaults)
             .filter { folded.isEmpty || LauncherMatch.score(query, in: $0.title(app: subject.appName)) != nil }
         list.rows.append(contentsOf: verbs.map(Row.verb))
         if !folded.isEmpty, let primary = LauncherVerb.primaryDestinationVerb(for: subject) {

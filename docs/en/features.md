@@ -663,6 +663,8 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
   (`large_type_key`, `copy_key`… in `[experimental.target_mode]`), grid, switcher, and BetterTouchTool's
   `roadie …` commands, each handled by BTT, by Roadie (`[[shortcuts]]`: `keys`, `command`, `btt_uuid`) or by
   nobody. A bar key taken by BTT is flagged; `btt_pause_keys` pauses that BTT shortcut while the bar is open.
+- **Verbs**: after Tab, the verbs you choose most for a kind of object (application, file, window, stage…)
+  come first; `learn_verb_order = false` keeps the fixed order.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

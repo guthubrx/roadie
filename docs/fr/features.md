@@ -694,6 +694,8 @@ toutes les fenetres visibles : `scope = "visible_windows"` dans
   commandes `roadie …` de BetterTouchTool, chacune prise en charge par BTT, par Roadie (`[[shortcuts]]` :
   `keys`, `command`, `btt_uuid`) ou par personne. Une touche de la barre prise par BTT est signalée ;
   `btt_pause_keys` met ce raccourci BTT en pause tant que la barre est ouverte.
+- **Verbes** : après Tab, les verbes les plus choisis pour un type d'objet (application, fichier, fenêtre,
+  stage…) passent en tête ; `learn_verb_order = false` garde l'ordre fixe.
 - **Divers** : ⌘L (réglable) montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
   dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
   la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…
