@@ -28,6 +28,8 @@ protocol AlfredEffects: Sendable {
     func dialog(title: String, text: String, buttons: [String]) async -> Int?
     /// Grille (SPEC-092) : la barre s'ouvre en tuiles ; Retour repart de la brique Grille.
     func showGrid(_ view: AlfredGridView) async
+    /// Vue Texte (session 117) : fenêtre de texte ; Retour repart de la brique avec le texte.
+    func showText(_ view: AlfredTextView) async
 }
 
 /// Bilan d'une exécution : étapes, briques manquantes, erreurs (sans contenu de l'utilisateur).
@@ -58,6 +60,8 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         "utility.file", "action.browseinalfred", "action.actioninalfred",
         // SPEC-092.
         "userinterface.grid",
+        // Session 117.
+        "userinterface.text",
     ]
 
     let effects: AlfredEffects
@@ -394,6 +398,34 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
                 return missing("userinterface.grid:inputtype:\(other)", workflow, run)
             }
             await effects.showGrid(AlfredGridView.make(object: object, workflow: workflow, response: response, variables: variables))
+            return .stop
+        case "userinterface.text":
+            var view = AlfredTextView.make(object: object, workflow: workflow, variables: variables)
+            switch object.int("inputtype") ?? 0 {
+            case 0:
+                // Argument reçu, une ligne par argument.
+                view.chunks = [input.joined(separator: "\n")]
+                view.loadingText = nil
+            case 1:
+                // Script relancé par la fenêtre : premier passage avec l'argument reçu.
+                view.scriptFile = expand(object.string("inputfile") ?? "")
+                view.initialInput = query
+            case 2:
+                // Fichier : son chemin dans la brique, sinon l'argument ; images relatives à son dossier.
+                let raw = object.string("inputfile") ?? ""
+                let path = Self.path(raw.isEmpty ? query : expand(raw), in: workflow)
+                guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+                    run.outcome.errors.append("text:file")
+                    await effects.notify(title: workflow.name, text: "Vue Texte : fichier illisible")
+                    return .stop
+                }
+                view.chunks = [content]
+                view.folder = (path as NSString).deletingLastPathComponent
+                view.loadingText = nil
+            case let other:
+                return missing("userinterface.text:inputtype:\(other)", workflow, run)
+            }
+            await effects.showText(view)
             return .stop
         case "action.browseinalfred", "action.actioninalfred":
             // Barre rouverte sur le chemin : mode chemin (SPEC-087), → y ouvre ses verbes.

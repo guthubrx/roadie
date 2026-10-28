@@ -9,6 +9,7 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
     private let webSearchURL: String
     private let reopen: @MainActor @Sendable (String) -> Void
     private let presentGrid: @MainActor @Sendable (AlfredGridView) -> Void
+    private let presentText: @MainActor @Sendable (AlfredTextView) -> Void
     /// Roadie va à la fenêtre du navigateur qui reçoit une adresse web (session 095).
     private let follow: @MainActor @Sendable (URL) -> Void
     private let postKeyEvent: @Sendable (CGEvent) -> Void
@@ -16,6 +17,7 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
 
     init(events: EventLog, webSearchURL: String, reopen: @escaping @MainActor @Sendable (String) -> Void,
          presentGrid: @escaping @MainActor @Sendable (AlfredGridView) -> Void = { _ in },
+         presentText: @escaping @MainActor @Sendable (AlfredTextView) -> Void = { _ in },
          follow: @escaping @MainActor @Sendable (URL) -> Void = { _ in },
          postKeyEvent: @escaping @Sendable (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) },
          writePasteboard: @escaping @MainActor @Sendable (String) -> Void = { text in
@@ -26,6 +28,7 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
         self.webSearchURL = webSearchURL
         self.reopen = reopen
         self.presentGrid = presentGrid
+        self.presentText = presentText
         self.follow = follow
         self.postKeyEvent = postKeyEvent
         self.writePasteboard = writePasteboard
@@ -119,6 +122,11 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
     func showGrid(_ view: AlfredGridView) async {
         let presentGrid = presentGrid
         await MainActor.run { presentGrid(view) }
+    }
+
+    func showText(_ view: AlfredTextView) async {
+        let presentText = presentText
+        await MainActor.run { presentText(view) }
     }
 
     func log(_ type: String, _ details: [String: String]) {

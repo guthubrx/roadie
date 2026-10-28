@@ -77,6 +77,12 @@ final class RecordedEffects: AlfredEffects, @unchecked Sendable {
         lock.withLock { recordedGrids.append(view) }
         note("grid:\(view.items.count):\(view.columns)")
     }
+    private var recordedTexts: [AlfredTextView] = []
+    var lastText: AlfredTextView? { lock.withLock { recordedTexts.last } }
+    func showText(_ view: AlfredTextView) async {
+        lock.withLock { recordedTexts.append(view) }
+        note("text:\(view.behaviour.rawValue)")
+    }
 }
 
 enum FixtureError: Error { case missing }

@@ -77,7 +77,7 @@ struct Spec088EngineTests {
     @Test func missingBrickStopsAndLoopsAreBounded() async throws {
         var fixture = WorkflowFixture()
         fixture.add("K", "input.keyword", ["keyword": "k"])
-        fixture.add("TV", "userinterface.text", [:])
+        fixture.add("TV", "output.musiccommand", [:])
         fixture.add("J1", "utility.junction")
         fixture.add("J2", "utility.junction")
         fixture.link("K", "TV")
@@ -87,7 +87,7 @@ struct Spec088EngineTests {
         let workflow = try fixture.write()
         let effects = RecordedEffects()
         let outcome = await AlfredWorkflowEngine(effects: effects).run(workflow, from: "K", arg: ["x"])
-        #expect(outcome.missing == ["userinterface.text"])
+        #expect(outcome.missing == ["output.musiccommand"])
         #expect(outcome.steps == AlfredWorkflowEngine.maxSteps)
     }
 
@@ -111,11 +111,11 @@ struct Spec088EngineTests {
         fixture.add("SF", "input.scriptfilter", ["keyword": "ok", "type": 0, "script": "echo"])
         fixture.add("CB", "output.clipboard")
         fixture.add("K2", "input.keyword", ["keyword": "vue"])
-        fixture.add("TV", "userinterface.text")
+        fixture.add("TV", "output.musiccommand")
         fixture.link("SF", "CB")
         fixture.link("K2", "TV")
         let report = AlfredCompatibility.report(try fixture.write())
-        #expect(report.state == .partial && report.missing == ["userinterface.text"] && report.keywords == ["ok", "vue"])
+        #expect(report.state == .partial && report.missing == ["output.musiccommand"] && report.keywords == ["ok", "vue"])
         var whole = WorkflowFixture()
         whole.add("SF", "input.scriptfilter", ["keyword": "ok", "type": 0, "script": "echo"])
         #expect(AlfredCompatibility.report(try whole.write()).state == .complete)

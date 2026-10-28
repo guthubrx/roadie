@@ -712,6 +712,10 @@ toutes les fenetres visibles : `scope = "visible_windows"` dans
   encore présents (menu Fichier > Ouvrir récent de macOS ; pour Word, Excel et PowerPoint, la liste propre à Office).
   La saisie filtre, Retour ouvre le document avec cette application. La première lecture d'une liste d'Office peut
   faire demander par macOS l'accès aux données de cette application.
+- **Vue Texte des workflows** : la brique Texte d'Alfred 5.5 ouvre une fenêtre (texte à lire, à modifier ou Markdown
+  rendu avec ses images), remplie par l'argument, un fichier ou un script relancé par un champ de saisie (réponses
+  JSON `append`, `replacelast`, `rerun`… comme dans Alfred). Retour envoie le texte à la suite du workflow,
+  avec les touches tenues ; Échap ferme.
 - **Divers** : ⌘L (réglable) montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
   dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
   la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…

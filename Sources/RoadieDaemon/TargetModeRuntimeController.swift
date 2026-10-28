@@ -798,6 +798,7 @@ public final class TargetModeRuntimeController: NSObject {
             }
             let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
                                             presentGrid: { view in self?.presentGrid(view) },
+                                            presentText: { view in self?.presentText(view) },
                                             follow: { url in self?.followBrowser(url) })
             Task.detached {
                 _ = await AlfredWorkflowEngine(effects: effects, workflows: workflows)
@@ -833,6 +834,7 @@ public final class TargetModeRuntimeController: NSObject {
                 else if object.type == "trigger.hotkey" { await Self.hotkeyArgument(object) } else { [] }
             let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
                                             presentGrid: { view in self?.presentGrid(view) },
+                                            presentText: { view in self?.presentText(view) },
                                             follow: { url in self?.followBrowser(url) })
             let engine = AlfredWorkflowEngine(effects: effects, workflows: workflows)
             _ = await engine.start(workflow, at: uid, arg: arg, variables: variables)
@@ -899,6 +901,40 @@ public final class TargetModeRuntimeController: NSObject {
         currentSession?.cancel()
         currentSession = nil
         handle(TargetModeRuntimeCommand(name: "targets.search"))
+    }
+
+    /// Vue Texte d'un workflow (session 117) : fenêtre ; son script relancé par la saisie, puis la suite du
+    /// schéma depuis la brique avec le texte et les touches tenues. Journal sans texte.
+    private func presentText(_ view: AlfredTextView) {
+        let config = service.effectiveConfig.experimental.targetMode
+        let workflows = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
+        guard let workflow = workflows.first(where: { $0.id == view.workflowID }) else { return }
+        let events = events, webSearchURL = config.webSearchURL
+        events.append(RoadieEvent(type: "launcher.workflow_text", details: ["workflow": workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID,
+                                                                             "behaviour": String(view.behaviour.rawValue)]))
+        let plain = (workflow.connections[view.objectUID] ?? []).contains { $0.modifiers == 0 }
+        var runScript: WorkflowTextPanel.RunScript?
+        if let file = view.scriptFile {
+            runScript = { input, variables, done in
+                _ = AlfredScriptRunner.start(AlfredScript(language: 8, source: "", file: file), query: input, arguments: [input],
+                                             workflow: workflow, variables: variables, keyword: "") { result in
+                    guard !result.cancelled else { return }
+                    let failure: String? = result.failure ?? (result.timedOut ? "délai dépassé" : nil)
+                    let response: AlfredTextResponse? = failure == nil ? AlfredTextResponse.parse(result.text) : nil
+                    DispatchQueue.main.async { MainActor.assumeIsolated { done(response, failure) } }
+                }
+            }
+        }
+        WorkflowTextPanel.show(view, plainContinues: plain, runScript: runScript) { [weak self] text, modifiers, variables in
+            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
+                                            presentGrid: { view in self?.presentGrid(view) },
+                                            presentText: { view in self?.presentText(view) },
+                                            follow: { url in self?.followBrowser(url) })
+            Task.detached {
+                _ = await AlfredWorkflowEngine(effects: effects, workflows: workflows)
+                    .run(workflow, from: view.objectUID, arg: [text], variables: variables, modifiers: modifiers)
+            }
+        }
     }
 
     // MARK: - Verbes du lanceur (SPEC-074)

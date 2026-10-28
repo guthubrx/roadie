@@ -681,6 +681,10 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
   exist (macOS File > Open Recent; for Word, Excel and PowerPoint, Office's own list). Typing filters, Return opens
   the document with that application. The first read of an Office list may make macOS ask for access to that
   application's data.
+- **Workflow Text View**: Alfred 5.5's Text object opens a window (text to read, edit, or rendered Markdown with its
+  images), filled by the argument, a file, or a script rerun from an input field (JSON responses `append`,
+  `replacelast`, `rerun`… as in Alfred). Return sends the text on through the workflow, with held keys; Escape
+  closes.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

@@ -7,6 +7,7 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Workflows : vue Texte d'Alfred (texte, texte modifiable ou Markdown, script relancé par une saisie), dans une fenêtre.
 - Verbe « Documents récents… » d'une application : ses 20 derniers documents (macOS, ou la liste d'Office), ouverts avec elle.
 - Réglages dans la barre : pages et réglages des Paramètres de Roadie, panneaux des Réglages Système ; ⌘, ouvre les Paramètres.
 - Historique des navigateurs dans la barre (`web_history_days`, 90 jours) : pages déjà vues de Firefox, Safari et Chrome.
