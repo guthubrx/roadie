@@ -496,6 +496,9 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "confirm_quit_all", "Confirmer « Tout quitter »",
               "La commande système « Tout quitter » demande un second Retour. Redémarrer, Éteindre, Fermer la session et Vider la corbeille le demandent toujours.",
               .bool, .bool(true)),
+        entry(.recherche, "experimental.target_mode", "calc_opens_calculator", "Calcul : ouvrir aussi Calculette",
+              "Retour sur un calcul copie toujours le résultat. Activé : il ouvre aussi Calculette, ou va à sa fenêtre déjà ouverte ; ⌘V y colle le résultat. ⌘C copie sans ouvrir.",
+              .bool, .bool(false)),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

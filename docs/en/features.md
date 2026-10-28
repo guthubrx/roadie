@@ -476,7 +476,9 @@ under « Calcul »; Return copies it and closes the bar, ⌘C copies it. Operato
 `×`, `÷`, parentheses, `,` or `.` decimal; after `=`: `pi`, `e`, `sqrt`, `abs`, `round`,
 `floor`, `ceil`, `exp`, `ln`, `log`, `log2`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`
 (`=sqrt(2)`). 12 significant digits, system decimal separator. A lone number or an unfinished
-calculation (`12*`, `1/0`) gives no row.
+calculation (`12*`, `1/0`) gives no row. With `calc_opens_calculator = true` (Settings > Search,
+« Calcul : ouvrir aussi Calculette »), Return copies the result and also opens Calculator, or goes to its
+open window; ⌘V pastes the result there. ⌘C still copies without opening.
 
 **Path**: an input starting with `~`, or with `/` followed by a root folder (`/Us`,
 `/Applications/`), lists that folder filtered by the rest of the input; nothing else is

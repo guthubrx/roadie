@@ -1875,11 +1875,20 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         model.replaceQuery(LauncherPathRules.completion(file, in: LauncherPathRules.parts(model.query)))
     }
 
-    /// Retour sur un calcul : le résultat est copié, la barre se ferme (SPEC-087 FR-003).
+    /// Retour sur un calcul : le résultat est copié, la barre se ferme (SPEC-087 FR-003). Avec
+    /// `calc_opens_calculator`, Calculette s'ouvre aussi, ou sa fenêtre revient, comme Retour sur l'application.
     private func finishCalc(_ calc: LauncherCalculation) {
-        launcher.recordQuery(model.query)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(calc.text, forType: .string)
+        if launcher.calcOpensCalculator, let calculator = LauncherCalculator.calculator(in: launcher.apps) {
+            guard !finished else { return }
+            finished = true
+            launcher.recordQuery(model.query)
+            cleanup()
+            onFinish?(launcher.launch(calculator))
+            return
+        }
+        launcher.recordQuery(model.query)
         finish(TargetActionResult(changed: true, message: "launcher calc copied"))
     }
 
@@ -2493,7 +2502,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         refreshLauncher()
         // Icône d'une fenêtre : celle de son application, retrouvée par son nom. O(a).
         let appPaths = Dictionary(launcher.apps.map { ($0.name, $0.path) }, uniquingKeysWith: { first, _ in first })
-        var suggestions = launcherList.rows.map { Self.suggestion($0, appPaths: appPaths, terminal: launcher.terminalApp, pendingSystem: pendingSystem) }
+        let calcOpens = launcher.calcOpensCalculator && LauncherCalculator.calculator(in: launcher.apps) != nil
+        var suggestions = launcherList.rows.map {
+            Self.suggestion($0, appPaths: appPaths, terminal: launcher.terminalApp, pendingSystem: pendingSystem, calcOpens: calcOpens)
+        }
         // Touche tenue : la ligne choisie annonce ce que Retour fera (SPEC-075).
         if let modifier = heldModifier, let index = selectedLauncherRow, let variant = currentVariant(modifier) {
             suggestions[index].detail = variant.title
@@ -2576,7 +2588,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     /// Ligne du lanceur dessinée par la barre : en-tête, application avec son icône, ou cible.
     private static func suggestion(_ row: LauncherList.Row, appPaths: [String: String], terminal: String = "terminal",
-                                   pendingSystem: String? = nil) -> SlashSuggestion {
+                                   pendingSystem: String? = nil, calcOpens: Bool = false) -> SlashSuggestion {
         switch row {
         case .header(let title):
             return SlashSuggestion(text: title, kind: .header)
@@ -2641,7 +2653,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .workflowItem(let entry, let item, _):
             return SlashSuggestion(text: item.title, detail: item.subtitle, kind: .result, icon: workflowIcon(item.icon, entry: entry))
         case .calc(let calc):
-            return SlashSuggestion(text: calc.text, detail: "\(calc.expression) · Retour copie", kind: .result, icon: .symbol("equal.square"))
+            return SlashSuggestion(text: calc.text, detail: "\(calc.expression) · \(LauncherCalculator.returnHint(opensCalculator: calcOpens))",
+                                   kind: .result, icon: .symbol("equal.square"))
         case .rule(let suggestion, let choice):
             let text = switch choice {
             case .create: "Créer la règle : \(suggestion.appName) toujours dans \(suggestion.stageTitle)"

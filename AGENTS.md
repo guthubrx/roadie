@@ -282,6 +282,9 @@ reste partagé avec specs/093-ordres-alfred.
 Session 109 installée : clic droit sur une stage du rail > « Supprimer la stage », nommée ou non, si elle n'a plus
 de fenêtre (stage active et écran absent exclus, raison affichée). 2 208 tests / 313 suites, PID 16562, santé 5/5.
 Reçu : specs/109-supprimer-stage/validation.md.
+Session 110 installée : Retour sur un calcul copie toujours et ouvre aussi Calculette si `calc_opens_calculator`
+(Paramètres > Recherche, désactivé par défaut). 2 212 tests / 314 suites, PID 39168, santé 5/5.
+Reçu : specs/110-calc-calculette/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

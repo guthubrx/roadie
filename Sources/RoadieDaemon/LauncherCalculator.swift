@@ -27,6 +27,19 @@ enum LauncherCalculator {
     ]
     static let constants: [String: Double] = ["pi": .pi, "e": M_E]
 
+    /// Calculette de macOS, ouverte par Retour sur un calcul quand `calc_opens_calculator` est actif (session 110).
+    static let calculatorBundleID = "com.apple.calculator"
+
+    /// Calculette parmi les applications du lanceur ; nil si elle n'y est pas. O(a).
+    static func calculator(in apps: [LauncherApp]) -> LauncherApp? {
+        apps.first { $0.bundleID == calculatorBundleID }
+    }
+
+    /// Effet de Retour annoncé sous le résultat. O(1).
+    static func returnHint(opensCalculator: Bool) -> String {
+        opensCalculator ? "Retour copie et ouvre Calculette" : "Retour copie"
+    }
+
     /// Caractères d'un calcul en cours de frappe (FR-009 : Maj + chiffre y écrit le chiffre).
     static let typingCharacters = Set("0123456789 +-*/^%,.()=×÷")
 

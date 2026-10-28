@@ -98,6 +98,8 @@ struct LauncherSearchContext {
     var systemCommands = LauncherSystemCommand.all()
     /// Ordre des éléments d'un chemin tapé (session 105) : `name`, `modified` ou `created`.
     var pathSort = "name"
+    /// Retour sur un calcul ouvre aussi Calculette (session 110, `calc_opens_calculator`).
+    var calcOpensCalculator = false
     /// Terminal du préfixe `>` (session 103).
     var terminalApp = "terminal"
     /// Signets des navigateurs (session 104), lus hors du fil principal ; rien si `bookmarks_enabled` est faux.

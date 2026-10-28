@@ -7,6 +7,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Calcul dans la barre : Retour copie toujours le résultat et peut aussi ouvrir Calculette (ou revenir à sa
+  fenêtre), réglage « Calcul : ouvrir aussi Calculette » dans Paramètres > Recherche (`calc_opens_calculator`).
 - Rail : clic droit sur une stage > « Supprimer la stage », nommée ou non, dès qu'elle n'a plus de fenêtre.
   La raison s'affiche quand la suppression est impossible (stage active, fenêtres, écran absent).
   `roadie stage delete` suit la même règle : les fenêtres fermées gardées en mémoire ne bloquent plus.

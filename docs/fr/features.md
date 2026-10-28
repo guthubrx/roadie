@@ -496,7 +496,9 @@ sous « Calcul » ; Retour le copie et ferme la barre, ⌘C le copie. Opérateur
 `÷`, parenthèses, `,` ou `.` décimal ; après `=` : `pi`, `e`, `sqrt`, `abs`, `round`, `floor`,
 `ceil`, `exp`, `ln`, `log`, `log2`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan` (`=sqrt(2)`).
 12 chiffres significatifs, virgule décimale en français. Un nombre seul ou un calcul inachevé
-(`12*`, `1/0`) ne donne aucune ligne.
+(`12*`, `1/0`) ne donne aucune ligne. Avec `calc_opens_calculator = true` (Paramètres > Recherche,
+« Calcul : ouvrir aussi Calculette »), Retour copie le résultat et ouvre aussi Calculette, ou va à sa
+fenêtre déjà ouverte ; ⌘V y colle le résultat. ⌘C copie toujours sans ouvrir.
 
 **Chemin** : une saisie qui commence par `~`, ou par `/` suivi d'un dossier de la racine (`/Us`,
 `/Applications/`), liste ce dossier filtré par la suite tapée ; rien d'autre n'est cherché. Tab

@@ -704,6 +704,7 @@ public final class TargetModeRuntimeController: NSObject {
         let savesPosition = barConfig.barSavePosition
         context.savePlacement = { placement in if savesPosition || placement == nil { positionStore.save(placement) } }
         context.terminalApp = barConfig.terminalApp
+        context.calcOpensCalculator = barConfig.calcOpensCalculator
         context.pathSort = barConfig.pathSort
         context.systemCommands = LauncherSystemCommand.all(confirmQuitAll: barConfig.confirmQuitAll)
         if barConfig.bookmarksEnabled {

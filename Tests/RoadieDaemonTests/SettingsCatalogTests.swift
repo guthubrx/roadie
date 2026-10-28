@@ -22,9 +22,10 @@ struct SettingsCatalogTests {
         // Spec075 : raccourci des verbes et recherche web. Spec088 : deux réglages des workflows. Session 096 : quatre réglages de la barre vide.
         // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
         // terminal, signets, tri, apprentissage, confirmation). Session 108 : douze touches de la barre.
-        #expect(simple.count == 231)
+        // Session 110 : Calculette ouverte par un calcul.
+        #expect(simple.count == 232)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 151)
+        #expect(simple.count - railSimple.count == 152)
     }
 
     @Test
@@ -166,7 +167,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 231)
+        #expect(expected.count == 232)
     }
 
     // MARK: - Défauts
