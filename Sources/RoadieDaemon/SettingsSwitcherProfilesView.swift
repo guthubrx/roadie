@@ -5,6 +5,8 @@ import RoadieCore
 struct SettingsSwitcherProfilesView: View {
     @ObservedObject var model: SettingsViewModel
     let descriptor: SettingDescriptor
+    /// Catégorie Raccourcis (session 108) : seulement le gestionnaire et la combinaison de chaque profil.
+    let shortcutsOnly: Bool
     @StateObject private var editor: SettingsCollectionEditorModel
     @State private var selectedID: UUID?
     @State private var tab = "Raccourci"
@@ -12,14 +14,59 @@ struct SettingsSwitcherProfilesView: View {
     @State private var message = ""
     private var fonts: InterfaceConfig { model.interfaceFonts }
 
-    init(model: SettingsViewModel, descriptor: SettingDescriptor) {
+    init(model: SettingsViewModel, descriptor: SettingDescriptor, shortcutsOnly: Bool = false) {
         self.model = model
         self.descriptor = descriptor
+        self.shortcutsOnly = shortcutsOnly
         _editor = StateObject(wrappedValue: SettingsCollectionEditorModel(descriptor: descriptor, service: model.service))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if shortcutsOnly {
+                ForEach(editor.rows) { row in
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(row.raw["name"] ?? "Profil").fontWeight(.semibold)
+                        shortcutRows(row)
+                    }
+                }
+            } else {
+                profilesBody
+            }
+            if busy { ProgressView("Vérification du raccourci…").controlSize(.small) }
+            if !message.isEmpty { Text(message).foregroundStyle(.orange).font(.system(size: fonts.settingsHelpFontSize)) }
+            ForEach(Array(editor.messages.enumerated()), id: \.offset) { _, value in
+                Text(value).foregroundStyle(.red).font(.system(size: fonts.settingsHelpFontSize))
+            }
+            if !editor.messages.isEmpty {
+                Button("Recharger les profils") { editor.reload(discardDrafts: true) }
+            }
+        }
+        .disabled(busy || model.isLocked)
+        .onAppear {
+            selectedID = selectedID ?? editor.rows.first?.id
+            editor.onChange = { model.collectionChanged(descriptor, result: $0) }
+        }
+        .onChange(of: model.collectionRevision) { _, _ in editor.reload() }
+        .onChange(of: model.collectionResetRevisions[descriptor.id]) { _, _ in editor.reload(discardDrafts: true) }
+    }
+
+    @ViewBuilder
+    private func shortcutRows(_ row: SettingsCollectionEditorModel.Row) -> some View {
+        SettingsFormRow("Géré par", help: "Roadie enregistre le raccourci directement. BetterTouchTool utilise une liaison vérifiée. Le mode externe conserve les commandes BTT ou Karabiner existantes.", fonts: fonts) {
+            SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: "Gestionnaire",
+                options: [("roadie", "Roadie"), ("btt", "BetterTouchTool"), ("external", "Outil externe / commande")],
+                selection: Binding(get: { source(row) }, set: { change(row, values: ["trigger_source": $0]) }))
+        }
+        SettingsFormRow("Combinaison", help: "Cliquez sur Enregistrer, puis appuyez sur les touches. Échap annule la capture.", fonts: fonts) {
+            ShortcutRecorderControl(value: row.raw["hotkey"] ?? "", fontSize: fonts.settingsTextFontSize) { value in
+                change(row, values: ["hotkey": value, "trigger_source": source(row) == "external" ? "roadie" : source(row)])
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var profilesBody: some View {
             if editor.rows.count > 1 { ForEach(editor.rows) { row in
                 Button { selectedID = row.id } label: {
                     HStack {
@@ -45,22 +92,6 @@ struct SettingsSwitcherProfilesView: View {
             if let row = editor.rows.first(where: { $0.id == selectedID }) ?? editor.rows.first {
                 profileForm(row)
             }
-            if busy { ProgressView("Vérification du raccourci…").controlSize(.small) }
-            if !message.isEmpty { Text(message).foregroundStyle(.orange).font(.system(size: fonts.settingsHelpFontSize)) }
-            ForEach(Array(editor.messages.enumerated()), id: \.offset) { _, value in
-                Text(value).foregroundStyle(.red).font(.system(size: fonts.settingsHelpFontSize))
-            }
-            if !editor.messages.isEmpty {
-                Button("Recharger les profils") { editor.reload(discardDrafts: true) }
-            }
-        }
-        .disabled(busy || model.isLocked)
-        .onAppear {
-            selectedID = selectedID ?? editor.rows.first?.id
-            editor.onChange = { model.collectionChanged(descriptor, result: $0) }
-        }
-        .onChange(of: model.collectionRevision) { _, _ in editor.reload() }
-        .onChange(of: model.collectionResetRevisions[descriptor.id]) { _, _ in editor.reload(discardDrafts: true) }
     }
 
     private func profileForm(_ row: SettingsCollectionEditorModel.Row) -> some View {
@@ -76,14 +107,11 @@ struct SettingsSwitcherProfilesView: View {
             }
             profileTabs.padding(.vertical, 10)
             if tab == "Raccourci" {
-                SettingsFormRow("Géré par", help: "Roadie enregistre le raccourci directement. BetterTouchTool utilise une liaison vérifiée. Le mode externe conserve les commandes BTT ou Karabiner existantes.", fonts: fonts) {
-                    SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: "Gestionnaire",
-                        options: [("roadie", "Roadie"), ("btt", "BetterTouchTool"), ("external", "Outil externe / commande")],
-                        selection: Binding(get: { source(row) }, set: { change(row, values: ["trigger_source": $0]) }))
-                }
-                SettingsFormRow("Combinaison", help: "Cliquez sur Enregistrer, puis appuyez sur les touches. Échap annule la capture.", fonts: fonts) {
-                    ShortcutRecorderControl(value: row.raw["hotkey"] ?? "", fontSize: fonts.settingsTextFontSize) { value in
-                        change(row, values: ["hotkey": value, "trigger_source": source(row) == "external" ? "roadie" : source(row)])
+                // Combinaison et gestionnaire réunis dans Paramètres > Raccourcis (session 108).
+                SettingsFormRow("Combinaison", help: "La combinaison et son gestionnaire se règlent avec les autres raccourcis.", fonts: fonts) {
+                    HStack(spacing: 10) {
+                        Text((row.raw["hotkey"] ?? "").isEmpty ? "Aucune" : ShortcutCapture.label(row.raw["hotkey"] ?? ""))
+                        Button("Régler dans Raccourcis") { model.select(.raccourcis) }
                     }
                 }
                 picker(row, key: "release_action", label: "Au relâchement",

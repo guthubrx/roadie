@@ -8,6 +8,7 @@ import RoadieCore
 /// Catégorie de la fenêtre de réglages. La valeur brute est l'identifiant utilisé par `/settings`.
 public enum SettingCategory: String, CaseIterable, Sendable {
     case general
+    case raccourcis
     case tuilage
     case stages
     case lettres
@@ -24,6 +25,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
     public var label: String {
         switch self {
         case .general: return "Général"
+        case .raccourcis: return "Raccourcis"
         case .tuilage: return "Tuilage"
         case .stages: return "Stages et bureaux"
         case .lettres: return "Mode lettres"
@@ -43,6 +45,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
     public var symbolName: String {
         switch self {
         case .general: return "gearshape"
+        case .raccourcis: return "keyboard"
         case .tuilage: return "rectangle.split.2x2"
         case .stages: return "square.stack.3d.up"
         case .lettres: return "textformat.abc"
@@ -171,6 +174,7 @@ public enum SettingsCatalog {
         interfaceDescriptors + tilingDescriptors + stageDescriptors + focusDescriptors + borderDescriptors
         + targetModeDescriptors + appTargetDescriptors + targetGridDescriptors
         + advancedDescriptors + ruleDescriptors + railDescriptors + fontFamilyDescriptors + switcherDescriptors + overviewDescriptors
+        + shortcutDescriptors
 
     /// Texte de recherche normalisé de chaque réglage, calculé une fois (même ordre que `all`) :
     /// nom, libellé, aide, catégorie et groupe affiché (session 107 : « raccourci » trouve tout un groupe).
@@ -224,9 +228,10 @@ public enum SettingsCatalog {
     /// Réglages dont le nom, le libellé ou la description contient la saisie, sans tenir compte
     /// de la casse ni des accents. Saisie vide : aucun résultat. O(n * m) - n réglages, m longueur d'un texte.
     public static func search(_ query: String) -> [SettingDescriptor] {
-        let needle = TargetHintService.normalized(query)
-        guard !needle.isEmpty else { return [] }
-        return zip(all, searchTexts).filter { $0.1.contains(needle) }.map(\.0)
+        // Chaque mot doit apparaître, dans n'importe quel ordre (session 107).
+        let words = TargetHintService.normalized(query).split(separator: " ").map(String.init)
+        guard !words.isEmpty else { return [] }
+        return zip(all, searchTexts).filter { text in words.allSatisfy { text.1.contains($0) } }.map(\.0)
     }
 }
 
@@ -281,6 +286,22 @@ extension SettingsCatalog {
               "Remplace la marge extérieure générale sur ce côté. Sans valeur, la marge générale s'applique.",
               .double(nil), .unset)
     }
+}
+
+// MARK: - Raccourcis (session 108)
+
+extension SettingsCatalog {
+    /// Touches de la barre, touches prioritaires sur BTT et commandes Roadie. Les raccourcis globaux, les
+    /// touches de la grille et celles des présentations restent dans leur table d'origine, rangés ici.
+    static let shortcutDescriptors: [SettingDescriptor] = LauncherBarKeys.actions.map { action in
+        entry(.raccourcis, "experimental.target_mode", action.configKey, action.label,
+              action.help + " Vide : désactivée.", .text, .string(action.defaultKey))
+    } + [
+        readOnlyEntry(.raccourcis, "experimental.target_mode", "btt_pause_keys", "Touches de la barre prioritaires sur BetterTouchTool",
+                      "Tant que la barre est ouverte, Roadie met en pause les raccourcis BetterTouchTool de ces combinaisons, puis les réactive à la fermeture. Le bouton d'un conflit les ajoute ici."),
+        readOnlyEntry(.raccourcis, "", "shortcuts", "Commandes Roadie",
+                      "Chaque commande roadie (focus, move, resize, warp, stage, desktop, display, window, toggle, rail…) avec sa combinaison et qui la prend en charge : Roadie, BetterTouchTool ou personne."),
+    ]
 }
 
 // MARK: - Tuilage
@@ -407,19 +428,19 @@ extension SettingsCatalog {
               "Taille de la saisie et du nombre de correspondances. La barre suit cette taille.", .double(8...48), .double(15)),
         entry(.recherche, "experimental.target_mode", "command_text_font_size", "Texte des suggestions (points)",
               "Taille de la liste et des messages après la saisie de /, indépendante de la barre.", .double(8...48), .double(13)),
-        entry(.recherche, "experimental.target_mode", "search_hotkey", "Raccourci de la recherche",
+        entry(.raccourcis, "experimental.target_mode", "search_hotkey", "Raccourci de la recherche",
               "Raccourci global qui ouvre la recherche, par exemple command+control+alt+f. Vide : désactivé.",
               .text, .string("command+control+alt+f")),
-        entry(.recherche, "experimental.target_mode", "actions_hotkey", "Raccourci des verbes de la fenêtre active",
+        entry(.raccourcis, "experimental.target_mode", "actions_hotkey", "Raccourci des verbes de la fenêtre active",
               "Ouvre la barre directement sur les verbes de la fenêtre au premier plan : envoyer, flotter, plein écran. Vide : désactivé.",
               .text, .string("command+control+alt+shift+f")),
         entry(.recherche, "experimental.target_mode", "web_search_url", "Recherche web (⌃ Retour)",
               "Adresse ouverte par ⌃ Retour dans la barre ; {query} reçoit le texte tapé.",
               .text, .string("https://www.google.com/search?q={query}")),
-        entry(.recherche, "experimental.target_mode", "pick_modifier", "Touche des raccourcis 1 à 9",
+        entry(.raccourcis, "experimental.target_mode", "pick_modifier", "Touche des raccourcis 1 à 9",
               "Touche tenue avec un chiffre pour ouvrir une ligne de la barre : command (⌘), shift (⇧), alt (⌥) ou control (⌃). Avec shift, les chiffres de la rangée du haut ne s'écrivent plus dans la recherche en AZERTY.",
               .choice(["command", "shift", "alt", "control"]), .string("command")),
-        entry(.recherche, "experimental.target_mode", "view_cycle_hotkey", "Touche des présentations",
+        entry(.raccourcis, "experimental.target_mode", "view_cycle_hotkey", "Touche des présentations",
               "Dans la barre, fait passer les résultats d'un workflow, d'un dossier ou les fichiers de la liste à la grille, puis aux grandes tuiles. Le chip à droite de la saisie fait de même. Vide : désactivée.",
               .text, .string("command+g")),
         entry(.recherche, "experimental.target_mode", "workflows_enabled", "Workflows dans la barre",
@@ -535,13 +556,13 @@ extension SettingsCatalog {
                   "Nombre de subdivisions successives d'une zone.", .int(1...20), .int(3)),
             entry(.grille, t, "hint_characters", "Lettres des étiquettes",
                   "Caractères des cellules. Au moins lignes × colonnes caractères.", .text, .string("azeqsdwxc")),
-            entry(.grille, t, "confirm_action_key", "Touche de confirmation",
+            entry(.raccourcis, t, "confirm_action_key", "Touche de confirmation",
                   "Touche qui valide l'action dans la zone choisie.", .text, .string("space")),
-            entry(.grille, t, "reset_key", "Touche de remise à zéro",
+            entry(.raccourcis, t, "reset_key", "Touche de remise à zéro",
                   "Touche qui revient à la grille entière.", .text, .string("r")),
-            entry(.grille, t, "back_key", "Touche de retour",
+            entry(.raccourcis, t, "back_key", "Touche de retour",
                   "Touche qui revient à la zone précédente.", .text, .string("backspace")),
-            entry(.grille, t, "exit_key", "Touche de sortie",
+            entry(.raccourcis, t, "exit_key", "Touche de sortie",
                   "Touche qui quitte la grille.", .text, .string("escape")),
             entry(.grille, t, "arrow_navigation_enabled", "Navigation aux flèches",
                   "Déplace la zone choisie avec les flèches.", .bool, .bool(true)),

@@ -1032,7 +1032,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: style) }
         windows.forEach { $0.orderFrontRegardless() }
         let input = SearchInputPanel()
-        input.viewCycle = SearchInputPanel.cycleKey(launcher.viewCycleKey, layout: TargetSearchHotkey.currentLayoutTable())
+        let layout = TargetSearchHotkey.currentLayoutTable()
+        input.viewCycle = SearchInputPanel.cycleKey(launcher.viewCycleKey, layout: layout)
+        input.barKeys = SearchInputPanel.barKeyTable(launcher.barKeys, layout: layout)
         input.onChange = { [weak self] text in self?.replaceInput(text) }
         input.onKey = { [weak self] key in self?.handleSearch(key) }
         input.onFlags = { [weak self] flags in self?.modifiersChanged(flags) }

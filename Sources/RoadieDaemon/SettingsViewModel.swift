@@ -100,12 +100,29 @@ final class SettingsViewModel: ObservableObject {
     /// `searchFocus`. O(n) - n = nombre de réglages.
     var searchResults: [SettingsSection] {
         guard isSearching else { return [] }
-        let grouped = Dictionary(grouping: SettingsCatalog.search(query), by: \.category)
+        var found = SettingsCatalog.search(query)
+        // Commandes Roadie (session 108) : une commande BTT ou `[[shortcuts]]` qui correspond montre la liste.
+        if !found.contains(where: { $0.id == "shortcuts" }), let shortcuts = SettingsCatalog.find(id: "shortcuts"),
+           commandTexts.contains(where: { text in queryWords.allSatisfy(text.contains) }) {
+            found.append(shortcuts)
+        }
+        let grouped = Dictionary(grouping: found, by: \.category)
         return SettingCategory.allCases.compactMap { category in
             guard let found = grouped[category] else { return nil }
             let editable = found.filter { $0.readOnlyReason == nil }
             return SettingsSection(category: category, descriptors: editable + found.filter { $0.readOnlyReason != nil })
         }
+    }
+
+    /// Commandes de `[[shortcuts]]`, relues avec le fichier (`refresh`).
+    private var roadieCommands: [String] = []
+
+    private var queryWords: [String] { TargetHintService.normalized(query).split(separator: " ").map(String.init) }
+
+    /// Commandes connues : raccourcis BTT lus et entrées de Roadie. O(c).
+    private var commandTexts: [String] {
+        BTTTriggerCatalog.shared.triggers.map { TargetHintService.normalized($0.command) }.filter { !$0.isEmpty }
+            + roadieCommands
     }
 
     /// Choisir une catégorie vide la recherche.
@@ -127,6 +144,12 @@ final class SettingsViewModel: ObservableObject {
     /// affichés. Garde catégorie, recherche et saisies en cours.
     func refresh() {
         validity = service.validity()
+        if let shortcuts = SettingsCatalog.find(id: "shortcuts"), case .success(.rows(let rows)) = service.collection(of: shortcuts) {
+            roadieCommands = rows.compactMap { row in
+                if case .string(let command) = row.fields["command"] { return TargetHintService.normalized(command) }
+                return nil
+            }
+        }
         values = [:]
         summaries = [:]
         loadVisibleValues()

@@ -224,6 +224,8 @@ public final class TargetModeRuntimeController: NSObject {
                 self?.handle(command)
             }
         }
+        // Session 108 : raccourcis BTT laissés en pause par un arrêt barre ouverte.
+        LauncherBTTPause.shared.restoreAtStart()
         events.append(RoadieEvent(type: "target_mode.runtime_started"))
     }
 
@@ -425,6 +427,8 @@ public final class TargetModeRuntimeController: NSObject {
         // Focus clavier rendu après Échap (session 097) : lu avant que le panneau prenne le clavier.
         escapeFocus = NSWorkspace.shared.frontmostApplication
             .flatMap { $0.processIdentifier == getpid() ? nil : LauncherFocusSnapshot.capture($0) }
+        // Touches de la barre prioritaires sur BTT (session 108) : ses raccourcis en conflit se mettent en pause.
+        LauncherBTTPause.shared.barOpened(pauseKeys: config.bttPauseKeys)
         // Barre immédiate (FR-009) : cibles Roadie tout de suite, puis toutes les fenêtres visibles, lues
         // en arrière-plan, chacune affichée dès qu'elle est lue. 2 s par fenêtre au moins : la barre
         // n'attend plus la plus lente, une page chargée peut donc être lue en entier.
@@ -661,6 +665,7 @@ public final class TargetModeRuntimeController: NSObject {
         context.viewBook = viewStore.load()
         context.saveViews = { book in viewStore.save(book) }
         context.viewCycleKey = service.effectiveConfig.experimental.targetMode.viewCycleHotkey
+        context.barKeys = service.effectiveConfig.experimental.targetMode.barKeys
         // Place et écran de la barre (session 102).
         let barConfig = service.effectiveConfig.experimental.targetMode
         let positionStore = LauncherPositionStore()
@@ -1984,6 +1989,7 @@ public final class TargetModeRuntimeController: NSObject {
         stopStyleUpdates()
         currentSession = nil
         currentCommand = nil
+        if command == "targets.search" || command == "targets.actions" { LauncherBTTPause.shared.barClosed() }
         if let saved = escapeFocus, command == "targets.search" || command == "targets.actions" {
             escapeFocus = nil
             if result.message == "target_search_escaped" { restoreFocusAfterEscape(saved) }

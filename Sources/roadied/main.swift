@@ -45,6 +45,7 @@ var settingsLiveApplyController: SettingsLiveApplyController?
 var workspaceObservers: [NSObjectProtocol] = []
 // Canal des commandes CLI (`run` et `tiler`), retenu pour toute la vie du process.
 var commandSocketServer: CommandSocketServer?
+var commandHotkeys: RoadieCommandHotkeys?
 
 func printUsage() {
     print("""
@@ -248,6 +249,11 @@ func startWindowSwitcherComponent() {
 func startCommandSocketComponent() {
     commandSocketServer = CommandSocketServer.start(router: CLICommandRouter())
     ShutdownRegistry.register { commandSocketServer?.stop() }
+    // Session 108 : raccourcis `[[shortcuts]]`, servis par le process qui détient le verrou, avec le routeur du socket.
+    let router = CLICommandRouter()
+    commandHotkeys = RoadieCommandHotkeys { arguments in _ = router.run(arguments) }
+    commandHotkeys?.start()
+    ShutdownRegistry.register { commandHotkeys?.stop() }
 }
 
 /// Sécurité de restauration, tenue par le process qui détient le verrou d'instance (`run` ou

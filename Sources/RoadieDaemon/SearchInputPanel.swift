@@ -24,6 +24,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     var viewCycle: (keyCode: UInt16, flags: NSEvent.ModifierFlags)?
     /// Saisie d'un chemin de dossier (session 105) : ⌫ en fin de `…/` remonte d'un dossier.
     var pathNavigation = false
+    /// Touches réglables de la barre (session 108) : combinaison physique → action de `LauncherBarKeys`.
+    var barKeys: [BarKeyCombo: String] = SearchInputPanel.barKeyTable(LauncherBarKeys.resolved([:]), layout: TargetSearchHotkey.currentLayoutTable())
     private var updating = false
     private var closing = false
 
@@ -144,7 +146,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         if event.type == .keyDown,
            (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
            let input = Self.navigation(event, labels: labelLetters, pick: pickModifier, text: field.stringValue,
-                                       selection: selectionKeys, grid: gridColumns != nil, viewCycle: viewCycle) {
+                                       selection: selectionKeys, grid: gridColumns != nil, viewCycle: viewCycle,
+                                       barKeys: barKeys) {
             onKey?(input)
             return
         }
@@ -152,7 +155,15 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     /// Les menus Édition ne sont pas installés dans le daemon. Cibler exclusivement cet éditeur.
+    /// Les touches réglables de la barre passent d'abord (session 108) : ⌘C ne copie la ligne que sans
+    /// texte sélectionné, sinon l'éditeur copie le texte.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == .keyDown, let editor = field.currentEditor() as? NSTextView, !editor.hasMarkedText(),
+           let action = barKeys[BarKeyCombo(event)] {
+            if action == "close" { onCancel?(); return true }
+            if action == "copy", editor.selectedRange().length > 0 { return NSApp.sendAction(#selector(NSText.copy(_:)), to: editor, from: self) }
+            if let input = Self.barInput(action, selection: selectionKeys) { onKey?(input); return true }
+        }
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
         guard flags == .command || flags == [.command, .shift],
               let editor = field.currentEditor() as? NSTextView,
@@ -166,16 +177,6 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
             return true
         }
         guard flags == .command else { return super.performKeyEquivalent(with: event) }
-        if key == "w" { onCancel?(); return true }
-        // ⌘C sans texte sélectionné copie la ligne choisie ; ⌘Y montre son aperçu (SPEC-077).
-        if key == "c", editor.selectedRange().length == 0 { onKey?(SearchKeyInput(kind: .copy)); return true }
-        if key == "y" { onKey?(SearchKeyInput(kind: .preview)); return true }
-        // ⌘L : la ligne choisie en grand texte (session 105).
-        if key == "l" { onKey?(SearchKeyInput(kind: .largeType)); return true }
-        // ⌘S : garder l'action choisie (SPEC-079).
-        if key == "s" { onKey?(SearchKeyInput(kind: .save)); return true }
-        // ⌘R : la règle proposée (SPEC-081).
-        if key == "r" { onKey?(SearchKeyInput(kind: .showRules)); return true }
         let action: Selector? = switch key {
         case "a": #selector(NSText.selectAll(_:))
         case "c": #selector(NSText.copy(_:))
@@ -196,8 +197,14 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     /// saisie vide ou de calcul : en AZERTY, les chiffres se tapent avec Maj (SPEC-087 FR-009).
     static func navigation(_ event: NSEvent, labels: Set<String> = [], pick: NSEvent.ModifierFlags = .command,
                            text: String = "", selection: SelectionKeys = SelectionKeys(), grid: Bool = false,
-                           viewCycle: (keyCode: UInt16, flags: NSEvent.ModifierFlags)? = nil) -> SearchKeyInput? {
+                           viewCycle: (keyCode: UInt16, flags: NSEvent.ModifierFlags)? = nil,
+                           barKeys: [BarKeyCombo: String]? = nil) -> SearchKeyInput? {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        // Touches réglables (session 108) ; ⌘W se traite dans `performKeyEquivalent`.
+        let table = barKeys ?? barKeyTable(LauncherBarKeys.resolved([:]), layout: TargetSearchHotkey.currentLayoutTable())
+        if let action = table[BarKeyCombo(event)], action != "close", let input = barInput(action, selection: selection) {
+            return input
+        }
         // Touche des présentations (session 099), avant les autres rôles de la touche.
         if let viewCycle, event.keyCode == viewCycle.keyCode, flags == viewCycle.flags { return SearchKeyInput(kind: .cycleView) }
         // Grille (SPEC-092 FR-004) : ← → passent à la tuile voisine ; Tab garde les verbes.
@@ -213,21 +220,7 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         if flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(), labels.contains(letter) {
             return SearchKeyInput(kind: .labelCharacter(letter))
         }
-        // Sélection multiple (SPEC-091, research R1) : ⌥ + flèches et ⌥⌫, comme le tampon d'Alfred.
-        // ⌥↑ ⌥↓ sur une ligne qui se choisit, ⌥← ⌥→ ⌥⌫ avec une sélection ; sinon AppKit déplace le
-        // curseur ou efface par mot (calcul, chemin, texte).
-        if flags == .option {
-            switch event.keyCode {
-            case 126 where selection.rowSelectable: return SearchKeyInput(kind: .selectToggle)
-            case 125 where selection.rowSelectable: return SearchKeyInput(kind: .selectAddNext)
-            case 123 where selection.hasSelection: return SearchKeyInput(kind: .selectRemoveLast)
-            case 124 where selection.hasSelection: return SearchKeyInput(kind: .selectionVerbs)
-            case 51 where selection.hasSelection: return SearchKeyInput(kind: .selectClear)
-            default: break
-            }
-        }
         switch event.keyCode {
-        case 53 where flags == .command: return SearchKeyInput(kind: .closeAll)
         case 53: return SearchKeyInput(kind: .escape)
         case 36, 76:
             return SearchKeyInput(kind: .confirm(shift: flags.contains(.shift), command: flags.contains(.command),
@@ -264,7 +257,7 @@ extension LauncherPickModifier {
 extension SearchInputPanel {
     /// `view_cycle_hotkey` normalisé → code physique et modificateurs selon la disposition ; nil si vide
     /// ou introuvable (session 099). O(128).
-    static func cycleKey(_ normalized: String, layout: [UInt32: String]) -> (keyCode: UInt16, flags: NSEvent.ModifierFlags)? {
+    nonisolated static func cycleKey(_ normalized: String, layout: [UInt32: String]) -> (keyCode: UInt16, flags: NSEvent.ModifierFlags)? {
         guard let parts = TargetModeConfig.hotkeyParts(normalized),
               let code = TargetSearchHotkey.namedKeyCode(parts.key) ?? TargetSearchHotkey.keyCode(for: parts.key, in: layout) else { return nil }
         var flags: NSEvent.ModifierFlags = []
@@ -274,6 +267,53 @@ extension SearchInputPanel {
         if parts.modifiers.contains("shift") { flags.insert(.shift) }
         return (UInt16(code), flags)
     }
+}
+
+extension SearchInputPanel {
+    /// Action d'une touche réglable. Sélection multiple (SPEC-091) : ajouter sur une ligne qui se choisit,
+    /// retirer, montrer les actions ou vider avec une sélection ; sinon nil, et AppKit déplace le curseur
+    /// ou efface par mot (calcul, chemin, texte). O(1).
+    static func barInput(_ action: String, selection: SelectionKeys) -> SearchKeyInput? {
+        switch action {
+        case "large_type": SearchKeyInput(kind: .largeType)
+        case "copy": SearchKeyInput(kind: .copy)
+        case "preview": SearchKeyInput(kind: .preview)
+        case "save_action": SearchKeyInput(kind: .save)
+        case "show_rules": SearchKeyInput(kind: .showRules)
+        case "close_all": SearchKeyInput(kind: .closeAll)
+        case "select_toggle" where selection.rowSelectable: SearchKeyInput(kind: .selectToggle)
+        case "select_add_next" where selection.rowSelectable: SearchKeyInput(kind: .selectAddNext)
+        case "select_remove_last" where selection.hasSelection: SearchKeyInput(kind: .selectRemoveLast)
+        case "selection_verbs" where selection.hasSelection: SearchKeyInput(kind: .selectionVerbs)
+        case "select_clear" where selection.hasSelection: SearchKeyInput(kind: .selectClear)
+        default: nil
+        }
+    }
+
+    /// Combinaisons physiques des touches de la barre, selon la disposition du clavier. Une combinaison
+    /// donnée à deux actions garde la première de `LauncherBarKeys.actions`. O(a).
+    nonisolated static func barKeyTable(_ keys: [String: String], layout: [UInt32: String]) -> [BarKeyCombo: String] {
+        var table: [BarKeyCombo: String] = [:]
+        for action in LauncherBarKeys.actions {
+            guard let raw = keys[action.id], let key = cycleKey(raw, layout: layout) else { continue }
+            let combo = BarKeyCombo(keyCode: key.keyCode, flags: key.flags)
+            if table[combo] == nil { table[combo] = action.id }
+        }
+        return table
+    }
+}
+
+/// Touche physique et modificateurs (⌘ ⌃ ⌥ ⇧), sans le côté ni les autres drapeaux.
+struct BarKeyCombo: Hashable, Sendable {
+    let keyCode: UInt16
+    let flags: UInt
+
+    init(keyCode: UInt16, flags: NSEvent.ModifierFlags) {
+        self.keyCode = keyCode
+        self.flags = flags.intersection([.command, .control, .option, .shift]).rawValue
+    }
+
+    init(_ event: NSEvent) { self.init(keyCode: event.keyCode, flags: event.modifierFlags) }
 }
 
 /// État de la barre utile aux touches ⌥ (SPEC-091) : une sélection existe, la ligne choisie se choisit.

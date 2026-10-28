@@ -17,6 +17,12 @@ jour et les limites connues ; les README décrivent la version courante.
 - Commandes système (verrouiller, suspendre les écrans, tout quitter, corbeille, son, redémarrer…),
   verbe « Forcer à quitter », ⌘L grand texte, ⌘⎋ ferme, ⌫ remonte d'un dossier, tri des dossiers,
   dossiers d'applications ajoutés, apprentissage réglable (`roadie launcher reset`), calcul avancé complet.
+- Paramètres > Raccourcis : tous les raccourcis réunis et réglés par appui sur les touches (barre, grille,
+  sélecteur, raccourcis globaux). Les commandes `roadie …` de BetterTouchTool y figurent, chacune prise en
+  charge par BetterTouchTool, par Roadie (`[[shortcuts]]`) ou par personne. Conflits avec BTT signalés ; une
+  touche de la barre peut mettre en pause le raccourci BTT tant que la barre est ouverte (`btt_pause_keys`).
+- Paramètres : la recherche filtre la colonne de gauche (catégories trouvées, puis leurs réglages) et trouve
+  aussi les commandes ; résultats affichés au fil du défilement, valeurs lues en un seul passage.
 
 - Présentations des résultats : liste, grille ou grandes tuiles pour un workflow, un dossier exploré ou les
   fichiers d'une recherche ; ⌘G (réglable) ou le chip à droite de la barre ; choix retenu par source.
@@ -95,6 +101,9 @@ jour et les limites connues ; les README décrivent la version courante.
 - Sélecteur : Cmd+Tab passe d'un plein écran natif au bureau ordinaire et revient, au lieu de
   « Action refusée par l'application » et d'une liste vide (réglage macOS « passer à un espace avec des
   fenêtres ouvertes pour l'application » requis, ADR 020).
+- ⌘L (grand texte) ne faisait rien : un raccourci global de BetterTouchTool (`roadie focus right`) prenait la
+  touche avant la barre. La touche se change, ou BTT se met en pause pendant la barre (Paramètres > Raccourcis).
+- Paramètres : la première lettre d'une recherche prenait jusqu'à 4,6 s ; environ 0,2 s.
 - Le tilde (⌥N) et les accents tapés par touche morte ne sont plus effacés par la barre.
 - Barre vide : « Revenir » propose la fenêtre vue avant la fenêtre en cours, plus la fenêtre en cours.
   Après Échap, l'application restée au premier plan retrouve le clavier (zone de saisie de T3 Code).

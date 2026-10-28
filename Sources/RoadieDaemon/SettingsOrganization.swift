@@ -26,6 +26,11 @@ enum SettingsOrganization {
         let key = d.key, id = d.id
         switch d.category {
         case .general: return "Texte et lisibilité"
+        case .raccourcis:
+            if ["search_hotkey", "actions_hotkey"].contains(key) || id == "overview.hotkey" { return "Raccourcis globaux de Roadie" }
+            if id.hasPrefix("target_grid.") { return "Dans la grille" }
+            if id == "shortcuts" { return "Commandes Roadie" }
+            return "Dans la barre de recherche"
         case .tuilage:
             if id.hasPrefix("window_placement.") { return "Nouvelles fenêtres" }
             if id.hasPrefix("width_adjustment.") || key == "resize_handles" { return "Redimensionnement" }
@@ -35,13 +40,13 @@ enum SettingsOrganization {
         case .stages: return "Organisation des stages et bureaux"
         case .focus: return key.contains("mouse") ? "Souris et pointeur" : "Changements de focus"
         case .bordures: return key.contains("font") ? "Texte" : "Apparence des bordures"
-        case .overview: return ["enabled", "hotkey"].contains(key) ? "Activation et raccourci" : "Disposition et loupe"
+        case .overview: return key == "enabled" ? "Activation" : "Disposition et loupe"
         case .selecteur:
             if key == "shortcuts" { return "Profils et raccourcis" }
             if key == "excluded_bundles" { return "Applications exclues" }
             if key == "enabled" { return "Activation" }
             return key.contains("font") ? "Texte" : "Apparence commune"
-        case .recherche: return key.contains("font") ? "Texte et apparence" : "Raccourci et activation"
+        case .recherche: return key.contains("font") ? "Texte et apparence" : "Activation et contenu"
         case .lettres: return key.contains("font") ? "Texte des repères" : "Activation et repères"
         case .grille:
             if key.contains("font") || key.contains("color") || key.contains("opacity") || key.contains("overlay") || key == "label_placement" { return "Apparence et repères" }

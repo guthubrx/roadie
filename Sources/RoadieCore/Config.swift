@@ -15,6 +15,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var experimental: ExperimentalConfig
     public var overview: OverviewConfig
     public var switcher: WindowSwitcherConfig
+    /// Raccourcis de commandes gérés par Roadie (session 108).
+    public var shortcuts: [CommandShortcut]
 
     public init(
         interface: InterfaceConfig = InterfaceConfig(),
@@ -29,7 +31,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
         experimental: ExperimentalConfig = ExperimentalConfig(),
         overview: OverviewConfig = OverviewConfig(),
-        switcher: WindowSwitcherConfig = WindowSwitcherConfig()
+        switcher: WindowSwitcherConfig = WindowSwitcherConfig(),
+        shortcuts: [CommandShortcut] = []
     ) {
         self.interface = interface
         self.tiling = tiling
@@ -44,6 +47,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.experimental = experimental
         self.overview = overview
         self.switcher = switcher
+        self.shortcuts = shortcuts
     }
 
     public init(
@@ -91,6 +95,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case experimental
         case overview
         case switcher
+        case shortcuts
     }
 
     public init(from decoder: Decoder) throws {
@@ -108,6 +113,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.experimental = try c.decodeIfPresent(ExperimentalConfig.self, forKey: .experimental) ?? ExperimentalConfig()
         self.overview = try c.decodeIfPresent(OverviewConfig.self, forKey: .overview) ?? OverviewConfig()
         self.switcher = try c.decodeIfPresent(WindowSwitcherConfig.self, forKey: .switcher) ?? WindowSwitcherConfig()
+        self.shortcuts = try c.decodeIfPresent([CommandShortcut].self, forKey: .shortcuts) ?? []
     }
 }
 
@@ -649,6 +655,87 @@ public struct WebSearch: Equatable, Codable, Sendable {
     ]
 }
 
+/// Actions de la barre qui ont une touche réglable (session 108). L'ordre est celui des paramètres.
+public enum LauncherBarKeys {
+    public struct Action: Sendable, Equatable {
+        public let id: String
+        public let label: String
+        public let help: String
+        public let defaultKey: String
+        public var configKey: String { id + "_key" }
+    }
+
+    public static let actions: [Action] = [
+        Action(id: "large_type", label: "Grand texte", help: "Montre la ligne choisie en très grands caractères, comme ⌘L dans Alfred.", defaultKey: "command+l"),
+        Action(id: "copy", label: "Copier la ligne", help: "Copie le chemin, l'adresse ou le titre de la ligne choisie, quand aucun texte n'est sélectionné dans la saisie.", defaultKey: "command+c"),
+        Action(id: "preview", label: "Aperçu", help: "Ouvre l'aperçu (Quick Look) du fichier choisi.", defaultKey: "command+y"),
+        Action(id: "save_action", label: "Garder l'action", help: "Enregistre l'action choisie sous une abréviation.", defaultKey: "command+s"),
+        Action(id: "show_rules", label: "Règle proposée", help: "Montre la règle proposée pour la fenêtre choisie.", defaultKey: "command+r"),
+        Action(id: "close", label: "Fermer la barre", help: "Ferme la barre.", defaultKey: "command+w"),
+        Action(id: "close_all", label: "Tout fermer", help: "Ferme la barre d'un coup, même dans un dossier ou un verbe.", defaultKey: "command+escape"),
+        Action(id: "select_toggle", label: "Ajouter ou retirer de la sélection", help: "Sélection multiple : ajoute la ligne choisie, ou la retire.", defaultKey: "alt+up"),
+        Action(id: "select_add_next", label: "Ajouter et passer à la suivante", help: "Sélection multiple : ajoute la ligne choisie, puis descend d'une ligne.", defaultKey: "alt+down"),
+        Action(id: "select_remove_last", label: "Retirer la dernière", help: "Sélection multiple : retire le dernier élément ajouté.", defaultKey: "alt+left"),
+        Action(id: "selection_verbs", label: "Actions de la sélection", help: "Sélection multiple : montre les actions qui s'appliquent à toute la sélection.", defaultKey: "alt+right"),
+        Action(id: "select_clear", label: "Vider la sélection", help: "Sélection multiple : retire tous les éléments.", defaultKey: "alt+backspace"),
+    ]
+
+    /// Défauts, puis valeurs données, normalisées ; une action inconnue est ignorée. O(a).
+    public static func resolved(_ given: [String: String]) -> [String: String] {
+        var keys: [String: String] = [:]
+        for action in actions {
+            keys[action.id] = TargetGridConfig.normalizedKey(given[action.id] ?? action.defaultKey, fallback: "")
+        }
+        return keys
+    }
+}
+
+/// Raccourci global géré par Roadie pour une commande `roadie …` (session 108), table `[[shortcuts]]`.
+/// `bttUUID` : raccourci BTT d'origine, désactivé tant que Roadie prend la main.
+public struct CommandShortcut: Equatable, Codable, Sendable {
+    public var keys: String
+    public var command: String
+    public var enabled: Bool
+    public var bttUUID: String
+
+    public init(keys: String, command: String, enabled: Bool = true, bttUUID: String = "") {
+        self.keys = TargetGridConfig.normalizedKey(keys, fallback: "")
+        self.command = command.trimmingCharacters(in: .whitespaces)
+        self.enabled = enabled
+        self.bttUUID = bttUUID
+    }
+
+    /// Arguments de la commande, sans le mot `roadie` du début ; guillemets simples et doubles respectés. O(n).
+    public var arguments: [String] {
+        var result: [String] = [], current = "", quote: Character?
+        for character in command {
+            if let open = quote {
+                if character == open { quote = nil } else { current.append(character) }
+            } else if character == "'" || character == "\"" {
+                quote = character
+            } else if character == " " {
+                if !current.isEmpty { result.append(current); current = "" }
+            } else { current.append(character) }
+        }
+        if !current.isEmpty { result.append(current) }
+        if result.first == "roadie" || result.first?.hasSuffix("/roadie") == true { result.removeFirst() }
+        return result
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case keys, command, enabled
+        case bttUUID = "btt_uuid"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(keys: try c.decodeIfPresent(String.self, forKey: .keys) ?? "",
+                  command: try c.decodeIfPresent(String.self, forKey: .command) ?? "",
+                  enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
+                  bttUUID: try c.decodeIfPresent(String.self, forKey: .bttUUID) ?? "")
+    }
+}
+
 public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var enabled: Bool
     public var pickerEnabled: Bool
@@ -720,6 +807,12 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var pathSort: String
     /// « Tout quitter » demande une confirmation (session 105).
     public var confirmQuitAll: Bool
+    /// Touches de la barre (session 108), par action de `LauncherBarKeys.actions` ; forme normalisée,
+    /// vide : touche désactivée. Clés TOML `<action>_key`.
+    public var barKeys: [String: String]
+    /// Touches de la barre qui passent avant BetterTouchTool (session 108) : tant que la barre est ouverte,
+    /// Roadie met en pause les raccourcis BTT de ces combinaisons, puis les réactive.
+    public var bttPauseKeys: [String]
 
     public static let defaultSearchHotkey = "command+control+alt+f"
     public static let defaultActionsHotkey = "command+control+alt+shift+f"
@@ -770,7 +863,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         appSearchPaths: [String] = [],
         learningEnabled: Bool = true,
         pathSort: String = "name",
-        confirmQuitAll: Bool = true
+        confirmQuitAll: Bool = true,
+        barKeys: [String: String] = [:],
+        bttPauseKeys: [String] = []
     ) {
         self.enabled = enabled
         self.pickerEnabled = pickerEnabled
@@ -811,6 +906,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.learningEnabled = learningEnabled
         self.pathSort = TargetModeConfig.pathSorts.contains(pathSort) ? pathSort : "name"
         self.confirmQuitAll = confirmQuitAll
+        self.barKeys = LauncherBarKeys.resolved(barKeys)
+        self.bttPauseKeys = bttPauseKeys.map { TargetGridConfig.normalizedKey($0, fallback: "") }.filter { !$0.isEmpty }
     }
 
     /// Modificateurs (`command`, `control`, `alt`, `shift`) et touche d'un raccourci normalisé ;
@@ -864,6 +961,15 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case learningEnabled = "learning_enabled"
         case pathSort = "path_sort"
         case confirmQuitAll = "confirm_quit_all"
+        case bttPauseKeys = "btt_pause_keys"
+    }
+
+    /// Clé TOML quelconque : les touches de la barre se lisent par leur nom (`large_type_key`…).
+    private struct AnyKey: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
     }
 
     public init(from decoder: Decoder) throws {
@@ -907,8 +1013,22 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             appSearchPaths: try c.decodeIfPresent([String].self, forKey: .appSearchPaths) ?? [],
             learningEnabled: try c.decodeIfPresent(Bool.self, forKey: .learningEnabled) ?? true,
             pathSort: try c.decodeIfPresent(String.self, forKey: .pathSort) ?? "name",
-            confirmQuitAll: try c.decodeIfPresent(Bool.self, forKey: .confirmQuitAll) ?? true
+            confirmQuitAll: try c.decodeIfPresent(Bool.self, forKey: .confirmQuitAll) ?? true,
+            barKeys: try Self.decodeBarKeys(decoder),
+            bttPauseKeys: try c.decodeIfPresent([String].self, forKey: .bttPauseKeys) ?? []
         )
+    }
+
+    /// O(a), a = nombre d'actions de la barre.
+    private static func decodeBarKeys(_ decoder: Decoder) throws -> [String: String] {
+        let any = try decoder.container(keyedBy: AnyKey.self)
+        var keys: [String: String] = [:]
+        for action in LauncherBarKeys.actions {
+            if let value = try any.decodeIfPresent(String.self, forKey: AnyKey(stringValue: action.configKey)) {
+                keys[action.id] = value
+            }
+        }
+        return keys
     }
 }
 
@@ -1346,14 +1466,15 @@ public enum RoadieConfigLoader {
         "fx.borders": ["stage_overrides"],
         "width_adjustment": ["presets"],
         "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"],
-        "experimental.target_mode": ["web_searches", "fallback_searches", "bookmark_browsers", "app_search_paths"],
+        "experimental.target_mode": ["web_searches", "fallback_searches", "bookmark_browsers", "app_search_paths", "btt_pause_keys"],
         "switcher": ["excluded_bundles", "shortcuts"]
     ]
 
     /// Tables qui sont elles-mêmes des tableaux de tables ou leurs sous-tables.
     private static let nonScalarTables: Set<String> = [
         "tiling.display_overrides", "stage_manager.workspaces", "fx.borders.stage_overrides",
-        "fx.rail.preview.stage_overrides", "switcher.shortcuts", "experimental.target_mode.web_searches", "rules", "rules.match", "rules.action"
+        "fx.rail.preview.stage_overrides", "switcher.shortcuts", "experimental.target_mode.web_searches", "rules", "rules.match", "rules.action",
+        "shortcuts"
     ]
 
     /// Clés scalaires reconnues par le validateur, par chemin de table TOML complet.
@@ -1525,7 +1646,8 @@ private enum ConfigValidationRules {
         "experimental.target_record",
         "rules",
         "rules.match",
-        "rules.action"
+        "rules.action",
+        "shortcuts"
     ]
 
     private static let knownUnsupportedTables: Set<String> = [
@@ -1577,11 +1699,12 @@ private enum ConfigValidationRules {
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
-            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family", "theme", "theme_dark", "visible_results", "bar_screen", "bar_position", "bar_save_position", "terminal_app", "bookmarks_enabled", "bookmark_browsers", "app_search_paths", "learning_enabled", "path_sort", "confirm_quit_all"],
+            "experimental.target_mode": Set<String>(["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family", "theme", "theme_dark", "visible_results", "bar_screen", "bar_position", "bar_save_position", "terminal_app", "bookmarks_enabled", "bookmark_browsers", "app_search_paths", "learning_enabled", "path_sort", "confirm_quit_all", "btt_pause_keys"]).union(LauncherBarKeys.actions.map(\.configKey)),
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],
             "rules": ["id", "enabled", "priority", "stop_processing", "match", "action"],
+            "shortcuts": ["keys", "command", "enabled", "btt_uuid"],
             "rules.match": ["app", "app_regex", "title", "title_regex", "role", "subrole", "display", "desktop", "stage", "is_floating"],
             "rules.action": ["manage", "exclude", "assign_desktop", "assign_display", "assign_stage", "follow", "floating", "layout", "gap_override", "scratchpad", "emit_event"]
         ]

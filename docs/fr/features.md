@@ -687,7 +687,12 @@ toutes les fenetres visibles : `scope = "visible_windows"` dans
 - **Système** : verrouiller, suspendre les écrans, tout quitter, vider la corbeille, son, redémarrer,
   éteindre… (second Retour pour les commandes lourdes) ; verbe « Forcer à quitter » d'une application.
 - **Dossiers tapés** : ⌫ à la fin de `…/` remonte d'un dossier ; `path_sort` trie par nom ou par date.
-- **Divers** : ⌘L montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
+- **Raccourcis** : Paramètres > Raccourcis réunit toutes les touches, réglées par appui : raccourcis globaux,
+  touches de la barre (`large_type_key`, `copy_key`… dans `[experimental.target_mode]`), grille, sélecteur, et
+  commandes `roadie …` de BetterTouchTool, chacune prise en charge par BTT, par Roadie (`[[shortcuts]]` :
+  `keys`, `command`, `btt_uuid`) ou par personne. Une touche de la barre prise par BTT est signalée ;
+  `btt_pause_keys` met ce raccourci BTT en pause tant que la barre est ouverte.
+- **Divers** : ⌘L (réglable) montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
   dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
   la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…
 

@@ -44,6 +44,11 @@ extension SettingsCatalog {
         case "target_mode.bookmark_browsers":
             return list(.choice(["firefox", "safari", "chrome", "brave", "edge"]),
                         TargetModeConfig().bookmarkBrowsers.map(SettingValue.string), unique: true)
+        case "target_mode.btt_pause_keys":
+            return list(.text, [], unique: true)
+        case "shortcuts":
+            return rows("shortcuts", [field("keys", "Combinaison"), field("command", "Commande", required: true),
+                                      field("enabled", "Active", .bool, value: .bool(true)), field("btt_uuid", "Raccourci BTT d'origine")])
         case "target_mode.app_search_paths":
             return list(.text, [], suggestions: ["~/Applications/Chrome Apps.localized", "/Applications/Utilities"], unique: true)
         case "switcher.shortcuts":

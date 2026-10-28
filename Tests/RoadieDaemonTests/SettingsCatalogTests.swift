@@ -21,10 +21,10 @@ struct SettingsCatalogTests {
         // Spec056 : 7 réglages du sélecteur ; les listes du sélecteur sont des collections.
         // Spec075 : raccourci des verbes et recherche web. Spec088 : deux réglages des workflows. Session 096 : quatre réglages de la barre vide.
         // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
-        // terminal, signets, tri, apprentissage, confirmation).
-        #expect(simple.count == 219)
+        // terminal, signets, tri, apprentissage, confirmation). Session 108 : douze touches de la barre.
+        #expect(simple.count == 231)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 139)
+        #expect(simple.count - railSimple.count == 151)
     }
 
     @Test
@@ -81,6 +81,7 @@ struct SettingsCatalogTests {
             "rail.preview.stage_overrides", "rules", "signals.hooks",
             "target_mode.bookmark_browsers", "target_mode.app_search_paths",
             "switcher.excluded_bundles", "switcher.shortcuts",
+            "target_mode.btt_pause_keys", "shortcuts",
         ])
         for descriptor in SettingsCatalog.all where descriptor.collection != nil {
             #expect(descriptor.readOnlyReason == nil)
@@ -96,7 +97,8 @@ struct SettingsCatalogTests {
         }
         #expect(SettingCategory.rail.label == "Rail")
         #expect(SettingCategory.stages.label == "Stages et bureaux")
-        #expect(SettingsCatalog.find(id: "target_mode.search_hotkey")?.category == .recherche)
+        // Session 108 : tous les raccourcis sont réunis dans leur catégorie.
+        #expect(SettingsCatalog.find(id: "target_mode.search_hotkey")?.category == .raccourcis)
         #expect(SettingsCatalog.find(id: "stage_manager.default_stage")?.category == .stages)
         #expect(SettingsCatalog.find(id: "stage_manager.workspaces")?.category == .stages)
         #expect(SettingsCatalog.find(id: "borders.stage_overrides")?.category == .bordures)
@@ -164,7 +166,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 219)
+        #expect(expected.count == 231)
     }
 
     // MARK: - Défauts
@@ -173,6 +175,11 @@ struct SettingsCatalogTests {
     func configDefaultsMatchRoadieConfig() throws {
         let tree = try jsonTree(RoadieConfig())
         for descriptor in simple where !descriptor.tablePath.hasPrefix("fx.rail") {
+            // Touches de la barre (session 108) : lues par leur nom, gardées dans `barKeys`.
+            if let action = LauncherBarKeys.actions.first(where: { $0.configKey == descriptor.key && descriptor.tablePath == "experimental.target_mode" }) {
+                #expect(descriptor.defaultValue == .string(RoadieConfig().experimental.targetMode.barKeys[action.id] ?? ""), "défaut différent : \(descriptor.id)")
+                continue
+            }
             let json = jsonValue(tree, tablePath: descriptor.tablePath, key: descriptor.key)
             switch descriptor.defaultValue {
             case .unset:

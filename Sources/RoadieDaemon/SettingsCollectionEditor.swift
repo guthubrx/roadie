@@ -129,6 +129,18 @@ final class SettingsCollectionEditorModel: ObservableObject {
         return newID
     }
 
+    /// Nouvelle ligne enregistrée tout de suite avec ces valeurs (session 108) ; nil si l'écriture échoue.
+    @discardableResult
+    func addRow(values: [String: String]) -> UUID? {
+        var raw = Dictionary(uniqueKeysWithValues: fields.map { ($0.path.joined(separator: "."), Self.text($0.defaultValue)) })
+        raw.merge(values) { _, new in new }
+        let id = UUID()
+        rows.append(Row(id: id, raw: raw, source: CollectionRow(fields: [:])))
+        hasDrafts = true
+        guard persist() else { rows.removeAll { $0.id == id }; return nil }
+        return id
+    }
+
     func addRow() {
         let raw = Dictionary(uniqueKeysWithValues: fields.map { ($0.path.joined(separator: "."), Self.text($0.defaultValue)) })
         rows.append(Row(id: UUID(), raw: raw, source: CollectionRow(fields: [:])))

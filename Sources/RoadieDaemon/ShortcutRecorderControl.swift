@@ -4,13 +4,14 @@ import SwiftUI
 
 /// Conversion de l'appui réel ; aucune saisie du nom des touches. O(128) pour la disposition.
 enum ShortcutCapture {
-    static func value(keyCode: UInt32, modifiers: NSEvent.ModifierFlags, layout: [UInt32: String]) -> String? {
+    /// `allowsPlainKeys` : une touche seule est acceptée (touches de la grille, session 108).
+    static func value(keyCode: UInt32, modifiers: NSEvent.ModifierFlags, layout: [UInt32: String], allowsPlainKeys: Bool = false) -> String? {
         var names: [String] = []
         if modifiers.contains(.control) { names.append("control") }
         if modifiers.contains(.option) { names.append("alt") }
         if modifiers.contains(.shift) { names.append("shift") }
         if modifiers.contains(.command) { names.append("command") }
-        guard modifiers.contains(.control) || modifiers.contains(.option) || modifiers.contains(.command) else { return nil }
+        guard allowsPlainKeys || modifiers.contains(.control) || modifiers.contains(.option) || modifiers.contains(.command) else { return nil }
         let named = ["space", "return", "tab", "escape", "backspace", "left", "right", "up", "down"] + (1...12).map { "f\($0)" }
         let key = named.first { TargetSearchHotkey.namedKeyCode($0) == keyCode }
             ?? layout[keyCode].flatMap { $0.count == 1 && !$0.contains("+") && !$0.contains(where: \.isWhitespace) ? $0 : nil }
@@ -22,7 +23,7 @@ enum ShortcutCapture {
         guard !raw.isEmpty else { return "Enregistrer…" }
         let symbols = ["command": "⌘", "cmd": "⌘", "control": "⌃", "ctrl": "⌃",
                        "alt": "⌥", "option": "⌥", "shift": "⇧", "tab": "⇥", "space": "Espace",
-                       "return": "↩", "escape": "⎋", "left": "←", "right": "→", "up": "↑", "down": "↓"]
+                       "return": "↩", "escape": "⎋", "backspace": "⌫", "left": "←", "right": "→", "up": "↑", "down": "↓"]
         return raw.split(separator: "+").map { symbols[String($0)] ?? $0.uppercased() }.joined(separator: " ")
     }
 }
@@ -30,11 +31,12 @@ enum ShortcutCapture {
 struct ShortcutRecorderControl: View {
     let value: String
     let fontSize: Double
+    var allowsPlainKeys = false
     let onChange: (String) -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            RecorderButton(value: value, fontSize: fontSize, onChange: onChange)
+            RecorderButton(value: value, fontSize: fontSize, allowsPlainKeys: allowsPlainKeys, onChange: onChange)
                 .frame(minWidth: 120, idealWidth: 230, maxWidth: .infinity, minHeight: 34)
             if !value.isEmpty {
                 Button("Effacer", systemImage: "xmark.circle") { onChange("") }
@@ -47,6 +49,7 @@ struct ShortcutRecorderControl: View {
 private struct RecorderButton: NSViewRepresentable {
     let value: String
     let fontSize: Double
+    let allowsPlainKeys: Bool
     let onChange: (String) -> Void
     @Environment(\.isEnabled) private var enabled
 
@@ -54,6 +57,7 @@ private struct RecorderButton: NSViewRepresentable {
     func updateNSView(_ view: ShortcutRecorderButton, context: Context) {
         view.onChange = onChange
         view.raw = value
+        view.allowsPlainKeys = allowsPlainKeys
         view.font = .systemFont(ofSize: fontSize)
         view.isEnabled = enabled
         if !view.recording { view.title = ShortcutCapture.label(value) }
@@ -69,6 +73,7 @@ private struct RecorderButton: NSViewRepresentable {
 @MainActor
 private final class ShortcutRecorderButton: NSButton {
     var raw = ""
+    var allowsPlainKeys = false
     var onChange: ((String) -> Void)?
     private(set) var recording = false
     private var tap: CFMachPort?
@@ -107,7 +112,8 @@ private final class ShortcutRecorderButton: NSButton {
                 let code = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
                 if code == 53 { recorder.finish(); return true }
                 let flags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
-                if let value = ShortcutCapture.value(keyCode: code, modifiers: flags, layout: TargetSearchHotkey.currentLayoutTable()) {
+                if let value = ShortcutCapture.value(keyCode: code, modifiers: flags, layout: TargetSearchHotkey.currentLayoutTable(),
+                                                     allowsPlainKeys: recorder.allowsPlainKeys) {
                     let change = recorder.onChange
                     recorder.finish()
                     change?(value)

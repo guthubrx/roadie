@@ -74,6 +74,8 @@ struct LauncherSearchContext {
     var viewBook = LauncherViewBook()
     var saveViews: (LauncherViewBook) -> Void = { _ in }
     var viewCycleKey = ""
+    /// Touches réglables de la barre (session 108).
+    var barKeys = LauncherBarKeys.resolved([:])
     /// Mises à jour de cette grille (tuiles après le texte d'attente, session 095) : la barre s'abonne.
     var subscribeGrid: (@escaping @MainActor (AlfredGridView) -> Void) -> Void = { _ in }
     /// Texte de départ de la barre (Show Alfred d'un workflow, ou dernière saisie reprise).

@@ -270,6 +270,11 @@ Session 106 installée : Cmd+Tab entre un plein écran natif et le bureau ordina
 (ouverture LaunchServices puis élément AX par jeton distant, ADR 020) ; liste relue au lieu d'être vide.
 Réglage macOS « passer à un espace avec des fenêtres ouvertes » requis. Aller-retour confirmé par l'utilisateur.
 Reçu : specs/106-cmdtab-plein-ecran/validation.md.
+Sessions 107 et 108 : recherche des paramètres qui filtre la colonne de gauche (index des valeurs, résultats
+paresseux : « p » 4,6 s → 0,2 s) ; Paramètres > Raccourcis réunit toutes les touches réglées par appui, les
+commandes `roadie` de BTT avec leur gestionnaire (BTT, Roadie `[[shortcuts]]`, personne) et les conflits.
+⌘L était pris par BTT (`roadie focus right`) : `btt_pause_keys` met BTT en pause pendant la barre.
+2 170 tests / 308 suites. Reçus : specs/107-recherche-parametres/, specs/108-raccourcis-reunis/.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

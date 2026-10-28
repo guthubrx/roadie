@@ -6,10 +6,14 @@ import RoadieCore
 /// Les couleurs viennent du système : l'apparence claire ou sombre suit macOS.
 struct SettingsView: View {
     @ObservedObject var model: SettingsViewModel
+    /// Raccourcis BTT lus à l'ouverture : la recherche trouve aussi les commandes (session 108).
+    @ObservedObject private var bttCatalog = BTTTriggerCatalog.shared
     private var fonts: InterfaceConfig { model.interfaceFonts }
     @State private var advancedOpen = false
     /// Réglage choisi dans la colonne de recherche : la zone droite y descend et le surligne.
     @State private var scrollTarget: String?
+    @State private var typedQuery = ""
+    @State private var searchDelay: Task<Void, Never>?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -21,16 +25,28 @@ struct SettingsView: View {
         .font(.system(size: fonts.settingsTextFontSize))
         .buttonStyle(SettingsButtonStyle(fontSize: fonts.settingsTextFontSize))
         .sheet(isPresented: $advancedOpen) { SettingsAdvancedEditor(model: model, descriptor: nil) }
+        .onAppear { bttCatalog.reload(); typedQuery = model.query }
     }
 
     // MARK: - Colonne gauche
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Rechercher dans tous les réglages", text: $model.query)
+            TextField("Rechercher dans tous les réglages", text: $typedQuery)
                 .textFieldStyle(.roundedBorder)
-                .onExitCommand { model.query = "" }
+                .onExitCommand { typedQuery = ""; model.query = "" }
                 .padding([.horizontal, .top], 10)
+                // Recherche lancée après une pause de frappe de 80 ms (session 107) : « police » tapé d'un trait ne
+                // recalcule pas six fois la fenêtre.
+                .onChange(of: typedQuery) { _, text in
+                    searchDelay?.cancel()
+                    searchDelay = Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(80))
+                        guard !Task.isCancelled else { return }
+                        model.query = text
+                    }
+                }
+                .onChange(of: model.query) { _, query in if query != typedQuery { typedQuery = query } }
             if model.isSearching {
                 searchSidebar
             } else {
@@ -52,6 +68,7 @@ struct SettingsView: View {
             HStack(spacing: 6) {
                 Text(category.label)
                     .font(.system(size: fonts.settingsTextFontSize))
+                    .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let count {
                     Spacer(minLength: 4)
@@ -124,10 +141,7 @@ struct SettingsView: View {
                         Text(String("Aucun réglage ne correspond à « \(model.query) »."))
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(model.sections) { section in
-                        Text(section.category.label).font(.system(size: fonts.settingsTitleFontSize, weight: .bold))
-                        grouped(section.descriptors)
-                    }
+                    lazyResults(model.sections)
                 } else {
                     Text(model.category.label).font(.system(size: fonts.settingsTitleFontSize, weight: .bold))
                     if model.category == .general {
@@ -146,6 +160,30 @@ struct SettingsView: View {
         }
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    /// Résultats de recherche (session 107) : une ligne par élément, construite seulement quand elle devient
+    /// visible. Une recherche large (« p », 230 réglages) ne fabrique plus toutes ses lignes d'un coup.
+    private func lazyResults(_ sections: [SettingsSection]) -> some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(SettingsDetailItem.items(sections)) { item in
+                switch item.kind {
+                case .title(let title):
+                    Text(title).font(.system(size: fonts.settingsTitleFontSize, weight: .bold)).padding(.top, 16).padding(.bottom, 4)
+                case .group(let title):
+                    Text(title).font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
+                        .foregroundStyle(.secondary).padding(.top, 12).padding(.bottom, 8)
+                case .row(let descriptor, let first, let last):
+                    let shape = UnevenRoundedRectangle(topLeadingRadius: first ? 10 : 0, bottomLeadingRadius: last ? 10 : 0,
+                                                       bottomTrailingRadius: last ? 10 : 0, topTrailingRadius: first ? 10 : 0)
+                    SettingRow(model: model, descriptor: descriptor)
+                        .background(scrollTarget == descriptor.id ? RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.10)) : nil)
+                        .background(shape.fill(Color(nsColor: .controlBackgroundColor)))
+                        .overlay(shape.stroke(Color(nsColor: .separatorColor)))
+                        .id(descriptor.id)
+                }
+            }
+        }
     }
 
     private func grouped(_ descriptors: [SettingDescriptor]) -> some View {
@@ -338,6 +376,10 @@ private struct SettingRow: View {
             } else {
                 if descriptor.id == "switcher.shortcuts" {
                     SettingsSwitcherProfilesView(model: model, descriptor: descriptor)
+                } else if descriptor.id == "shortcuts" {
+                    SettingsCommandShortcutsView(model: model, descriptor: descriptor)
+                } else if descriptor.id == "target_mode.btt_pause_keys" {
+                    SettingsShortcutConflictsView(model: model, descriptor: descriptor)
                 } else {
                     SettingsCollectionEditor(model: model, descriptor: descriptor)
                 }
@@ -392,9 +434,10 @@ private struct SettingRow: View {
                     set: { model.apply(descriptor, raw: $0) }
                 ), label: descriptor.label)
                 .frame(maxWidth: .infinity)
-            } else if descriptor.key == "search_hotkey" || descriptor.key == "actions_hotkey" || descriptor.key == "view_cycle_hotkey"
-                        || descriptor.id == "overview.hotkey" {
-                ShortcutRecorderControl(value: model.text(for: descriptor), fontSize: fonts.settingsTextFontSize) {
+            } else if descriptor.category == .raccourcis {
+                // Toutes les touches se règlent par appui (session 108) ; celles de la grille acceptent une touche seule.
+                ShortcutRecorderControl(value: model.text(for: descriptor), fontSize: fonts.settingsTextFontSize,
+                                        allowsPlainKeys: descriptor.id.hasPrefix("target_grid.")) {
                     model.apply(descriptor, raw: $0)
                 }
             } else {
@@ -469,5 +512,33 @@ private struct OverviewBlurPreview: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3)))
         .accessibilityLabel("Aperçu du flou : \(Int(percent)) %")
+    }
+}
+
+/// Élément de la liste paresseuse des résultats : titre de catégorie, titre de groupe ou ligne de réglage,
+/// avec sa place dans la carte (première, dernière) pour arrondir les coins. O(n).
+struct SettingsDetailItem: Identifiable {
+    enum Kind {
+        case title(String)
+        case group(String)
+        case row(SettingDescriptor, first: Bool, last: Bool)
+    }
+    let id: String
+    let kind: Kind
+
+    static func items(_ sections: [SettingsSection]) -> [SettingsDetailItem] {
+        var items: [SettingsDetailItem] = []
+        for section in sections {
+            items.append(SettingsDetailItem(id: "title:" + section.category.rawValue, kind: .title(section.category.label)))
+            for group in SettingsOrganization.groups(section.descriptors) {
+                if group.descriptors.count != 1 || group.descriptors.first?.collection == nil {
+                    items.append(SettingsDetailItem(id: "group:\(section.category.rawValue):" + group.title, kind: .group(group.title)))
+                }
+                for (index, descriptor) in group.descriptors.enumerated() {
+                    items.append(SettingsDetailItem(id: descriptor.id, kind: .row(descriptor, first: index == 0, last: index == group.descriptors.count - 1)))
+                }
+            }
+        }
+        return items
     }
 }

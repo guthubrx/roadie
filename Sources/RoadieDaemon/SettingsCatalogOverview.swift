@@ -10,6 +10,6 @@ extension SettingsCatalog {
         entry(.overview, "overview", "background_blur", "Flou du fond d’écran (%)", "0 % : fond d’écran net. 100 % : très flou. L’aperçu montre votre fond d’écran avec ce réglage. Le flou masque les icônes du bureau sans gêner la lecture des cartes.", .double(0...100), .double(20)),
         entry(.overview, "overview", "selection_color", "Couleur du contour de sélection", "Contour de la fenêtre sélectionnée : au départ la fenêtre active, puis celle choisie aux flèches. C’est la fenêtre qu’Entrée ouvre. Le survol de la souris ne la déplace pas.", .color, .string("#66C2F7")),
         entry(.overview, "overview", "selection_width", "Épaisseur du contour de sélection (points)", "Épaisseur du contour de la fenêtre sélectionnée, de 1 à 8 points.", .double(1...8), .double(2)),
-        entry(.overview, "overview", "hotkey", "Raccourci interne (facultatif)", "Enregistrez directement une combinaison. Laissez vide pour BetterTouchTool, Karabiner ou un autre outil : roadie overview toggle. Ce réglage ne modifie pas Cmd+Tab.", .text, .string("")),
+        entry(.raccourcis, "overview", "hotkey", "Raccourci de la vue d’ensemble", "Enregistrez directement une combinaison. Laissez vide pour BetterTouchTool, Karabiner ou un autre outil : roadie overview toggle. Ce réglage ne modifie pas Cmd+Tab.", .text, .string("")),
     ]
 }
