@@ -43,12 +43,14 @@ struct LauncherHistoryStore: Sendable {
     func load() -> LauncherHistoryBook { JSONPersistence.load(LauncherHistoryBook.self, from: url, default: LauncherHistoryBook()) }
 
     func record(_ query: String, at now: Date = Date()) {
-        var book = load()
-        let before = book
-        book.record(query, at: now)
-        guard book != before else { return }
-        JSONPersistence.write(book, to: url, label: "launcher history")
+        JSONPersistence.mutate(LauncherHistoryBook.self, at: url, default: LauncherHistoryBook(), label: "launcher history") { book in
+            book.record(query, at: now)
+        }
     }
 
-    func clear() { JSONPersistence.write(LauncherHistoryBook(), to: url, label: "launcher history") }
+    func clear() throws {
+        try JSONPersistence.mutateChecked(LauncherHistoryBook.self, at: url, default: LauncherHistoryBook(), label: "launcher history") { book in
+            book = LauncherHistoryBook()
+        }
+    }
 }

@@ -11,15 +11,24 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
     private let presentGrid: @MainActor @Sendable (AlfredGridView) -> Void
     /// Roadie va à la fenêtre du navigateur qui reçoit une adresse web (session 095).
     private let follow: @MainActor @Sendable (URL) -> Void
+    private let postKeyEvent: @Sendable (CGEvent) -> Void
+    private let writePasteboard: @MainActor @Sendable (String) -> Void
 
     init(events: EventLog, webSearchURL: String, reopen: @escaping @MainActor @Sendable (String) -> Void,
          presentGrid: @escaping @MainActor @Sendable (AlfredGridView) -> Void = { _ in },
-         follow: @escaping @MainActor @Sendable (URL) -> Void = { _ in }) {
+         follow: @escaping @MainActor @Sendable (URL) -> Void = { _ in },
+         postKeyEvent: @escaping @Sendable (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) },
+         writePasteboard: @escaping @MainActor @Sendable (String) -> Void = { text in
+             NSPasteboard.general.clearContents()
+             NSPasteboard.general.setString(text, forType: .string)
+         }) {
         self.events = events
         self.webSearchURL = webSearchURL
         self.reopen = reopen
         self.presentGrid = presentGrid
         self.follow = follow
+        self.postKeyEvent = postKeyEvent
+        self.writePasteboard = writePasteboard
     }
 
     func openURL(_ url: String, browser: String?) async {
@@ -58,17 +67,15 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
 
     /// Copie ; `paste` : ⌘V simulé dans l'application au premier plan, une fois la barre fermée.
     func copy(_ text: String, paste: Bool) async {
-        await MainActor.run {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-        }
+        let writePasteboard = writePasteboard
+        await MainActor.run { writePasteboard(text) }
         guard paste else { return }
         try? await Task.sleep(for: .milliseconds(150))
         let source = CGEventSource(stateID: .hidSystemState)
         for down in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: down) else { continue }
             event.flags = .maskCommand
-            event.post(tap: .cghidEventTap)
+            postKeyEvent(event)
         }
     }
 
@@ -130,7 +137,7 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
     }()
 
     func keyCombo(keyCode: Int, character: String, modifiers: Int, count: Int) async {
-        let code = keyCode >= 0 ? CGKeyCode(keyCode) : character.lowercased().first.flatMap { Self.keyCodes[$0] }
+        let code = keyCode >= 0 ? CGKeyCode(exactly: keyCode) : character.lowercased().first.flatMap { Self.keyCodes[$0] }
         guard let code else { return }
         var flags: CGEventFlags = []
         if modifiers & 1_048_576 != 0 { flags.insert(.maskCommand) }
@@ -143,7 +150,7 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
             for down in [true, false] {
                 guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else { continue }
                 event.flags = flags
-                event.post(tap: .cghidEventTap)
+                postKeyEvent(event)
             }
             try? await Task.sleep(for: .milliseconds(20))
         }

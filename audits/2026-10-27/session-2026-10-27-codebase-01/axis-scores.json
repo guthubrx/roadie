@@ -1,0 +1,1059 @@
+{
+  "scoring_version": "axes-2",
+  "input_sha256": "fc2f12a58deeeed8a30f62e58020f25183f635d698f7195737562ef53c92451c",
+  "manifest_sha256": "3a9d72442995dee1c66b0093449f9a8017fe2f5ba3945ad153b63ee1bf2a2f7c",
+  "axes": {
+    "security": {
+      "title": "Sécurité",
+      "score": 50,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 5,
+      "controls_applicable": 5,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 2,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle commun non vérifié : security.authorization"
+      ],
+      "control_ids": [
+        "axes.security.01",
+        "axes.security.02",
+        "axes.security.03",
+        "axes.security.04",
+        "axes.security.05"
+      ],
+      "finding_fingerprints": [
+        "3f97992ebae1926f57fd",
+        "49bf8e4666be13ab11c2"
+      ],
+      "demonstrated_score": 50,
+      "criteria": [
+        {
+          "id": "axes.security.01",
+          "axis": "security",
+          "title": "Analyse statique et validation des entrées",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Semgrep et cinq règles SwiftLint ; une seule règle Semgrep Swift, lecture manuelle partielle. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/controle-swift.md",
+              "sha256": "700cd23c4df5d6d31b926efab5722fcbae6286193a05f01b304d9040ccbd4536"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060122775256Z/stdout.json",
+              "sha256": "e61ceca3d4fef8c7ee8907af529862468ba197b49ba8a079975c2213e55c68b2"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.02",
+          "axis": "security",
+          "title": "Protection des secrets courants",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Recherche locale des secrets des fichiers ; configuration d'exclusion figée, pas de contrôle continu démontré. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060137200327Z/raw.json",
+              "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.03",
+          "axis": "security",
+          "title": "Maîtrise des secrets historiques",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Historique examiné depuis v0.4.0 ; commits antérieurs exclus. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060144671471Z/raw.json",
+              "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.04",
+          "axis": "security",
+          "title": "Authentification et séparation des droits",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Socket local 0600 examiné ; scripts de workflow exécutés avec les droits de l'utilisateur, sans isolement démontré. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.05",
+          "axis": "security",
+          "title": "Maîtrise des dépendances vulnérables",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "OSV a examiné une dépendance Swift verrouillée ; suivi continu non démontré. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060155620354Z/stdout.json",
+              "sha256": "54345d5194d238b6017d0f3181f392109ce35023cc6b4bdfa8c134943dcb578e"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "llm_security": {
+      "title": "Sécurité IA",
+      "score": null,
+      "grade": "N/A",
+      "status": "not_applicable",
+      "controls_verified": 0,
+      "controls_applicable": 0,
+      "coverage_percent": null,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.llm_security.01",
+        "axes.llm_security.02",
+        "axes.llm_security.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": null,
+      "criteria": [
+        {
+          "id": "axes.llm_security.01",
+          "axis": "llm_security",
+          "title": "Confidentialité et pseudonymisation",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Aucun appel à un service LLM trouvé dans les sources et dépendances du produit.",
+          "evidence": [],
+          "excluded": true
+        },
+        {
+          "id": "axes.llm_security.02",
+          "axis": "llm_security",
+          "title": "Permissions des appels externes",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Aucun appel à un service LLM trouvé dans les sources et dépendances du produit.",
+          "evidence": [],
+          "excluded": true
+        },
+        {
+          "id": "axes.llm_security.03",
+          "axis": "llm_security",
+          "title": "Résistance aux instructions malveillantes",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Aucun appel à un service LLM trouvé dans les sources et dépendances du produit.",
+          "evidence": [],
+          "excluded": true
+        }
+      ]
+    },
+    "reliability": {
+      "title": "Fiabilité et exploitation",
+      "score": 50,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 2,
+      "controls_applicable": 4,
+      "coverage_percent": 50.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 12,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle non vérifié : axes.reliability.03",
+        "Contrôle non vérifié : axes.reliability.04",
+        "Contrôle commun non vérifié : correctness.concurrency",
+        "Contrôle commun non vérifié : reliability.observability",
+        "2 critère(s) sans niveau de qualité justifié"
+      ],
+      "control_ids": [
+        "axes.reliability.01",
+        "axes.reliability.02",
+        "axes.reliability.03",
+        "axes.reliability.04"
+      ],
+      "finding_fingerprints": [
+        "3f97992ebae1926f57fd",
+        "5721844f49ae3b638a61",
+        "14982e1e8bde259a88c7",
+        "b3b59a4d83bc1d642626",
+        "e382d0eba769e38eed53",
+        "1c68b69e1c4d8b093062",
+        "d1a708dba11299bb2db5",
+        "197a278f4d8d481d25bc",
+        "a00058d9c5a6f2bfb526",
+        "ef7cebf56e4758da03ee",
+        "16700b9eda3f46c6bb48",
+        "2a985ff83084ebfe4526"
+      ],
+      "demonstrated_score": 25,
+      "criteria": [
+        {
+          "id": "axes.reliability.01",
+          "axis": "reliability",
+          "title": "Conservation et rotation des sauvegardes",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Fichiers illisibles conservés et écritures transactionnelles testées sur cinq magasins ; restauration globale non testée. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/variantes-persistance.md",
+              "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060004411512Z/stdout.json",
+              "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.reliability.02",
+          "axis": "reliability",
+          "title": "Reprise des traitements interrompus",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Échange atomique et panne injectée testés ; interruption réelle pendant l'échange non testée. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/variantes-remplacement.md",
+              "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060004411512Z/stdout.json",
+              "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.reliability.03",
+          "axis": "reliability",
+          "title": "Continuité pendant une bascule",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        },
+        {
+          "id": "axes.reliability.04",
+          "axis": "reliability",
+          "title": "Restauration après sinistre",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        }
+      ]
+    },
+    "tests": {
+      "title": "Tests et validation",
+      "score": 58,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 3,
+      "controls_applicable": 5,
+      "coverage_percent": 60.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 1,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle non vérifié : axes.tests.04",
+        "Contrôle non vérifié : axes.tests.05",
+        "2 critère(s) sans niveau de qualité justifié"
+      ],
+      "control_ids": [
+        "axes.tests.01",
+        "axes.tests.02",
+        "axes.tests.03",
+        "axes.tests.04",
+        "axes.tests.05"
+      ],
+      "finding_fingerprints": [
+        "b3b59a4d83bc1d642626"
+      ],
+      "demonstrated_score": 35,
+      "criteria": [
+        {
+          "id": "axes.tests.01",
+          "axis": "tests",
+          "title": "Typage des sources et des tests",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Sources et tests Swift compilés ; avertissements existants et suites exclues conservés. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060004411512Z/stdout.json",
+              "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.02",
+          "axis": "tests",
+          "title": "Analyse de style et erreurs statiques",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Semgrep et SwiftLint ciblé exécutés ; toutes les règles Swift et tous les signaux ne sont pas qualifiés. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/controle-swift.md",
+              "sha256": "700cd23c4df5d6d31b926efab5722fcbae6286193a05f01b304d9040ccbd4536"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.03",
+          "axis": "tests",
+          "title": "Régressions et cas limites",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Suite Swift et tests ciblés réussis ; trois suites exclues et parcours graphique non exécuté. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060004411512Z/stdout.json",
+              "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/cycles-et-limites.md",
+              "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.04",
+          "axis": "tests",
+          "title": "Qualification du runtime livré",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.05",
+          "axis": "tests",
+          "title": "Tests interface et intégration des données",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        }
+      ]
+    },
+    "performance": {
+      "title": "Performance et ressources",
+      "score": 50,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 1,
+      "controls_applicable": 4,
+      "coverage_percent": 25.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 1,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle non vérifié : axes.performance.01",
+        "Contrôle non vérifié : axes.performance.02",
+        "Contrôle non vérifié : axes.performance.04",
+        "Contrôle commun non vérifié : performance.complexity",
+        "3 critère(s) sans niveau de qualité justifié"
+      ],
+      "control_ids": [
+        "axes.performance.01",
+        "axes.performance.02",
+        "axes.performance.03",
+        "axes.performance.04"
+      ],
+      "finding_fingerprints": [
+        "e382d0eba769e38eed53"
+      ],
+      "demonstrated_score": 13,
+      "criteria": [
+        {
+          "id": "axes.performance.01",
+          "axis": "performance",
+          "title": "Admission et saturation des demandes",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        },
+        {
+          "id": "axes.performance.02",
+          "axis": "performance",
+          "title": "Budget mémoire",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        },
+        {
+          "id": "axes.performance.03",
+          "axis": "performance",
+          "title": "Délais, annulation et libération",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Délai et annulation du lanceur lus ; tests de signaux groupés exclus. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/cycles-et-limites.md",
+              "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.performance.04",
+          "axis": "performance",
+          "title": "Mesures représentatives de latence et charge",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        }
+      ]
+    },
+    "complexity": {
+      "title": "Complexité algorithmique",
+      "score": 50,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 2,
+      "controls_applicable": 3,
+      "coverage_percent": 66.67,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 1,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle non vérifié : axes.complexity.03",
+        "Contrôle commun non vérifié : performance.complexity",
+        "1 critère(s) sans niveau de qualité justifié"
+      ],
+      "control_ids": [
+        "axes.complexity.01",
+        "axes.complexity.02",
+        "axes.complexity.03"
+      ],
+      "finding_fingerprints": [
+        "1c68b69e1c4d8b093062"
+      ],
+      "demonstrated_score": 33,
+      "criteria": [
+        {
+          "id": "axes.complexity.01",
+          "axis": "complexity",
+          "title": "Complexité des points d’entrée",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Quelques chemins critiques lus ; inventaire des complexités de tous les points d'entrée incomplet. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/controle-swift.md",
+              "sha256": "700cd23c4df5d6d31b926efab5722fcbae6286193a05f01b304d9040ccbd4536"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/cycles-et-limites.md",
+              "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.complexity.02",
+          "axis": "complexity",
+          "title": "Bornes des parcours et allocations",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Borne de récursion et allocations examinées sur les calculs et sorties de scripts ; reste du dépôt partiel. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/variantes-valeurs.md",
+              "sha256": "8513221724c9e57ac6eb5579683b5d1a4949d436908d98a7f9c3a5d59c96ce54"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.complexity.03",
+          "axis": "complexity",
+          "title": "Coût des accès et écritures de données",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        }
+      ]
+    },
+    "quality": {
+      "title": "Qualité du code et des erreurs",
+      "score": 50,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 2,
+      "controls_applicable": 3,
+      "coverage_percent": 66.67,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 1,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle non vérifié : axes.quality.03",
+        "1 critère(s) sans niveau de qualité justifié"
+      ],
+      "control_ids": [
+        "axes.quality.01",
+        "axes.quality.02",
+        "axes.quality.03"
+      ],
+      "finding_fingerprints": [
+        "49bf8e4666be13ab11c2"
+      ],
+      "demonstrated_score": 33,
+      "criteria": [
+        {
+          "id": "axes.quality.01",
+          "axis": "quality",
+          "title": "Gestion des refus et messages utilisateur",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Erreurs explicites de stockage et notifications ajoutées ; résultat CLI de projet toujours asynchrone. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/variantes-persistance.md",
+              "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/revue-independante.md",
+              "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.quality.02",
+          "axis": "quality",
+          "title": "Gestion des erreurs partielles",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Échec de remplacement injecté et ancienne donnée conservée ; interruption réelle non simulée. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/variantes-remplacement.md",
+              "sha256": "e4e723bb75eb44bdf745bc23b655dfcbfd4a7fa279db64a7ce84a28c89bca469"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060004411512Z/stdout.json",
+              "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.quality.03",
+          "axis": "quality",
+          "title": "Ergonomie des parcours concernés",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        }
+      ]
+    },
+    "architecture": {
+      "title": "Architecture et dépendances",
+      "score": 50,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 2,
+      "controls_applicable": 4,
+      "coverage_percent": 50.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle non vérifié : axes.architecture.03",
+        "Contrôle non vérifié : axes.architecture.04",
+        "Contrôle commun non vérifié : architecture.dependencies",
+        "2 critère(s) sans niveau de qualité justifié"
+      ],
+      "control_ids": [
+        "axes.architecture.01",
+        "axes.architecture.02",
+        "axes.architecture.03",
+        "axes.architecture.04"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 25,
+      "criteria": [
+        {
+          "id": "axes.architecture.01",
+          "axis": "architecture",
+          "title": "Frontières et résolution des dépendances",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Dépendances de modules et accès aux fichiers lus sur les chemins audités ; frontières internes non exhaustives. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.architecture.02",
+          "axis": "architecture",
+          "title": "Maîtrise des cycles",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Graphe des cibles Swift lu ; aucune analyse complète des cycles internes. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.architecture.03",
+          "axis": "architecture",
+          "title": "Séparation construction et exécution",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        },
+        {
+          "id": "axes.architecture.04",
+          "axis": "architecture",
+          "title": "Assemblages et dépendances dynamiques",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        }
+      ]
+    },
+    "ai_hygiene": {
+      "title": "Responsabilité future et hygiène",
+      "score": 58,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle commun non vérifié : quality.llm"
+      ],
+      "control_ids": [
+        "axes.ai_hygiene.01",
+        "axes.ai_hygiene.02",
+        "axes.ai_hygiene.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 58,
+      "criteria": [
+        {
+          "id": "axes.ai_hygiene.01",
+          "axis": "ai_hygiene",
+          "title": "Invariants et compromis expliqués",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Invariants et limites des corrections expliqués ; tous les invariants historiques ne sont pas relus. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/cycles-et-limites.md",
+              "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.ai_hygiene.02",
+          "axis": "ai_hygiene",
+          "title": "Périmètre et maintenabilité du changement",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Patch ciblé avec tests ; la maintenabilité globale reste partiellement examinée. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/revue-independante.md",
+              "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060004411512Z/stdout.json",
+              "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.ai_hygiene.03",
+          "axis": "ai_hygiene",
+          "title": "Revue contradictoire et responsabilité",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Contre-audit et revues indépendantes documentés ; aucun essai macOS côté relecteurs. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/revue-independante.md",
+              "sha256": "f1c13cfe6569f757817c5d575e48c0af401e9690a458746abbff93d859d89c59"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/contre-audit-workflow.md",
+              "sha256": "75b2892036e78071ccf5060ee9fa79de3f0d86f6c8ac82eecacbb63bf74a624e"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "minimalism": {
+      "title": "Minimalisme et frugalité",
+      "score": 50,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 1,
+      "controls_applicable": 3,
+      "coverage_percent": 33.33,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle non vérifié : axes.minimalism.02",
+        "Contrôle non vérifié : axes.minimalism.03",
+        "Contrôle commun non vérifié : quality.minimalism",
+        "2 critère(s) sans niveau de qualité justifié"
+      ],
+      "control_ids": [
+        "axes.minimalism.01",
+        "axes.minimalism.02",
+        "axes.minimalism.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 17,
+      "criteria": [
+        {
+          "id": "axes.minimalism.01",
+          "axis": "minimalism",
+          "title": "Dépendances nécessaires en exploitation",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Une dépendance Swift directe verrouillée ; aucune preuve exhaustive d'absence de dépendances évitables. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/contexte.md",
+              "sha256": "5889a648061f91001854330e191e6518b2e7899b4ad728e61646ca56b37ebdd3"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.minimalism.02",
+          "axis": "minimalism",
+          "title": "Poids et ressources justifiés",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        },
+        {
+          "id": "axes.minimalism.03",
+          "axis": "minimalism",
+          "title": "Code mort et simplifications possibles",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        }
+      ]
+    },
+    "business": {
+      "title": "Métier et fidélité des données",
+      "score": 50,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 2,
+      "controls_applicable": 3,
+      "coverage_percent": 66.67,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 8,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle non vérifié : axes.business.03",
+        "Contrôle commun non vérifié : correctness.logic",
+        "1 critère(s) sans niveau de qualité justifié"
+      ],
+      "control_ids": [
+        "axes.business.01",
+        "axes.business.02",
+        "axes.business.03"
+      ],
+      "finding_fingerprints": [
+        "5721844f49ae3b638a61",
+        "14982e1e8bde259a88c7",
+        "d1a708dba11299bb2db5",
+        "197a278f4d8d481d25bc",
+        "a00058d9c5a6f2bfb526",
+        "ef7cebf56e4758da03ee",
+        "16700b9eda3f46c6bb48",
+        "2a985ff83084ebfe4526"
+      ],
+      "demonstrated_score": 33,
+      "criteria": [
+        {
+          "id": "axes.business.01",
+          "axis": "business",
+          "title": "Fidélité des données lues",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Conservation des fichiers et lecture de workflows testées sur des données synthétiques ; usage réel non rejoué. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/variantes-persistance.md",
+              "sha256": "3f03561ba251e971286ed066cfe2f476dec783a359ed129894e8ec7114adfa3c"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060004411512Z/stdout.json",
+              "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.business.02",
+          "axis": "business",
+          "title": "Cohérence et idempotence des versions",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Installation, remplacement et suppression ordinaires testés ; idempotence générale non démontrée. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/variantes-workflow.md",
+              "sha256": "d578fd8d635ab89f53823cc9cac87e67aef5d4d402531c62cbf082b83cd1c4d7"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060004411512Z/stdout.json",
+              "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.business.03",
+          "axis": "business",
+          "title": "Conformité aux règles et données de référence",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        }
+      ]
+    },
+    "traceability": {
+      "title": "Traçabilité des exigences",
+      "score": 50,
+      "grade": "F",
+      "status": "provisional",
+      "controls_verified": 1,
+      "controls_applicable": 2,
+      "coverage_percent": 50.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [
+        "Contrôle non vérifié : axes.traceability.02",
+        "Contrôle commun non vérifié : spec.traceability",
+        "1 critère(s) sans niveau de qualité justifié"
+      ],
+      "control_ids": [
+        "axes.traceability.01",
+        "axes.traceability.02"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 25,
+      "criteria": [
+        {
+          "id": "axes.traceability.01",
+          "axis": "traceability",
+          "title": "Lien constats, corrections et preuves",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Reproductions, corrections et tests reliés ; couverture des spécifications historiques incomplète. Le niveau supérieur exige une qualification plus complète.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/cycles-et-limites.md",
+              "sha256": "ce7315616a442a94716680b34a5bd80a18a21e335030c39f54c97ddfe3e77551"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261027T060004411512Z/stdout.json",
+              "sha256": "107d7c570b168f47d509f6e57cb0af8ffb7618f22e485e5515233569cc05d102"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.traceability.02",
+          "axis": "traceability",
+          "title": "Couverture des exigences obligatoires",
+          "weight": 1,
+          "status": "unknown",
+          "level": null,
+          "rating_rationale": "Non vérifié pour l'ensemble du dépôt ; preuve ou mesure insuffisante.",
+          "evidence": [],
+          "excluded": false
+        }
+      ]
+    }
+  },
+  "unmapped_findings": [],
+  "method": "Qualité observée = somme des niveaux justifiés / maximum des critères notés. Niveaux ancrés de0 à4, poids figés. Le nombre de défauts ne donne plus la note : leurs pénalités restent un garde-fou. Couverture séparée. Note démontrée = points acquis / maximum de tous les critères applicables ; les inconnus ne rapportent aucun point. Aucun niveau justifié : non noté. Pas de moyenne globale des axes.",
+  "rubric_version": "quality-1",
+  "rubric_sha256": "cf850d3dd0976f4cd6ca9385ba320154248c8e85b084392af0efe9acda208607"
+}

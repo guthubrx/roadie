@@ -1,0 +1,28 @@
+{
+  "tool": "osv-scanner",
+  "revision": 6,
+  "argv": [
+    "/opt/homebrew/bin/osv-scanner",
+    "scan",
+    "source",
+    "-r",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie",
+    "--format",
+    "json"
+  ],
+  "cwd": "/Users/moi/Nextcloud/10.Scripts/39.roadie",
+  "started_at": "2026-10-27T05:40:38.163962+00:00",
+  "status": "completed",
+  "exit_code": 0,
+  "seconds": 0.806,
+  "peak_rss_mb": 58.52,
+  "output": "stdout.json",
+  "output_sha256": "54345d5194d238b6017d0f3181f392109ce35023cc6b4bdfa8c134943dcb578e",
+  "surviving_pids": [],
+  "version": "osv-scanner version: 2.7.0\nosv-scalibr version: 0.5.3\ncommit: n/a\nbuilt at: n/a",
+  "file_bytes": 134217728,
+  "log_bytes": 10485760,
+  "temporary_bytes_removed": 0,
+  "normalization_warnings": [],
+  "candidates": 0
+}

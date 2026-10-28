@@ -69,17 +69,16 @@ struct StageProjectStore: Sendable {
 
     func load() -> StageProjectBook { JSONPersistence.load(StageProjectBook.self, from: url, default: StageProjectBook()) }
 
-    func save(_ project: StageProject) {
-        var book = load()
-        book.projects[LauncherMatch.fold(project.name)] = project
-        JSONPersistence.write(book, to: url, label: "stage projects")
+    func save(_ project: StageProject) throws {
+        try JSONPersistence.mutateChecked(StageProjectBook.self, at: url, default: StageProjectBook(), label: "stage projects") { book in
+            book.projects[LauncherMatch.fold(project.name)] = project
+        }
     }
 
     @discardableResult
-    func delete(_ name: String) -> Bool {
-        var book = load()
-        guard book.projects.removeValue(forKey: LauncherMatch.fold(name)) != nil else { return false }
-        JSONPersistence.write(book, to: url, label: "stage projects")
-        return true
+    func delete(_ name: String) throws -> Bool {
+        try JSONPersistence.mutateChecked(StageProjectBook.self, at: url, default: StageProjectBook(), label: "stage projects") { book in
+            book.projects.removeValue(forKey: LauncherMatch.fold(name)) != nil
+        }
     }
 }

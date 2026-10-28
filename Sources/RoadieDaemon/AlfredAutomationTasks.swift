@@ -72,18 +72,63 @@ enum AlfredAutomationTasks {
             .first(where: { FileManager.default.fileExists(atPath: $0.appendingPathComponent("Tasks").path) }) else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        for name in ["Tasks", "LICENSE"] {
-            let target = root.appendingPathComponent(name)
-            if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
-            if FileManager.default.fileExists(atPath: extracted.appendingPathComponent(name).path) {
-                try FileManager.default.moveItem(at: extracted.appendingPathComponent(name), to: target)
-            }
-        }
+        try install(extracted: extracted, root: root)
         let enumerator = FileManager.default.enumerator(atPath: root.appendingPathComponent("Tasks").path)
         var count = 0
         while let path = enumerator?.nextObject() as? String { if path.hasSuffix("alfredtask.json") { count += 1 } }
         return count
+    }
+
+    /// Remplace seulement Tasks et LICENSE. Les autres fichiers du dossier restent en place.
+    static func install(extracted: URL, root: URL,
+                        swap: (URL, URL) throws -> Void = StagedFileReplacement.atomicSwap) throws {
+        let manager = FileManager.default
+        // Un dossier utilisateur peut être un lien symbolique : préparer et remplacer sa cible,
+        // jamais supprimer des éléments en passant par une copie du lien.
+        let destination = root.resolvingSymlinksInPath()
+        for name in ["Tasks", "LICENSE"] where !manager.fileExists(atPath: extracted.appendingPathComponent(name).path) {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        try FileLock.withLock(path: destination.path + ".lock", mode: .exclusive) {
+            try manager.createDirectory(at: destination, withIntermediateDirectories: true)
+            let staging = destination.appendingPathComponent(".roadie-tasks-install-\(UUID().uuidString)")
+            try manager.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+            var keepStaging = false
+            defer {
+                if !keepStaging {
+                    do { try manager.removeItem(at: staging) }
+                    catch { fputs("roadie: impossible de supprimer \(staging.path): \(error)\n", stderr) }
+                }
+            }
+            for name in ["Tasks", "LICENSE"] {
+                try manager.copyItem(at: extracted.appendingPathComponent(name), to: staging.appendingPathComponent(name))
+            }
+            var applied: [(name: String, existed: Bool)] = []
+            do {
+                for name in ["Tasks", "LICENSE"] {
+                    let prepared = staging.appendingPathComponent(name)
+                    let target = destination.appendingPathComponent(name)
+                    let existed = manager.fileExists(atPath: target.path)
+                    if existed { try swap(prepared, target) }
+                    else { try manager.moveItem(at: prepared, to: target) }
+                    applied.append((name, existed))
+                }
+            } catch {
+                let original = error
+                for item in applied.reversed() {
+                    let prepared = staging.appendingPathComponent(item.name)
+                    let target = destination.appendingPathComponent(item.name)
+                    do {
+                        if item.existed { try swap(prepared, target) }
+                        else { try manager.moveItem(at: target, to: prepared) }
+                    } catch {
+                        keepStaging = true
+                        fputs("roadie: retour arrière incomplet ; fichiers conservés dans \(staging.path): \(error)\n", stderr)
+                    }
+                }
+                throw original
+            }
+        }
     }
 
     private static func runTool(_ path: String, _ arguments: [String]) throws {

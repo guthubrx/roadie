@@ -1,0 +1,405 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    }
+  ],
+  "findings": [],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pending",
+      "rationale": "Sources modifiées : vérification finale à refaire",
+      "evidence": []
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : non mesuré.",
+  "responsibility": "Vertus LLM et responsabilité future : non vérifiées."
+}

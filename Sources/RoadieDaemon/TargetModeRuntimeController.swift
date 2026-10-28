@@ -169,6 +169,9 @@ public final class TargetModeRuntimeController: NSObject {
     private let service: SnapshotService
     private let events: EventLog
     private let presenter: any TargetModeOverlayPresenting
+    private let memoryStore: LauncherMemoryStore
+    private let notifyRuleChoiceFailure: (String) -> Void
+    private let ruleAffinity: WindowRuleAffinityService
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
     private var currentCommand: String?
@@ -200,12 +203,21 @@ public final class TargetModeRuntimeController: NSObject {
         service: SnapshotService,
         events: EventLog,
         presenter: any TargetModeOverlayPresenting,
-        gridPostEvent: @escaping (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
+        gridPostEvent: @escaping (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) },
+        memoryStore: LauncherMemoryStore = LauncherMemoryStore(),
+        notifyRuleChoiceFailure: ((String) -> Void)? = nil,
+        ruleAffinity: WindowRuleAffinityService? = nil
     ) {
         self.service = service
         self.events = events
         self.presenter = presenter
         self.gridPostEvent = gridPostEvent
+        self.memoryStore = memoryStore
+        self.ruleAffinity = ruleAffinity ?? WindowRuleAffinityService(eventLog: events)
+        self.notifyRuleChoiceFailure = notifyRuleChoiceFailure ?? { message in
+            let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
+            Task { await effects.notify(title: "Roadie", text: message) }
+        }
     }
 
     public func start() {
@@ -299,8 +311,14 @@ public final class TargetModeRuntimeController: NSObject {
             }
             return
         case "project.delete":
-            let deleted = command.string("name").map { StageProjectStore().delete($0) } ?? false
-            events.append(RoadieEvent(type: "project.command", details: ["command": "delete", "deleted": String(deleted)]))
+            do {
+                let deleted = try command.string("name").map { try StageProjectStore().delete($0) } ?? false
+                events.append(RoadieEvent(type: "project.command", details: ["command": "delete", "deleted": String(deleted)]))
+            } catch {
+                events.append(RoadieEvent(type: "project.delete_failed", details: ["reason": "persistence"]))
+                let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
+                Task { await effects.notify(title: "Roadie", text: "Impossible de supprimer le projet.") }
+            }
             return
         default:
             break
@@ -537,7 +555,7 @@ public final class TargetModeRuntimeController: NSObject {
         context.projects = StageProjectStore().load().projects.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         // Liste de la barre vide (SPEC-081).
         let now = Date()
-        let memory = LauncherMemoryStore().load()
+        let memory = memoryStore.load()
         let rules = service.effectiveConfig.rules
         let stageInfo: (StageScope) -> (key: String, title: String)? = { scope in
             guard let stage = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
@@ -622,9 +640,14 @@ public final class TargetModeRuntimeController: NSObject {
                 .flatMap { StagePresentationOrder.isNamed($0) ? $0.name : nil }
         }
         context.saveAlias = { [events] alias, name in
-            let previous = aliasStore.save(alias, as: name)
-            events.append(RoadieEvent(type: "launcher.alias_saved", details: ["replaced": String(previous != nil)]))
-            return previous
+            do {
+                let previous = try aliasStore.save(alias, as: name)
+                events.append(RoadieEvent(type: "launcher.alias_saved", details: ["replaced": String(previous != nil)]))
+                return .success(previous)
+            } catch {
+                events.append(RoadieEvent(type: "launcher.alias_save_failed", details: ["reason": "persistence"]))
+                return .failure(error)
+            }
         }
         context.endPreview = { [weak self] commit in self?.endPreview(commit: commit) }
         context.performBatch = { [weak self] actions in self?.performBatch(actions) ?? TargetActionResult(changed: false, message: "launcher_unavailable") }
@@ -841,8 +864,12 @@ public final class TargetModeRuntimeController: NSObject {
             switch action.verb {
             case .reopenProject: return openProject(named: name)
             case .deleteProject:
-                let deleted = StageProjectStore().delete(name)
-                return TargetActionResult(changed: deleted, message: "project delete: \(deleted)")
+                do {
+                    let deleted = try StageProjectStore().delete(name)
+                    return TargetActionResult(changed: deleted, message: "project delete: \(deleted)")
+                } catch {
+                    return TargetActionResult(changed: false, message: "Projet non supprimé", error: "project_not_deleted")
+                }
             default: return refused(label, "verb")
             }
         case .target(let target):
@@ -1161,13 +1188,19 @@ public final class TargetModeRuntimeController: NSObject {
             let windows = await Self.projectWindows(entries)
             let project = StageProject.capture(name: stage.name, members: stage.members.map(\.windowID), windows: windows,
                                                tree: stage.bspTree, at: Date())
-            StageProjectStore().save(project)
-            events.append(RoadieEvent(type: "project.saved", details: [
-                "windows": String(project.windows.count),
-                "documents": String(project.windows.filter { $0.document != nil || $0.url != nil }.count),
-                "tree": String(project.tree != nil)]))
+            do {
+                try StageProjectStore().save(project)
+                events.append(RoadieEvent(type: "project.saved", details: [
+                    "windows": String(project.windows.count),
+                    "documents": String(project.windows.filter { $0.document != nil || $0.url != nil }.count),
+                    "tree": String(project.tree != nil)]))
+            } catch {
+                events.append(RoadieEvent(type: "project.save_failed", details: ["reason": "persistence"]))
+                let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
+                await effects.notify(title: "Roadie", text: "Impossible d'enregistrer le projet « \(stage.name) ».")
+            }
         }
-        return TargetActionResult(changed: true, message: "project saved: \(stage.name)")
+        return TargetActionResult(changed: false, message: "project save scheduled: \(stage.name)")
     }
 
     /// De quoi rouvrir chaque fenêtre : application, document ou adresse, lus hors du fil principal. O(w).
@@ -1323,16 +1356,37 @@ public final class TargetModeRuntimeController: NSObject {
     /// Plus tard reporte d'un jour ; Jamais retire la proposition pour cette application et cette stage.
     private func chooseRule(_ suggestion: RuleSuggestion, _ choice: RuleChoice) -> TargetActionResult {
         let now = Date()
-        LauncherMemoryStore().update { $0.decline(suggestion, choice, at: now) }
+        if choice != .create {
+            do {
+                try memoryStore.updateChecked { $0.decline(suggestion, choice, at: now) }
+            } catch {
+                return failedRuleChoice(choice, reason: "persistence", error: "rule_choice_not_saved",
+                                        message: "Impossible d'enregistrer le choix de règle.")
+            }
+        }
         events.append(RoadieEvent(type: "launcher.rule_choice", details: ["choice": choice.rawValue, "bundleID": suggestion.bundleID]))
         guard choice == .create else { return TargetActionResult(changed: true, message: "rule suggestion: \(choice.rawValue)") }
         let snapshot = service.snapshot(followFocus: false)
-        guard let display = snapshot.displays.first(where: { $0.id == suggestion.stage.displayID }) else { return refused("rule create", "display") }
+        guard let display = snapshot.displays.first(where: { $0.id == suggestion.stage.displayID }) else {
+            return failedRuleChoice(choice, reason: "display", error: "display",
+                                    message: "Impossible de créer la règle : écran indisponible.")
+        }
         let window = snapshot.windows.first { $0.window.bundleID == suggestion.bundleID }?.window
             ?? WindowSnapshot(id: WindowID(rawValue: 1), pid: 0, appName: suggestion.appName, bundleID: suggestion.bundleID, title: "",
                               frame: Rect(x: 0, y: 0, width: 1, height: 1), isOnScreen: false, isTileCandidate: true)
-        let result = WindowRuleAffinityService(eventLog: events).saveAffinity(kind: .app, window: window, scope: suggestion.stage, display: display)
-        return TargetActionResult(changed: result.changed, message: result.message)
+        let result = ruleAffinity.saveAffinity(kind: .app, window: window, scope: suggestion.stage, display: display)
+        guard result.changed else {
+            return failedRuleChoice(choice, reason: "affinity", error: "rule_create_not_saved",
+                                    message: "Impossible de créer la règle.")
+        }
+        memoryStore.update { $0.decline(suggestion, choice, at: now) }
+        return TargetActionResult(changed: true, message: result.message)
+    }
+
+    private func failedRuleChoice(_ choice: RuleChoice, reason: String, error: String, message: String) -> TargetActionResult {
+        events.append(RoadieEvent(type: "launcher.rule_choice_failed", details: ["choice": choice.rawValue, "reason": reason]))
+        notifyRuleChoiceFailure(message)
+        return TargetActionResult(changed: false, message: message, error: error)
     }
 
     /// `roadie undo` et la ligne Annuler : la fenêtre du dernier déplacement revient dans sa stage
@@ -1340,7 +1394,7 @@ public final class TargetModeRuntimeController: NSObject {
     /// Annule le dernier déplacement, ou tout le dernier envoi groupé encore en place (SPEC-091 FR-006).
     private func undoLastMove() -> TargetActionResult {
         let snapshot = service.snapshot(followFocus: false)
-        let moves = LauncherMemoryStore().load().undoableBatch(at: Date(), currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope })
+        let moves = memoryStore.load().undoableBatch(at: Date(), currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope })
         guard !moves.isEmpty else { return refused("launcher undo", "nothing") }
         let actions = WindowContextActions(snapshotService: service, stageStore: service.effectiveStageStore, eventLog: events)
         var changed = 0
@@ -1383,7 +1437,7 @@ public final class TargetModeRuntimeController: NSObject {
         }
         if windows.count > 1 {
             let batch = UUID().uuidString
-            LauncherMemoryStore().update { $0.mark(batch: batch, windows: Set(windows), since: start) }
+            memoryStore.update { $0.mark(batch: batch, windows: Set(windows), since: start) }
         }
         if first.verb == .sendTo, case .stage? = resolved.first?.destination?.kind, let last = windows.last { focus(last) }
         events.append(RoadieEvent(type: "launcher.batch", details: ["verb": first.verb.rawValue, "done": String(done), "count": String(resolved.count)]))

@@ -42,7 +42,9 @@ struct LauncherRanking: Codable, Equatable, Sendable {
     }
 
     private static func score(_ anchor: Double, at now: Date) -> Double {
-        max(1, exp(lambda * (anchor - now.timeIntervalSince1970)))
+        let score = exp(lambda * (anchor - now.timeIntervalSince1970))
+        if score == .infinity { return .greatestFiniteMagnitude }
+        return score.isFinite ? max(1, score) : 1
     }
 
     /// Nombre de choix de cet objet après exactement cette requête. O(1).
@@ -60,7 +62,11 @@ struct LauncherRanking: Codable, Equatable, Sendable {
     func prefixUses(_ key: String, query: String) -> Int {
         let folded = LauncherMatch.fold(query)
         guard !folded.isEmpty, let abbreviations = entries[key]?.abbreviations else { return 0 }
-        return abbreviations.reduce(0) { $0 + ($1.key.hasPrefix(folded) ? $1.value : 0) }
+        return abbreviations.reduce(0) { total, pair in
+            guard pair.key.hasPrefix(folded) else { return total }
+            let (sum, overflow) = total.addingReportingOverflow(max(0, pair.value))
+            return overflow ? Int.max : sum
+        }
     }
 
     /// Un choix : le score gagne 100 points et la requête est mémorisée, partout et dans la stage
@@ -68,13 +74,13 @@ struct LauncherRanking: Codable, Equatable, Sendable {
     mutating func recordVisit(_ key: String, query: String, at now: Date, context: String? = nil) {
         let t = now.timeIntervalSince1970
         var entry = entries[key] ?? Entry(anchor: t, abbreviations: [:])
-        entry.anchor = t + log(frecency(key, at: now) + 100) / Self.lambda
+        entry.anchor = Self.updatedAnchor(entry.anchor, score: frecency(key, at: now), at: t)
         let folded = LauncherMatch.fold(query)
         Self.remember(folded, in: &entry.abbreviations)
         if let context {
             var contexts = entry.contexts ?? [:]
             var local = contexts[context] ?? Context(anchor: t, abbreviations: [:])
-            local.anchor = t + log(frecency(key, at: now, context: context) + 100) / Self.lambda
+            local.anchor = Self.updatedAnchor(local.anchor, score: frecency(key, at: now, context: context), at: t)
             Self.remember(folded, in: &local.abbreviations)
             contexts[context] = local
             if contexts.count > Self.maxContexts, let oldest = contexts.min(by: { $0.value.anchor < $1.value.anchor }) {
@@ -85,10 +91,19 @@ struct LauncherRanking: Codable, Equatable, Sendable {
         entries[key] = entry
     }
 
+    /// Si le score déborde déjà, ajouter 100 est négligeable : garder l'ancre finie existante.
+    private static func updatedAnchor(_ anchor: Double, score: Double, at time: Double) -> Double {
+        let increased = score + 100
+        guard increased.isFinite else { return max(anchor, time) }
+        let updated = time + log(increased) / lambda
+        return updated.isFinite ? updated : max(anchor, time)
+    }
+
     /// Ajoute la requête ; au-delà de la borne, la moins utilisée part. O(a).
     private static func remember(_ folded: String, in abbreviations: inout [String: Int]) {
         guard !folded.isEmpty else { return }
-        abbreviations[folded, default: 0] += 1
+        let count = max(0, abbreviations[folded, default: 0])
+        abbreviations[folded] = count == Int.max ? count : count + 1
         if abbreviations.count > maxAbbreviations,
            let rarest = abbreviations.min(by: { $0.value < $1.value || ($0.value == $1.value && $0.key > $1.key) }) {
             abbreviations[rarest.key] = nil
@@ -116,8 +131,9 @@ struct LauncherRankingStore: Sendable {
     }
 
     func recordVisit(_ key: String, query: String, at now: Date = Date(), context: String? = nil) {
-        var ranking = load(at: now)
-        ranking.recordVisit(key, query: query, at: now, context: context)
-        JSONPersistence.write(ranking, to: url, label: "launcher ranking")
+        JSONPersistence.mutate(LauncherRanking.self, at: url, default: LauncherRanking(), label: "launcher ranking") { ranking in
+            ranking.prune(at: now)
+            ranking.recordVisit(key, query: query, at: now, context: context)
+        }
     }
 }

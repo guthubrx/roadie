@@ -115,12 +115,10 @@ struct LauncherAliasStore: Sendable {
 
     /// Une abréviation déjà prise est remplacée. Renvoie l'ancienne action remplacée, s'il y en avait une.
     @discardableResult
-    func save(_ alias: LauncherAlias, as name: String) -> LauncherAlias? {
-        var book = load()
+    func save(_ alias: LauncherAlias, as name: String) throws -> LauncherAlias? {
         let key = LauncherMatch.fold(name)
-        let previous = book.aliases[key]
-        book.aliases[key] = alias
-        JSONPersistence.write(book, to: url, label: "launcher aliases")
-        return previous
+        return try JSONPersistence.mutateChecked(LauncherAliasBook.self, at: url, default: LauncherAliasBook(), label: "launcher aliases") { book in
+            book.aliases.updateValue(alias, forKey: key)
+        }
     }
 }
