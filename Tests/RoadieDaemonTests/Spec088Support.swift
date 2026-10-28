@@ -83,6 +83,12 @@ final class RecordedEffects: AlfredEffects, @unchecked Sendable {
         lock.withLock { recordedTexts.append(view) }
         note("text:\(view.behaviour.rawValue)")
     }
+    private var recordedMedia: [AlfredMediaView] = []
+    var lastMedia: AlfredMediaView? { lock.withLock { recordedMedia.last } }
+    func showMedia(_ view: AlfredMediaView) async {
+        lock.withLock { recordedMedia.append(view) }
+        note("media:\(view.kind.rawValue)")
+    }
 }
 
 enum FixtureError: Error { case missing }

@@ -69,6 +69,35 @@ struct AlfredTextView: Equatable, Sendable {
     }
 }
 
+/// Vue Image ou PDF d'un workflow (session 118), briques `userinterface.image` et `userinterface.pdf` : le fichier
+/// reçu en argument, montré dans une fenêtre ; Retour envoie son chemin à la suite du schéma.
+struct AlfredMediaView: Equatable, Sendable {
+    enum Kind: String, Sendable { case image, pdf }
+    /// « Image Size » d'Alfred : 0 automatique (réduite à la fenêtre), 1 ajustée au cadre, 2 sans tenir compte de la
+    /// résolution (pixels réels).
+    enum ImageSize: Int, Sendable { case automatic = 0, fit = 1, ignoreDPI = 2 }
+    /// « Display Mode » d'Alfred : 0 automatique, 1 une page, 2 une page continue, 3 deux pages, 4 deux pages continues.
+    enum PDFMode: Int, Sendable { case automatic = 0, singlePage, singlePageContinuous, twoPages, twoPagesContinuous }
+
+    var kind: Kind
+    var workflowID: String
+    var objectUID: String
+    var title: String
+    var path: String
+    var imageSize = ImageSize.automatic
+    var pdfMode = PDFMode.automatic
+    var variables: [String: String] = [:]
+
+    /// O(1).
+    static func make(_ kind: Kind, object: AlfredObject, workflow: AlfredWorkflow, path: String, variables: [String: String]) -> AlfredMediaView {
+        var view = AlfredMediaView(kind: kind, workflowID: workflow.id, objectUID: object.uid, title: workflow.name, path: path)
+        view.imageSize = ImageSize(rawValue: object.int("imageresizemode") ?? 0) ?? .automatic
+        view.pdfMode = PDFMode(rawValue: object.int("displaymode") ?? 0) ?? .automatic
+        view.variables = variables
+        return view
+    }
+}
+
 /// Réponse JSON d'un script de vue Texte (aide d'Alfred, « Text View JSON Format »). Une sortie qui n'est pas
 /// ce JSON devient le texte lui-même.
 struct AlfredTextResponse: Equatable, Sendable {

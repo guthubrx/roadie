@@ -796,10 +796,7 @@ public final class TargetModeRuntimeController: NSObject {
             guard let workflow = byID[entry.workflowID] else {
                 return TargetActionResult(changed: false, message: "launcher workflow: absent", error: "workflow")
             }
-            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
-                                            presentGrid: { view in self?.presentGrid(view) },
-                                            presentText: { view in self?.presentText(view) },
-                                            follow: { url in self?.followBrowser(url) })
+            let effects = Self.liveEffects(self, events: events, webSearchURL: webSearchURL)
             Task.detached {
                 _ = await AlfredWorkflowEngine(effects: effects, workflows: workflows)
                     .run(workflow, from: entry.objectUID, arg: arg, variables: variables, modifiers: modifiers)
@@ -832,10 +829,7 @@ public final class TargetModeRuntimeController: NSObject {
         Task { @MainActor [weak self] in
             let arg: [String] = if let argument { [argument] }
                 else if object.type == "trigger.hotkey" { await Self.hotkeyArgument(object) } else { [] }
-            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
-                                            presentGrid: { view in self?.presentGrid(view) },
-                                            presentText: { view in self?.presentText(view) },
-                                            follow: { url in self?.followBrowser(url) })
+            let effects = Self.liveEffects(self, events: events, webSearchURL: webSearchURL)
             let engine = AlfredWorkflowEngine(effects: effects, workflows: workflows)
             _ = await engine.start(workflow, at: uid, arg: arg, variables: variables)
         }
@@ -903,6 +897,33 @@ public final class TargetModeRuntimeController: NSObject {
         handle(TargetModeRuntimeCommand(name: "targets.search"))
     }
 
+    /// Effets réels d'un workflow lancé depuis la barre, une commande ou une vue : barre rouverte, grille,
+    /// vues Texte, Image et PDF, navigateur suivi. `owner` faible : un effet après l'arrêt de Roadie ne fait rien.
+    private nonisolated static func liveEffects(_ owner: TargetModeRuntimeController?, events: EventLog, webSearchURL: String) -> AlfredLiveEffects {
+        AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { [weak owner] text in owner?.reopenSearch(text) },
+                          presentGrid: { [weak owner] view in owner?.presentGrid(view) },
+                          presentText: { [weak owner] view in owner?.presentText(view) },
+                          presentMedia: { [weak owner] view in owner?.presentMedia(view) },
+                          follow: { [weak owner] url in owner?.followBrowser(url) })
+    }
+
+    /// Vue Image ou PDF d'un workflow (session 118) : fenêtre d'aperçu ; Retour envoie le chemin à la suite.
+    private func presentMedia(_ view: AlfredMediaView) {
+        let config = service.effectiveConfig.experimental.targetMode
+        let workflows = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
+        guard let workflow = workflows.first(where: { $0.id == view.workflowID }) else { return }
+        let events = events, webSearchURL = config.webSearchURL
+        events.append(RoadieEvent(type: "launcher.workflow_media", details: ["workflow": workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID,
+                                                                              "kind": view.kind.rawValue]))
+        WorkflowMediaPanel.show(view) { [weak self] path, modifiers in
+            let effects = Self.liveEffects(self, events: events, webSearchURL: webSearchURL)
+            Task.detached {
+                _ = await AlfredWorkflowEngine(effects: effects, workflows: workflows)
+                    .run(workflow, from: view.objectUID, arg: [path], variables: view.variables, modifiers: modifiers)
+            }
+        }
+    }
+
     /// Vue Texte d'un workflow (session 117) : fenêtre ; son script relancé par la saisie, puis la suite du
     /// schéma depuis la brique avec le texte et les touches tenues. Journal sans texte.
     private func presentText(_ view: AlfredTextView) {
@@ -926,10 +947,7 @@ public final class TargetModeRuntimeController: NSObject {
             }
         }
         WorkflowTextPanel.show(view, plainContinues: plain, runScript: runScript) { [weak self] text, modifiers, variables in
-            let effects = AlfredLiveEffects(events: events, webSearchURL: webSearchURL, reopen: { text in self?.reopenSearch(text) },
-                                            presentGrid: { view in self?.presentGrid(view) },
-                                            presentText: { view in self?.presentText(view) },
-                                            follow: { url in self?.followBrowser(url) })
+            let effects = Self.liveEffects(self, events: events, webSearchURL: webSearchURL)
             Task.detached {
                 _ = await AlfredWorkflowEngine(effects: effects, workflows: workflows)
                     .run(workflow, from: view.objectUID, arg: [text], variables: variables, modifiers: modifiers)

@@ -685,6 +685,9 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
   images), filled by the argument, a file, or a script rerun from an input field (JSON responses `append`,
   `replacelast`, `rerun`… as in Alfred). Return sends the text on through the workflow, with held keys; Escape
   closes.
+- **Workflow Image and PDF views**: the received file opens in a preview window (image reduced, fitted, or at its
+  real pixels; PDF in one or two pages, continuous or not, per the object). Return sends its path on through the
+  workflow; Escape closes.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

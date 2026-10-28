@@ -7,6 +7,7 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Workflows : vues Image et PDF d'Alfred, dans une fenêtre d'aperçu.
 - Workflows : vue Texte d'Alfred (texte, texte modifiable ou Markdown, script relancé par une saisie), dans une fenêtre.
 - Verbe « Documents récents… » d'une application : ses 20 derniers documents (macOS, ou la liste d'Office), ouverts avec elle.
 - Réglages dans la barre : pages et réglages des Paramètres de Roadie, panneaux des Réglages Système ; ⌘, ouvre les Paramètres.

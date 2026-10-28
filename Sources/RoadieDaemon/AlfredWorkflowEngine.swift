@@ -30,6 +30,8 @@ protocol AlfredEffects: Sendable {
     func showGrid(_ view: AlfredGridView) async
     /// Vue Texte (session 117) : fenêtre de texte ; Retour repart de la brique avec le texte.
     func showText(_ view: AlfredTextView) async
+    /// Vue Image ou PDF (session 118) : fenêtre d'aperçu ; Retour repart de la brique avec le chemin.
+    func showMedia(_ view: AlfredMediaView) async
 }
 
 /// Bilan d'une exécution : étapes, briques manquantes, erreurs (sans contenu de l'utilisateur).
@@ -60,8 +62,8 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         "utility.file", "action.browseinalfred", "action.actioninalfred",
         // SPEC-092.
         "userinterface.grid",
-        // Session 117.
-        "userinterface.text",
+        // Session 117, 118.
+        "userinterface.text", "userinterface.image", "userinterface.pdf",
     ]
 
     let effects: AlfredEffects
@@ -426,6 +428,18 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
                 return missing("userinterface.text:inputtype:\(other)", workflow, run)
             }
             await effects.showText(view)
+            return .stop
+        case "userinterface.image", "userinterface.pdf":
+            // Le fichier reçu en argument (première ligne), relatif au dossier du workflow.
+            let first = input.first?.components(separatedBy: .newlines).first ?? ""
+            let path = Self.path(first, in: workflow)
+            guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
+                run.outcome.errors.append("media:file")
+                await effects.notify(title: workflow.name, text: "Aperçu : fichier absent")
+                return .stop
+            }
+            let kind: AlfredMediaView.Kind = object.type == "userinterface.pdf" ? .pdf : .image
+            await effects.showMedia(.make(kind, object: object, workflow: workflow, path: path, variables: variables))
             return .stop
         case "action.browseinalfred", "action.actioninalfred":
             // Barre rouverte sur le chemin : mode chemin (SPEC-087), → y ouvre ses verbes.
