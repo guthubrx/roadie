@@ -674,6 +674,9 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
 - **Web history** (`web_history_days`, 90 by default, 0: off): pages already seen in the bookmark browsers
   (Firefox, all profiles; Safari with Full Disk Access; Chrome, Brave, Edge), under « Historique » from two
   letters, excluding pages already bookmarked; most visited first.
+- **Settings** (`settings_in_search`): Roadie settings pages and settings (`rail`, `theme`) and System Settings
+  panes in your language (`keyboard`, `wi-fi`) under « Réglages »; Return opens the page, the setting (Settings
+  search already filled) or the pane. ⌘, (`settings_key`) opens Roadie Settings.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

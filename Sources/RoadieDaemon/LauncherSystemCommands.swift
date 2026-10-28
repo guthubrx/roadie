@@ -11,6 +11,8 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
     let symbol: String
     /// Second Retour exigé.
     let confirms: Bool
+    /// Détail de la ligne ; nil : « Système » (session 115 : « Réglages Système », « Paramètres de Roadie »).
+    var detail: String? = nil
 
     /// `confirmQuitAll` : réglage `confirm_quit_all`.
     static func all(confirmQuitAll: Bool = true) -> [LauncherSystemCommand] {
@@ -41,11 +43,12 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
         return 2
     }
 
-    /// Commandes qui correspondent, trois au plus, dès deux lettres. O(c × q × t).
-    static func matches(_ query: String, in commands: [LauncherSystemCommand]) -> [LauncherSystemCommand] {
+    /// Commandes qui correspondent, `limit` au plus (trois), dès deux lettres ; à score égal, le titre le plus
+    /// court. O(c × q × t + c log c).
+    static func matches(_ query: String, in commands: [LauncherSystemCommand], limit: Int = 3) -> [LauncherSystemCommand] {
         guard LauncherMatch.fold(query).count >= 2 else { return [] }
         return commands.compactMap { command in command.score(query).map { (command, $0) } }
-            .sorted { $0.1 > $1.1 }.prefix(3).map(\.0)
+            .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.title.count < $1.0.title.count }.prefix(limit).map(\.0)
     }
 
     /// Applications quittées par « Tout quitter » : applications ordinaires, sauf le Finder et Roadie.
@@ -81,7 +84,17 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
         case "logout": Self.script("tell application \"System Events\" to log out")
         case "restart": Self.script("tell application \"System Events\" to restart")
         case "shutdown": Self.script("tell application \"System Events\" to shut down")
-        default: break
+        default:
+            // Réglages trouvés (session 115) : panneau des Réglages Système, page ou réglage de Roadie.
+            if id.hasPrefix(LauncherSettingTargets.panePrefix),
+               let url = LauncherSettingTargets.paneURL(String(id.dropFirst(LauncherSettingTargets.panePrefix.count))) {
+                NSWorkspace.shared.open(url)
+            } else if id.hasPrefix(LauncherSettingTargets.roadieCategoryPrefix) {
+                SettingsWindowController.shared.show(category: SettingCategory(rawValue: String(id.dropFirst(LauncherSettingTargets.roadieCategoryPrefix.count))))
+            } else if id.hasPrefix(LauncherSettingTargets.roadieSettingPrefix),
+                      let descriptor = SettingsCatalog.find(id: String(id.dropFirst(LauncherSettingTargets.roadieSettingPrefix.count))) {
+                SettingsWindowController.shared.show(category: descriptor.category, query: descriptor.label)
+            }
         }
     }
 

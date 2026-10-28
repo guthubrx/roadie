@@ -705,6 +705,9 @@ toutes les fenetres visibles : `scope = "visible_windows"` dans
 - **Historique web** (`web_history_days`, 90 par défaut, 0 : désactivé) : pages déjà vues dans les navigateurs
   des signets (Firefox, tous les profils ; Safari avec l'accès complet au disque ; Chrome, Brave, Edge), sous
   « Historique » dès deux lettres, hors pages déjà en signet ; les plus visitées d'abord.
+- **Réglages** (`settings_in_search`) : pages et réglages des Paramètres de Roadie (`rail`, `thème`) et panneaux
+  des Réglages Système dans votre langue (`clavier`, `wi-fi`) sous « Réglages » ; Retour ouvre la page, le réglage
+  (recherche des Paramètres déjà remplie) ou le panneau. ⌘, (`settings_key`) ouvre les Paramètres de Roadie.
 - **Divers** : ⌘L (réglable) montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
   dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
   la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…

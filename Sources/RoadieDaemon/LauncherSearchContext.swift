@@ -98,6 +98,8 @@ struct LauncherSearchContext {
     var systemCommands = LauncherSystemCommand.all()
     /// Ordre des éléments d'un chemin tapé (session 105) : `name`, `modified` ou `created`.
     var pathSort = "name"
+    /// Réglages trouvés par la barre (session 115) ; vide si `settings_in_search` est faux.
+    var settingTargets: [LauncherSystemCommand] = []
     /// Mots-clés de la recherche dans le contenu et par étiquette (session 113).
     var fileKeywords = LauncherFileKeywords()
     /// Les verbes les plus choisis passent en tête (session 111, `learn_verb_order`).

@@ -17,9 +17,11 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var directoryWatcher: RailFileWatcher?
 
     /// Ouvre la fenêtre, ou la ramène devant. `nil` : dernière catégorie vue (Général à la première ouverture).
-    public func show(category: SettingCategory?) {
+    /// `query` : recherche déjà tapée, pour montrer un réglage trouvé par la barre (session 115).
+    public func show(category: SettingCategory?, query: String? = nil) {
         WindowSwitcherHotkeyRegistry.observePeerStatus()
         model.prepareForShow(category: category)
+        if let query { model.query = query }
         let window = self.window ?? makeWindow()
         self.window = window
         armWatchers()

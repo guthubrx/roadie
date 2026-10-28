@@ -281,6 +281,7 @@ extension SearchInputPanel {
         case "save_action": SearchKeyInput(kind: .save)
         case "show_rules": SearchKeyInput(kind: .showRules)
         case "close_all": SearchKeyInput(kind: .closeAll)
+        case "settings": SearchKeyInput(kind: .openSettings)
         case "select_toggle" where selection.rowSelectable: SearchKeyInput(kind: .selectToggle)
         case "select_add_next" where selection.rowSelectable: SearchKeyInput(kind: .selectAddNext)
         case "select_remove_last" where selection.hasSelection: SearchKeyInput(kind: .selectRemoveLast)

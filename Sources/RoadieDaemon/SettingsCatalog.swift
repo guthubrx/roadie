@@ -511,6 +511,9 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "web_history_days", "Historique des navigateurs : jours",
               "Pages déjà vues dans les navigateurs des signets, proposées sous « Historique » dès deux lettres (titre ou adresse). Nombre de jours couverts ; 0 : désactivé. Safari demande l'accès complet au disque pour Roadie.",
               .int(0...365), .int(90)),
+        entry(.recherche, "experimental.target_mode", "settings_in_search", "Réglages dans la barre",
+              "Les pages et réglages des Paramètres de Roadie (« rail », « thème ») et les panneaux des Réglages Système (« clavier », « Wi-Fi ») apparaissent sous « Réglages » dès deux lettres. Retour les ouvre.",
+              .bool, .bool(true)),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

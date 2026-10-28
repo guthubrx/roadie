@@ -1351,6 +1351,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .closeAll:
             finish(TargetActionResult(changed: false, message: "target_search_escaped", error: "cancelled"))
             return
+        case .openSettings:
+            // ⌘, : les Paramètres de Roadie, comme les préférences d'Alfred (session 115).
+            finish(TargetActionResult(changed: true, message: "launcher settings"))
+            SettingsWindowController.shared.show(category: nil)
+            return
         case .preview:
             if case .file(let file)? = launcherList.row(for: launcherSelection) {
                 finishAction(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil))
@@ -1532,6 +1537,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         // Commandes système (session 105), après la première section.
         launcherList.insertSection("Système", LauncherSystemCommand.matches(model.query, in: launcher.systemCommands).map(LauncherList.Row.system))
+        // Réglages de Roadie et des Réglages Système (session 115), après les sections principales.
+        launcherList.appendSection("Réglages", LauncherSystemCommand.matches(model.query, in: launcher.settingTargets, limit: 4)
+            .map(LauncherList.Row.system))
         // Mots-clés de workflows en cours de frappe (SPEC-088), après la première section.
         let keywords = launcher.workflowEntries.filter { $0.match(model.query) == .suggest }
         launcherList.insertSection("Workflows", keywords.prefix(4).map(LauncherList.Row.workflowKeyword))
@@ -2216,7 +2224,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             finish(TargetActionResult(changed: false, message: "target_search_escaped", error: "cancelled"))
             return
         case .text, .labelCharacter, .ignored, .copy, .preview, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
-             .selectionVerbs, .selectClear, .move, .cycleView, .parentFolder, .largeType:
+             .selectionVerbs, .selectClear, .move, .cycleView, .parentFolder, .largeType, .openSettings:
             break
         }
         render()
@@ -2662,7 +2670,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return SlashSuggestion(text: query, detail: "Recherche récente", kind: .result, icon: .symbol("clock.arrow.circlepath"))
         case .system(let command):
             let detail = command.id == pendingSystem ? "Retour encore pour confirmer · Échap annule"
-                : command.confirms ? "Système · Retour deux fois" : "Système"
+                : command.confirms ? "Système · Retour deux fois" : command.detail ?? "Système"
             return SlashSuggestion(text: command.title, detail: detail, kind: .result, icon: .symbol(command.symbol))
         case .terminal(let command):
             let name = LauncherTerminal.appName(terminal)
@@ -2875,7 +2883,7 @@ extension SlashCommandModel {
         case .escape, .closeAll:
             return .close
         case .ignored, .pick, .actions, .copy, .preview, .save, .showRules, .selectToggle, .selectAddNext, .selectRemoveLast,
-             .selectionVerbs, .selectClear, .move, .cycleView, .parentFolder, .largeType:
+             .selectionVerbs, .selectClear, .move, .cycleView, .parentFolder, .largeType, .openSettings:
             break
         }
         return .update
@@ -2927,6 +2935,8 @@ public struct SearchKeyInput: Sendable, Equatable {
         /// Session 105 : ⌫ sur un chemin de dossier remonte d'un dossier ; ⌘L montre la ligne en grand ;
         /// ⌘⎋ ferme la barre d'un coup.
         case parentFolder, largeType, closeAll
+        /// Session 115 : ⌘, ouvre les Paramètres de Roadie.
+        case openSettings
         case ignored
     }
 

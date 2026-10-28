@@ -7,6 +7,7 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Réglages dans la barre : pages et réglages des Paramètres de Roadie, panneaux des Réglages Système ; ⌘, ouvre les Paramètres.
 - Historique des navigateurs dans la barre (`web_history_days`, 90 jours) : pages déjà vues de Firefox, Safari et Chrome.
 - Fichiers : `in mots` cherche dans le contenu, `tags étiquette` par étiquette du Finder (mots-clés réglables) ;
   OneDrive, Dropbox, Google Drive et iCloud Drive sont aussi cherchés.
