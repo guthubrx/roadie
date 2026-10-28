@@ -981,7 +981,17 @@ public final class CLICommandRouter {
                 let argument = entry.hotkeyArgument == 3 ? "texte « \(entry.hotkeyText) »" : arguments[entry.hotkeyArgument] ?? "aucun"
                 out("\(entry.workflowName)\t\(entry.keys.isEmpty ? "touches non attribuées" : entry.keys)\targument : \(argument)\troadie workflow run \(id) \(entry.objectUID)")
             }
-            if hotkeys.isEmpty { out("aucun raccourci") }
+            // Boutons d'Alfred Remote (session 120) : la même commande les appelle depuis BetterTouchTool.
+            var remotes = 0
+            for workflow in workflows {
+                let id = workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID
+                for object in workflow.objects.values.sorted(by: { $0.uid < $1.uid }) where object.type == "trigger.remote" {
+                    let trigger = object.string("triggerid") ?? ""
+                    out("\(workflow.name)\tbouton Remote « \(object.string("triggername") ?? trigger) »\troadie workflow trigger \(id) \(trigger)")
+                    remotes += 1
+                }
+            }
+            if hotkeys.isEmpty && remotes == 0 { out("aucun raccourci") }
             return 0
         case "run", "trigger":
             guard args.count >= 3 else { return usageError() }

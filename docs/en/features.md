@@ -693,6 +693,10 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
   leaves folders out; `calc_decimal` (macOS, point, comma) and `calc_grouping` shape a calculation result;
   `show_scrollbar` shows a scroll bar; 17 built-in web searches (`gi`, `tr`, `amazon`, `gh`, `wa`…); « Recharger
   les applications » and « Reconstruire l'index Spotlight » commands.
+- **Workflows: Remote buttons and cache**: an Alfred Remote button becomes a trigger called by
+  `roadie workflow trigger ID TRIGGERID` (with its fixed text), listed by `roadie workflow list --hotkeys` for
+  BetterTouchTool; a Script Filter asking for a cache (`cache.seconds`) is not rerun for the same input during that
+  time.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

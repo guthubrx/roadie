@@ -7,6 +7,7 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Workflows : boutons d'Alfred Remote appelés par `roadie workflow trigger`, cache des Script Filters (`cache.seconds`).
 - Barre : mots-clés `open` et `find`, types de fichiers et dossiers écartés réglables, séparateur et milliers du calcul,
   barre de défilement, 17 recherches web fournies, commandes « Recharger les applications » et « Reconstruire l'index Spotlight ».
 - Workflows : vues Image et PDF d'Alfred, dans une fenêtre d'aperçu.

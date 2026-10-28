@@ -782,12 +782,19 @@ public final class TargetModeRuntimeController: NSObject {
                 DispatchQueue.main.async { MainActor.assumeIsolated { done(nil, "script absent") } }
                 return nil
             }
+            // Cache demandé par le script (session 120) : même entrée, même saisie, réponse encore valable.
+            let cacheKey = "\(entry.id)\u{1F}\(argument)"
+            if let cached = AlfredScriptFilterCache.shared.response(for: cacheKey) {
+                DispatchQueue.main.async { MainActor.assumeIsolated { done(cached, nil) } }
+                return nil
+            }
             let started = Date()
             let arguments = argument.isEmpty && object.bool("argumenttreatemptyqueryasnil") ? [] : [argument]
             return AlfredScriptRunner.start(script, query: argument, arguments: arguments, workflow: workflow,
                                             variables: workflow.configuredVariables, keyword: entry.keyword) { result in
                 let response = entry.kind == .fileFilter ? AlfredFileFilter.response(result.text)
                     : result.output.isEmpty ? nil : AlfredScriptFilterResponse.parse(result.output)
+                if let response, !result.cancelled { AlfredScriptFilterCache.shared.store(response, for: cacheKey) }
                 events.append(RoadieEvent(type: "launcher.workflow_filter", details: [
                     "workflow": workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID,
                     "ms": String(Int(Date().timeIntervalSince(started) * 1000)), "status": String(result.status),
@@ -833,7 +840,8 @@ public final class TargetModeRuntimeController: NSObject {
         let webSearchURL = config.webSearchURL
         Task { @MainActor [weak self] in
             let arg: [String] = if let argument { [argument] }
-                else if object.type == "trigger.hotkey" { await Self.hotkeyArgument(object) } else { [] }
+                else if object.type == "trigger.hotkey" { await Self.hotkeyArgument(object) }
+                else if object.type == "trigger.remote" { AlfredWorkflowEngine.remoteArgument(object) } else { [] }
             let effects = Self.liveEffects(self, events: events, webSearchURL: webSearchURL)
             let engine = AlfredWorkflowEngine(effects: effects, workflows: workflows)
             _ = await engine.start(workflow, at: uid, arg: arg, variables: variables)

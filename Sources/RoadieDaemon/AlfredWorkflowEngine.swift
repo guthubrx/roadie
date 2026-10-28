@@ -56,7 +56,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         "utility.random", "utility.json", "utility.hidealfred", "utility.showalfred", "utility.debug", "utility.expression",
         "input.scriptfilter", "input.keyword",
         // Étape 2 (SPEC-089).
-        "trigger.hotkey", "trigger.external", "trigger.action", "trigger.universalaction", "trigger.fallback",
+        "trigger.hotkey", "trigger.external", "trigger.action", "trigger.universalaction", "trigger.fallback", "trigger.remote",
         "input.listfilter", "input.filefilter", "output.callexternaltrigger", "output.dispatchkeycombo", "output.largetype",
         "action.browseinterminal", "action.terminalcommand", "automation.runshortcut", "automation.task", "utility.dialog",
         "utility.file", "action.browseinalfred", "action.actioninalfred",
@@ -77,10 +77,15 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         self.workflows = workflows
     }
 
-    /// Déclencheur externe d'un workflow par son `triggerid`, sinon la brique qui déclare ce nom
+    /// Argument d'un bouton Remote appelé sans argument (session 120) : son texte fixe (`argumenttype` 3), sinon aucun.
+    static func remoteArgument(_ object: AlfredObject) -> [String] {
+        object.int("argumenttype") == 3 ? [object.string("argument") ?? ""] : []
+    }
+
+    /// Déclencheur externe (ou bouton Remote, session 120) d'un workflow par son `triggerid`, sinon la brique qui déclare ce nom
     /// (`inboundconfig.externalid`, Alfred 5.5, SPEC-092 FR-009). O(o).
     static func externalTrigger(_ id: String, in workflow: AlfredWorkflow) -> AlfredObject? {
-        workflow.objects.values.first { $0.type == "trigger.external" && $0.string("triggerid") == id }
+        workflow.objects.values.first { ["trigger.external", "trigger.remote"].contains($0.type) && $0.string("triggerid") == id }
             ?? workflow.objects.values.first { $0.externalID == id }
     }
 
@@ -296,7 +301,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             await effects.showBar(keyword.isEmpty ? query : "\(keyword) \(query)")
             return .stop
         // MARK: Étape 2 (SPEC-089)
-        case "trigger.hotkey", "trigger.external", "trigger.action", "trigger.universalaction", "trigger.fallback":
+        case "trigger.hotkey", "trigger.external", "trigger.action", "trigger.universalaction", "trigger.fallback", "trigger.remote":
             // Déclencheur atteint par une flèche : il passe la main tel quel.
             return pass
         case "input.listfilter", "input.filefilter":
@@ -313,7 +318,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             }
             let arg = (object.config["passinputasargument"]?.bool ?? true) ? input : []
             let vars = (object.config["passvariables"]?.bool ?? false) ? variables : destination.configuredVariables
-            if trigger.type == "trigger.external" {
+            if ["trigger.external", "trigger.remote"].contains(trigger.type) {
                 await follow(destination, from: trigger.uid, input: arg, variables: vars, modifiers: 0, branch: nil, run: run)
             } else {
                 // Brique visée par son `externalid` : elle s'exécute elle-même (SPEC-092 FR-009).

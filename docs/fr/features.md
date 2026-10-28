@@ -724,6 +724,10 @@ toutes les fenetres visibles : `scope = "visible_windows"` dans
   `file_excluded_folders` écarte des dossiers ; `calc_decimal` (macOS, point, virgule) et `calc_grouping` règlent
   le résultat d'un calcul ; `show_scrollbar` montre une barre de défilement ; 17 recherches web fournies (`gi`,
   `tr`, `amazon`, `gh`, `wa`…) ; commandes « Recharger les applications » et « Reconstruire l'index Spotlight ».
+- **Workflows : boutons Remote et cache** : un bouton d'Alfred Remote devient un déclencheur appelé par
+  `roadie workflow trigger ID TRIGGERID` (avec son texte fixe), listé par `roadie workflow list --hotkeys` pour
+  BetterTouchTool ; un Script Filter qui demande un cache (`cache.seconds`) n'est pas relancé pour la même saisie
+  pendant ce délai.
 - **Divers** : ⌘L (réglable) montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
   dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
   la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…

@@ -39,6 +39,8 @@ struct AlfredScriptFilterResponse: Equatable, Sendable {
     var skipKnowledge = false
     /// Grille (SPEC-092 FR-007) : `uid` de la tuile choisie à l'ouverture.
     var preselect: String?
+    /// `cache.seconds` (session 120) : la réponse sert telle quelle pour la même saisie pendant ce délai (5 à 86 400 s).
+    var cacheSeconds: Double?
 
     /// JSON d'Alfred, sinon ancien format XML `<items>` ; nil si ni l'un ni l'autre. O(n).
     static func parse(_ data: Data) -> AlfredScriptFilterResponse? {
@@ -52,6 +54,7 @@ struct AlfredScriptFilterResponse: Equatable, Sendable {
         response.rerun = (json["rerun"] as? NSNumber)?.doubleValue.clamped(to: 0.1...5)
         response.skipKnowledge = (json["skipknowledge"] as? Bool) ?? false
         response.preselect = (json["preselect"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        response.cacheSeconds = ((json["cache"] as? [String: Any])?["seconds"] as? NSNumber)?.doubleValue.clamped(to: 5...86_400)
         response.items = (json["items"] as? [[String: Any]] ?? []).compactMap(item)
         return response
     }
@@ -220,4 +223,32 @@ private final class AlfredXMLItems: NSObject, XMLParserDelegate {
 
 private extension Double {
     func clamped(to range: ClosedRange<Double>) -> Double { Swift.min(range.upperBound, Swift.max(range.lowerBound, self)) }
+}
+
+/// Réponses gardées des Script Filters qui demandent un cache (session 120), par entrée et saisie ; l'expiration
+/// vient de la réponse. 200 réponses au plus, la plus ancienne part d'abord.
+final class AlfredScriptFilterCache: @unchecked Sendable {
+    static let shared = AlfredScriptFilterCache()
+    static let limit = 200
+    private let lock = NSLock()
+    private var entries: [String: (expires: Date, response: AlfredScriptFilterResponse)] = [:]
+
+    /// Réponse encore valable, sinon nil. O(1).
+    func response(for key: String, now: Date = Date()) -> AlfredScriptFilterResponse? {
+        lock.withLock {
+            guard let entry = entries[key] else { return nil }
+            if entry.expires > now { return entry.response }
+            entries[key] = nil
+            return nil
+        }
+    }
+
+    /// Garde la réponse si elle demande un cache. O(n) quand la borne est atteinte.
+    func store(_ response: AlfredScriptFilterResponse, for key: String, now: Date = Date()) {
+        guard let seconds = response.cacheSeconds else { return }
+        lock.withLock {
+            entries[key] = (now.addingTimeInterval(seconds), response)
+            if entries.count > Self.limit, let oldest = entries.min(by: { $0.value.expires < $1.value.expires }) { entries[oldest.key] = nil }
+        }
+    }
 }
