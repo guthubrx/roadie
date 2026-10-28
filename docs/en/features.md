@@ -667,6 +667,10 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
   come first; `learn_verb_order = false` keeps the fixed order.
 - **Tile shape**: a workflow grid follows its Alfred image setting (`imageaspect`: square, portrait or
   landscape); tile width does not change.
+- **Content and tags**: `in invoice march` finds files whose text contains these words (word start),
+  `tags red` those carrying a Finder tag (colours in French or English). Keywords are configurable
+  (`content_search_keyword`, `tag_search_keyword`, empty: off). OneDrive, Dropbox, Google Drive and iCloud
+  Drive (`~/Library/CloudStorage`, `~/Library/Mobile Documents`) are searched too.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

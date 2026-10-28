@@ -137,9 +137,10 @@ struct LauncherList: Equatable, Sendable {
     /// Spotlight, les plus récentes d'abord (SPEC-077) ; une espace en tête ne garde qu'elles.
     init(query rawQuery: String, apps: [LauncherApp], details: [String: String], targets: [RoadieTarget],
          ranking: LauncherRanking, now: Date, context: String? = nil, files: [LauncherFile] = [], projects: [StageProject] = [],
-         openItems: [LauncherOpenItem] = []) {
-        let filesOnly = LauncherFileRules.filesOnly(rawQuery)
-        let query = filesOnly ? LauncherFileRules.needle(rawQuery) : rawQuery
+         openItems: [LauncherOpenItem] = [], fileKeywords: LauncherFileKeywords = LauncherFileKeywords()) {
+        let fileQuery = LauncherFileQuery.parse(rawQuery, keywords: fileKeywords)
+        let filesOnly = fileQuery.filesOnly
+        let query = filesOnly ? fileQuery.needle : rawQuery
         guard !LauncherMatch.fold(query).isEmpty else { return }
         struct Candidate { let row: Row; let id: String; let key: String; let section: Section; let score: Int; let name: String; var order = 0 }
         var candidates: [Candidate] = []

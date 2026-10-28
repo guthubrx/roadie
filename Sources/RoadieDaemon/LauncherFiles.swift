@@ -15,6 +15,38 @@ struct LauncherFile: Equatable, Hashable, Sendable {
     var folder: String { (path as NSString).deletingLastPathComponent }
 }
 
+/// Mots-clés de la recherche dans le contenu et par étiquette (session 113), comme `in` et `tags` d'Alfred ;
+/// vide : désactivé.
+struct LauncherFileKeywords: Equatable, Sendable {
+    var content = "in"
+    var tag = "tags"
+}
+
+/// Saisie de la recherche de fichiers : par nom (SPEC-077), dans le contenu ou par étiquette Finder
+/// (session 113). `filesOnly` : seuls les fichiers sont montrés.
+struct LauncherFileQuery: Equatable, Sendable {
+    enum Mode: Equatable, Sendable { case name, content, tag }
+    var mode: Mode
+    var needle: String
+    var filesOnly: Bool
+
+    /// Une espace ou une apostrophe en tête : nom seul. `in rapport`, `tags rouge` : contenu, étiquette ;
+    /// le mot-clé doit être suivi d'une espace (`inbox` reste un nom). O(n).
+    static func parse(_ query: String, keywords: LauncherFileKeywords = LauncherFileKeywords()) -> LauncherFileQuery {
+        if query.hasPrefix(" ") || query.hasPrefix("'") {
+            return LauncherFileQuery(mode: .name, needle: String(query.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines), filesOnly: true)
+        }
+        let lowered = query.lowercased()
+        for (keyword, mode) in [(keywords.content, Mode.content), (keywords.tag, Mode.tag)] {
+            let keyword = keyword.trimmingCharacters(in: .whitespaces).lowercased()
+            guard !keyword.isEmpty, lowered.hasPrefix(keyword + " ") else { continue }
+            return LauncherFileQuery(mode: mode, needle: String(query.dropFirst(keyword.count + 1)).trimmingCharacters(in: .whitespacesAndNewlines),
+                                     filesOnly: true)
+        }
+        return LauncherFileQuery(mode: .name, needle: query.trimmingCharacters(in: .whitespacesAndNewlines), filesOnly: false)
+    }
+}
+
 /// Règles de la recherche de fichiers, pures et testables. O(1) par chemin.
 enum LauncherFileRules {
     /// Familles montrées par défaut, comme les « Extras » d'Alfred : dossiers, documents, textes, images.
@@ -22,31 +54,69 @@ enum LauncherFileRules {
                                "public.composite-content", "public.spreadsheet", "public.presentation"]
     static let limit = 40
 
-    /// Saisie qui ne cherche que des fichiers : une espace ou une apostrophe en tête (recherche rapide).
-    static func filesOnly(_ query: String) -> Bool { query.hasPrefix(" ") || query.hasPrefix("'") }
-
-    /// Texte cherché : sans le préfixe de recherche rapide ni les espaces autour.
-    static func needle(_ query: String) -> String {
-        var text = query
-        if filesOnly(text) { text.removeFirst() }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Saisie qui ne cherche que des fichiers : une espace ou une apostrophe en tête (recherche rapide),
+    /// ou un mot-clé de contenu ou d'étiquette (session 113).
+    static func filesOnly(_ query: String, keywords: LauncherFileKeywords = LauncherFileKeywords()) -> Bool {
+        LauncherFileQuery.parse(query, keywords: keywords).filesOnly
     }
 
-    /// 3 caractères au moins, 2 en recherche rapide : en deçà, trop de réponses pour être utiles.
-    static func shouldSearch(_ query: String) -> Bool { needle(query).count >= (filesOnly(query) ? 2 : 3) }
+    /// Texte cherché : sans le préfixe ni le mot-clé, ni les espaces autour.
+    static func needle(_ query: String, keywords: LauncherFileKeywords = LauncherFileKeywords()) -> String {
+        LauncherFileQuery.parse(query, keywords: keywords).needle
+    }
 
-    /// Dossier personnel hors `~/Library`, sans élément caché ni dépendances de projet.
+    /// 3 caractères au moins, 2 en recherche rapide, de contenu ou d'étiquette : en deçà, trop de réponses.
+    static func shouldSearch(_ query: String, keywords: LauncherFileKeywords = LauncherFileKeywords()) -> Bool {
+        let parsed = LauncherFileQuery.parse(query, keywords: keywords)
+        return parsed.needle.count >= (parsed.filesOnly ? 2 : 3)
+    }
+
+    /// Couleurs du Finder : macOS les enregistre sous leur nom anglais, même affichées en français.
+    static let tagColors = ["rouge": "Red", "orange": "Orange", "jaune": "Yellow", "vert": "Green", "bleu": "Blue",
+                            "violet": "Purple", "gris": "Gray"]
+
+    /// Texte placé entre guillemets dans une requête Spotlight : `\`, `"` et `*` neutralisés. O(n).
+    static func quoted(_ text: String) -> String {
+        text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "*", with: "\\*")
+    }
+
+    /// Requête Spotlight : par nom (familles d'`contentTypes`) ; contenu : chaque mot comme début de mot du
+    /// texte (0,1 s contre 3 s pour un texte partiel sur ce poste) ; étiquette : début d'un nom d'étiquette,
+    /// ou sa couleur en anglais. O(m) mots.
+    static func predicate(_ query: LauncherFileQuery) -> NSPredicate {
+        switch query.mode {
+        case .name:
+            return predicate(query.needle)
+        case .content:
+            let words = query.needle.split(whereSeparator: \.isWhitespace).map { "kMDItemTextContent == \"\(quoted(String($0)))*\"cdw" }
+            let content = NSPredicate(fromMetadataQueryString: words.joined(separator: " && ")) ?? NSPredicate(value: false)
+            return NSCompoundPredicate(andPredicateWithSubpredicates: [content, types])
+        case .tag:
+            let names = [query.needle] + (tagColors[LauncherMatch.fold(query.needle)].map { [$0] } ?? [])
+            let text = names.map { "kMDItemUserTags == \"\(quoted($0))*\"cd" }.joined(separator: " || ")
+            return NSPredicate(fromMetadataQueryString: text) ?? NSPredicate(value: false)
+        }
+    }
+
+    private static var types: NSPredicate {
+        NSCompoundPredicate(orPredicateWithSubpredicates: contentTypes.map { NSPredicate(format: "kMDItemContentTypeTree == %@", $0) })
+    }
+
+    /// Dossiers de `~/Library` gardés, comme la portée d'Alfred (session 113) : OneDrive, Dropbox, Google Drive
+    /// (`CloudStorage`) et iCloud Drive (`Mobile Documents`).
+    static let libraryFolders = ["/Library/CloudStorage/", "/Library/Mobile Documents/"]
+
+    /// Dossier personnel hors `~/Library` (sauf les stockages en ligne), sans élément caché ni dépendances de projet.
     static func isShown(_ path: String, home: String = NSHomeDirectory()) -> Bool {
-        guard path.hasPrefix(home + "/"), !path.hasPrefix(home + "/Library/") else { return false }
+        guard path.hasPrefix(home + "/") else { return false }
+        if path.hasPrefix(home + "/Library/"), !libraryFolders.contains(where: { path.hasPrefix(home + $0) }) { return false }
         let relative = path.dropFirst(home.count + 1)
         return !relative.split(separator: "/").contains { $0.hasPrefix(".") || $0 == "node_modules" }
     }
 
     static func predicate(_ needle: String) -> NSPredicate {
         let name = NSPredicate(format: "kMDItemDisplayName LIKE[cd] %@", "*\(needle)*")
-        let types = NSCompoundPredicate(orPredicateWithSubpredicates: contentTypes.map {
-            NSPredicate(format: "kMDItemContentTypeTree == %@", $0)
-        })
         return NSCompoundPredicate(andPredicateWithSubpredicates: [name, types])
     }
 
@@ -66,11 +136,13 @@ final class LauncherFileSearch {
     private var query: NSMetadataQuery?
     private var pending: DispatchWorkItem?
     private var observer: NSObjectProtocol?
+    /// Mots-clés `in` et `tags` réglés (session 113).
+    var keywords = LauncherFileKeywords()
 
     func search(_ text: String, done: @escaping @MainActor ([LauncherFile]) -> Void) {
         cancel()
-        guard LauncherFileRules.shouldSearch(text) else { done([]); return }
-        let needle = LauncherFileRules.needle(text)
+        guard LauncherFileRules.shouldSearch(text, keywords: keywords) else { done([]); return }
+        let needle = LauncherFileQuery.parse(text, keywords: keywords)
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.start(needle, done: done) }
         }
@@ -87,7 +159,7 @@ final class LauncherFileSearch {
         observer = nil
     }
 
-    private func start(_ needle: String, done: @escaping @MainActor ([LauncherFile]) -> Void) {
+    private func start(_ needle: LauncherFileQuery, done: @escaping @MainActor ([LauncherFile]) -> Void) {
         let query = NSMetadataQuery()
         query.searchScopes = [NSMetadataQueryUserHomeScope]
         query.predicate = LauncherFileRules.predicate(needle)

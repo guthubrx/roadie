@@ -7,6 +7,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Fichiers : `in mots` cherche dans le contenu, `tags étiquette` par étiquette du Finder (mots-clés réglables) ;
+  OneDrive, Dropbox, Google Drive et iCloud Drive sont aussi cherchés.
 - Grille des workflows : tuiles carrées, en portrait ou en paysage selon le réglage d'images du workflow (`imageaspect`).
 - Verbes de la barre : après Tab, les plus choisis pour un type d'objet passent en tête (`learn_verb_order`).
 - Calcul dans la barre : Retour copie toujours le résultat et peut aussi ouvrir Calculette (ou revenir à sa

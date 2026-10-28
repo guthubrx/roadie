@@ -1513,7 +1513,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let phrase = LauncherPhrase.parse(model.query, destinations: launcher.destinations, newStageHome: launcher.newStageHome)
         launcherList = LauncherList(query: phrase?.objectQuery ?? model.query, apps: launcher.apps, details: launcher.details,
                                     targets: model.matches, ranking: launcher.ranking, now: Date(), context: launcher.rankingContext,
-                                    files: phrase == nil ? files : [], projects: launcher.projects, openItems: openItems)
+                                    files: phrase == nil ? files : [], projects: launcher.projects, openItems: openItems,
+                                    fileKeywords: launcher.fileKeywords)
         if let phrase, let subject = Self.subject(of: launcherList.row(for: launcherList.best)),
            let action = phrase.action(for: subject, activeStage: launcher.activeStage) {
             launcherList.prepend(.phrase(action, LauncherPhrase.title(action)), header: "Phrase")
@@ -1898,8 +1899,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         guard model.query != filesQuery else { return }
         let query = model.query
         filesQuery = query
-        let needle = LauncherMatch.fold(LauncherFileRules.needle(query))
-        files = needle.isEmpty ? [] : files.filter { LauncherMatch.fold($0.name).contains(needle) }
+        let parsed = LauncherFileQuery.parse(query, keywords: launcher.fileKeywords)
+        let needle = LauncherMatch.fold(parsed.needle)
+        // Contenu ou étiquette : le nom ne dit rien des fichiers qui restent, la liste attend Spotlight.
+        files = needle.isEmpty || parsed.mode != .name ? [] : files.filter { LauncherMatch.fold($0.name).contains(needle) }
+        fileSearch.keywords = launcher.fileKeywords
         fileSearch.search(query) { [weak self] found in
             guard let self, !self.finished, self.model.query == query, self.step == .objects else { return }
             self.files = found

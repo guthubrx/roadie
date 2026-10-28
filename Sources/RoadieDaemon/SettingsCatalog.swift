@@ -502,6 +502,12 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "learn_verb_order", "Verbes : ordre appris",
               "Après Tab, les verbes que vous choisissez le plus pour un type d'objet (application, fichier, fenêtre, stage…) passent en tête. Désactivé : ordre fixe. Suit aussi « Apprendre vos choix ».",
               .bool, .bool(true)),
+        entry(.recherche, "experimental.target_mode", "content_search_keyword", "Mot-clé : chercher dans le contenu",
+              "Mot-clé suivi d'une espace puis de mots (« in facture ») : fichiers dont le texte contient ces mots, par Spotlight. Vide : désactivé.",
+              .text, .string("in")),
+        entry(.recherche, "experimental.target_mode", "tag_search_keyword", "Mot-clé : chercher par étiquette",
+              "Mot-clé suivi d'une espace puis d'une étiquette du Finder (« tags rouge », « tags projet ») : fichiers et dossiers qui la portent. Les couleurs se tapent en français ou en anglais. Vide : désactivé.",
+              .text, .string("tags")),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

@@ -706,6 +706,7 @@ public final class TargetModeRuntimeController: NSObject {
         context.terminalApp = barConfig.terminalApp
         context.calcOpensCalculator = barConfig.calcOpensCalculator
         context.learnsVerbOrder = barConfig.learnVerbOrder
+        context.fileKeywords = LauncherFileKeywords(content: barConfig.contentSearchKeyword, tag: barConfig.tagSearchKeyword)
         context.pathSort = barConfig.pathSort
         context.systemCommands = LauncherSystemCommand.all(confirmQuitAll: barConfig.confirmQuitAll)
         if barConfig.bookmarksEnabled {
