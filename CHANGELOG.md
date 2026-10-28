@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Rail : clic droit sur une stage > « Supprimer la stage », nommée ou non, dès qu'elle n'a plus de fenêtre.
+  La raison s'affiche quand la suppression est impossible (stage active, fenêtres, écran absent).
+  `roadie stage delete` suit la même règle : les fenêtres fermées gardées en mémoire ne bloquent plus.
 - Thèmes de la barre à la manière d'Alfred : les neuf thèmes d'Alfred avec leurs couleurs, polices et flou,
   thèmes exportés d'Alfred lus tels quels, thème du mode sombre, nombre de résultats montrés.
 - Barre déplaçable à la souris, place retenue (double-clic : place par défaut) ; place par défaut en bas,

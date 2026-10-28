@@ -1309,15 +1309,6 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         return true
     }
 
-    public mutating func deleteEmptyInactiveStage(_ id: StageID) -> Bool {
-        guard id != activeStageID,
-              let index = stages.firstIndex(where: { $0.id == id }),
-              stages[index].members.isEmpty
-        else { return false }
-        stages.remove(at: index)
-        return true
-    }
-
     // Complexite : O(stages * members). Pre-conditions : le total members est borne (~60-100).
     // Le balayage de toutes les stages est necessaire pour deplacer la fenetre depuis un stage
     // d'origine inconnu et nettoyer les groupes orphelins.

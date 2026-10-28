@@ -534,8 +534,38 @@ public final class RailController {
         moveItem.submenu = moveMenu
         menu.addItem(moveItem)
 
+        menu.addItem(.separator())
+        let refusal = Self.deleteStageRefusal(stageID: stageID, displayID: displayID, store: store,
+                                              liveWindowIDs: snapshotService.railWindowIDs(in: snapshot))
+        let deleteItem = NSMenuItem(title: "Supprimer la stage" + (refusal.map { " (\($0))" } ?? ""), action: nil, keyEquivalent: "")
+        if refusal == nil {
+            let deleteTarget = RailMenuActionTarget { [weak self] in
+                self?.perform(.deleteStage(stageID), displayID: displayID)
+                self?.rebuildPanels()
+            }
+            deleteItem.action = #selector(RailMenuActionTarget.choose(_:))
+            deleteItem.target = deleteTarget
+            stageMenuTargets.append(deleteTarget)
+        } else {
+            deleteItem.isEnabled = false
+        }
+        menu.addItem(deleteItem)
+
         applyFont(to: menu, font: currentStageTextConfig.font)
         menu.popUp(positioning: nil, at: panel.convertPoint(fromScreen: screenPoint), in: panel.contentView)
+    }
+
+    /// Raison qui empêche de supprimer la stage (SPEC-109), nil si elle peut partir.
+    static func deleteStageRefusal(stageID: StageID, displayID: DisplayID, store: StageStore,
+                                   liveWindowIDs: Set<WindowID>, now: Date = Date()) -> String? {
+        var state = store.state()
+        let scope = state.scope(displayID: displayID, desktopID: state.currentDesktopID(for: displayID))
+        guard let stage = scope.stages.first(where: { $0.id == stageID }) else { return "introuvable" }
+        if stage.id == scope.activeStageID { return "stage active" }
+        if StageCommandService.isDeletable(stage, activeStageID: scope.activeStageID, liveWindowIDs: liveWindowIDs, now: now) {
+            return nil
+        }
+        return stage.parkingState == .parked ? "écran absent" : "contient des fenêtres"
     }
 
     private var currentStageTextConfig: RailStageLabelConfig {
@@ -785,6 +815,13 @@ public final class RailController {
             ))
             // Nom déjà porté par une autre stage (SPEC-067) : refus signalé par le son d’alerte système.
             if commandService.rename(stageID.rawValue, to: name, displayID: displayID).outcome == .failed { NSSound.beep() }
+        case .deleteStage(let stageID):
+            events.append(RoadieEvent(
+                type: "rail_stage_delete",
+                details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]
+            ))
+            // Une fenêtre arrivée entre l'ouverture du menu et le choix bloque la suppression.
+            if commandService.delete(stageID.rawValue, displayID: displayID).outcome == .failed { NSSound.beep() }
         case .moveStageToDisplay(let stageID, let targetDisplayID):
             print("rail move stage \(stageID.rawValue) -> display \(targetDisplayID.rawValue)")
             fflush(stdout)
@@ -1512,6 +1549,7 @@ enum RailAction {
     case placeWindow(DropPreviewCandidate)
     case moveStage(StageID, Int)
     case renameStage(StageID, String)
+    case deleteStage(StageID)
     case moveStageToDisplay(StageID, DisplayID)
 }
 

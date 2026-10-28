@@ -453,7 +453,8 @@ and `stage assign-position` target the visible order in the nav rail, so positio
 the nav rail order. `stage assign-empty` sends the active window to the next
 unnamed empty stage, creating one if needed. A stage name is unique across Roadie:
 `stage rename` refuses a name already used by another stage, and
-`roadie state heal` fixes inherited duplicates.
+`roadie state heal` fixes inherited duplicates. `stage delete` removes an inactive
+stage without windows, named or not; the closed windows it still remembered go with it.
 
 Bring an inactive-stage window back into the active stage:
 
@@ -571,7 +572,7 @@ Supported interactions:
 - Drag an application window by its title bar onto a stage to move it there.
 - Drag an application window by its title bar onto empty rail space to place it in an empty or newly created stage.
 - Drag a stage with the right mouse button to reorder stages. A translucent preview shows its destination, while neighboring cards show the new order. Release to apply it, or move outside the rail before releasing to cancel.
-- Right-click a stage without dragging to open its menu: rename the stage, send the stage to another display, or send a window to another stage.
+- Right-click a stage without dragging to open its menu: rename the stage, send the stage to another display, send a window to another stage, or delete the stage once it has no window.
 - Clicks in macOS-reserved areas such as the menu bar are ignored by rail empty-click handling.
 
 Adjust the strength in **Réglages Roadie > Rail > Aimantation du réordonnancement (%)**. At 0, snapping is disabled; higher values keep the preview at its destination through small pointer movements.

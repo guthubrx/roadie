@@ -455,19 +455,32 @@ public struct StageCommandService {
         return StageCommandResult(message: "stage reorder \(stageID.rawValue): position=\(position)", changed: true)
     }
 
-    public func delete(_ rawStageID: String) -> StageCommandResult {
+    /// Une stage se supprime si elle est inactive, non parquée et sans fenêtre représentée dans le rail
+    /// (SPEC-109) : ses membres fermés, ou absents au-delà de la grâce du rail, partent avec elle. O(m).
+    static func isDeletable(_ stage: PersistentStage, activeStageID: StageID, liveWindowIDs: Set<WindowID>,
+                            now: Date = Date()) -> Bool {
+        stage.id != activeStageID && stage.parkingState != .parked
+            && RailController.railDisplayStage(stage, liveWindowIDs: liveWindowIDs, now: now).members.isEmpty
+    }
+
+    /// `displayID` nil : écran actif (CLI). Sinon l'écran du rail cliqué.
+    public func delete(_ rawStageID: String, displayID: DisplayID? = nil) -> StageCommandResult {
         let snapshot = service.snapshot()
-        guard let display = activeDisplay(in: snapshot) else {
+        let display = displayID == nil ? activeDisplay(in: snapshot) : snapshot.displays.first { $0.id == displayID }
+        guard let display else {
             return StageCommandResult(message: "stage delete: no display", changed: false, outcome: .noOp)
         }
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage delete")
         }
+        let live = liveWindowIDs(in: snapshot)
         let deleted: Bool
         do {
             deleted = try store.mutateChecked { state -> Bool in
                 var scope = activeScope(displayID: display.id, in: &state)
-                guard scope.deleteEmptyInactiveStage(stageID) else { return false }
+                guard let stage = scope.stages.first(where: { $0.id == stageID }),
+                      Self.isDeletable(stage, activeStageID: scope.activeStageID, liveWindowIDs: live) else { return false }
+                scope.stages.removeAll { $0.id == stageID }
                 state.update(scope)
                 return true
             }
@@ -475,7 +488,7 @@ public struct StageCommandService {
             return .persistenceFailure("stage delete \(stageID.rawValue)", error)
         }
         guard deleted else {
-            return StageCommandResult(message: "stage delete \(stageID.rawValue): must exist, be inactive, and be empty", changed: false, outcome: .failed)
+            return StageCommandResult(message: "stage delete \(stageID.rawValue): must exist, be inactive, not parked, and have no window", changed: false, outcome: .failed)
         }
         return StageCommandResult(message: "stage delete \(stageID.rawValue)", changed: true)
     }

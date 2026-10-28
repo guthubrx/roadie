@@ -192,7 +192,7 @@ Main interactions:
 - drag an application window by its title bar onto a stage to move it there;
 - drag an application window by its title bar onto empty rail space to create or use an empty stage;
 - drag a stage with the right mouse button to preview its destination and the new card order; release to apply, or release outside the rail to cancel;
-- right-click a stage without dragging to open its menu: rename the stage, send it to another display, or send a window to another stage.
+- right-click a stage without dragging to open its menu: rename the stage, send it to another display, send a window to another stage, or delete the stage once it has no window (the active stage and a stage of a missing display stay).
 
 macOS-reserved areas such as the menu bar are ignored by empty rail click handling.
 

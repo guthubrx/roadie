@@ -455,7 +455,7 @@ roadie stage prev
 roadie stage next
 ```
 
-`stage switch` et `stage assign` ciblent les identifiants stables. `stage switch-position` et `stage assign-position` ciblent l’ordre visible du nav rail. `stage switch-visible prev|next` parcourt uniquement les stages non vides. `stage assign-empty` envoie la fenêtre active vers le prochain stage vide sans nom et le crée si nécessaire. Un nom de stage est unique dans tout Roadie : `stage rename` refuse un nom déjà porté par une autre stage, et `roadie state heal` corrige les doublons hérités.
+`stage switch` et `stage assign` ciblent les identifiants stables. `stage switch-position` et `stage assign-position` ciblent l’ordre visible du nav rail. `stage switch-visible prev|next` parcourt uniquement les stages non vides. `stage assign-empty` envoie la fenêtre active vers le prochain stage vide sans nom et le crée si nécessaire. Un nom de stage est unique dans tout Roadie : `stage rename` refuse un nom déjà porté par une autre stage, et `roadie state heal` corrige les doublons hérités. `stage delete` retire une stage inactive sans fenêtre, nommée ou non ; les fenêtres fermées qu’elle gardait en mémoire partent avec elle.
 
 Ramener dans la stage active une fenêtre d’une stage inactive :
 
@@ -569,7 +569,7 @@ Interactions supportées :
 - Glisser une fenêtre d’application par sa barre de titre vers une stage pour l’y déplacer.
 - Glisser une fenêtre d’application par sa barre de titre vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.
 - Glisser une stage avec le bouton droit de la souris pour réordonner les stages. Un aperçu translucide montre sa future place ; les cartes voisines montrent le nouvel ordre. Relâcher pour l’appliquer, ou sortir du rail avant de relâcher pour annuler.
-- Faire un clic droit sur une stage, sans glisser, pour ouvrir son menu : renommer la stage, l’envoyer vers un autre écran ou envoyer une fenêtre vers une autre stage.
+- Faire un clic droit sur une stage, sans glisser, pour ouvrir son menu : renommer la stage, l’envoyer vers un autre écran, envoyer une fenêtre vers une autre stage ou supprimer la stage si elle n’a plus de fenêtre.
 
 L’intensité de l’aimantation se règle dans **Réglages Roadie > Rail > Aimantation du réordonnancement (%)**. À 0, elle est désactivée ; une valeur plus élevée stabilise davantage la destination malgré les petits mouvements de souris.
 
