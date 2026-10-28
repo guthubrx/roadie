@@ -958,6 +958,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var openItems: [LauncherOpenItem] = []
     /// Signets des navigateurs (session 104), arrivés après l'ouverture.
     private var bookmarks: [LauncherBookmark] = []
+    /// Pages de l'historique des navigateurs (session 114).
+    private var history: [LauncherBookmark] = []
     /// Commande système en attente du second Retour (session 105).
     private var pendingSystem: String?
     /// Chemin tapé (SPEC-087) : lecture du dossier en fond, éléments de la saisie `pathFor`.
@@ -1058,6 +1060,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             // Mots-clés Firefox avec %s : des recherches par mot-clé de plus (« w chat »).
             let taken = Set(self.launcher.webSearches.map { $0.keyword.lowercased() })
             self.launcher.webSearches += LauncherBookmark.keywordSearches(bookmarks, taken: taken)
+            self.filesChanged = true
+            self.render()
+        }
+        launcher.loadHistory { [weak self] pages in
+            guard let self, !self.finished else { return }
+            self.history = pages
             self.filesChanged = true
             self.render()
         }
@@ -1529,7 +1537,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         launcherList.insertSection("Workflows", keywords.prefix(4).map(LauncherList.Row.workflowKeyword))
         // Signets des navigateurs (session 104), avant les replis ; un mot-clé Firefox tapé seul passe en tête.
         if phrase == nil {
-            launcherList.appendSection("Signets", LauncherBookmark.matches(model.query, in: bookmarks).map {
+            let marks = LauncherBookmark.matches(model.query, in: bookmarks)
+            launcherList.appendSection("Signets", marks.map { .web(LauncherWebRow(kind: .bookmark($0), title: $0.title)) })
+            // Historique (session 114) : pages déjà vues, hors signets proposés.
+            let shown = Set(marks.map { LauncherWebHistory.normalized($0.url) })
+            launcherList.appendSection("Historique", LauncherWebHistory.matches(model.query, in: history, excluding: shown).map {
                 .web(LauncherWebRow(kind: .bookmark($0), title: $0.title))
             })
             let typed = model.query.trimmingCharacters(in: .whitespaces).lowercased()

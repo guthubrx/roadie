@@ -508,6 +508,9 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "tag_search_keyword", "Mot-clé : chercher par étiquette",
               "Mot-clé suivi d'une espace puis d'une étiquette du Finder (« tags rouge », « tags projet ») : fichiers et dossiers qui la portent. Les couleurs se tapent en français ou en anglais. Vide : désactivé.",
               .text, .string("tags")),
+        entry(.recherche, "experimental.target_mode", "web_history_days", "Historique des navigateurs : jours",
+              "Pages déjà vues dans les navigateurs des signets, proposées sous « Historique » dès deux lettres (titre ou adresse). Nombre de jours couverts ; 0 : désactivé. Safari demande l'accès complet au disque pour Roadie.",
+              .int(0...365), .int(90)),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

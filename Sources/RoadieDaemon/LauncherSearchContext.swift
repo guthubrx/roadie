@@ -108,6 +108,8 @@ struct LauncherSearchContext {
     var terminalApp = "terminal"
     /// Signets des navigateurs (session 104), lus hors du fil principal ; rien si `bookmarks_enabled` est faux.
     var loadBookmarks: (@escaping @MainActor @Sendable ([LauncherBookmark]) -> Void) -> Void = { _ in }
+    /// Historique des navigateurs (session 114), lu hors du fil principal ; rien si `web_history_days` vaut 0.
+    var loadHistory: (@escaping @MainActor @Sendable ([LauncherBookmark]) -> Void) -> Void = { _ in }
     var fallbackSearches: [String] = []
     /// Lot de la sélection multiple (SPEC-091) et annulation du dernier lot.
     var performBatch: @MainActor ([LauncherAction]) -> TargetActionResult = { _ in

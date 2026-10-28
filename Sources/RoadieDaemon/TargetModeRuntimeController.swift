@@ -709,6 +709,15 @@ public final class TargetModeRuntimeController: NSObject {
         context.fileKeywords = LauncherFileKeywords(content: barConfig.contentSearchKeyword, tag: barConfig.tagSearchKeyword)
         context.pathSort = barConfig.pathSort
         context.systemCommands = LauncherSystemCommand.all(confirmQuitAll: barConfig.confirmQuitAll)
+        if barConfig.webHistoryDays > 0 {
+            let browsers = barConfig.bookmarkBrowsers, days = barConfig.webHistoryDays
+            context.loadHistory = { done in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let pages = LauncherWebHistoryStore.shared.load(browsers: browsers, days: days)
+                    DispatchQueue.main.async { MainActor.assumeIsolated { done(pages) } }
+                }
+            }
+        }
         if barConfig.bookmarksEnabled {
             let browsers = barConfig.bookmarkBrowsers
             context.loadBookmarks = { done in

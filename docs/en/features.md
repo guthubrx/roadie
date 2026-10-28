@@ -671,6 +671,9 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
   `tags red` those carrying a Finder tag (colours in French or English). Keywords are configurable
   (`content_search_keyword`, `tag_search_keyword`, empty: off). OneDrive, Dropbox, Google Drive and iCloud
   Drive (`~/Library/CloudStorage`, `~/Library/Mobile Documents`) are searched too.
+- **Web history** (`web_history_days`, 90 by default, 0: off): pages already seen in the bookmark browsers
+  (Firefox, all profiles; Safari with Full Disk Access; Chrome, Brave, Edge), under « Historique » from two
+  letters, excluding pages already bookmarked; most visited first.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

@@ -7,6 +7,7 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Historique des navigateurs dans la barre (`web_history_days`, 90 jours) : pages déjà vues de Firefox, Safari et Chrome.
 - Fichiers : `in mots` cherche dans le contenu, `tags étiquette` par étiquette du Finder (mots-clés réglables) ;
   OneDrive, Dropbox, Google Drive et iCloud Drive sont aussi cherchés.
 - Grille des workflows : tuiles carrées, en portrait ou en paysage selon le réglage d'images du workflow (`imageaspect`).

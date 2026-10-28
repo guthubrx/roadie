@@ -702,6 +702,9 @@ toutes les fenetres visibles : `scope = "visible_windows"` dans
   mot), `tags rouge` ceux qui portent une étiquette du Finder (couleurs en français ou en anglais). Mots-clés
   réglables (`content_search_keyword`, `tag_search_keyword`, vide : désactivé). OneDrive, Dropbox, Google Drive
   et iCloud Drive (`~/Library/CloudStorage`, `~/Library/Mobile Documents`) sont aussi cherchés.
+- **Historique web** (`web_history_days`, 90 par défaut, 0 : désactivé) : pages déjà vues dans les navigateurs
+  des signets (Firefox, tous les profils ; Safari avec l'accès complet au disque ; Chrome, Brave, Edge), sous
+  « Historique » dès deux lettres, hors pages déjà en signet ; les plus visitées d'abord.
 - **Divers** : ⌘L (réglable) montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
   dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
   la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…

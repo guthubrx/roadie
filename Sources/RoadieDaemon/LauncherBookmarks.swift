@@ -22,8 +22,11 @@ struct LauncherBookmark: Equatable, Hashable, Sendable {
     var tags: [String] = []
     /// Icône du site en cache, si le navigateur en a une.
     var icon: String?
+    /// Page de l'historique (session 114) et son nombre de visites.
+    var isHistory = false
+    var visits = 0
 
-    var id: String { "bookmark:\(browser):\(url)" }
+    var id: String { "\(isHistory ? "history" : "bookmark"):\(browser):\(url)" }
 
     /// Titre, puis étiquettes et mot-clé, puis adresse (3 lettres au moins). O(q × t).
     func score(_ query: String) -> Int? {
