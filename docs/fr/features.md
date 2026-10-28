@@ -708,6 +708,10 @@ toutes les fenetres visibles : `scope = "visible_windows"` dans
 - **Réglages** (`settings_in_search`) : pages et réglages des Paramètres de Roadie (`rail`, `thème`) et panneaux
   des Réglages Système dans votre langue (`clavier`, `wi-fi`) sous « Réglages » ; Retour ouvre la page, le réglage
   (recherche des Paramètres déjà remplie) ou le panneau. ⌘, (`settings_key`) ouvre les Paramètres de Roadie.
+- **Documents récents** : sur une application, Tab puis « Documents récents… » liste ses 20 derniers documents
+  encore présents (menu Fichier > Ouvrir récent de macOS ; pour Word, Excel et PowerPoint, la liste propre à Office).
+  La saisie filtre, Retour ouvre le document avec cette application. La première lecture d'une liste d'Office peut
+  faire demander par macOS l'accès aux données de cette application.
 - **Divers** : ⌘L (réglable) montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
   dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
   la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…

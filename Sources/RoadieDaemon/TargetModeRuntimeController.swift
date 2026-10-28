@@ -929,6 +929,11 @@ public final class TargetModeRuntimeController: NSObject {
                 NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).forEach { $0.forceTerminate() }
             case .bringHere:
                 bringHere(app, into: action.destination.flatMap(stageScope) ?? activeStageScope())
+            case .recentDocuments:
+                // Document récent (session 116) : ouvert avec cette application, même si une autre est celle par défaut.
+                guard case .document(let path)? = action.destination?.kind else { return refused(label, "destination") }
+                NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: URL(fileURLWithPath: app.path),
+                                        configuration: NSWorkspace.OpenConfiguration())
             default:
                 return refused(label, "verb")
             }
@@ -1112,6 +1117,8 @@ public final class TargetModeRuntimeController: NSObject {
             case .display(let display):
                 message = WindowCommandService(service: service, stageStore: store, events: events)
                     .send(windowID: window, toDisplayID: display, focusMovedWindow: false).message
+            case .document:
+                return refused(label, "destination")
             }
             return TargetActionResult(changed: true, message: message)
         case (.window, .focus):
@@ -1197,7 +1204,7 @@ public final class TargetModeRuntimeController: NSObject {
                 .createStage(named: name, displayID: display, desktopID: desktop)
             events.append(RoadieEvent(type: "launcher.stage_created", details: ["message": result.message]))
             return scope
-        case .desktop, .display:
+        case .desktop, .display, .document:
             return nil
         }
     }

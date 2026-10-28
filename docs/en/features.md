@@ -677,6 +677,10 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
 - **Settings** (`settings_in_search`): Roadie settings pages and settings (`rail`, `theme`) and System Settings
   panes in your language (`keyboard`, `wi-fi`) under « Réglages »; Return opens the page, the setting (Settings
   search already filled) or the pane. ⌘, (`settings_key`) opens Roadie Settings.
+- **Recent documents**: on an application, Tab then « Documents récents… » lists its last 20 documents that still
+  exist (macOS File > Open Recent; for Word, Excel and PowerPoint, Office's own list). Typing filters, Return opens
+  the document with that application. The first read of an Office list may make macOS ask for access to that
+  application's data.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

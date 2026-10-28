@@ -122,7 +122,7 @@ struct LauncherPhrase: Equatable, Sendable {
             case .destination(let destination):
                 switch destination.kind {
                 case .stage, .newStage: return make(.openIn, destination)
-                case .desktop, .display: return nil
+                case .desktop, .display, .document: return nil
                 }
             }
         case .target(let target):

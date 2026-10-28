@@ -937,6 +937,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var stepQuery = ""
     /// État de tuilage de la fenêtre dont les verbes sont montrés, lu une fois à l'entrée (SPEC-075).
     private var stepTiling: LauncherTilingState?
+    /// Documents récents de la dernière application vue à la troisième étape (session 116).
+    private var recent: (bundleID: String, destinations: [LauncherDestination])?
     /// Touche tenue qui change ce que fait Retour (SPEC-075).
     private var heldModifier: LauncherModifier?
     /// Maj tenue seule : sous-titre `mods.shift` d'une ligne de workflow (SPEC-088 FR-006).
@@ -2160,7 +2162,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 actionList.appendWorkflows(launcher.workflowTriggers.filter { AlfredWorkflowIndex.accepts($0, path: file.path) }, query: stepQuery)
             }
         case .destinations(let subject, let verb):
-            actionList = .destinations(for: subject, verb: verb, query: stepQuery, destinations: launcher.destinations,
+            actionList = .destinations(for: subject, verb: verb, query: stepQuery, destinations: destinations(for: subject, verb: verb),
                                        newStageHome: launcher.newStageHome)
         case .saving:
             return
@@ -2172,6 +2174,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                                        destinations: launcher.destinations, newStageHome: launcher.newStageHome)
         }
         actionSelection = actionList.best
+    }
+
+    /// Destinations d'un verbe ; documents récents (session 116) lus une fois par application ouverte dans l'étape.
+    private func destinations(for subject: LauncherSubject, verb: LauncherVerb) -> [LauncherDestination] {
+        guard verb == .recentDocuments, case .app(let app) = subject else { return launcher.destinations }
+        if let recent, recent.bundleID == app.bundleID { return recent.destinations }
+        let found = LauncherRecentDocuments.destinations(LauncherRecentDocuments.documents(bundleID: app.bundleID))
+        recent = (app.bundleID, found)
+        return found
     }
 
     private func handleStep(_ input: SearchKeyInput) {
@@ -2610,6 +2621,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .desktop: "rectangle.on.rectangle"
             case .display: "display"
             case .newStage: "plus.square.on.square"
+            case .document: "doc"
+            }
+            if case .document(let path) = destination.kind {
+                return SlashSuggestion(text: destination.title, detail: destination.detail, kind: .result, icon: .file(path))
             }
             return SlashSuggestion(text: "\(verb.destinationPrefix) \(destination.title)", detail: destination.detail,
                                    kind: .result, icon: .symbol(symbol))

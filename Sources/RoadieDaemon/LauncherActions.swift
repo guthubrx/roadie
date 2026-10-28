@@ -73,6 +73,8 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     case open, newWindow, openIn, gatherIn, hide, quit
     /// Session 105 : comme le Forcer à quitter de macOS.
     case forceQuit
+    /// Session 116 : documents récents de l'application, choisis à la troisième étape.
+    case recentDocuments
     // Application et fenêtre : vers la stage active, sans changer la stage affichée (SPEC-075).
     case bringHere
     // Fenêtre
@@ -97,6 +99,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .hide: "Masquer l'application"
         case .quit: "Quitter l'application"
         case .forceQuit: "Forcer à quitter"
+        case .recentDocuments: "Documents récents…"
         case .focus: "Aller à la fenêtre"
         case .sendTo: "Envoyer vers…"
         case .bringHere: "Amener ici"
@@ -130,9 +133,13 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .gatherIn: "Réunir dans"
         case .sendTo: "Envoyer vers"
         case .moveTo: "Déplacer vers"
+        case .recentDocuments: "Ouvrir"
         default: title
         }
     }
+
+    /// Titre de la troisième étape : « Word › Documents récents ».
+    var destinationsTitle: String { self == .recentDocuments ? "Documents récents" : destinationPrefix }
 
     /// Titre affiché : les verbes « toujours » nomment l'application (« Toujours faire flotter Firefox »).
     func title(app: String) -> String {
@@ -144,7 +151,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         }
     }
 
-    var needsDestination: Bool { [.openIn, .gatherIn, .sendTo, .moveTo].contains(self) }
+    var needsDestination: Bool { [.openIn, .gatherIn, .sendTo, .moveTo, .recentDocuments].contains(self) }
 
     /// Clé du classement appris pour ce verbe sur ce type d'objet (session 111) : `verb:app:quit`.
     func rankingKey(for subject: LauncherSubject) -> String { "verb:\(subject.verbKind):\(rawValue)" }
@@ -163,7 +170,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     /// dépendent de `tiling` ; sans état connu, « Faire flotter » seul (bascule SPEC-047). O(1).
     static func verbs(for subject: LauncherSubject, tiling: LauncherTilingState? = nil) -> [LauncherVerb] {
         switch subject {
-        case .app: return [.open, .openIn, .bringHere, .newWindow, .gatherIn, .hide, .quit, .forceQuit]
+        case .app: return [.open, .openIn, .bringHere, .newWindow, .recentDocuments, .gatherIn, .hide, .quit, .forceQuit]
         case .file: return [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath]
         case .project: return [.reopenProject, .deleteProject]
         case .url: return [.open, .openIn, .bringHere, .copyPath]
@@ -204,6 +211,8 @@ struct LauncherDestination: Equatable, Sendable {
         case display(DisplayID)
         /// Stage à créer dans ce bureau ; nom facultatif (unique dans tout Roadie, SPEC-067).
         case newStage(name: String?, DisplayID, DesktopID)
+        /// Document récent d'une application (session 116), par son chemin.
+        case document(String)
     }
 
     let kind: Kind
@@ -216,6 +225,7 @@ struct LauncherDestination: Equatable, Sendable {
         case .desktop(let display, let desktop): "desktop:\(display.rawValue)/\(desktop.rawValue)"
         case .display(let display): "display:\(display.rawValue)"
         case .newStage(let name, let display, let desktop): "new:\(display.rawValue)/\(desktop.rawValue)/\(name ?? "")"
+        case .document(let path): "document:\(path)"
         }
     }
 
@@ -225,16 +235,18 @@ struct LauncherDestination: Equatable, Sendable {
         case .desktop: .desktop
         case .display: .display
         case .newStage: .newStage
+        case .document: .document
         }
     }
 
-    fileprivate enum Category { case stage, desktop, display, newStage }
+    fileprivate enum Category { case stage, desktop, display, newStage, document }
 
     /// Destinations acceptées par un verbe pour un objet. O(1).
     fileprivate static func accepts(_ category: Category, verb: LauncherVerb, subject: LauncherSubject) -> Bool {
         switch verb {
         case .openIn, .gatherIn: return category == .stage || category == .newStage
-        case .sendTo: return true
+        case .sendTo: return category != .document
+        case .recentDocuments: return category == .document
         case .moveTo:
             if case .target(let target) = subject, target.kind == .desktop { return category == .display }
             return category == .desktop || category == .display
@@ -384,7 +396,7 @@ struct LauncherActionList: Equatable, Sendable {
     static func destinations(for subject: LauncherSubject, verb: LauncherVerb, query: String,
                              destinations: [LauncherDestination], newStageHome: (DisplayID, DesktopID)) -> LauncherActionList {
         var list = LauncherActionList()
-        list.rows.append(.header("\(subject.title) › \(verb.destinationPrefix)"))
+        list.rows.append(.header("\(subject.title) › \(verb.destinationsTitle)"))
         list.rows.append(contentsOf: matching(destinations, verb: verb, subject: subject, query: query, newStageHome: newStageHome)
             .map { .destination(verb, $0) })
         list.best = list.rows.lazy.compactMap(\.id).first
@@ -399,11 +411,13 @@ struct LauncherActionList: Equatable, Sendable {
         let accepted = all.filter { LauncherDestination.accepts($0.category, verb: verb, subject: subject) && $0.kind != own.map { .stage($0) } }
         let folded = LauncherMatch.fold(query)
         var found: [LauncherDestination]
+        // Documents récents : la liste entière (20 au plus), plus récent d'abord.
+        let limit = verb == .recentDocuments ? LauncherRecentDocuments.limit : destinationLimit
         if folded.isEmpty {
-            found = Array(accepted.prefix(destinationLimit))
+            found = Array(accepted.prefix(limit))
         } else {
             let scored = accepted.compactMap { destination in LauncherMatch.score(query, in: destination.title).map { (destination, $0) } }
-            found = scored.sorted { $0.1 > $1.1 }.prefix(destinationLimit).map(\.0)
+            found = scored.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0)
         }
         guard LauncherDestination.accepts(.newStage, verb: verb, subject: subject) else { return found }
         let name = query.trimmingCharacters(in: .whitespacesAndNewlines)
