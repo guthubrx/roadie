@@ -1,11 +1,12 @@
 import AppKit
 import ApplicationServices
+import RoadieAX
 
 /// Focus clavier de l'application au premier plan à l'ouverture de la barre (session 097). Le panneau
-/// prend le clavier sans activer Roadie. Fermé par Échap, il ne rend pas toujours la frappe à
-/// l'application restée active : dans T3 Code, la zone de saisie ne recevait plus rien. Activer à
-/// nouveau une application déjà au premier plan ne change rien ; la fenêtre et l'élément sont donc
-/// remis au focus par l'Accessibilité.
+/// prend le clavier sans activer Roadie. Fermé par Échap, il ne rend pas la frappe à l'application
+/// restée active : dans T3 Code, la zone de saisie gardait le focus AX (`kept=true`) sans recevoir la
+/// frappe, et les écritures AX le lui faisaient perdre. La fenêtre redevient donc clé par SkyLight
+/// (session 098, ADR 020) ; l'élément sert seulement au diagnostic.
 struct LauncherFocusSnapshot: @unchecked Sendable {
     let pid: pid_t
     let bundleID: String
@@ -24,22 +25,13 @@ struct LauncherFocusSnapshot: @unchecked Sendable {
                                      element: Self.element(app, kAXFocusedUIElementAttribute))
     }
 
-    /// Fenêtre remise principale, puis élément remis au focus. Les détails servent à l'événement
-    /// `launcher.focus_restore` : `kept` dit si l'élément avait encore le focus avant l'écriture.
+    /// Fenêtre rendue clé. Les détails servent à l'événement `launcher.focus_restore` : `kept` dit si
+    /// l'élément avait encore le focus de l'application, `key` si SkyLight a accepté la demande.
     func restore() -> [String: String] {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, Self.timeout)
-        var details = ["bundleID": bundleID, "saved": element == nil ? "none" : "element",
-                       "kept": String(focusIsSaved(app))]
-        if let window {
-            AXUIElementSetMessagingTimeout(window, Self.timeout)
-            details["window"] = String(AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue).rawValue)
-        }
-        if let element {
-            AXUIElementSetMessagingTimeout(element, Self.timeout)
-            details["element"] = String(AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue).rawValue)
-        }
-        return details
+        return ["bundleID": bundleID, "saved": element == nil ? "none" : "element", "kept": String(focusIsSaved(app)),
+                "key": String(window.map { WindowKeyFocus.makeKey(pid: pid, window: $0) } ?? false)]
     }
 
     /// L'élément enregistré a-t-il le focus de l'application ?
