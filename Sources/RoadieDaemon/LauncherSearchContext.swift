@@ -56,7 +56,9 @@ struct LauncherSearchContext {
     }
     var aliasAction: @MainActor (LauncherAlias) -> LauncherAction? = { _ in nil }
     var stageName: @MainActor (StageScope) -> String? = { _ in nil }
-    var saveAlias: @MainActor (LauncherAlias, String) -> LauncherAlias? = { _, _ in nil }
+    var saveAlias: @MainActor (LauncherAlias, String) -> Result<LauncherAlias?, Error> = { _, _ in
+        .failure(JSONPersistence.PersistenceError(description: "launcher indisponible"))
+    }
     /// Fin de l'aperçu par Retour : la disposition de l'aperçu reste (vrai) ou est restaurée (faux).
     var endPreview: @MainActor (Bool) -> Void = { _ in }
     /// Workflows (SPEC-088) : entrées tapées ; Script Filter lancé hors du fil principal (réponse ou

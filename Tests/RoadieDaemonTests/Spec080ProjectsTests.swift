@@ -31,13 +31,14 @@ struct Spec080ProjectTests {
         #expect(project.tree(for: []) == nil)
     }
 
-    @Test func storeReplacesByNameAndDeletes() {
+    @Test func storeReplacesByNameAndDeletes() throws {
         let store = StageProjectStore(path: tempPath("spec080-projects") + ".json")
-        store.save(StageProject.capture(name: "Essai", members: [], windows: [:], tree: nil, at: now))
-        store.save(StageProject(name: "essai", savedAt: now, windows: [window("Notes")], tree: nil))
+        try store.save(StageProject.capture(name: "Essai", members: [], windows: [:], tree: nil, at: now))
+        try store.save(StageProject(name: "essai", savedAt: now, windows: [window("Notes")], tree: nil))
         #expect(store.load().projects.count == 1)
         #expect(store.load().project(named: "ESSAI")?.windows.count == 1)
-        #expect(store.delete("Essai") && !store.delete("Essai"))
+        #expect(try store.delete("Essai"))
+        #expect(try !store.delete("Essai"))
     }
 }
 

@@ -89,13 +89,13 @@ struct Spec079AliasTests {
         #expect(alias.action(state: PersistentStageState(), activeStage: nil, home: (display, DesktopID(rawValue: 1))) == nil)
     }
 
-    @Test func namesAndStorage() {
+    @Test func namesAndStorage() throws {
         #expect(LauncherAlias.isValidName("fp") && LauncherAlias.isValidName("douzecaracte") && !LauncherAlias.isValidName("treizecaracte"))
         #expect(!LauncherAlias.isValidName("f p") && !LauncherAlias.isValidName(" "))
         let store = LauncherAliasStore(path: tempPath("spec079-aliases") + ".json")
         let alias = LauncherAlias(path: app.path, isApp: true, bundleID: nil, name: "Firefox", stage: nil, here: true, newStage: false, position: nil)
-        #expect(store.save(alias, as: "FP") == nil)
+        #expect(try store.save(alias, as: "FP") == nil)
         #expect(store.load().alias(for: "fp")?.1 == alias)
-        #expect(store.save(alias, as: "fp") == alias)
+        #expect(try store.save(alias, as: "fp") == alias)
     }
 }

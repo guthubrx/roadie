@@ -1,0 +1,7 @@
+# Reproduction et recherche de variantes — valeurs numériques et récursion
+
+Les copies avant correction sont dans `notes/original/`. La commande `notes/repro-valeurs.py`, exécutée sous le runner V15, utilise des sous-processus séparés. Un plist synthétique contenant `<real>1e100</real>` est accepté, puis `PlistValue.int` termine le sous-processus par une erreur fatale de conversion (`returncode=-5`). `CGKeyCode(65536)` termine aussi le sous-processus (`returncode=-5`). Une expression de 32 ou 5 000 parenthèses passe ; 50 000 parenthèses terminent le sous-processus (`returncode=-4`). Aucun événement clavier n'est envoyé par la reproduction.
+
+Recherche : `rg -n '\b(Int|UInt|UInt8|UInt16|UInt32|UInt64|CGKeyCode)\(' Sources/RoadieDaemon/Alfred*.swift Sources/RoadieDaemon/Launcher*.swift Sources/RoadieDaemon/TargetMacroService.swift`. Les conversions de texte par `Int(...)` sont optionnelles. Les codes de macro sont validés par `inspect` avant la voie de lecture ordinaire ; l'appel direct interne de `replay` et la conversion de dates de `LauncherMemory` restent à examiner séparément. Le délai de workflow est borné par `min` et `max` avant conversion ; les valeurs non finies restent à qualifier.
+
+Les tests de session couvrent la lecture réelle d'un plist de workflow, les valeurs non finies et fractionnaires, les codes clavier hors plage, les parenthèses, les signes et les puissances imbriqués ainsi qu'un calcul ordinaire à plat.

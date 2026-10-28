@@ -1,0 +1,480 @@
+diff --git a/Sources/RoadieDaemon/AlfredLiveEffects.swift b/Sources/RoadieDaemon/AlfredLiveEffects.swift
+index 51baa01d..bd2235ca 100644
+--- a/Sources/RoadieDaemon/AlfredLiveEffects.swift
++++ b/Sources/RoadieDaemon/AlfredLiveEffects.swift
+@@ -111,7 +111,7 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
+     }()
+ 
+     func keyCombo(keyCode: Int, character: String, modifiers: Int, count: Int) async {
+-        let code = keyCode >= 0 ? CGKeyCode(keyCode) : character.lowercased().first.flatMap { Self.keyCodes[$0] }
++        let code = keyCode >= 0 ? CGKeyCode(exactly: keyCode) : character.lowercased().first.flatMap { Self.keyCodes[$0] }
+         guard let code else { return }
+         var flags: CGEventFlags = []
+         if modifiers & 1_048_576 != 0 { flags.insert(.maskCommand) }
+diff --git a/Sources/RoadieDaemon/AlfredWorkflow.swift b/Sources/RoadieDaemon/AlfredWorkflow.swift
+index a22c3a84..921f36ab 100644
+--- a/Sources/RoadieDaemon/AlfredWorkflow.swift
++++ b/Sources/RoadieDaemon/AlfredWorkflow.swift
+@@ -34,7 +34,8 @@ enum PlistValue: Equatable, Sendable {
+     var int: Int? {
+         switch self {
+         case .int(let value): value
+-        case .double(let value): Int(value)
++        // Une valeur plist hors de la plage de Int ne doit pas arrêter le démon.
++        case .double(let value): Int(exactly: value.rounded(.towardZero))
+         case .bool(let value): value ? 1 : 0
+         case .string(let value): Int(value.trimmingCharacters(in: .whitespaces))
+         default: nil
+diff --git a/Sources/RoadieDaemon/CLICommandRouter.swift b/Sources/RoadieDaemon/CLICommandRouter.swift
+index ad8ac44f..4772752f 100644
+--- a/Sources/RoadieDaemon/CLICommandRouter.swift
++++ b/Sources/RoadieDaemon/CLICommandRouter.swift
+@@ -96,6 +96,7 @@ public final class CLICommandRouter {
+     /// les composants (REL-014), donc l'instance partagée par défaut.
+     private let configReload: ConfigReloadService
+     private let railRuntimeStore: RailRuntimeStateStore
++    private let workflowInstallationFolder: URL
+     private var cachedService: SnapshotService?
+     private var stdoutBuffer = ""
+     private var stderrBuffer = ""
+@@ -112,12 +113,14 @@ public final class CLICommandRouter {
+         makeService: @escaping (_ readOnly: Bool) -> SnapshotService = CLICommandRouter.defaultService,
+         streamSink: ((String) -> Void)? = nil,
+         configReload: ConfigReloadService = .shared,
+-        railRuntimeStore: RailRuntimeStateStore = RailRuntimeStateStore()
++        railRuntimeStore: RailRuntimeStateStore = RailRuntimeStateStore(),
++        workflowInstallationFolder: URL? = nil
+     ) {
+         self.makeService = makeService
+         self.streamSink = streamSink
+         self.configReload = configReload
+         self.railRuntimeStore = railRuntimeStore
++        self.workflowInstallationFolder = workflowInstallationFolder ?? AlfredWorkflowIndex.roadieFolder
+     }
+ 
+     /// Service par défaut. Une lecture n'écrit pas l'état et ne fait pas suivre le focus par la
+@@ -967,21 +970,28 @@ public final class CLICommandRouter {
+                 err("workflow: archive illisible (info.plist absent)")
+                 return 1
+             }
+-            let name = (workflow.bundleID.isEmpty ? file.deletingPathExtension().lastPathComponent : workflow.bundleID)
+-                .replacingOccurrences(of: "/", with: "-")
+-            let target = AlfredWorkflowIndex.roadieFolder.appendingPathComponent(name)
++            let identifier = workflow.bundleID.isEmpty ? file.deletingPathExtension().lastPathComponent : workflow.bundleID
++            guard let name = Self.workflowDirectoryName(identifier) else {
++                err("workflow: identifiant de dossier invalide")
++                return 2
++            }
++            let target = workflowInstallationFolder.appendingPathComponent(name)
+             if FileManager.default.fileExists(atPath: target.path) {
+                 guard args.contains("--replace") else { err("workflow: déjà installé : \(name) (--replace pour remplacer)"); return 1 }
+                 try FileManager.default.removeItem(at: target)
+             }
+-            try FileManager.default.createDirectory(at: AlfredWorkflowIndex.roadieFolder, withIntermediateDirectories: true)
++            try FileManager.default.createDirectory(at: workflowInstallationFolder, withIntermediateDirectories: true)
+             try FileManager.default.moveItem(at: root, to: target)
+             let report = AlfredCompatibility.report(AlfredWorkflow.load(folder: target, source: .roadie) ?? workflow)
+             out("installé : \(workflow.name) → \(target.path) (\(report.state.rawValue))")
+             return 0
+         case "remove":
+             guard args.count >= 2 else { return usageError() }
+-            let target = AlfredWorkflowIndex.roadieFolder.appendingPathComponent(args[1].replacingOccurrences(of: "/", with: "-"))
++            guard let name = Self.workflowDirectoryName(args[1]) else {
++                err("workflow: identifiant de dossier invalide")
++                return 2
++            }
++            let target = workflowInstallationFolder.appendingPathComponent(name)
+             guard FileManager.default.fileExists(atPath: target.appendingPathComponent("info.plist").path) else {
+                 err("workflow: absent du dossier de Roadie : \(args[1]) (les workflows d'Alfred se retirent dans Alfred)")
+                 return 2
+@@ -994,6 +1004,13 @@ public final class CLICommandRouter {
+         }
+     }
+ 
++    /// Un identifiant ne doit jamais désigner le dossier des workflows ou son parent.
++    private static func workflowDirectoryName(_ identifier: String) -> String? {
++        let name = identifier.replacingOccurrences(of: "/", with: "-")
++        guard !name.isEmpty, name != ".", name != "..", !name.contains("\0") else { return nil }
++        return name
++    }
++
+     private func value(after flag: String, in args: [String]) -> String? {
+         guard let index = args.firstIndex(of: flag) else { return nil }
+         let valueIndex = args.index(after: index)
+diff --git a/Sources/RoadieDaemon/LauncherAliases.swift b/Sources/RoadieDaemon/LauncherAliases.swift
+index c0b9b388..069a16e0 100644
+--- a/Sources/RoadieDaemon/LauncherAliases.swift
++++ b/Sources/RoadieDaemon/LauncherAliases.swift
+@@ -116,11 +116,9 @@ struct LauncherAliasStore: Sendable {
+     /// Une abréviation déjà prise est remplacée. Renvoie l'ancienne action remplacée, s'il y en avait une.
+     @discardableResult
+     func save(_ alias: LauncherAlias, as name: String) -> LauncherAlias? {
+-        var book = load()
+         let key = LauncherMatch.fold(name)
+-        let previous = book.aliases[key]
+-        book.aliases[key] = alias
+-        JSONPersistence.write(book, to: url, label: "launcher aliases")
+-        return previous
++        return JSONPersistence.mutate(LauncherAliasBook.self, at: url, default: LauncherAliasBook(), label: "launcher aliases") { book in
++            book.aliases.updateValue(alias, forKey: key)
++        }
+     }
+ }
+diff --git a/Sources/RoadieDaemon/LauncherCalculator.swift b/Sources/RoadieDaemon/LauncherCalculator.swift
+index b0edaee5..b1cd60d8 100644
+--- a/Sources/RoadieDaemon/LauncherCalculator.swift
++++ b/Sources/RoadieDaemon/LauncherCalculator.swift
+@@ -55,10 +55,14 @@ enum LauncherCalculator {
+ 
+     /// Jetons puis grammaire : somme → produit → unaire → puissance (à droite) → primaire.
+     private struct Parser {
++        // Les parenthèses, signes et puissances utilisent la pile. Cette borne refuse une saisie
++        // pathologique avant un débordement, sans limiter les opérations à plat.
++        private static let maxDepth = 128
+         enum Token: Equatable { case number(Double), name(String), op(Character), open, close }
+ 
+         private let tokens: [Token]
+         private var index = 0
++        private var depth = 0
+ 
+         var hasOperator: Bool {
+             tokens.enumerated().contains { offset, token in
+@@ -135,6 +139,9 @@ enum LauncherCalculator {
+ 
+         /// Moins unaire plus faible que `^` : `-2^2` = -4.
+         private mutating func unary() -> Double? {
++            guard depth < Self.maxDepth else { return nil }
++            depth += 1
++            defer { depth -= 1 }
+             if case .op(let op)? = current, op == "-" || op == "+" {
+                 index += 1
+                 guard let value = unary() else { return nil }
+diff --git a/Sources/RoadieDaemon/LauncherHistory.swift b/Sources/RoadieDaemon/LauncherHistory.swift
+index d3dd5f42..f92b1779 100644
+--- a/Sources/RoadieDaemon/LauncherHistory.swift
++++ b/Sources/RoadieDaemon/LauncherHistory.swift
+@@ -43,12 +43,14 @@ struct LauncherHistoryStore: Sendable {
+     func load() -> LauncherHistoryBook { JSONPersistence.load(LauncherHistoryBook.self, from: url, default: LauncherHistoryBook()) }
+ 
+     func record(_ query: String, at now: Date = Date()) {
+-        var book = load()
+-        let before = book
+-        book.record(query, at: now)
+-        guard book != before else { return }
+-        JSONPersistence.write(book, to: url, label: "launcher history")
++        JSONPersistence.mutate(LauncherHistoryBook.self, at: url, default: LauncherHistoryBook(), label: "launcher history") { book in
++            book.record(query, at: now)
++        }
+     }
+ 
+-    func clear() { JSONPersistence.write(LauncherHistoryBook(), to: url, label: "launcher history") }
++    func clear() {
++        JSONPersistence.mutate(LauncherHistoryBook.self, at: url, default: LauncherHistoryBook(), label: "launcher history") { book in
++            book = LauncherHistoryBook()
++        }
++    }
+ }
+diff --git a/Sources/RoadieDaemon/LauncherMemory.swift b/Sources/RoadieDaemon/LauncherMemory.swift
+index 02de0434..95e7b9bf 100644
+--- a/Sources/RoadieDaemon/LauncherMemory.swift
++++ b/Sources/RoadieDaemon/LauncherMemory.swift
+@@ -110,9 +110,7 @@ struct LauncherMemoryStore: Sendable {
+     func load() -> LauncherMemoryBook { JSONPersistence.load(LauncherMemoryBook.self, from: url, default: LauncherMemoryBook()) }
+ 
+     func update(_ change: (inout LauncherMemoryBook) -> Void) {
+-        var book = load()
+-        change(&book)
+-        JSONPersistence.write(book, to: url, label: "launcher memory")
++        JSONPersistence.mutate(LauncherMemoryBook.self, at: url, default: LauncherMemoryBook(), label: "launcher memory", change)
+     }
+ 
+     /// Un déplacement réel d'une fenêtre connue ; rien si elle ne change pas de stage. Écrit à chaque
+diff --git a/Sources/RoadieDaemon/LauncherRanking.swift b/Sources/RoadieDaemon/LauncherRanking.swift
+index b6ee073b..6a851b4d 100644
+--- a/Sources/RoadieDaemon/LauncherRanking.swift
++++ b/Sources/RoadieDaemon/LauncherRanking.swift
+@@ -60,7 +60,11 @@ struct LauncherRanking: Codable, Equatable, Sendable {
+     func prefixUses(_ key: String, query: String) -> Int {
+         let folded = LauncherMatch.fold(query)
+         guard !folded.isEmpty, let abbreviations = entries[key]?.abbreviations else { return 0 }
+-        return abbreviations.reduce(0) { $0 + ($1.key.hasPrefix(folded) ? $1.value : 0) }
++        return abbreviations.reduce(0) { total, pair in
++            guard pair.key.hasPrefix(folded) else { return total }
++            let (sum, overflow) = total.addingReportingOverflow(max(0, pair.value))
++            return overflow ? Int.max : sum
++        }
+     }
+ 
+     /// Un choix : le score gagne 100 points et la requête est mémorisée, partout et dans la stage
+@@ -88,7 +92,8 @@ struct LauncherRanking: Codable, Equatable, Sendable {
+     /// Ajoute la requête ; au-delà de la borne, la moins utilisée part. O(a).
+     private static func remember(_ folded: String, in abbreviations: inout [String: Int]) {
+         guard !folded.isEmpty else { return }
+-        abbreviations[folded, default: 0] += 1
++        let count = max(0, abbreviations[folded, default: 0])
++        abbreviations[folded] = count == Int.max ? count : count + 1
+         if abbreviations.count > maxAbbreviations,
+            let rarest = abbreviations.min(by: { $0.value < $1.value || ($0.value == $1.value && $0.key > $1.key) }) {
+             abbreviations[rarest.key] = nil
+@@ -116,8 +121,9 @@ struct LauncherRankingStore: Sendable {
+     }
+ 
+     func recordVisit(_ key: String, query: String, at now: Date = Date(), context: String? = nil) {
+-        var ranking = load(at: now)
+-        ranking.recordVisit(key, query: query, at: now, context: context)
+-        JSONPersistence.write(ranking, to: url, label: "launcher ranking")
++        JSONPersistence.mutate(LauncherRanking.self, at: url, default: LauncherRanking(), label: "launcher ranking") { ranking in
++            ranking.prune(at: now)
++            ranking.recordVisit(key, query: query, at: now, context: context)
++        }
+     }
+ }
+diff --git a/Sources/RoadieDaemon/StageProjects.swift b/Sources/RoadieDaemon/StageProjects.swift
+index 8fda08a1..5d61d8b3 100644
+--- a/Sources/RoadieDaemon/StageProjects.swift
++++ b/Sources/RoadieDaemon/StageProjects.swift
+@@ -70,16 +70,15 @@ struct StageProjectStore: Sendable {
+     func load() -> StageProjectBook { JSONPersistence.load(StageProjectBook.self, from: url, default: StageProjectBook()) }
+ 
+     func save(_ project: StageProject) {
+-        var book = load()
+-        book.projects[LauncherMatch.fold(project.name)] = project
+-        JSONPersistence.write(book, to: url, label: "stage projects")
++        JSONPersistence.mutate(StageProjectBook.self, at: url, default: StageProjectBook(), label: "stage projects") { book in
++            book.projects[LauncherMatch.fold(project.name)] = project
++        }
+     }
+ 
+     @discardableResult
+     func delete(_ name: String) -> Bool {
+-        var book = load()
+-        guard book.projects.removeValue(forKey: LauncherMatch.fold(name)) != nil else { return false }
+-        JSONPersistence.write(book, to: url, label: "stage projects")
+-        return true
++        JSONPersistence.mutate(StageProjectBook.self, at: url, default: StageProjectBook(), label: "stage projects") { book in
++            book.projects.removeValue(forKey: LauncherMatch.fold(name)) != nil
++        }
+     }
+ }
+
+diff --git a/Tests/RoadieDaemonTests/Spec093NumericSafetyTests.swift b/Tests/RoadieDaemonTests/Spec093NumericSafetyTests.swift
+new file mode 100644
+index 00000000..1196b391
+--- /dev/null
++++ b/Tests/RoadieDaemonTests/Spec093NumericSafetyTests.swift
+@@ -0,0 +1,51 @@
++import Foundation
++import Testing
++@testable import RoadieDaemon
++
++struct Spec093NumericSafetyTests {
++    @Test func plistNumbersOutsideIntegerRangeAreRejected() throws {
++        #expect(PlistValue.double(2.9).int == 2)
++        #expect(PlistValue.double(-2.9).int == -2)
++        #expect(PlistValue.double(.greatestFiniteMagnitude).int == nil)
++        #expect(PlistValue.double(-.greatestFiniteMagnitude).int == nil)
++        #expect(PlistValue.double(.infinity).int == nil)
++        #expect(PlistValue.double(.nan).int == nil)
++
++        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-plist-\(UUID().uuidString)")
++        defer { try? FileManager.default.removeItem(at: sandbox) }
++        var fixture = WorkflowFixture()
++        fixture.add("SF", "input.scriptfilter", ["keyword": "exemple", "argumenttype": 1e100])
++        let workflow = try fixture.write(in: sandbox)
++        let entry = try #require(AlfredWorkflowIndex.entries([workflow]).first)
++        #expect(entry.argument == .required)
++    }
++
++    @Test func calculatorLimitsRecursiveDepthButKeepsOrdinaryExpressions() {
++        func nested(_ count: Int) -> String {
++            "=" + String(repeating: "(", count: count) + "1" + String(repeating: ")", count: count)
++        }
++        #expect(LauncherCalculator.evaluate(nested(32))?.value == 1)
++        #expect(LauncherCalculator.evaluate(nested(50_000)) == nil)
++        #expect(LauncherCalculator.evaluate("=" + String(repeating: "-", count: 200) + "1") == nil)
++        #expect(LauncherCalculator.evaluate("=" + Array(repeating: "1", count: 200).joined(separator: "^")) == nil)
++        #expect(LauncherCalculator.evaluate(Array(repeating: "1", count: 300).joined(separator: "+"))?.value == 300)
++    }
++
++    @Test func invalidWorkflowKeyCodeDoesNotCrashOrEmitAKey() async {
++        let path = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-log-\(UUID().uuidString)")
++        let effects = AlfredLiveEffects(events: EventLog(path: path.path), webSearchURL: "", reopen: { _ in })
++        // Un code hors plage s'arrête avant la création d'un événement clavier réel.
++        await effects.keyCombo(keyCode: 65_536, character: "", modifiers: 0, count: 1)
++        await effects.keyCombo(keyCode: .max, character: "", modifiers: 0, count: 1)
++    }
++
++    @Test func rankingCountersDoNotOverflowOnDamagedButValidData() {
++        let now = Date(timeIntervalSince1970: 2_000_000_000)
++        var ranking = LauncherRanking(entries: ["a": .init(anchor: now.timeIntervalSince1970,
++                                                             abbreviations: ["x": .max, "xx": 1], contexts: nil)])
++        #expect(ranking.prefixUses("a", query: "x") == .max)
++        ranking.recordVisit("a", query: "x", at: now)
++        #expect(ranking.exactUses("a", query: "x") == .max)
++        #expect(ranking.prefixUses("a", query: "x") == .max)
++    }
++}
+
+diff --git a/Tests/RoadieDaemonTests/Spec093PersistenceSafetyTests.swift b/Tests/RoadieDaemonTests/Spec093PersistenceSafetyTests.swift
+new file mode 100644
+index 00000000..928e9bb7
+--- /dev/null
++++ b/Tests/RoadieDaemonTests/Spec093PersistenceSafetyTests.swift
+@@ -0,0 +1,68 @@
++import Foundation
++import Testing
++@testable import RoadieDaemon
++
++struct Spec093PersistenceSafetyTests {
++    @Test func corruptLauncherFilesAreNotOverwrittenByMutations() throws {
++        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-state-\(UUID().uuidString)")
++        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
++        defer { try? FileManager.default.removeItem(at: sandbox) }
++        let invalid = Data("{document abîmé".utf8)
++        func corrupt(_ name: String) throws -> URL {
++            let file = sandbox.appendingPathComponent(name)
++            try invalid.write(to: file)
++            return file
++        }
++
++        let history = try corrupt("history.json")
++        LauncherHistoryStore(path: history.path).record("cherche")
++        #expect(try Data(contentsOf: history) == invalid)
++        LauncherHistoryStore(path: history.path).clear()
++        #expect(try Data(contentsOf: history) == invalid)
++
++        let memory = try corrupt("memory.json")
++        LauncherMemoryStore(path: memory.path).update { $0.declined["a"] = Date() }
++        #expect(try Data(contentsOf: memory) == invalid)
++
++        let aliases = try corrupt("aliases.json")
++        let alias = LauncherAlias(path: "/tmp/exemple", isApp: false, bundleID: nil, name: "Exemple", stage: nil,
++                                  here: false, newStage: false, position: nil)
++        LauncherAliasStore(path: aliases.path).save(alias, as: "ex")
++        #expect(try Data(contentsOf: aliases) == invalid)
++
++        let projects = try corrupt("projects.json")
++        StageProjectStore(path: projects.path).save(StageProject(name: "Exemple", savedAt: Date(), windows: [], tree: nil))
++        #expect(try Data(contentsOf: projects) == invalid)
++
++        let ranking = try corrupt("ranking.json")
++        LauncherRankingStore(path: ranking.path).recordVisit("exemple", query: "ex")
++        #expect(try Data(contentsOf: ranking) == invalid)
++    }
++
++    @Test func concurrentMemoryUpdatesKeepBothChanges() throws {
++        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-race-\(UUID().uuidString)")
++        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
++        defer { try? FileManager.default.removeItem(at: sandbox) }
++        let store = LauncherMemoryStore(path: sandbox.appendingPathComponent("memory.json").path)
++        let arrived = DispatchSemaphore(value: 0)
++        let proceed = DispatchSemaphore(value: 0)
++        let group = DispatchGroup()
++        for key in ["a", "b"] {
++            DispatchQueue.global().async(group: group) {
++                store.update { book in
++                    arrived.signal()
++                    proceed.wait()
++                    book.declined[key] = Date(timeIntervalSince1970: 2_000_000_000)
++                }
++            }
++        }
++        try #require(arrived.wait(timeout: .now() + 5) == .success)
++        // Avant correction, les deux lectures peuvent se terminer avant leurs écritures. Après
++        // correction, le second attend le verrou ; le délai libère alors le premier.
++        _ = arrived.wait(timeout: .now() + 0.5)
++        proceed.signal()
++        proceed.signal()
++        try #require(group.wait(timeout: .now() + 5) == .success)
++        #expect(Set(store.load().declined.keys) == Set(["a", "b"]))
++    }
++}
+
+diff --git a/Tests/RoadieDaemonTests/Spec093WorkflowSafetyTests.swift b/Tests/RoadieDaemonTests/Spec093WorkflowSafetyTests.swift
+new file mode 100644
+index 00000000..6a1c8347
+--- /dev/null
++++ b/Tests/RoadieDaemonTests/Spec093WorkflowSafetyTests.swift
+@@ -0,0 +1,82 @@
++import Foundation
++import Testing
++@testable import RoadieDaemon
++
++@Suite @MainActor
++struct Spec093WorkflowSafetyTests {
++    private func archive(identifier: String, in sandbox: URL) throws -> URL {
++        var fixture = WorkflowFixture()
++        fixture.bundleID = identifier
++        let workflow = try fixture.write(in: sandbox.appendingPathComponent("source"))
++        let archive = sandbox.appendingPathComponent("test.alfredworkflow")
++        let process = Process()
++        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
++        process.arguments = ["-c", "-k", "--keepParent", workflow.folder.path, archive.path]
++        try process.run()
++        process.waitUntilExit()
++        try #require(process.terminationStatus == 0)
++        return archive
++    }
++
++    @Test(arguments: [".", ".."])
++    func installationRefusesReservedNamesBeforeReplacingAnything(_ identifier: String) throws {
++        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-\(UUID().uuidString)")
++        defer { try? FileManager.default.removeItem(at: sandbox) }
++        let parent = sandbox.appendingPathComponent("protected")
++        let workflows = parent.appendingPathComponent("workflows")
++        let existing = workflows.appendingPathComponent("autre-workflow")
++        try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
++        let parentMarker = parent.appendingPathComponent("configuration")
++        let workflowMarker = existing.appendingPathComponent("donnees")
++        try Data("conserver".utf8).write(to: parentMarker)
++        try Data("conserver".utf8).write(to: workflowMarker)
++        let file = try archive(identifier: identifier, in: sandbox)
++
++        let response = CLICommandRouter(workflowInstallationFolder: workflows)
++            .run(["workflow", "install", file.path, "--replace"])
++
++        #expect(response.exitCode != 0)
++        #expect(response.stderr.contains("identifiant de dossier invalide"))
++        #expect(FileManager.default.fileExists(atPath: parentMarker.path))
++        #expect(FileManager.default.fileExists(atPath: workflowMarker.path))
++    }
++
++    @Test(arguments: [".", ".."])
++    func removalRefusesReservedNamesEvenWhenParentContainsPlist(_ identifier: String) throws {
++        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-\(UUID().uuidString)")
++        defer { try? FileManager.default.removeItem(at: sandbox) }
++        let workflows = sandbox.appendingPathComponent("workflows")
++        try FileManager.default.createDirectory(at: workflows, withIntermediateDirectories: true)
++        let parentMarker = sandbox.appendingPathComponent("info.plist")
++        let workflowMarker = workflows.appendingPathComponent("info.plist")
++        try Data("conserver".utf8).write(to: parentMarker)
++        try Data("conserver".utf8).write(to: workflowMarker)
++
++        let response = CLICommandRouter(workflowInstallationFolder: workflows)
++            .run(["workflow", "remove", identifier])
++
++        #expect(response.exitCode != 0)
++        #expect(response.stderr.contains("identifiant de dossier invalide"))
++        #expect(FileManager.default.fileExists(atPath: parentMarker.path))
++        #expect(FileManager.default.fileExists(atPath: workflowMarker.path))
++    }
++
++    @Test func ordinaryInstallReplaceAndRemoveStaySupported() throws {
++        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-093-\(UUID().uuidString)")
++        defer { try? FileManager.default.removeItem(at: sandbox) }
++        let workflows = sandbox.appendingPathComponent("workflows")
++        let file = try archive(identifier: "test/groupe", in: sandbox)
++        let target = workflows.appendingPathComponent("test-groupe")
++        let router = CLICommandRouter(workflowInstallationFolder: workflows)
++
++        #expect(router.run(["workflow", "install", file.path]).exitCode == 0)
++        let marker = target.appendingPathComponent("ancien")
++        try Data("ancien".utf8).write(to: marker)
++        #expect(router.run(["workflow", "install", file.path]).exitCode != 0)
++        #expect(FileManager.default.fileExists(atPath: marker.path))
++        #expect(router.run(["workflow", "install", file.path, "--replace"]).exitCode == 0)
++        #expect(!FileManager.default.fileExists(atPath: marker.path))
++        #expect(router.run(["workflow", "remove", "test/groupe"]).exitCode == 0)
++        #expect(!FileManager.default.fileExists(atPath: target.path))
++    }
++}

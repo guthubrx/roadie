@@ -1,0 +1,7 @@
+# Variante — mise à jour des tâches Alfred
+
+La recherche `rg -n -i 'removeItem|moveItem|copyItem|renameatx_np' Sources/RoadieDaemon/AlfredAutomationTasks.swift Sources/RoadieDaemon/CLICommandRouter.swift` a trouvé une seconde séquence supprimant l'installation précédente avant de déplacer la nouvelle : `AlfredAutomationTasks.update`, pour `Tasks` et `LICENSE`. Une erreur ou une interruption après suppression pouvait laisser une installation incomplète. Le code avant correction est conservé dans `notes/original/AlfredAutomationTasks.swift`.
+
+La nouvelle version prépare seulement les deux éléments, puis échange chacun sous verrou. Si le second échange échoue, le premier est remis ; les fichiers extérieurs à `Tasks` et `LICENSE` ne sont plus copiés ni remplacés. Les tests injectent un échec et une modification concurrente d'un autre fichier, puis vérifient un succès et un dossier d'installation lié symboliquement. Les téléchargements réels et les archives tierces ne sont pas utilisés pour ces tests.
+
+La revue suivante a signalé que le dossier temporaire pouvait être indexé comme workflow. La préparation est désormais dans un sous-dossier sans `info.plist` à sa racine, ce qui préserve aussi les noms de workflow existants. Un échec de suppression du temporaire est journalisé. Une interruption réelle entre les deux échanges peut laisser une mise à jour partielle et un ancien élément dans le dossier temporaire ; la reprise automatique de cette situation n'est pas démontrée.

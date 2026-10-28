@@ -1,0 +1,40 @@
+{
+  "tool": "gitleaks-history",
+  "revision": 10,
+  "argv": [
+    "/opt/homebrew/bin/gitleaks",
+    "git",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie",
+    "--redact",
+    "--no-banner",
+    "--report-format",
+    "json",
+    "--report-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-27/session-2026-10-27-codebase-01/runs/20261027T060144671471Z/raw.json",
+    "--exit-code",
+    "0",
+    "--log-opts=5ab0ab9544de68edbd6642f58ac6140ef8a07f1e..5ed75b0532c4179c2b6b7d6a4a88e5e2ec2e92fd"
+  ],
+  "cwd": "/Users/moi/Nextcloud/10.Scripts/39.roadie",
+  "started_at": "2026-10-27T06:01:44.697214+00:00",
+  "status": "completed",
+  "exit_code": 0,
+  "seconds": 1.954,
+  "peak_rss_mb": 110.59,
+  "output": "raw.json",
+  "output_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "surviving_pids": [],
+  "version": "gitleaks version 8.30.1",
+  "file_bytes": 134217728,
+  "log_bytes": 10485760,
+  "history_scope": {
+    "kind": "range",
+    "requested_since": "v0.4.0",
+    "since": "5ab0ab9544de68edbd6642f58ac6140ef8a07f1e",
+    "until": "5ed75b0532c4179c2b6b7d6a4a88e5e2ec2e92fd",
+    "range": "5ab0ab9544de68edbd6642f58ac6140ef8a07f1e..5ed75b0532c4179c2b6b7d6a4a88e5e2ec2e92fd"
+  },
+  "temporary_bytes_removed": 0,
+  "normalization_warnings": [],
+  "candidates": 0
+}

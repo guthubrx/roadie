@@ -17,12 +17,12 @@ struct Spec090HistoryTests {
         #expect(book.resumable(at: start.addingTimeInterval(100 + 360)) == nil)
     }
 
-    @Test func storeWritesAndClears() {
+    @Test func storeWritesAndClears() throws {
         let store = LauncherHistoryStore(path: tempPath("spec090-history") + ".json")
         store.record("yt chat")
         store.record("github.com")
         #expect(store.load().recent(2) == ["github.com", "yt chat"])
-        store.clear()
+        try store.clear()
         #expect(store.load().entries.isEmpty)
     }
 }

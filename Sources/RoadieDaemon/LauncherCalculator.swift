@@ -60,10 +60,14 @@ enum LauncherCalculator {
 
     /// Jetons puis grammaire : somme → produit → unaire → puissance (à droite) → primaire.
     private struct Parser {
+        // Les parenthèses, signes et puissances utilisent la pile. Cette borne refuse une saisie
+        // pathologique avant un débordement, sans limiter les opérations à plat.
+        private static let maxDepth = 128
         enum Token: Equatable { case number(Double), name(String), op(Character), open, close }
 
         private let tokens: [Token]
         private var index = 0
+        private var depth = 0
 
         var hasOperator: Bool {
             tokens.enumerated().contains { offset, token in
@@ -140,6 +144,9 @@ enum LauncherCalculator {
 
         /// Moins unaire plus faible que `^` : `-2^2` = -4.
         private mutating func unary() -> Double? {
+            guard depth < Self.maxDepth else { return nil }
+            depth += 1
+            defer { depth -= 1 }
             if case .op(let op)? = current, op == "-" || op == "+" {
                 index += 1
                 guard let value = unary() else { return nil }

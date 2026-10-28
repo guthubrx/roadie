@@ -110,9 +110,12 @@ struct LauncherMemoryStore: Sendable {
     func load() -> LauncherMemoryBook { JSONPersistence.load(LauncherMemoryBook.self, from: url, default: LauncherMemoryBook()) }
 
     func update(_ change: (inout LauncherMemoryBook) -> Void) {
-        var book = load()
-        change(&book)
-        JSONPersistence.write(book, to: url, label: "launcher memory")
+        JSONPersistence.mutate(LauncherMemoryBook.self, at: url, default: LauncherMemoryBook(), label: "launcher memory", change)
+    }
+
+    /// Les choix explicites doivent signaler toute modification non enregistrée.
+    func updateChecked(_ change: (inout LauncherMemoryBook) -> Void) throws {
+        try JSONPersistence.mutateChecked(LauncherMemoryBook.self, at: url, default: LauncherMemoryBook(), label: "launcher memory", change)
     }
 
     /// Un déplacement réel d'une fenêtre connue ; rien si elle ne change pas de stage. Écrit à chaque
