@@ -172,6 +172,11 @@ Si macOS ne permet pas de vérifier l’état d’une fenêtre hors écran, la c
 indique « état non vérifié ». Un profil qui exclut les fenêtres réduites,
 masquées ou plein écran écarte aussi ces états inconnus.
 
+Depuis ou vers une fenêtre en plein écran natif, le sélecteur change d'espace macOS.
+Il faut pour cela activer **Réglages Système > Bureau et Dock > Mission Control >
+Lors du basculement vers une application, passer à un espace avec des fenêtres
+ouvertes pour l'application** (ADR 020).
+
 Les bureaux Roadie sont distincts des Spaces natifs de macOS. Cette intégration
 ne constitue pas une gestion complète des Spaces ni des onglets natifs.
 Le sélecteur est une implémentation propre à Roadie ; il n'importe pas le code,

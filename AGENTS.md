@@ -266,6 +266,10 @@ Sessions 100 à 105 installées : tilde et accents par touche morte gardés ; th
 nombre de résultats) ; barre déplaçable, place retenue ; `> commande` dans le terminal choisi ; signets de
 Firefox (profils, étiquettes, mots-clés, icônes), Safari, Chrome et onglets Firefox ; commandes système, ⌘L,
 ⌫ dossier, tri, `roadie launcher reset`. 2 158 tests / 305 suites, PID 33419, santé 5/5. Reçus : specs/100 à 105.
+Session 106 installée : Cmd+Tab entre un plein écran natif et le bureau ordinaire, dans les deux sens
+(ouverture LaunchServices puis élément AX par jeton distant, ADR 020) ; liste relue au lieu d'être vide.
+Réglage macOS « passer à un espace avec des fenêtres ouvertes » requis. Aller-retour confirmé par l'utilisateur.
+Reçu : specs/106-cmdtab-plein-ecran/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

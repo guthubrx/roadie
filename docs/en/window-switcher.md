@@ -164,6 +164,10 @@ If macOS cannot verify an offscreen window's state, its card reports an unknown
 state. Profiles that exclude minimized, hidden or fullscreen windows also exclude
 these unknown states.
 
+To or from a native fullscreen window, the switcher changes the macOS Space. This
+needs **System Settings > Desktop & Dock > Mission Control > When switching to an
+application, switch to a Space with open windows for the application** (ADR 020).
+
 Roadie desktops are distinct from native macOS Spaces. This integration does not
 provide complete management of native Spaces or native tabs. The switcher is
 Roadie's own implementation; it does not import AltTab code, assets or license.

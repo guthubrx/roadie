@@ -92,6 +92,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Corrections
 
+- Sélecteur : Cmd+Tab passe d'un plein écran natif au bureau ordinaire et revient, au lieu de
+  « Action refusée par l'application » et d'une liste vide (réglage macOS « passer à un espace avec des
+  fenêtres ouvertes pour l'application » requis, ADR 020).
 - Le tilde (⌥N) et les accents tapés par touche morte ne sont plus effacés par la barre.
 - Barre vide : « Revenir » propose la fenêtre vue avant la fenêtre en cours, plus la fenêtre en cours.
   Après Échap, l'application restée au premier plan retrouve le clavier (zone de saisie de T3 Code).
