@@ -279,6 +279,9 @@ Session 093 (audit V15 de la base de code, specs/093-audit-codebase/) et session
 Échap) intégrées dans main le 28 octobre 2026 : 2 205 tests / 312 suites et 28 tests de scripts réussis.
 Fusion préparée par Codex conservée sous l'étiquette `archive/093-fusion-preparee-20261027`. Le numéro 093
 reste partagé avec specs/093-ordres-alfred.
+Session 109 installée : clic droit sur une stage du rail > « Supprimer la stage », nommée ou non, si elle n'a plus
+de fenêtre (stage active et écran absent exclus, raison affichée). 2 208 tests / 313 suites, PID 16562, santé 5/5.
+Reçu : specs/109-supprimer-stage/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
