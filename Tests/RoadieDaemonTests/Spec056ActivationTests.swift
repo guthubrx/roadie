@@ -139,6 +139,37 @@ struct Spec056ActivationTests {
         else { #expect(store.state() == before) }
     }
 
+    /// Session 106 : depuis un plein écran natif, la fenêtre visée est sur un autre espace et AX ne la voit
+    /// pas. Le repli ouvre l'application et change d'espace ; sans lui, l'activation échoue comme avant et revient en arrière.
+    @Test(arguments: [false, true])
+    func windowOnAnotherSpaceIsReachedByOpeningItsApplication(spaceSwitchWorks: Bool) throws {
+        let target = spec056Window(2, x: 500)
+        let provider = PowerUserProvider(windows: [])
+        let writer = Spec056RestoringWriter(provider: provider, target: target, becomesReadable: true)
+        writer.focusSucceeds = false
+        writer.otherSpaceSucceeds = spaceSwitchWorks
+        let store = StageStore(path: tempPath("spec106-other-space-\(spaceSwitchWorks)"))
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: DisplayID(rawValue: "display-main"),
+            activeStageID: StageID(rawValue: "source"), stages: [
+                PersistentStage(id: StageID(rawValue: "source")),
+                PersistentStage(id: StageID(rawValue: "destination"), members: [spec056Member(target)])])]))
+        let owner = try #require(store.state().stageScope(for: target.id))
+        let before = store.state()
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: store,
+                                      persistStateChanges: false)
+        let result = WindowBookmarkCommandService(service: service, store: store).focusWindow(target, in: owner,
+            snapshot: service.snapshot(followFocus: false), generation: PlacementGeneration.shared.next(),
+            label: "switcher", cause: "switcher.activate", eventPrefix: "window.switcher", requireOwnership: true, details: [:])
+        #expect(writer.calls.prefix(2) == ["focus", "space"])
+        if spaceSwitchWorks {
+            #expect(result.outcome != .failed)
+            #expect(store.state().scopes.first?.activeStageID == owner.stageID)
+        } else {
+            #expect(result.outcome == .failed)
+            #expect(store.state() == before)
+        }
+    }
+
     @Test func refusedFrameDoesNotClaimThatFocusFailed() throws {
         let target = spec056Window(2, x: 500)
         let provider = PowerUserProvider(windows: [])
@@ -269,6 +300,7 @@ private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Senda
     var focusSucceeds = true
     var frameSucceeds = true
     var onFocus: (() -> Void)?
+    var otherSpaceSucceeds = false
     init(provider: PowerUserProvider, target: WindowSnapshot, becomesReadable: Bool) {
         self.provider = provider; self.target = target; self.becomesReadable = becomesReadable
     }
@@ -283,6 +315,12 @@ private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Senda
             provider.snapshots.append(restored)
         }
         return true
+    }
+    func focusOnOtherSpace(_ window: WindowSnapshot, timeout: TimeInterval) -> SpaceFocusOutcome {
+        calls.append("space")
+        guard otherSpaceSucceeds else { return SpaceFocusOutcome(opened: true, focused: false, waitedMs: 0) }
+        focusSucceeds = true
+        return SpaceFocusOutcome(opened: true, focused: focus(window), waitedMs: 0)
     }
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         calls.append("frame")

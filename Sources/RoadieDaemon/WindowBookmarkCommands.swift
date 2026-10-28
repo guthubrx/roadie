@@ -180,7 +180,14 @@ public struct WindowBookmarkCommandService {
         // Une fenêtre réduite peut manquer au relevé AX. La restaurer avant de calculer
         // son tuilage ; le relevé suivant fournit sa géométrie réelle, jamais celle de la carte.
         let restoreBeforeLayout = requireOwnership && windowsByID[target.id] == nil
-        if restoreBeforeLayout, !service.focus(target) { return restoreFailure("restore failed") }
+        if restoreBeforeLayout, !service.focus(target) {
+            // Invisible pour AX : souvent sur un autre espace, quand un plein écran natif est actif.
+            let outcome = service.focusOnOtherSpace(target)
+            events.append(RoadieEvent(type: "\(eventPrefix)_space_focus", scope: targetScope, details: details.merging([
+                "opened": String(outcome.opened), "remote": String(outcome.remote), "focused": String(outcome.focused), "waitedMs": String(outcome.waitedMs)
+            ], uniquingKeysWith: { _, new in new })))
+            if !outcome.focused { return restoreFailure("restore failed") }
+        }
         let refreshed = restoreBeforeLayout ? service.snapshot(followFocus: false) : nil
         let observedWindows = refreshed.map { Dictionary($0.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { _, last in last }) } ?? windowsByID
 

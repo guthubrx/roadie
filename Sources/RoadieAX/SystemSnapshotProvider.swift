@@ -36,6 +36,7 @@ public protocol WindowFrameWriting: Sendable {
     /// Lecture AX fraîche du cadre (seconde observation d'un refus, A14). nil si illisible.
     func readFrame(of window: WindowSnapshot) -> CGRect?
     func focus(_ window: WindowSnapshot) -> Bool
+    func focusOnOtherSpace(_ window: WindowSnapshot, timeout: TimeInterval) -> SpaceFocusOutcome
     func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool
     func activateApplication(bundleID: String) -> Bool
     func reset(_ window: WindowSnapshot) -> Bool
@@ -64,11 +65,29 @@ public extension WindowFrameWriting {
 
     func readFrame(of window: WindowSnapshot) -> CGRect? { nil }
     func focus(_ window: WindowSnapshot) -> Bool { false }
+    func focusOnOtherSpace(_ window: WindowSnapshot, timeout: TimeInterval) -> SpaceFocusOutcome {
+        SpaceFocusOutcome(opened: false, focused: false, waitedMs: 0)
+    }
     func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool { false }
     func activateApplication(bundleID: String) -> Bool { false }
     func reset(_ window: WindowSnapshot) -> Bool { false }
     func toggleZoom(_ window: WindowSnapshot) -> Bool { reset(window) }
     func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool { false }
+}
+
+/// Résultat de `focusOnOtherSpace` : ouverture demandée, élément trouvé par jeton distant, focus obtenu,
+/// attente totale.
+public struct SpaceFocusOutcome: Sendable, Equatable {
+    public var opened: Bool
+    public var remote = false
+    public var focused: Bool
+    public var waitedMs: Int
+
+    public init(opened: Bool, focused: Bool, waitedMs: Int) {
+        self.opened = opened
+        self.focused = focused
+        self.waitedMs = waitedMs
+    }
 }
 
 public struct WindowFrameUpdate: Sendable {
@@ -1185,6 +1204,70 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         guard let element = element(pid: window.pid, id: window.id, title: window.title, frame: window.frame, windows: &windows)
         else { return false }
         return focus(element, pid: window.pid)
+    }
+
+    /// Fenêtre d'un autre espace macOS (session 106). Depuis un plein écran natif, AX ne liste pas les
+    /// fenêtres du bureau ordinaire, et inversement. `activate()` et la mise au premier plan SkyLight
+    /// laissent macOS sur place (relevés du 28 octobre 2026). Deux étapes, chacune suivie d'une attente
+    /// qu'AX liste la fenêtre :
+    /// 1. ouverture par LaunchServices, celle du Dock : bascule sur l'espace de l'application, sauf si
+    ///    elle a déjà une fenêtre sur l'espace affiché (réglage « passer à un espace… » actif) ;
+    /// 2. élément AX obtenu par jeton distant, puis focus et AXRaise sur la fenêtre elle-même (AltTab).
+    public func focusOnOtherSpace(_ window: WindowSnapshot, timeout: TimeInterval) -> SpaceFocusOutcome {
+        let start = Date()
+        var outcome = SpaceFocusOutcome(opened: false, focused: false, waitedMs: 0)
+        func finished() -> SpaceFocusOutcome {
+            outcome.waitedMs = Int(Date().timeIntervalSince(start) * 1000)
+            return outcome
+        }
+        func reached(until deadline: TimeInterval) -> Bool {
+            repeat {
+                Thread.sleep(forTimeInterval: 0.05)
+                var windows: PIDWindows?
+                if let element = element(pid: window.pid, id: window.id, title: window.title, frame: window.frame, windows: &windows) {
+                    outcome.focused = focus(element, pid: window.pid)
+                    return true
+                }
+            } while Date().timeIntervalSince(start) < deadline
+            return false
+        }
+        if let url = NSRunningApplication(processIdentifier: window.pid)?.bundleURL {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+            outcome.opened = true
+            if reached(until: timeout / 2) { return finished() }
+        }
+        guard let remote = Self.remoteWindowElement(pid: window.pid, windowID: CGWindowID(window.id.rawValue)) else {
+            return finished()
+        }
+        outcome.remote = true
+        _ = focus(remote, pid: window.pid)
+        _ = reached(until: timeout)
+        return finished()
+    }
+
+    private typealias RemoteTokenElement = @convention(c) (CFData) -> Unmanaged<AXUIElement>?
+    private static let remoteTokenElement: RemoteTokenElement? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "_AXUIElementCreateWithRemoteToken")
+        .map { unsafeBitCast($0, to: RemoteTokenElement.self) } // RTLD_DEFAULT
+
+    /// Fenêtre absente de kAXWindows (autre espace) : jeton distant de 20 octets (pid, 0, « coco »,
+    /// identifiant d'élément), identifiants 0 à 999 comme AltTab, au plus 0,3 s. O(1000) appels AX.
+    static func remoteWindowElement(pid: pid_t, windowID: CGWindowID) -> AXUIElement? {
+        guard let remoteTokenElement else { return nil }
+        let start = Date()
+        var token = Data(count: 20)
+        token.withUnsafeMutableBytes { bytes in
+            bytes.storeBytes(of: pid, toByteOffset: 0, as: pid_t.self)
+            bytes.storeBytes(of: Int32(0x636f_636f), toByteOffset: 8, as: Int32.self)
+        }
+        for elementID in UInt64(0)..<1000 where Date().timeIntervalSince(start) < 0.3 {
+            token.withUnsafeMutableBytes { $0.storeBytes(of: elementID, toByteOffset: 12, as: UInt64.self) }
+            guard let element = remoteTokenElement(token as CFData)?.takeRetainedValue() else { continue }
+            var id = CGWindowID()
+            if AXUIElementGetWindowID(element, &id) == .success, id == windowID { return element }
+        }
+        return nil
     }
 
     public func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool {

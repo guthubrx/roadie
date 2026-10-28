@@ -483,7 +483,13 @@ public final class WindowSwitcherController {
         let query = session.model?.query ?? ""
         session.loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            let loaded = await self.switcher.load()
+            // Un relevé absent (état modifié pendant la lecture, par exemple par l'annulation d'un échec)
+            // n'est pas une liste vide : relire, au plus trois fois (session 106).
+            var loaded = await self.switcher.load()
+            for _ in 0..<3 where loaded.snapshot == nil && !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                loaded = await self.switcher.load()
+            }
             guard !Task.isCancelled, let current = self.session, current.id == sessionID, current.loadRevision == revision else { return }
             var model = self.makeModel(entries: loaded.entries, context: loaded.context, session: current)
             model.search(query)

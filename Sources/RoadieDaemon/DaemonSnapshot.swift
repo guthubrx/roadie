@@ -2201,6 +2201,12 @@ public extension SnapshotService {
         return frameWriter.focus(window)
     }
 
+    /// Fenêtre sur un autre espace macOS (plein écran natif actif, session 106). Au plus 1,5 s d'attente.
+    func focusOnOtherSpace(_ window: WindowSnapshot) -> SpaceFocusOutcome {
+        processState.invalidatePublished(preservingGesture: true)
+        return frameWriter.focusOnOtherSpace(window, timeout: 1.5)
+    }
+
     func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool {
         invalidateSharedSnapshot()
         return frameWriter.focusApplicationWindow(bundleID: bundleID, windowID: windowID, title: title, frame: frame)
