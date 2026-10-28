@@ -448,7 +448,9 @@ public final class TargetModeRuntimeController: NSObject {
         // Capslock + Maj + F (SPEC-075) : les verbes de la fenêtre au premier plan, si Roadie la connaît.
         var initialSubject: LauncherSubject?
         if command.name == "targets.actions" {
-            let focused = service.snapshot(followFocus: false).focusedWindowID
+            // Fenêtre active réelle (session 098) : celle du snapshot sans suivi du focus est la fenêtre
+            // retenue pour la stage du premier écran, pas forcément celle de l'application au premier plan.
+            let focused = service.focusedWindowID() ?? WindowSwitcherFocusHistory.shared.recentIDs.first
             initialSubject = focused.flatMap { id in roadieTargets.first { $0.id == "window:\(id.rawValue)" } }.map(LauncherSubject.target)
             events.append(RoadieEvent(type: "target_mode.actions_started", details: [
                 "focusedWindowID": focused.map { String($0.rawValue) } ?? "none",
@@ -580,7 +582,9 @@ public final class TargetModeRuntimeController: NSObject {
             idle += [.header("Règle proposée"), .rule(first, .create), .rule(first, .later), .rule(first, .never)]
         }
         let windowTargets = Dictionary(targets.filter { $0.kind == .window }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let focused = snapshot.focusedWindowID
+        // Fenêtre active lue dans l'application au premier plan (session 098) : `snapshot.focusedWindowID`
+        // désignait la fenêtre retenue pour la stage du premier écran (iTerm2 sur l'autre écran).
+        let focused = service.focusedWindowID()
         let recentIDs = WindowSwitcherFocusHistory.shared.recentIDs
         let previous = Self.previousWindow(recent: recentIDs, focused: focused, targets: windowTargets)
         events.append(RoadieEvent(type: "launcher.idle_back", details: [
@@ -1971,18 +1975,30 @@ public final class TargetModeRuntimeController: NSObject {
         return known.first { $0.id != current?.id }
     }
 
-    /// Après Échap, la fenêtre et l'élément qui avaient le clavier le retrouvent, si leur application est
-    /// toujours au premier plan. Écritures AX hors fil principal ; relecture 200 ms après (délai choisi,
+    /// Après Échap, la fenêtre qui avait le clavier redevient clé, si son application est toujours au
+    /// premier plan. Hors fil principal ; relecture 200 ms après (délai choisi,
     /// non mesuré) pour l'événement `launcher.focus_restore`.
     private func restoreFocusAfterEscape(_ saved: LauncherFocusSnapshot) {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == saved.pid else { return }
         let events = events
+        // Diagnostic (session 098) : une fenêtre de Roadie qui reprend le clavier à la fermeture du panneau
+        // garderait la frappe, quel que soit l'état de l'application.
+        let roadieKey = Self.keyWindowName()
         DispatchQueue.global(qos: .userInitiated).async {
             var details = saved.restore()
+            details["roadieKey"] = roadieKey
             Thread.sleep(forTimeInterval: 0.2)
             details["after"] = String(saved.focusIsSaved())
-            events.append(RoadieEvent(type: "launcher.focus_restore", details: details))
+            DispatchQueue.main.async {
+                details["roadieKeyAfter"] = MainActor.assumeIsolated { Self.keyWindowName() }
+                events.append(RoadieEvent(type: "launcher.focus_restore", details: details))
+            }
         }
+    }
+
+    /// Fenêtre de Roadie qui a le clavier : sa classe, « none » sinon.
+    private static func keyWindowName() -> String {
+        NSApp.keyWindow.map { String(describing: type(of: $0)) } ?? "none"
     }
 
     private func finish(_ result: TargetActionResult, command: String) {

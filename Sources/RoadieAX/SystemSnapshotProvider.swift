@@ -1342,6 +1342,9 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         }
         let raise = io.performAction(kAXRaiseAction, on: element)
         if registry.noteResult(raise, pid: pid) { return false }
+        // Fenêtre clé (session 098, ADR 020) : sans elle, une application déjà au premier plan
+        // garde la frappe ailleurs. Sans effet sur la décision de réussite.
+        WindowKeyFocus.makeKey(pid: pid, window: element)
         // Relectures seulement quand une écriture a échoué (REL-010) : l'état réel tranche.
         let focusedWindowConfirmed = focusedWindow != .success
             && elementAttribute(app, kAXFocusedWindowAttribute, pid: pid).map { CFEqual($0, element) } == true
