@@ -18,7 +18,16 @@ final class SettingsViewModel: ObservableObject {
     /// Dernière catégorie vue : conservée d'une ouverture à l'autre (Général à la première).
     @Published private(set) var category: SettingCategory = .general
     @Published var query = "" {
-        didSet { if query != oldValue { loadVisibleValues() } }
+        didSet {
+            guard query != oldValue else { return }
+            searchFocus = nil
+            loadVisibleValues()
+        }
+    }
+    /// Pendant une recherche, catégorie choisie dans la colonne de gauche ; nil : tous les résultats
+    /// (session 107). Effacée à chaque nouvelle saisie.
+    @Published var searchFocus: SettingCategory? {
+        didSet { if searchFocus != oldValue { loadVisibleValues() } }
     }
     /// Saisie en cours d'un champ, par nom de réglage ; retirée à la validation.
     @Published var drafts: [String: String] = [:]
@@ -82,6 +91,15 @@ final class SettingsViewModel: ObservableObject {
         guard isSearching else {
             return [SettingsSection(category: category, descriptors: SettingsCatalog.descriptors(in: category))]
         }
+        let results = searchResults
+        guard let searchFocus else { return results }
+        return results.filter { $0.category == searchFocus }
+    }
+
+    /// Résultats de la recherche par catégorie, pour la colonne de gauche (session 107), sans le filtre
+    /// `searchFocus`. O(n) - n = nombre de réglages.
+    var searchResults: [SettingsSection] {
+        guard isSearching else { return [] }
         let grouped = Dictionary(grouping: SettingsCatalog.search(query), by: \.category)
         return SettingCategory.allCases.compactMap { category in
             guard let found = grouped[category] else { return nil }

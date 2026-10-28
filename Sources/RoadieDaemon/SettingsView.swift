@@ -8,6 +8,8 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsViewModel
     private var fonts: InterfaceConfig { model.interfaceFonts }
     @State private var advancedOpen = false
+    /// Réglage choisi dans la colonne de recherche : la zone droite y descend et le surligne.
+    @State private var scrollTarget: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -25,32 +27,95 @@ struct SettingsView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Rechercher", text: $model.query)
+            TextField("Rechercher dans tous les réglages", text: $model.query)
                 .textFieldStyle(.roundedBorder)
+                .onExitCommand { model.query = "" }
                 .padding([.horizontal, .top], 10)
-            // Pas de sélection pendant une recherche : cliquer une catégorie quitte la recherche.
-            List(selection: Binding(
-                get: { model.isSearching ? nil : model.category },
-                set: { if let category = $0 { model.select(category) } }
-            )) {
-                ForEach(SettingCategory.allCases, id: \.self) { category in
-                    Label {
-                        Text(category.label)
-                            .font(.system(size: fonts.settingsTextFontSize))
-                            .fixedSize(horizontal: false, vertical: true)
-                    } icon: {
-                        Image(systemName: category.symbolName).font(.system(size: min(16, fonts.settingsTextFontSize)))
+            if model.isSearching {
+                searchSidebar
+            } else {
+                List(selection: Binding(
+                    get: { model.category },
+                    set: { if let category = $0 { model.select(category) } }
+                )) {
+                    ForEach(SettingCategory.allCases, id: \.self) { category in
+                        categoryLabel(category).tag(category)
                     }
-                        .tag(category)
+                }
+                .listStyle(.sidebar)
+            }
+        }
+    }
+
+    private func categoryLabel(_ category: SettingCategory, count: Int? = nil) -> some View {
+        Label {
+            HStack(spacing: 6) {
+                Text(category.label)
+                    .font(.system(size: fonts.settingsTextFontSize))
+                    .fixedSize(horizontal: false, vertical: true)
+                if let count {
+                    Spacer(minLength: 4)
+                    Text("\(count)").font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
                 }
             }
-            .listStyle(.sidebar)
+        } icon: {
+            Image(systemName: category.symbolName).font(.system(size: min(16, fonts.settingsTextFontSize)))
         }
+    }
+
+    /// Recherche (session 107) : la colonne ne garde que les catégories trouvées, avec leurs réglages.
+    /// Un clic sur une catégorie restreint la zone droite ; un clic sur un réglage y descend.
+    private var searchSidebar: some View {
+        let results = model.searchResults
+        return List {
+            if results.isEmpty {
+                Text("Aucun réglage").foregroundStyle(.secondary)
+            } else {
+                sidebarButton(selected: model.searchFocus == nil) { model.searchFocus = nil; scrollTarget = nil } label: {
+                    Label("Tous les résultats (\(results.reduce(0) { $0 + $1.descriptors.count }))", systemImage: "line.3.horizontal.decrease")
+                }
+            }
+            ForEach(results) { section in
+                sidebarButton(selected: model.searchFocus == section.category) {
+                    model.searchFocus = section.category
+                    scrollTarget = nil
+                } label: { categoryLabel(section.category, count: section.descriptors.count) }
+                ForEach(section.descriptors.prefix(8), id: \.id) { descriptor in
+                    sidebarButton(selected: false) {
+                        model.searchFocus = section.category
+                        scrollTarget = descriptor.id
+                    } label: {
+                        Text(descriptor.label)
+                            .font(.system(size: fonts.settingsHelpFontSize))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .padding(.leading, 26)
+                    }
+                }
+                if section.descriptors.count > 8 {
+                    Text("et \(section.descriptors.count - 8) autres")
+                        .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.tertiary)
+                        .padding(.leading, 26)
+                }
+            }
+        }
+        .listStyle(.sidebar)
+    }
+
+    private func sidebarButton(selected: Bool, action: @escaping () -> Void, @ViewBuilder label: () -> some View) -> some View {
+        Button(action: action) {
+            label().frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, 2)
+        .listRowBackground(selected ? RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.18)) : nil)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     // MARK: - Zone droite
 
     private var detail: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if model.isLocked { invalidBanner }
@@ -74,6 +139,11 @@ struct SettingsView: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onChange(of: scrollTarget) { _, target in
+            guard let target else { return }
+            DispatchQueue.main.async { withAnimation { proxy.scrollTo(target, anchor: .top) } }
+        }
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -111,6 +181,8 @@ struct SettingsView: View {
             ForEach(Array(descriptors.enumerated()), id: \.element.id) { index, descriptor in
                 if index > 0 { Divider().padding(.leading, 14) }
                 SettingRow(model: model, descriptor: descriptor)
+                    .id(descriptor.id)
+                    .background(scrollTarget == descriptor.id ? RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.10)) : nil)
             }
         }
         .background(cardBackground)

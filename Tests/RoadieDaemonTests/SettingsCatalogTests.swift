@@ -266,9 +266,10 @@ struct SettingsCatalogTests {
 
     @Test
     func searchForBordureFindsExactlyTheBorderSettings() {
+        // Le nom de la catégorie compte aussi (session 107) : la liste des exceptions par stage en fait partie.
         let found = SettingsCatalog.search("bordure")
-        #expect(Set(found.map(\.id)) == Set(simple.filter { $0.id.hasPrefix("borders.") }.map(\.id)))
-        #expect(found.count == 6)
+        #expect(Set(found.map(\.id)) == Set(SettingsCatalog.descriptors(in: .bordures).map(\.id)))
+        #expect(found.count == 7)
     }
 
     @Test

@@ -172,9 +172,10 @@ public enum SettingsCatalog {
         + targetModeDescriptors + appTargetDescriptors + targetGridDescriptors
         + advancedDescriptors + ruleDescriptors + railDescriptors + fontFamilyDescriptors + switcherDescriptors + overviewDescriptors
 
-    /// Texte de recherche normalisé de chaque réglage, calculé une fois (même ordre que `all`).
+    /// Texte de recherche normalisé de chaque réglage, calculé une fois (même ordre que `all`) :
+    /// nom, libellé, aide, catégorie et groupe affiché (session 107 : « raccourci » trouve tout un groupe).
     private static let searchTexts: [String] = all.map {
-        TargetHintService.normalized("\($0.id) \($0.label) \($0.help)")
+        TargetHintService.normalized("\($0.id) \($0.label) \($0.help) \($0.category.label) \(SettingsOrganization.title(for: $0))")
     }
 
     /// Préfixes de table retirés du nom d'un réglage.

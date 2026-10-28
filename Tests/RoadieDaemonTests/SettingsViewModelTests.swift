@@ -178,7 +178,7 @@ struct SettingsViewModelTests {
         #expect(model.isSearching)
         #expect(model.sections.map(\.category) == [.bordures])
         let ids = model.sections.flatMap(\.descriptors).map(\.id)
-        #expect(ids.count == 6)
+        #expect(ids.count == 7)
         #expect(ids.allSatisfy { $0.hasPrefix("borders.") })
 
         model.query = ""
