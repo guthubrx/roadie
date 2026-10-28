@@ -86,11 +86,27 @@ public final class SettingsService: @unchecked Sendable {
             return (.string(SettingsCollectionCodec.summary(current)), current == spec.defaultValue)
         }
         guard descriptor.readOnlyReason == nil,
-              let literal = ConfigFileEditor.readLiteral(text, table: descriptor.tablePath, key: descriptor.key),
+              let literal = ConfigFileEditor.literal(in: literalIndex(text), table: descriptor.tablePath, key: descriptor.key),
               var value = Self.parse(literal, kind: descriptor.kind)
         else { return (descriptor.defaultValue, true) }
         if case .string(let choice) = value { value = .string(SettingsCatalog.canonicalChoice(choice, for: descriptor.id)) }
         return (value, value == descriptor.defaultValue)
+    }
+
+    /// Index des littéraux du dernier texte lu (session 107) : une recherche large lit 230 valeurs dans le
+    /// même texte. Reconstruit seulement quand le texte change. O(L) par texte, puis O(1) par valeur.
+    private let indexLock = NSLock()
+    private var indexedText: String?
+    private var indexedLiterals: [String: String] = [:]
+
+    private func literalIndex(_ text: String) -> [String: String] {
+        indexLock.lock()
+        defer { indexLock.unlock() }
+        if indexedText != text {
+            indexedLiterals = ConfigFileEditor.literalIndex(text)
+            indexedText = text
+        }
+        return indexedLiterals
     }
 
     /// Champs qui nomment une entrée d'un tableau de tables, par ordre de préférence.

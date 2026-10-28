@@ -43,4 +43,17 @@ struct Spec107SettingsSearchTests {
         model.query = ""
         #expect(model.searchResults.isEmpty)
     }
+
+    @Test func aBroadSearchListsEveryResultAsLazyItems() throws {
+        let model = try makeModel()
+        model.query = "p"
+        let total = model.searchResults.reduce(0) { $0 + $1.descriptors.count }
+        #expect(total > 100)
+        let items = SettingsDetailItem.items(model.sections)
+        #expect(items.filter { if case .row = $0.kind { return true }; return false }.count == total)
+        #expect(Set(items.map(\.id)).count == items.count)
+        // Chaque carte commence et finit par une ligne arrondie.
+        let rows = items.compactMap { item -> (Bool, Bool)? in if case .row(_, let first, let last) = item.kind { return (first, last) }; return nil }
+        #expect(rows.filter(\.0).count == rows.filter(\.1).count)
+    }
 }

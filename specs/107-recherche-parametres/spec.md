@@ -18,3 +18,13 @@
 ## Hors périmètre
 
 Les lignes des éditeurs de listes (règles, profils) ne sont pas cherchées une par une.
+
+## Vitesse (retour utilisateur : « les deux premières lettres sont lentes »)
+
+Mesure sur le fichier réel (30 Ko) : chercher coûte 2 à 5 ms ; « p » trouve 230 réglages et la fenêtre en
+construisait toutes les lignes (3,5 s de mise en page) après avoir relu le fichier pour chaque valeur (0,57 s).
+
+- FR-006 Index des littéraux : le fichier est lu une fois par version (`ConfigFileEditor.literalIndex`), puis
+  chaque valeur se lit en O(1). Mêmes refus que `readLiteral`.
+- FR-007 Résultats paresseux (`LazyVStack`) : seules les lignes visibles sont construites.
+- FR-008 Recherche lancée après 80 ms sans frappe.

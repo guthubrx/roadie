@@ -80,6 +80,72 @@ public enum ConfigFileEditor {
         return String(view)
     }
 
+    /// Index des littéraux de tout le fichier (session 107) : un seul passage au lieu d'un par réglage
+    /// (environ 3 ms chacun sur un fichier de 30 Ko). Mêmes refus que `readLiteral` : clé ou table en double,
+    /// clé pointée, table en ligne, valeur multi-lignes, chaîne non fermée. Lecture par `literal(in:table:key:)`. O(L).
+    public static func literalIndex(_ text: String) -> [String: String] {
+        var literals: [String: String] = [:]
+        var rejectedKeys: Set<[String]> = []
+        var rejectedTables: Set<[String]> = []
+        var tables: Set<[String]> = []
+        var state = ScanState()
+        var context: [String] = []
+        var contextIsArray = false
+        for line in splitLines(text) {
+            let scalars = Array(line.text.unicodeScalars)
+            guard state.isTopLevel else {
+                state = scan(scalars, from: 0, state).state
+                continue
+            }
+            guard let first = scalars.firstIndex(where: { !isSpace($0) }), scalars[first] != "#" else { continue }
+            if let header = header(scalars, at: first) {
+                context = header.path
+                contextIsArray = header.isArray
+                if !header.isArray, !tables.insert(context).inserted { rejectedTables.insert(context) }
+                continue
+            }
+            guard let equals = equalsIndex(scalars, from: first) else { continue }
+            let names = segments(scalars[first..<equals])
+            let result = scan(scalars, from: equals + 1, ScanState())
+            state = result.state
+            guard !contextIsArray else { continue }
+            let path = context + names
+            let start = scalars[(equals + 1)...].firstIndex(where: { !isSpace($0) }) ?? scalars.count
+            let opening = start < scalars.count ? scalars[start] : " "
+            if names.count > 1 {
+                // Clé pointée : la clé visée, ou une table plus profonde que le contexte, est définie ainsi.
+                for length in (context.count + 1)...path.count { rejectedKeys.insert(Array(path[..<length])) }
+                for length in (context.count + 1)..<path.count { rejectedTables.insert(Array(path[..<length])) }
+                continue
+            }
+            if opening == "{" { rejectedTables.insert(path) }
+            if literals[path.joined(separator: "\u{1F}")] != nil || rejectedKeys.contains(path) {
+                rejectedKeys.insert(path)
+                continue
+            }
+            guard opening != "{", opening != "[", state.isTopLevel, !result.unterminated else {
+                rejectedKeys.insert(path)
+                continue
+            }
+            var end = result.comment ?? scalars.count
+            while end > start, isSpace(scalars[end - 1]) { end -= 1 }
+            guard end > start else { continue }
+            literals[path.joined(separator: "\u{1F}")] = String(String.UnicodeScalarView(scalars[start..<end]))
+        }
+        for path in rejectedKeys { literals[path.joined(separator: "\u{1F}")] = nil }
+        guard !rejectedTables.isEmpty else { return literals }
+        return literals.filter { entry in
+            let path = entry.key.components(separatedBy: "\u{1F}")
+            return !rejectedTables.contains(Array(path.dropLast()))
+        }
+    }
+
+    /// Littéral d'une clé dans un index de `literalIndex`, comme `readLiteral`. O(t), t = longueur du chemin.
+    public static func literal(in index: [String: String], table: String, key: String) -> String? {
+        let path = (table.isEmpty ? [] : segments(Array(table.unicodeScalars)[...])) + [key]
+        return index[path.joined(separator: "\u{1F}")]
+    }
+
     /// Texte de la valeur, même sur plusieurs lignes (tableau, table en ligne), pour un affichage en lecture seule :
     /// commentaires et lignes vides retirés, lignes ramenées sur une seule (`["a", "b"]`).
     /// `nil` si la clé est absente, vide ou illisible. Complexité : O(L) sur L = nombre de caractères du fichier.
