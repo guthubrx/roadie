@@ -285,6 +285,11 @@ Reçu : specs/109-supprimer-stage/validation.md.
 Session 110 installée : Retour sur un calcul copie toujours et ouvre aussi Calculette si `calc_opens_calculator`
 (Paramètres > Recherche, désactivé par défaut). 2 212 tests / 314 suites, PID 39168, santé 5/5.
 Reçu : specs/110-calc-calculette/validation.md.
+Sessions 111 à 120 installées (reprise d'Alfred terminée) : ordre appris des verbes, forme des tuiles, `in` et `tags`,
+historique des navigateurs, réglages dans la barre et ⌘,, documents récents (macOS et Office), vues Texte, Image et PDF
+des workflows, petites reprises (open, find, types, calcul, défilement, recherches web, Spotlight), boutons Remote et
+cache des Script Filters. 2 252 tests / 324 suites, PID 18000, santé 5/5. Corpus : 92 workflows sur 102 complets.
+Reçus : specs/111-ordre-verbes/ à specs/120-remote-cache/.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
