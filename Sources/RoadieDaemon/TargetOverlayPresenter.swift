@@ -20,6 +20,8 @@ public struct TargetOverlayStyle: Sendable, Equatable {
     /// Thème de la barre (session 101) et nombre de résultats montrés (0 : autant que la place).
     var theme: LauncherTheme = .roadie
     var maxRows = 0
+    /// Barre de défilement à droite de la liste (session 119).
+    var scrollbar = false
 
     public init(
         drawTargetFrames: Bool = false,
@@ -72,6 +74,7 @@ public struct TargetOverlayStyle: Sendable, Equatable {
         )
         style.theme = theme
         style.maxRows = config.visibleResults
+        style.scrollbar = config.showScrollbar
         return style
     }
 
@@ -1260,7 +1263,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 return
             }
             if case .file(let file)? = launcherList.row(for: launcherSelection) {
-                finishAction(LauncherAction(subject: .file(file), verb: .open, destination: nil))
+                finishAction(LauncherAction(subject: .file(file), verb: fileVerb, destination: nil))
                 return
             }
             switch launcherList.row(for: launcherSelection) {
@@ -1584,7 +1587,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             launcherList.prepend(.web(LauncherWebRow(kind: .address(url), title: "Ouvrir \(url.absoluteString)")), header: "Adresse")
         }
         // Calcul (SPEC-087) : son résultat passe en tête et devient la ligne choisie.
-        if let calc = LauncherCalculator.evaluate(model.query) {
+        if let calc = LauncherCalculator.evaluate(model.query, locale: launcher.calcLocale, grouping: launcher.calcGrouping) {
             launcherList.prepend(.calc(calc), header: "Calcul")
         }
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
@@ -1926,6 +1929,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         // Contenu ou étiquette : le nom ne dit rien des fichiers qui restent, la liste attend Spotlight.
         files = needle.isEmpty || parsed.mode != .name ? [] : files.filter { LauncherMatch.fold($0.name).contains(needle) }
         fileSearch.keywords = launcher.fileKeywords
+        fileSearch.extraTypes = launcher.fileTypes
+        fileSearch.excluded = launcher.fileExcluded
         fileSearch.search(query) { [weak self] found in
             guard let self, !self.finished, self.model.query == query, self.step == .objects else { return }
             self.files = found
@@ -1978,6 +1983,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         copiedRowID = launcherSelection
     }
 
+    /// Retour sur un fichier : l'ouvrir, ou le montrer dans le Finder après le mot-clé `find` (session 119).
+    private var fileVerb: LauncherVerb {
+        LauncherFileQuery.parse(model.query, keywords: launcher.fileKeywords).reveals ? .reveal : .open
+    }
+
     private var selectedLauncherRow: Int? { launcherList.rows.firstIndex { $0.id == launcherSelection && $0.id != nil } }
 
     /// Clic sur une ligne : action immédiate, sans attendre un éventuel double Retour.
@@ -1985,7 +1995,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch launcherList.row(for: launcherSelection) {
         case .app(let app, _): finishLaunching(app)
         case .target(let target): finishActivating(target, target.source == .app ? .click : (target.actions.first ?? .focus))
-        case .file(let file): finishAction(LauncherAction(subject: .file(file), verb: .open, destination: nil))
+        case .file(let file): finishAction(LauncherAction(subject: .file(file), verb: fileVerb, destination: nil))
         case .phrase(let action, _), .alias(_, let action, _): finishAction(action)
         case .project(let project): finishAction(LauncherAction(subject: .project(project.name), verb: .reopenProject, destination: nil))
         case .action(let key, let action, _, _): if key == "undo-batch" { finishUndo() } else { finishAction(action) }

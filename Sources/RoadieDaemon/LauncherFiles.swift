@@ -20,6 +20,9 @@ struct LauncherFile: Equatable, Hashable, Sendable {
 struct LauncherFileKeywords: Equatable, Sendable {
     var content = "in"
     var tag = "tags"
+    /// `open` et `find` d'Alfred (session 119) : fichiers seuls ; avec `find`, Retour les montre dans le Finder.
+    var open = "open"
+    var find = "find"
 }
 
 /// Saisie de la recherche de fichiers : par nom (SPEC-077), dans le contenu ou par étiquette Finder
@@ -29,6 +32,8 @@ struct LauncherFileQuery: Equatable, Sendable {
     var mode: Mode
     var needle: String
     var filesOnly: Bool
+    /// `find` : Retour montre le fichier dans le Finder au lieu de l'ouvrir (session 119).
+    var reveals = false
 
     /// Une espace ou une apostrophe en tête : nom seul. `in rapport`, `tags rouge` : contenu, étiquette ;
     /// le mot-clé doit être suivi d'une espace (`inbox` reste un nom). O(n).
@@ -37,11 +42,12 @@ struct LauncherFileQuery: Equatable, Sendable {
             return LauncherFileQuery(mode: .name, needle: String(query.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines), filesOnly: true)
         }
         let lowered = query.lowercased()
-        for (keyword, mode) in [(keywords.content, Mode.content), (keywords.tag, Mode.tag)] {
+        for (keyword, mode, reveals) in [(keywords.content, Mode.content, false), (keywords.tag, Mode.tag, false),
+                                         (keywords.open, Mode.name, false), (keywords.find, Mode.name, true)] {
             let keyword = keyword.trimmingCharacters(in: .whitespaces).lowercased()
             guard !keyword.isEmpty, lowered.hasPrefix(keyword + " ") else { continue }
             return LauncherFileQuery(mode: mode, needle: String(query.dropFirst(keyword.count + 1)).trimmingCharacters(in: .whitespacesAndNewlines),
-                                     filesOnly: true)
+                                     filesOnly: true, reveals: reveals)
         }
         return LauncherFileQuery(mode: .name, needle: query.trimmingCharacters(in: .whitespacesAndNewlines), filesOnly: false)
     }
@@ -84,14 +90,15 @@ enum LauncherFileRules {
     /// Requête Spotlight : par nom (familles d'`contentTypes`) ; contenu : chaque mot comme début de mot du
     /// texte (0,1 s contre 3 s pour un texte partiel sur ce poste) ; étiquette : début d'un nom d'étiquette,
     /// ou sa couleur en anglais. O(m) mots.
-    static func predicate(_ query: LauncherFileQuery) -> NSPredicate {
+    /// `extraTypes` : types ajoutés par `file_types` (session 119), comme les Extras et l'Avancé d'Alfred.
+    static func predicate(_ query: LauncherFileQuery, extraTypes: [String] = []) -> NSPredicate {
         switch query.mode {
         case .name:
-            return predicate(query.needle)
+            return predicate(query.needle, extraTypes: extraTypes)
         case .content:
             let words = query.needle.split(whereSeparator: \.isWhitespace).map { "kMDItemTextContent == \"\(quoted(String($0)))*\"cdw" }
             let content = NSPredicate(fromMetadataQueryString: words.joined(separator: " && ")) ?? NSPredicate(value: false)
-            return NSCompoundPredicate(andPredicateWithSubpredicates: [content, types])
+            return NSCompoundPredicate(andPredicateWithSubpredicates: [content, types(extraTypes)])
         case .tag:
             let names = [query.needle] + (tagColors[LauncherMatch.fold(query.needle)].map { [$0] } ?? [])
             let text = names.map { "kMDItemUserTags == \"\(quoted($0))*\"cd" }.joined(separator: " || ")
@@ -99,25 +106,31 @@ enum LauncherFileRules {
         }
     }
 
-    private static var types: NSPredicate {
-        NSCompoundPredicate(orPredicateWithSubpredicates: contentTypes.map { NSPredicate(format: "kMDItemContentTypeTree == %@", $0) })
+    /// Familles cherchées : celles d'`contentTypes` et les types ajoutés (un type couvre aussi ses sous-types). O(t).
+    private static func types(_ extra: [String]) -> NSPredicate {
+        NSCompoundPredicate(orPredicateWithSubpredicates: (contentTypes + extra).map { NSPredicate(format: "kMDItemContentTypeTree == %@", $0) })
     }
 
     /// Dossiers de `~/Library` gardés, comme la portée d'Alfred (session 113) : OneDrive, Dropbox, Google Drive
     /// (`CloudStorage`) et iCloud Drive (`Mobile Documents`).
     static let libraryFolders = ["/Library/CloudStorage/", "/Library/Mobile Documents/"]
 
-    /// Dossier personnel hors `~/Library` (sauf les stockages en ligne), sans élément caché ni dépendances de projet.
-    static func isShown(_ path: String, home: String = NSHomeDirectory()) -> Bool {
+    /// Dossier personnel hors `~/Library` (sauf les stockages en ligne), sans élément caché ni dépendances de projet,
+    /// ni dossier écarté par `file_excluded_folders` (session 119, chemins absolus ou en `~`). O(e + p).
+    static func isShown(_ path: String, home: String = NSHomeDirectory(), excluded: [String] = []) -> Bool {
         guard path.hasPrefix(home + "/") else { return false }
+        if excluded.contains(where: { folder in
+            let root = folder.hasPrefix("~/") ? home + folder.dropFirst() : folder
+            return !root.isEmpty && (path == root || path.hasPrefix(root.hasSuffix("/") ? root : root + "/"))
+        }) { return false }
         if path.hasPrefix(home + "/Library/"), !libraryFolders.contains(where: { path.hasPrefix(home + $0) }) { return false }
         let relative = path.dropFirst(home.count + 1)
         return !relative.split(separator: "/").contains { $0.hasPrefix(".") || $0 == "node_modules" }
     }
 
-    static func predicate(_ needle: String) -> NSPredicate {
+    static func predicate(_ needle: String, extraTypes: [String] = []) -> NSPredicate {
         let name = NSPredicate(format: "kMDItemDisplayName LIKE[cd] %@", "*\(needle)*")
-        return NSCompoundPredicate(andPredicateWithSubpredicates: [name, types])
+        return NSCompoundPredicate(andPredicateWithSubpredicates: [name, types(extraTypes)])
     }
 
     /// Les plus récemment utilisés d'abord, puis par nom. O(f log f).
@@ -138,6 +151,9 @@ final class LauncherFileSearch {
     private var observer: NSObjectProtocol?
     /// Mots-clés `in` et `tags` réglés (session 113).
     var keywords = LauncherFileKeywords()
+    /// Types ajoutés et dossiers écartés (session 119).
+    var extraTypes: [String] = []
+    var excluded: [String] = []
 
     func search(_ text: String, done: @escaping @MainActor ([LauncherFile]) -> Void) {
         cancel()
@@ -162,7 +178,8 @@ final class LauncherFileSearch {
     private func start(_ needle: LauncherFileQuery, done: @escaping @MainActor ([LauncherFile]) -> Void) {
         let query = NSMetadataQuery()
         query.searchScopes = [NSMetadataQueryUserHomeScope]
-        query.predicate = LauncherFileRules.predicate(needle)
+        query.predicate = LauncherFileRules.predicate(needle, extraTypes: extraTypes)
+        let excluded = excluded
         query.sortDescriptors = [NSSortDescriptor(key: NSMetadataItemLastUsedDateKey, ascending: false)]
         observer = NotificationCenter.default.addObserver(forName: .NSMetadataQueryDidFinishGathering, object: query, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -172,7 +189,7 @@ final class LauncherFileSearch {
                 for index in 0..<query.resultCount where files.count < LauncherFileRules.limit {
                     guard let item = query.result(at: index) as? NSMetadataItem,
                           let path = item.value(forAttribute: NSMetadataItemPathKey) as? String,
-                          LauncherFileRules.isShown(path) else { continue }
+                          LauncherFileRules.isShown(path, excluded: excluded) else { continue }
                     let types = item.value(forAttribute: "kMDItemContentTypeTree") as? [String] ?? []
                     files.append(LauncherFile(path: path,
                                               name: item.value(forAttribute: NSMetadataItemDisplayNameKey) as? String ?? (path as NSString).lastPathComponent,

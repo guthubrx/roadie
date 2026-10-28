@@ -688,6 +688,11 @@ visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
 - **Workflow Image and PDF views**: the received file opens in a preview window (image reduced, fitted, or at its
   real pixels; PDF in one or two pages, continuous or not, per the object). Return sends its path on through the
   workflow; Escape closes.
+- **Small Alfred features**: `open name` shows files only, `find name` too and Return reveals them in Finder
+  (`open_keyword`, `find_keyword`); `file_types` adds file types (archives, AppleScripts…), `file_excluded_folders`
+  leaves folders out; `calc_decimal` (macOS, point, comma) and `calc_grouping` shape a calculation result;
+  `show_scrollbar` shows a scroll bar; 17 built-in web searches (`gi`, `tr`, `amazon`, `gh`, `wa`…); « Recharger
+  les applications » and « Reconstruire l'index Spotlight » commands.
 - **Misc**: ⌘L (configurable) shows the selected row in large type; ⌘⎋ closes the bar; `app_search_paths` adds application
   folders; `learning_enabled` turns learning off and `roadie launcher reset` clears it; the calculator also
   knows sinh, cosh, tanh, trunc, dtor, rtod…

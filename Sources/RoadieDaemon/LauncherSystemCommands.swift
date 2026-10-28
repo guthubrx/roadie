@@ -32,6 +32,11 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             .init(id: "logout", title: "Fermer la session", keywords: ["déconnexion", "log out"], symbol: "rectangle.portrait.and.arrow.right", confirms: true),
             .init(id: "restart", title: "Redémarrer", keywords: ["restart", "reboot"], symbol: "restart", confirms: true),
             .init(id: "shutdown", title: "Éteindre", keywords: ["shut down", "arrêter"], symbol: "power", confirms: true),
+            // Session 119 : « reload » et la reconstruction de l'index de macOS, dans l'Avancé d'Alfred.
+            .init(id: "reload-apps", title: "Recharger les applications", keywords: ["reload", "recharger"], symbol: "arrow.clockwise",
+                  confirms: false),
+            .init(id: "rebuild-spotlight", title: "Reconstruire l'index Spotlight", keywords: ["spotlight", "mdutil", "index"],
+                  symbol: "magnifyingglass.circle", confirms: true),
         ]
     }
 
@@ -84,6 +89,9 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
         case "logout": Self.script("tell application \"System Events\" to log out")
         case "restart": Self.script("tell application \"System Events\" to restart")
         case "shutdown": Self.script("tell application \"System Events\" to shut down")
+        case "reload-apps": LauncherAppCatalog.shared.refresh()
+        // macOS demande le mot de passe d'un administrateur ; l'index se reconstruit ensuite en arrière-plan (plus d'une heure).
+        case "rebuild-spotlight": Self.script("do shell script \"/usr/bin/mdutil -E /\" with administrator privileges")
         default:
             // Réglages trouvés (session 115) : panneau des Réglages Système, page ou réglage de Roadie.
             if id.hasPrefix(LauncherSettingTargets.panePrefix),

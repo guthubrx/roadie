@@ -709,7 +709,12 @@ public final class TargetModeRuntimeController: NSObject {
         if barConfig.settingsInSearch {
             context.settingTargets = LauncherSettingTargets.roadie() + LauncherSettingTargetsCache.shared.systemPanes()
         }
-        context.fileKeywords = LauncherFileKeywords(content: barConfig.contentSearchKeyword, tag: barConfig.tagSearchKeyword)
+        context.fileKeywords = LauncherFileKeywords(content: barConfig.contentSearchKeyword, tag: barConfig.tagSearchKeyword,
+                                                    open: barConfig.openKeyword, find: barConfig.findKeyword)
+        context.fileTypes = barConfig.fileTypes
+        context.fileExcluded = barConfig.fileExcludedFolders
+        context.calcLocale = LauncherCalculator.locale(barConfig.calcDecimal)
+        context.calcGrouping = barConfig.calcGrouping
         context.pathSort = barConfig.pathSort
         context.systemCommands = LauncherSystemCommand.all(confirmQuitAll: barConfig.confirmQuitAll)
         if barConfig.webHistoryDays > 0 {

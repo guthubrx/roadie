@@ -719,6 +719,11 @@ toutes les fenetres visibles : `scope = "visible_windows"` dans
 - **Vues Image et PDF des workflows** : le fichier reçu s'ouvre dans une fenêtre d'aperçu (image réduite, ajustée ou
   à ses pixels réels ; PDF en une ou deux pages, continues ou non, selon la brique). Retour envoie son chemin à la
   suite du workflow ; Échap ferme.
+- **Petites reprises d'Alfred** : `open nom` ne montre que des fichiers, `find nom` aussi et Retour les montre dans
+  le Finder (`open_keyword`, `find_keyword`) ; `file_types` ajoute des types de fichiers (archives, AppleScripts…),
+  `file_excluded_folders` écarte des dossiers ; `calc_decimal` (macOS, point, virgule) et `calc_grouping` règlent
+  le résultat d'un calcul ; `show_scrollbar` montre une barre de défilement ; 17 recherches web fournies (`gi`,
+  `tr`, `amazon`, `gh`, `wa`…) ; commandes « Recharger les applications » et « Reconstruire l'index Spotlight ».
 - **Divers** : ⌘L (réglable) montre la ligne choisie en grand texte ; ⌘⎋ ferme la barre ; `app_search_paths` ajoute des
   dossiers d'applications ; `learning_enabled` coupe l'apprentissage et `roadie launcher reset` l'efface ;
   la calculatrice connaît aussi sinh, cosh, tanh, trunc, dtor, rtod…

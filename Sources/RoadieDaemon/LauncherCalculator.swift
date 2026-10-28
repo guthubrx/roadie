@@ -50,21 +50,31 @@ enum LauncherCalculator {
     }
 
     /// Calcul complet et fini, sinon nil (texte ordinaire, saisie incomplète, division par zéro). O(n).
-    static func evaluate(_ raw: String, locale: Locale = .current) -> LauncherCalculation? {
+    /// Langue du résultat selon `calc_decimal` (session 119) : point, virgule, ou celle de macOS. O(1).
+    static func locale(_ setting: String) -> Locale {
+        switch setting {
+        case "point": Locale(identifier: "en_US_POSIX")
+        case "comma": Locale(identifier: "fr_FR")
+        default: .current
+        }
+    }
+
+    /// `grouping` : milliers séparés dans le résultat (`calc_grouping`, session 119).
+    static func evaluate(_ raw: String, locale: Locale = .current, grouping: Bool = false) -> LauncherCalculation? {
         let text = raw.trimmingCharacters(in: .whitespaces)
         let advanced = text.hasPrefix("=")
         let body = advanced ? String(text.dropFirst()) : text
         guard var parser = Parser(body, advanced: advanced) else { return nil }
         // Un nombre seul n'est pas un calcul : il faut un opérateur, ou le préfixe `=`.
         guard advanced || parser.hasOperator, let value = parser.parse(), value.isFinite else { return nil }
-        return LauncherCalculation(expression: text, value: value, text: format(value, locale: locale))
+        return LauncherCalculation(expression: text, value: value, text: format(value, locale: locale, grouping: grouping))
     }
 
-    static func format(_ value: Double, locale: Locale = .current) -> String {
+    static func format(_ value: Double, locale: Locale = .current, grouping: Bool = false) -> String {
         let formatter = NumberFormatter()
         formatter.locale = locale
         formatter.numberStyle = .decimal
-        formatter.usesGroupingSeparator = false
+        formatter.usesGroupingSeparator = grouping
         formatter.usesSignificantDigits = true
         formatter.maximumSignificantDigits = 12
         let clean = value == 0 ? 0 : value // -0 rendu 0

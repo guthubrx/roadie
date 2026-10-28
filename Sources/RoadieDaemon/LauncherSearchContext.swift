@@ -100,6 +100,11 @@ struct LauncherSearchContext {
     var pathSort = "name"
     /// Réglages trouvés par la barre (session 115) ; vide si `settings_in_search` est faux.
     var settingTargets: [LauncherSystemCommand] = []
+    /// Types de fichiers ajoutés, dossiers écartés et format du calcul (session 119).
+    var fileTypes: [String] = []
+    var fileExcluded: [String] = []
+    var calcLocale = Locale.current
+    var calcGrouping = false
     /// Mots-clés de la recherche dans le contenu et par étiquette (session 113).
     var fileKeywords = LauncherFileKeywords()
     /// Les verbes les plus choisis passent en tête (session 111, `learn_verb_order`).

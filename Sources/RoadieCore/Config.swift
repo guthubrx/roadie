@@ -652,6 +652,19 @@ public struct WebSearch: Equatable, Codable, Sendable {
         WebSearch(keyword: "wp", title: "Wikipédia", url: "https://fr.wikipedia.org/w/index.php?search={query}"),
         WebSearch(keyword: "ddg", title: "DuckDuckGo", url: "https://duckduckgo.com/?q={query}"),
         WebSearch(keyword: "maps", title: "Plans", url: "maps://?q={query}"),
+        // Session 119 : d'autres recherches intégrées d'Alfred.
+        WebSearch(keyword: "gi", title: "Google Images", url: "https://www.google.com/search?tbm=isch&q={query}"),
+        WebSearch(keyword: "gmaps", title: "Google Maps", url: "https://www.google.com/maps/search/{query}"),
+        WebSearch(keyword: "tr", title: "Google Traduction", url: "https://translate.google.com/?sl=auto&text={query}"),
+        WebSearch(keyword: "wpen", title: "Wikipedia (anglais)", url: "https://en.wikipedia.org/w/index.php?search={query}"),
+        WebSearch(keyword: "amazon", title: "Amazon", url: "https://www.amazon.fr/s?k={query}"),
+        WebSearch(keyword: "imdb", title: "IMDb", url: "https://www.imdb.com/find?q={query}"),
+        WebSearch(keyword: "ebay", title: "eBay", url: "https://www.ebay.fr/sch/i.html?_nkw={query}"),
+        WebSearch(keyword: "bing", title: "Bing", url: "https://www.bing.com/search?q={query}"),
+        WebSearch(keyword: "linkedin", title: "LinkedIn", url: "https://www.linkedin.com/search/results/all/?keywords={query}"),
+        WebSearch(keyword: "x", title: "X", url: "https://x.com/search?q={query}"),
+        WebSearch(keyword: "gh", title: "GitHub", url: "https://github.com/search?q={query}"),
+        WebSearch(keyword: "wa", title: "Wolfram|Alpha", url: "https://www.wolframalpha.com/input?i={query}"),
     ]
 }
 
@@ -819,6 +832,15 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var webHistoryDays: Int
     /// Paramètres de Roadie et panneaux des Réglages Système dans la barre (session 115).
     public var settingsInSearch: Bool
+    /// Session 119 : mots-clés `open` et `find`, types de fichiers ajoutés (UTI), dossiers écartés, séparateur
+    /// décimal du calcul (`system`, `point`, `comma`) et groupement des milliers, barre de défilement.
+    public var openKeyword: String
+    public var findKeyword: String
+    public var fileTypes: [String]
+    public var fileExcludedFolders: [String]
+    public var calcDecimal: String
+    public var calcGrouping: Bool
+    public var showScrollbar: Bool
     /// Touches de la barre (session 108), par action de `LauncherBarKeys.actions` ; forme normalisée,
     /// vide : touche désactivée. Clés TOML `<action>_key`.
     public var barKeys: [String: String]
@@ -832,6 +854,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public static let pickModifiers = ["command", "shift", "alt", "control"]
     public static let barScreens = ["mouse", "active", "main"]
     public static let barPositions = ["bottom", "center", "top"]
+    /// Séparateur décimal du résultat d'un calcul (session 119) : réglages de macOS, point ou virgule.
+    public static let calcDecimals = ["system", "point", "comma"]
     public static let terminalApps = ["terminal", "iterm", "ghostty", "warp", "kitty", "wezterm", "alacritty"]
     public static let bookmarkBrowserIDs = ["firefox", "safari", "chrome", "brave", "edge", "arc"]
     public static let pathSorts = ["name", "modified", "created"]
@@ -882,6 +906,13 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         tagSearchKeyword: String = "tags",
         webHistoryDays: Int = 90,
         settingsInSearch: Bool = true,
+        openKeyword: String = "open",
+        findKeyword: String = "find",
+        fileTypes: [String] = [],
+        fileExcludedFolders: [String] = [],
+        calcDecimal: String = "system",
+        calcGrouping: Bool = false,
+        showScrollbar: Bool = false,
         barKeys: [String: String] = [:],
         bttPauseKeys: [String] = []
     ) {
@@ -930,6 +961,13 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.tagSearchKeyword = tagSearchKeyword.trimmingCharacters(in: .whitespaces)
         self.webHistoryDays = min(365, max(0, webHistoryDays))
         self.settingsInSearch = settingsInSearch
+        self.openKeyword = openKeyword.trimmingCharacters(in: .whitespaces)
+        self.findKeyword = findKeyword.trimmingCharacters(in: .whitespaces)
+        self.fileTypes = fileTypes.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        self.fileExcludedFolders = fileExcludedFolders.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        self.calcDecimal = TargetModeConfig.calcDecimals.contains(calcDecimal) ? calcDecimal : "system"
+        self.calcGrouping = calcGrouping
+        self.showScrollbar = showScrollbar
         self.barKeys = LauncherBarKeys.resolved(barKeys)
         self.bttPauseKeys = bttPauseKeys.map { TargetGridConfig.normalizedKey($0, fallback: "") }.filter { !$0.isEmpty }
     }
@@ -991,6 +1029,13 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case tagSearchKeyword = "tag_search_keyword"
         case webHistoryDays = "web_history_days"
         case settingsInSearch = "settings_in_search"
+        case openKeyword = "open_keyword"
+        case findKeyword = "find_keyword"
+        case fileTypes = "file_types"
+        case fileExcludedFolders = "file_excluded_folders"
+        case calcDecimal = "calc_decimal"
+        case calcGrouping = "calc_grouping"
+        case showScrollbar = "show_scrollbar"
         case bttPauseKeys = "btt_pause_keys"
     }
 
@@ -1050,6 +1095,13 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             tagSearchKeyword: try c.decodeIfPresent(String.self, forKey: .tagSearchKeyword) ?? "tags",
             webHistoryDays: try c.decodeIfPresent(Int.self, forKey: .webHistoryDays) ?? 90,
             settingsInSearch: try c.decodeIfPresent(Bool.self, forKey: .settingsInSearch) ?? true,
+            openKeyword: try c.decodeIfPresent(String.self, forKey: .openKeyword) ?? "open",
+            findKeyword: try c.decodeIfPresent(String.self, forKey: .findKeyword) ?? "find",
+            fileTypes: try c.decodeIfPresent([String].self, forKey: .fileTypes) ?? [],
+            fileExcludedFolders: try c.decodeIfPresent([String].self, forKey: .fileExcludedFolders) ?? [],
+            calcDecimal: try c.decodeIfPresent(String.self, forKey: .calcDecimal) ?? "system",
+            calcGrouping: try c.decodeIfPresent(Bool.self, forKey: .calcGrouping) ?? false,
+            showScrollbar: try c.decodeIfPresent(Bool.self, forKey: .showScrollbar) ?? false,
             barKeys: try Self.decodeBarKeys(decoder),
             bttPauseKeys: try c.decodeIfPresent([String].self, forKey: .bttPauseKeys) ?? []
         )
@@ -1502,7 +1554,8 @@ public enum RoadieConfigLoader {
         "fx.borders": ["stage_overrides"],
         "width_adjustment": ["presets"],
         "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"],
-        "experimental.target_mode": ["web_searches", "fallback_searches", "bookmark_browsers", "app_search_paths", "btt_pause_keys"],
+        "experimental.target_mode": ["web_searches", "fallback_searches", "bookmark_browsers", "app_search_paths", "btt_pause_keys",
+                                      "file_types", "file_excluded_folders"],
         "switcher": ["excluded_bundles", "shortcuts"]
     ]
 
@@ -1735,7 +1788,7 @@ private enum ConfigValidationRules {
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
-            "experimental.target_mode": Set<String>(["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family", "theme", "theme_dark", "visible_results", "bar_screen", "bar_position", "bar_save_position", "terminal_app", "bookmarks_enabled", "bookmark_browsers", "app_search_paths", "learning_enabled", "path_sort", "confirm_quit_all", "calc_opens_calculator", "learn_verb_order", "content_search_keyword", "tag_search_keyword", "web_history_days", "settings_in_search", "btt_pause_keys"]).union(LauncherBarKeys.actions.map(\.configKey)),
+            "experimental.target_mode": Set<String>(["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family", "theme", "theme_dark", "visible_results", "bar_screen", "bar_position", "bar_save_position", "terminal_app", "bookmarks_enabled", "bookmark_browsers", "app_search_paths", "learning_enabled", "path_sort", "confirm_quit_all", "calc_opens_calculator", "learn_verb_order", "content_search_keyword", "tag_search_keyword", "web_history_days", "settings_in_search", "open_keyword", "find_keyword", "file_types", "file_excluded_folders", "calc_decimal", "calc_grouping", "show_scrollbar", "btt_pause_keys"]).union(LauncherBarKeys.actions.map(\.configKey)),
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],

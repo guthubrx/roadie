@@ -407,6 +407,10 @@ enum SearchBarRenderer {
             }
             return
         }
+        if style.scrollbar, let thumb = scrollThumb(panel: panel, shown: shown, count: state.suggestions.count) {
+            LauncherTheme.color(theme.subtitle.color).withAlphaComponent(0.45).setFill()
+            NSBezierPath(roundedRect: thumb, xRadius: thumb.width / 2, yRadius: thumb.width / 2).fill()
+        }
         if state.richRows {
             let metrics = LauncherRowMetrics(fontSize: style.commandTextFontSize)
             for (row, index) in zip(layout.suggestionRows, shown) {
@@ -430,6 +434,16 @@ enum SearchBarRenderer {
             draw(suggestionLine(suggestion, font: commandFont, theme: theme, selected: index == state.selectedSuggestion), in: textRow)
         }
         for (row, message) in zip(layout.messageRows, messages) { draw(message, in: row) }
+    }
+
+    /// Curseur de la barre de défilement (session 119) : à droite du panneau, hauteur et place proportionnelles aux
+    /// lignes visibles ; nil si tout tient. O(1).
+    nonisolated static func scrollThumb(panel: CGRect, shown: Range<Int>, count: Int) -> CGRect? {
+        guard count > shown.count, count > 0, panel.height > 16 else { return nil }
+        let track = panel.insetBy(dx: 0, dy: 8)
+        let height = max(18, track.height * CGFloat(shown.count) / CGFloat(count))
+        let top = track.maxY - (track.height - height) * CGFloat(shown.lowerBound) / CGFloat(max(1, count - shown.count))
+        return CGRect(x: panel.maxX - 7, y: top - height, width: 3, height: height)
     }
 
     /// Fond et contour du thème ; le flou éventuel est posé dessous par la fenêtre (`SearchBarBlur`).
