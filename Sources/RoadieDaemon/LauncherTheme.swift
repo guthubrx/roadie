@@ -139,6 +139,17 @@ extension LauncherTheme {
                search: "#00000000", searchText: text(46, "#FFFFFFFF", "#FFFFFFFF", "Avenir"), selected: "#1D6488FF",
                title: text(26, "#FFFFFFDB", "#FFFFFFE8", "Avenir"), subtitle: text(14, "#FFFFFF7F", "#FFFFFFCB", "Avenir"),
                shortcut: text(20, "#FFFFFF59", "#FFFFFFFF", "Avenir")),
+        // Session 131 : thèmes en verre d'Alfred 6, relevés sur l'image de sa page (alfredapp.com/v6) : le fond d'écran
+        // transparaît sous un verre sombre, champ de recherche plus foncé et arrondi, sélection turquoise ; variante
+        // claire avec la couleur d'accent de macOS.
+        alfred("glassy-dark", "Glassy Dark", window: "#141A3A59", blur: 0, effect: .dark, roundness: 22, width: 680, border: "#FFFFFF33",
+               search: "#00000040", searchRoundness: 14, searchText: text(30, "#FFFFFFFF", "#FFFFFFFF", "System Light"),
+               selected: "#358188E6", rowRoundness: 14, title: text(18, "#FFFFFFF0", "#FFFFFFFF"),
+               subtitle: text(12, "#FFFFFFA6", "#FFFFFFD9"), shortcut: text(16, "#FFFFFF8C", "#FFFFFFFF")),
+        alfred("glassy-light", "Glassy Light", window: "#FFFFFF59", blur: 0, effect: .light, roundness: 22, width: 680, border: "#FFFFFF80",
+               search: "#FFFFFF66", searchRoundness: 14, searchText: text(30, "#1C1C22FF", "#FFFFFFFF", "System Light"),
+               selected: "accent", rowRoundness: 14, title: text(18, "#1C1C22F0", "#FFFFFFFF"),
+               subtitle: text(12, "#1C1C2299", "#FFFFFFD9"), shortcut: text(16, "#1C1C2280", "#FFFFFFFF")),
     ]
 }
 

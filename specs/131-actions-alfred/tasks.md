@@ -71,10 +71,10 @@ Format : `- [ ] Tnnn [Pn] [USn] description (fichiers) - vérification`. Tests a
 
 ## Phase 8 - US7 Alfred 6 (P3)
 
-- [ ] T018 [P3] [US7] Tableaux Markdown : bloc tableau (alignements) et rendu (`AlfredTextView.swift`,
+- [x] T018 [P3] [US7] Tableaux Markdown : bloc tableau (alignements) et rendu (`AlfredTextView.swift`,
   `WorkflowTextPanel.swift`, `Tests/RoadieDaemonTests/Spec131MarkdownTableTests.swift`).
-- [ ] T019 [P3] [US7] Thèmes de barre Glassy Dark et Glassy Light (`LauncherTheme.swift`) - test de présence et valeurs.
-- [ ] T020 [P3] [US7] Style des vues de workflow `workflow_view_style` (theme, glassy-dark, flat-dark, glassy-light),
+- [x] T019 [P3] [US7] Thèmes de barre Glassy Dark et Glassy Light (`LauncherTheme.swift`) - test de présence et valeurs.
+- [x] T020 [P3] [US7] Style des vues de workflow `workflow_view_style` (theme, glassy-dark, flat-dark, glassy-light),
   réglage FR/EN, appliqué aux panneaux Texte, Image, PDF (`WorkflowTextPanel.swift`, `WorkflowMediaPanel.swift`,
   config et catalogue) - test du réglage et rendu hors écran vérifié.
 - [ ] T021 [P3] [US7] Apps : catégories, filtre, épinglage, grille dans la barre par le mot-clé `apps`

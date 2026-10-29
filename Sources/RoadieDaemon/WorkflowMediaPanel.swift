@@ -38,7 +38,7 @@ final class WorkflowMediaPanel: NSObject, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.delegate = self
         panel.minSize = NSSize(width: 320, height: 240)
-        panel.contentView = view.kind == .pdf ? pdfView() : imageView()
+        panel.contentView = WorkflowViewStyle.current.wrap(view.kind == .pdf ? pdfView() : imageView(), in: panel)
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         if let area = screen?.visibleFrame {
             panel.setFrameOrigin(NSPoint(x: area.midX - panel.frame.width / 2, y: area.midY - panel.frame.height / 2))

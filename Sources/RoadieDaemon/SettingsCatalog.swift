@@ -120,6 +120,11 @@ public struct SettingDescriptor: Equatable, Sendable {
         case ("target_mode.terminal_app", let app): return LauncherTerminal.appName(app)
         case ("target_mode.return_cmd", let effect), ("target_mode.return_alt", let effect), ("target_mode.return_ctrl", let effect):
             return Self.returnEffectLabel(effect)
+        case ("target_mode.workflow_view_style", "system"): return tr("Comme macOS", "Like macOS")
+        case ("target_mode.workflow_view_style", "theme"): return tr("Couleurs du thème de la barre", "Bar theme colors")
+        case ("target_mode.workflow_view_style", "glassy-dark"): return "Glassy Dark"
+        case ("target_mode.workflow_view_style", "flat-dark"): return "Flat Dark"
+        case ("target_mode.workflow_view_style", "glassy-light"): return "Glassy Light"
         case ("target_mode.path_sort", "name"): return tr("Par nom", "By name")
         case ("target_mode.path_sort", "modified"): return tr("Modifiés récemment d'abord", "Recently modified first")
         case ("target_mode.path_sort", "created"): return tr("Créés récemment d'abord", "Recently created first")
@@ -478,6 +483,10 @@ extension SettingsCatalog {
               tr("Ce que fait Retour avec la touche Contrôle tenue dans la barre ; la ligne choisie l'annonce.",
                  "What Return does with Control held in the bar; the selected row announces it."),
               .choice(TargetModeConfig.returnEffects), .string("web")),
+        entry(.recherche, "experimental.target_mode", "workflow_view_style", tr("Style des fenêtres de workflow", "Workflow window style"),
+              tr("Apparence des vues Texte, Image et PDF des workflows et du navigateur SF Symbols, comme les styles d'Alfred 6 : verre sombre, aplat sombre ou verre clair.",
+                 "Look of the Text, Image and PDF workflow views and of the SF Symbols browser, like Alfred 6 styles: dark glass, flat dark or light glass."),
+              .choice(TargetModeConfig.workflowViewStyles), .string("system")),
         entry(.raccourcis, "experimental.target_mode", "view_cycle_hotkey", tr("Touche des présentations", "View key"),
               tr("Dans la barre, fait passer les résultats d'un workflow, d'un dossier ou les fichiers de la liste à la grille, puis aux grandes tuiles. Le chip à droite de la saisie fait de même. Vide : désactivée.", "In the bar, switches the results of a workflow, a folder or files from list to grid, then to large tiles. The chip on the right of the field does the same. Empty: off."),
               .text, .string("command+g")),

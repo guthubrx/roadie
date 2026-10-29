@@ -135,7 +135,8 @@ struct AlfredTextResponse: Equatable, Sendable {
 }
 
 /// Markdown d'une vue Texte, découpé en blocs simples pour l'affichage : titres, citations, listes, code,
-/// images, paragraphes ; la mise en forme dans une ligne (gras, italique, code, liens) reste à `AttributedString`.
+/// images, tableaux (session 131, comme Alfred 6), paragraphes ; la mise en forme dans une ligne (gras, italique,
+/// code, liens) reste à `AttributedString`.
 /// Pur et testable. O(n) lignes.
 enum AlfredMarkdown {
     enum Block: Equatable, Sendable {
@@ -147,7 +148,11 @@ enum AlfredMarkdown {
         case code(String)
         case image(alt: String, path: String)
         case rule
+        /// Tableau : cellules d'en-tête, alignement de chaque colonne, lignes (complétées ou coupées à la largeur de l'en-tête).
+        case table(header: [String], alignments: [Alignment], rows: [[String]])
     }
+
+    enum Alignment: Equatable, Sendable { case left, center, right }
 
     static func blocks(_ text: String) -> [Block] {
         var blocks: [Block] = []
@@ -157,8 +162,28 @@ enum AlfredMarkdown {
             if !paragraph.isEmpty { blocks.append(.paragraph(paragraph.joined(separator: "\n"))) }
             paragraph = []
         }
-        for raw in text.components(separatedBy: "\n") {
+        let lines = text.components(separatedBy: "\n")
+        var index = 0
+        while index < lines.count {
+            let raw = lines[index]
+            index += 1
             let line = raw.trimmingCharacters(in: .whitespaces)
+            // Tableau : une ligne à barres suivie de sa ligne de séparation, puis les lignes à barres.
+            if code == nil, line.contains("|"), index < lines.count, let alignments = separator(lines[index]) {
+                let header = cells(line)
+                if header.count == alignments.count {
+                    flush()
+                    index += 1
+                    var rows: [[String]] = []
+                    while index < lines.count, lines[index].contains("|"), !lines[index].trimmingCharacters(in: .whitespaces).isEmpty {
+                        let row = cells(lines[index])
+                        rows.append(Array((row + Array(repeating: "", count: max(0, header.count - row.count))).prefix(header.count)))
+                        index += 1
+                    }
+                    blocks.append(.table(header: header, alignments: alignments, rows: rows))
+                    continue
+                }
+            }
             if line.hasPrefix("```") {
                 if let open = code { blocks.append(.code(open.joined(separator: "\n"))); code = nil } else { flush(); code = [] }
                 continue
@@ -181,6 +206,36 @@ enum AlfredMarkdown {
         if let open = code { blocks.append(.code(open.joined(separator: "\n"))) }
         flush()
         return blocks
+    }
+
+    /// Cellules d'une ligne de tableau : barres de bord facultatives, `\|` garde une barre dans une cellule. O(n).
+    static func cells(_ line: String) -> [String] {
+        var text = line.trimmingCharacters(in: .whitespaces)
+        if text.hasPrefix("|") { text.removeFirst() }
+        if text.hasSuffix("|"), !text.hasSuffix("\\|") { text.removeLast() }
+        var cells: [String] = [], current = "", escaped = false
+        for character in text {
+            if escaped { current.append(character); escaped = false; continue }
+            if character == "\\" { escaped = true; continue }
+            if character == "|" { cells.append(current.trimmingCharacters(in: .whitespaces)); current = ""; continue }
+            current.append(character)
+        }
+        cells.append(current.trimmingCharacters(in: .whitespaces))
+        return cells
+    }
+
+    /// Ligne de séparation d'un tableau (`|:---|:---:|---:|`) : alignement de chaque colonne ; nil sinon. O(n).
+    static func separator(_ line: String) -> [Alignment]? {
+        let parts = cells(line)
+        guard !parts.isEmpty, line.contains("-") else { return nil }
+        var alignments: [Alignment] = []
+        for part in parts {
+            let left = part.hasPrefix(":"), right = part.hasSuffix(":")
+            let dashes = part.trimmingCharacters(in: CharacterSet(charactersIn: ":"))
+            guard !dashes.isEmpty, dashes.allSatisfy({ $0 == "-" }) else { return nil }
+            alignments.append(left && right ? .center : right ? .right : .left)
+        }
+        return alignments
     }
 
     private static func heading(_ line: String) -> Block? {

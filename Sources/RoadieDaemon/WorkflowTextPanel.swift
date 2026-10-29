@@ -103,8 +103,10 @@ final class WorkflowTextPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
         rows.forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
         stack.translatesAutoresizingMaskIntoConstraints = false
         let content = NSVisualEffectView()
-        content.material = .popover
-        content.state = .active
+        // Session 131 : style des fenêtres de workflow (Alfred 6).
+        let style = WorkflowViewStyle.current
+        style.prepare(panel, effect: content)
+        style.decorate(input)
         content.addSubview(stack)
         panel.contentView = content
         NSLayoutConstraint.activate([
@@ -265,6 +267,39 @@ enum WorkflowMarkdownRenderer {
             case .rule:
                 result.append(NSAttributedString(string: String(repeating: "─", count: 40),
                                                  attributes: [.font: font, .foregroundColor: NSColor.separatorColor]))
+            case .table(let header, let alignments, let rows):
+                result.append(table(header: header, alignments: alignments, rows: rows, font: font))
+            }
+        }
+        return result
+    }
+
+    /// Tableau Markdown (session 131) : une cellule par bloc de `NSTextTable`, en-tête en gras sur un fond léger,
+    /// filets fins, alignement de chaque colonne. O(l × c).
+    static func table(header: [String], alignments: [AlfredMarkdown.Alignment], rows: [[String]], font: NSFont) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let table = NSTextTable()
+        table.numberOfColumns = header.count
+        table.collapsesBorders = true
+        table.hidesEmptyCells = false
+        for (rowIndex, row) in ([header] + rows).enumerated() {
+            for (column, text) in row.enumerated() {
+                let block = NSTextTableBlock(table: table, startingRow: rowIndex, rowSpan: 1, startingColumn: column, columnSpan: 1)
+                block.setWidth(0.5, type: .absoluteValueType, for: .border)
+                block.setBorderColor(.separatorColor)
+                block.setWidth(5, type: .absoluteValueType, for: .padding)
+                if rowIndex == 0 { block.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.25) }
+                let style = NSMutableParagraphStyle()
+                style.textBlocks = [block]
+                style.alignment = switch column < alignments.count ? alignments[column] : .left {
+                case .left: .left
+                case .center: .center
+                case .right: .right
+                }
+                let cellFont = rowIndex == 0 ? NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) : font
+                let cell = NSMutableAttributedString(attributedString: inline(text.isEmpty ? " " : text, font: cellFont, style: style))
+                cell.append(NSAttributedString(string: "\n", attributes: [.font: cellFont, .paragraphStyle: style]))
+                result.append(cell)
             }
         }
         return result
@@ -290,5 +325,80 @@ enum WorkflowMarkdownRenderer {
             result.append(NSAttributedString(string: String(parsed[run.range].characters), attributes: attributes))
         }
         return result
+    }
+}
+
+/// Apparence des fenêtres de workflow (session 131), comme les styles d'Alfred UI d'Alfred 6 regardés sur sa page :
+/// Glassy Dark (verre sombre, commandes en bulle de verre avec liseré), Flat Dark (même fond, commandes pleines sans
+/// verre), Glassy Light (verre clair), le thème de la barre, ou l'apparence de macOS (défaut, comme avant).
+enum WorkflowViewStyle: String, CaseIterable, Sendable {
+    case system, theme, glassyDark = "glassy-dark", flatDark = "flat-dark", glassyLight = "glassy-light"
+
+    /// Style réglé (`workflow_view_style`). O(1).
+    @MainActor static var current: WorkflowViewStyle {
+        WorkflowViewStyle(rawValue: ConfigReloadService.shared.currentConfig().experimental.targetMode.workflowViewStyle) ?? .system
+    }
+
+    var isGlass: Bool { self == .glassyDark || self == .glassyLight }
+
+    /// Fond de la fenêtre : matière, apparence, barre de titre fondue dans le contenu (sauf `system`). O(1).
+    @MainActor func prepare(_ panel: NSPanel, effect: NSVisualEffectView) {
+        effect.state = .active
+        effect.blendingMode = .behindWindow
+        switch self {
+        case .system:
+            effect.material = .popover
+            return
+        case .glassyDark, .flatDark:
+            panel.appearance = NSAppearance(named: .darkAqua)
+            effect.material = .hudWindow
+        case .glassyLight:
+            panel.appearance = NSAppearance(named: .aqua)
+            effect.material = .popover
+        case .theme:
+            let theme = LauncherThemeCatalog.resolve(ConfigReloadService.shared.currentConfig().experimental.targetMode,
+                                                     dark: LauncherThemeCatalog.systemIsDark)
+            panel.appearance = NSAppearance(named: LauncherTheme.isLight(theme.windowColor) ? .aqua : .darkAqua)
+            effect.material = .popover
+            effect.wantsLayer = true
+            effect.layer?.backgroundColor = LauncherTheme.color(theme.windowColor).cgColor
+        }
+        panel.styleMask.insert(.fullSizeContentView)
+        panel.titlebarAppearsTransparent = true
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+    }
+
+    /// Commande de saisie : bulle de verre arrondie avec liseré clair (Glassy), aplat plein sans liseré (Flat Dark),
+    /// champ de macOS sinon. O(1).
+    @MainActor func decorate(_ field: NSTextField) {
+        guard self == .glassyDark || self == .glassyLight || self == .flatDark else { return }
+        field.isBezeled = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.wantsLayer = true
+        field.layer?.cornerRadius = 10
+        if isGlass {
+            field.layer?.backgroundColor = (self == .glassyDark ? NSColor.white.withAlphaComponent(0.10) : NSColor.white.withAlphaComponent(0.45)).cgColor
+            field.layer?.borderWidth = 0.75
+            field.layer?.borderColor = NSColor.white.withAlphaComponent(self == .glassyDark ? 0.35 : 0.8).cgColor
+        } else {
+            field.layer?.backgroundColor = NSColor(white: 0.22, alpha: 1).cgColor
+            field.layer?.borderWidth = 0
+        }
+    }
+
+    /// Contenu enveloppé dans le fond du style ; `system` le laisse tel quel. O(1).
+    @MainActor func wrap(_ content: NSView, in panel: NSPanel) -> NSView {
+        guard self != .system else { return content }
+        let effect = NSVisualEffectView()
+        prepare(panel, effect: effect)
+        content.translatesAutoresizingMaskIntoConstraints = false
+        effect.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: effect.leadingAnchor), content.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            content.topAnchor.constraint(equalTo: effect.topAnchor, constant: 28), content.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+        ])
+        return effect
     }
 }
