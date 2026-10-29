@@ -1,0 +1,309 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": true,
+    "decision": "inconclusive"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 3,
+    "low": 3,
+    "info": 0,
+    "total": 6,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "REL-SCRIPT-TIMEOUT",
+      "file": "Sources/RoadieDaemon/AlfredWorkflowEngine.swift",
+      "symbol": "AlfredWorkflowEngine.process",
+      "instance": "run-script-default-timeout",
+      "line": 169,
+      "category": "reliability",
+      "title": "Action Run Script arrêtée après 10 secondes",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Run Script reçoit le délai par défaut des Script Filters (10 s) ; la spec 088 ne le fixe qu'aux filtres. Reproduit : arrêt à 10,67 s, suite non exécutée.",
+      "remediation": "Passer un délai propre aux filtres et laisser Run Script aller à son terme (ou un délai long réglable), annulation explicite conservée.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredWorkflowEngine.swift",
+          "sha256": "f4c306662036ab1977e04b3ca33e0a4c6707be3db310e3c6759ea2f651631a32",
+          "line": 169
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/repro-audit129.swift",
+          "sha256": "6c47f3df161bf6ff2be1afe8354543fee940274ddbb64db556b0323edbc44391"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-delais.md",
+            "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "8a08a1d4fee37693ac4d"
+    },
+    {
+      "rule_id": "REL-SCRIPT-TIMEOUT",
+      "file": "Sources/RoadieDaemon/AlfredWorkflowEngine.swift",
+      "symbol": "AlfredWorkflowEngine.process",
+      "instance": "nsapplescript-default-timeout",
+      "line": 180,
+      "category": "reliability",
+      "title": "Action Run NSAppleScript arrêtée après 10 secondes",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Même appel sans délai que Run Script, pour l'objet Run NSAppleScript ; même cause que le cas reproduit.",
+      "remediation": "Même correction que pour Run Script.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredWorkflowEngine.swift",
+          "sha256": "f4c306662036ab1977e04b3ca33e0a4c6707be3db310e3c6759ea2f651631a32",
+          "line": 180
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-delais.md",
+          "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-delais.md",
+            "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "5d7c9605b2f089a1a4a3"
+    },
+    {
+      "rule_id": "REL-SCRIPT-TIMEOUT",
+      "file": "Sources/RoadieDaemon/AlfredAutomationTasks.swift",
+      "symbol": "AlfredAutomationTasks.run",
+      "instance": "automation-task-default-timeout",
+      "line": 58,
+      "category": "reliability",
+      "title": "Tâche d'automatisation arrêtée après 10 secondes",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Les tâches d'automatisation passent par AlfredScriptRunner.run sans délai : une tâche longue est arrêtée à 10 s.",
+      "remediation": "Délai adapté aux tâches longues, ou aucun délai avec annulation explicite.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredAutomationTasks.swift",
+          "sha256": "06160d989e81f50fbe7791067b57f3c24a67efa4d8ef70de57e95f0151ac98a7",
+          "line": 58
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-delais.md",
+          "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-delais.md",
+            "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ],
+      "fingerprint": "e45811aa3be246fadbaf"
+    },
+    {
+      "rule_id": "REL-AUTH-TIMEOUT",
+      "file": "Sources/RoadieDaemon/LauncherSystemCommands.swift",
+      "symbol": "LauncherSystemCommand.run",
+      "instance": "rebuild-spotlight-auth-timeout",
+      "line": 109,
+      "category": "reliability",
+      "title": "Reconstruction Spotlight interrompue si le mot de passe prend plus de 10 s",
+      "severity": "LOW",
+      "confidence": "medium",
+      "status": "confirmed",
+      "rationale": "La commande `with administrator privileges` passe par un osascript arrêté à 10 s ; reproduit avec le même lanceur. Fermeture de la boîte d'authentification non observée.",
+      "remediation": "Délai long ou absent pour cette commande, et message en cas d'échec ou d'annulation.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/LauncherSystemCommands.swift",
+          "sha256": "9a3df4d1aeb6cae6ead09f8fcec2975ad4c18258e277fb750288fb35cf98d07c",
+          "line": 109
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/LauncherSystemCommands.swift",
+          "sha256": "9a3df4d1aeb6cae6ead09f8fcec2975ad4c18258e277fb750288fb35cf98d07c",
+          "line": 125
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-delais.md",
+            "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "quality"
+      ],
+      "fingerprint": "f0bae9b53a253e5ebfae"
+    },
+    {
+      "rule_id": "DATA-LITERAL-INDEX",
+      "file": "Sources/RoadieDaemon/ConfigFileEditor.swift",
+      "symbol": "ConfigFileEditor.literalIndex",
+      "instance": "empty-value-duplicate",
+      "line": 132,
+      "category": "business",
+      "title": "Index des littéraux : doublon non refusé après une valeur vide",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Une clé à valeur vide n'est pas notée ; sa redéfinition est indexée au lieu d'être refusée comme doublon, contrairement à readLiteral. Test différentiel : une seule cause.",
+      "remediation": "Noter la clé (ou la refuser) avant `continue` quand la valeur est vide, puis ajouter le cas au test d'équivalence.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/ConfigFileEditor.swift",
+          "sha256": "df07ce61b9a2ea5791c9f01bcaf385a8baaf7c3dcb22d79f720e381242fa1caa",
+          "line": 132
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181646448678Z/stdout.json",
+          "sha256": "c7f672cdc3f9cf0e2c9127d634230942445da773d3992263c4070dc145c2c14b"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-index-et-parcours.md",
+            "sha256": "86b5d5a435d60f0b762f92a76b7eb32d18d0159fc130ec72f584ffe6317c09d3"
+          }
+        ]
+      },
+      "axes": [
+        "business",
+        "tests"
+      ],
+      "fingerprint": "870baf613327150cc291"
+    },
+    {
+      "rule_id": "PERF-QUADRATIC-BFS",
+      "file": "Sources/RoadieDaemon/LauncherOpenItems.swift",
+      "symbol": "FirefoxTabSelector.select",
+      "instance": "array-removefirst-bfs",
+      "line": 160,
+      "category": "performance",
+      "title": "Parcours en largeur quadratique des onglets de Firefox",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "removeFirst() sur un Array à chaque pas : O(n²) pour n ≤ 4 000 éléments par fenêtre ; borne écrite, complexité non annotée ; durée non mesurée.",
+      "remediation": "Lire la file avec un indice (ou un ArraySlice) pour revenir à O(n).",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/LauncherOpenItems.swift",
+          "sha256": "375658e1f569518986583e2ee1494a751f8d5ccadc6a89befeb224adbb2141ee",
+          "line": 160
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/complexite.md",
+          "sha256": "9bc78f71f9dc2c611ecc62669c5c1ec7763e2a637d2fc32802784fab5cbc1b94"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-index-et-parcours.md",
+            "sha256": "86b5d5a435d60f0b762f92a76b7eb32d18d0159fc130ec72f584ffe6317c09d3"
+          }
+        ]
+      },
+      "axes": [
+        "complexity",
+        "performance"
+      ],
+      "fingerprint": "aa1d6c4fe7431fb33dcd"
+    }
+  ],
+  "suppressed": []
+}

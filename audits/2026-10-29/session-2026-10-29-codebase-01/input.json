@@ -1,0 +1,1069 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180004516016Z/run.json",
+          "sha256": "f6581f58e16a9aba2dcb2a4ca30501d7adc4bdd648f4cd2ebad7156a978c30d4"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180009036146Z/run.json",
+          "sha256": "2221999beeface0f49e614a113bfa99ce97f508312fe0379af2c31c233aec2c7"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s).  Historique limité à 5ab0ab9544de68edbd6642f58ac6140ef8a07f1e..3c9d66d993eb6e9e86e78e711653e32cf25b9886; les commits antérieurs sont hors périmètre.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180533513743Z/run.json",
+          "sha256": "4b75ad3368b9f0e232a3d8f610038034b5b4d1cb3ad7e7af781b174332695117"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180010451804Z/run.json",
+          "sha256": "2555a4ec590864e1748609c66785b0392a4a3bb3a712cc0e96f69bdc68c6160f"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "unknown",
+      "rationale": "Entrées ajoutées depuis le 27 octobre lues (ordres à Alfred, réglages gardés, terminal, commandes système, chemins de workflows) ; socket 0600 inchangé. La centaine de commandes CLI n'a pas été relue une à une.",
+      "evidence": []
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "unknown",
+      "rationale": "Lecture ciblée des sources modifiées et des appelants ; trois défauts de logique confirmés par reproduction. Le reste du dépôt n'est pas relu fonction par fonction.",
+      "evidence": []
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "unknown",
+      "rationale": "46 déclarations Sendable non vérifiées recensées, verrous et files des nouveaux magasins relus, gardes des résultats tardifs de la barre vérifiées ; pas d'essai de concurrence.",
+      "evidence": []
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "unknown",
+      "rationale": "Heuristique sur tout Sources (181 signaux) et relecture des chemins chauds ; un parcours quadratique borné confirmé ; aucune mesure.",
+      "evidence": []
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pass",
+      "rationale": "Suite Swift séquentielle 2 267 tests / 331 suites et 28 tests de scripts réussis au commit figé ; deux suites exclues (signaux forcés, notification globale).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180536484946Z/stdout.json",
+          "sha256": "3eedcb0e484835747492d2b2dd30e214e181942aeb913ca3ec2d128186bc7ec1"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180935866623Z/stderr.log",
+          "sha256": "b83d7f282d89ab193109b43b408b7243907bc578d15fe83d4617302fc32de0b8"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "dab0fcd9eab59f69492a26a5102ffe0e9b76abc506cd8ca772a871e0f814649c"
+        }
+      ]
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pass",
+      "rationale": "Graphe SwiftPM lu : 5 bibliothèques, 2 exécutables, une dépendance verrouillée (TOMLKit 0.6.0), cycles de modules impossibles ; couplage interne de RoadieDaemon non cartographié.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "dab0fcd9eab59f69492a26a5102ffe0e9b76abc506cd8ca772a871e0f814649c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "234512128cf1ff939d9995f55e8a55f8a17c3ebc883a69fc98315031106b5d0e"
+        }
+      ]
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "unknown",
+      "rationale": "Checklist exécutée sur un échantillon de fonctions d'enrobage : ~10 lignes suppressibles ; pas de mesure sur tout le dépôt.",
+      "evidence": []
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "unknown",
+      "rationale": "Volume, abstractions et traduction en lot examinés ; aucune revue indépendante (Bridget indisponible) ; compréhension humaine non démontrable.",
+      "evidence": []
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "unknown",
+      "rationale": "Journal sans saisie de l'utilisateur et rotation existante ; deux échecs silencieux relevés ; aucune observation de production.",
+      "evidence": []
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "unknown",
+      "rationale": "Specs 088 (délais) et 127 (traduction) rapprochées du code ; les 126 autres dossiers ne sont pas revérifiés.",
+      "evidence": []
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "REL-SCRIPT-TIMEOUT",
+      "file": "Sources/RoadieDaemon/AlfredWorkflowEngine.swift",
+      "symbol": "AlfredWorkflowEngine.process",
+      "instance": "run-script-default-timeout",
+      "line": 169,
+      "category": "reliability",
+      "title": "Action Run Script arrêtée après 10 secondes",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Run Script reçoit le délai par défaut des Script Filters (10 s) ; la spec 088 ne le fixe qu'aux filtres. Reproduit : arrêt à 10,67 s, suite non exécutée.",
+      "remediation": "Passer un délai propre aux filtres et laisser Run Script aller à son terme (ou un délai long réglable), annulation explicite conservée.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredWorkflowEngine.swift",
+          "sha256": "f4c306662036ab1977e04b3ca33e0a4c6707be3db310e3c6759ea2f651631a32",
+          "line": 169
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/repro-audit129.swift",
+          "sha256": "6c47f3df161bf6ff2be1afe8354543fee940274ddbb64db556b0323edbc44391"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-delais.md",
+            "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    },
+    {
+      "rule_id": "REL-SCRIPT-TIMEOUT",
+      "file": "Sources/RoadieDaemon/AlfredWorkflowEngine.swift",
+      "symbol": "AlfredWorkflowEngine.process",
+      "instance": "nsapplescript-default-timeout",
+      "line": 180,
+      "category": "reliability",
+      "title": "Action Run NSAppleScript arrêtée après 10 secondes",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Même appel sans délai que Run Script, pour l'objet Run NSAppleScript ; même cause que le cas reproduit.",
+      "remediation": "Même correction que pour Run Script.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredWorkflowEngine.swift",
+          "sha256": "f4c306662036ab1977e04b3ca33e0a4c6707be3db310e3c6759ea2f651631a32",
+          "line": 180
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-delais.md",
+          "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-delais.md",
+            "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    },
+    {
+      "rule_id": "REL-SCRIPT-TIMEOUT",
+      "file": "Sources/RoadieDaemon/AlfredAutomationTasks.swift",
+      "symbol": "AlfredAutomationTasks.run",
+      "instance": "automation-task-default-timeout",
+      "line": 58,
+      "category": "reliability",
+      "title": "Tâche d'automatisation arrêtée après 10 secondes",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Les tâches d'automatisation passent par AlfredScriptRunner.run sans délai : une tâche longue est arrêtée à 10 s.",
+      "remediation": "Délai adapté aux tâches longues, ou aucun délai avec annulation explicite.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/AlfredAutomationTasks.swift",
+          "sha256": "06160d989e81f50fbe7791067b57f3c24a67efa4d8ef70de57e95f0151ac98a7",
+          "line": 58
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-delais.md",
+          "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-delais.md",
+            "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "business"
+      ]
+    },
+    {
+      "rule_id": "REL-AUTH-TIMEOUT",
+      "file": "Sources/RoadieDaemon/LauncherSystemCommands.swift",
+      "symbol": "LauncherSystemCommand.run",
+      "instance": "rebuild-spotlight-auth-timeout",
+      "line": 109,
+      "category": "reliability",
+      "title": "Reconstruction Spotlight interrompue si le mot de passe prend plus de 10 s",
+      "severity": "LOW",
+      "confidence": "medium",
+      "status": "confirmed",
+      "rationale": "La commande `with administrator privileges` passe par un osascript arrêté à 10 s ; reproduit avec le même lanceur. Fermeture de la boîte d'authentification non observée.",
+      "remediation": "Délai long ou absent pour cette commande, et message en cas d'échec ou d'annulation.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/LauncherSystemCommands.swift",
+          "sha256": "9a3df4d1aeb6cae6ead09f8fcec2975ad4c18258e277fb750288fb35cf98d07c",
+          "line": 109
+        },
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/LauncherSystemCommands.swift",
+          "sha256": "9a3df4d1aeb6cae6ead09f8fcec2975ad4c18258e277fb750288fb35cf98d07c",
+          "line": 125
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-delais.md",
+            "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+          }
+        ]
+      },
+      "axes": [
+        "reliability",
+        "quality"
+      ]
+    },
+    {
+      "rule_id": "DATA-LITERAL-INDEX",
+      "file": "Sources/RoadieDaemon/ConfigFileEditor.swift",
+      "symbol": "ConfigFileEditor.literalIndex",
+      "instance": "empty-value-duplicate",
+      "line": 132,
+      "category": "business",
+      "title": "Index des littéraux : doublon non refusé après une valeur vide",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "Une clé à valeur vide n'est pas notée ; sa redéfinition est indexée au lieu d'être refusée comme doublon, contrairement à readLiteral. Test différentiel : une seule cause.",
+      "remediation": "Noter la clé (ou la refuser) avant `continue` quand la valeur est vide, puis ajouter le cas au test d'équivalence.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/ConfigFileEditor.swift",
+          "sha256": "df07ce61b9a2ea5791c9f01bcaf385a8baaf7c3dcb22d79f720e381242fa1caa",
+          "line": 132
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181646448678Z/stdout.json",
+          "sha256": "c7f672cdc3f9cf0e2c9127d634230942445da773d3992263c4070dc145c2c14b"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-index-et-parcours.md",
+            "sha256": "86b5d5a435d60f0b762f92a76b7eb32d18d0159fc130ec72f584ffe6317c09d3"
+          }
+        ]
+      },
+      "axes": [
+        "business",
+        "tests"
+      ]
+    },
+    {
+      "rule_id": "PERF-QUADRATIC-BFS",
+      "file": "Sources/RoadieDaemon/LauncherOpenItems.swift",
+      "symbol": "FirefoxTabSelector.select",
+      "instance": "array-removefirst-bfs",
+      "line": 160,
+      "category": "performance",
+      "title": "Parcours en largeur quadratique des onglets de Firefox",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "confirmed",
+      "rationale": "removeFirst() sur un Array à chaque pas : O(n²) pour n ≤ 4 000 éléments par fenêtre ; borne écrite, complexité non annotée ; durée non mesurée.",
+      "remediation": "Lire la file avec un indice (ou un ArraySlice) pour revenir à O(n).",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/LauncherOpenItems.swift",
+          "sha256": "375658e1f569518986583e2ee1494a751f8d5ccadc6a89befeb224adbb2141ee",
+          "line": 160
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/complexite.md",
+          "sha256": "9bc78f71f9dc2c611ecc62669c5c1ec7763e2a637d2fc32802784fab5cbc1b94"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Recherche du même mécanisme documentée avec ses motifs, témoins et limites.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variantes-index-et-parcours.md",
+            "sha256": "86b5d5a435d60f0b762f92a76b7eb32d18d0159fc130ec72f584ffe6317c09d3"
+          }
+        ]
+      },
+      "axes": [
+        "complexity",
+        "performance"
+      ]
+    }
+  ],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Semgrep (0 signal), SwiftLint 6 règles (45 signaux relus) et lecture des nouvelles entrées ; peu de règles Swift.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "dab0fcd9eab59f69492a26a5102ffe0e9b76abc506cd8ca772a871e0f814649c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180949045528Z/stdout.json",
+          "sha256": "50966c2229e21a687dc64a99c2611895a1bf6f5007eeac8d092964dfcfdaa9e0"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "234512128cf1ff939d9995f55e8a55f8a17c3ebc883a69fc98315031106b5d0e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Semgrep (0 signal), SwiftLint 6 règles (45 signaux relus) et lecture des nouvelles entrées ; peu de règles Swift. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Gitleaks sur les fichiers figés : 0 signal ; aucun contrôle continu démontré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180009036146Z/raw.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Gitleaks sur les fichiers figés : 0 signal ; aucun contrôle continu démontré. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Historique depuis v0.4.0 sans signal ; l'historique complet a dépassé 300 s.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180533513743Z/raw.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "dab0fcd9eab59f69492a26a5102ffe0e9b76abc506cd8ca772a871e0f814649c"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Historique depuis v0.4.0 sans signal ; l'historique complet a dépassé 300 s. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Socket local 0600, chemins de workflows et réglages gardés protégés ; scripts de workflow exécutés avec les droits de l'utilisateur, par conception.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "234512128cf1ff939d9995f55e8a55f8a17c3ebc883a69fc98315031106b5d0e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Socket local 0600, chemins de workflows et réglages gardés protégés ; scripts de workflow exécutés avec les droits de l'utilisateur, par conception. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "OSV : une dépendance verrouillée sans avis ; suivi continu non démontré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180010451804Z/stdout.json",
+          "sha256": "54345d5194d238b6017d0f3181f392109ce35023cc6b4bdfa8c134943dcb578e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "OSV : une dépendance verrouillée sans avis ; suivi continu non démontré. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM dans les sources ni dans les dépendances du produit.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM dans les sources ni dans les dépendances du produit.",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM dans les sources ni dans les dépendances du produit.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pass",
+      "rationale": "Groupes de processus arrêtés au délai ou à la frappe, pause BTT rétablie au démarrage ; délais inadaptés pour Run Script et Spotlight, pas d'escalade si un script ignore SIGTERM et SIGINT.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-delais.md",
+          "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Groupes de processus arrêtés au délai ou à la frappe, pause BTT rétablie au démarrage ; délais inadaptés pour Run Script et Spotlight, pas d'escalade si un script ignore SIGTERM et SIGINT. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Sources et tests Swift compilés au commit figé ; avertissements existants conservés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180536484946Z/stdout.json",
+          "sha256": "3eedcb0e484835747492d2b2dd30e214e181942aeb913ca3ec2d128186bc7ec1"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "dab0fcd9eab59f69492a26a5102ffe0e9b76abc506cd8ca772a871e0f814649c"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Sources et tests Swift compilés au commit figé ; avertissements existants conservés. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Semgrep et SwiftLint ciblé exécutés ; tous les signaux et règles Swift ne sont pas qualifiés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "dab0fcd9eab59f69492a26a5102ffe0e9b76abc506cd8ca772a871e0f814649c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180949045528Z/stdout.json",
+          "sha256": "50966c2229e21a687dc64a99c2611895a1bf6f5007eeac8d092964dfcfdaa9e0"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Semgrep et SwiftLint ciblé exécutés ; tous les signaux et règles Swift ne sont pas qualifiés. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "2 267 tests réussis, mais trois défauts confirmés n'étaient couverts par aucun test et le test d'équivalence de l'index n'a pas vu la valeur vide.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180536484946Z/stdout.json",
+          "sha256": "3eedcb0e484835747492d2b2dd30e214e181942aeb913ca3ec2d128186bc7ec1"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181646448678Z/stdout.json",
+          "sha256": "c7f672cdc3f9cf0e2c9127d634230942445da773d3992263c4070dc145c2c14b"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "2 267 tests réussis, mais trois défauts confirmés n'étaient couverts par aucun test et le test d'équivalence de l'index n'a pas vu la valeur vide. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Barre : attente de 100 ms entre frappes, une requête Spotlight à la fois, relance des filtres bornée à 0,1-5 s ; pas d'essai de saturation.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/complexite.md",
+          "sha256": "9bc78f71f9dc2c611ecc62669c5c1ec7763e2a637d2fc32802784fab5cbc1b94"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Barre : attente de 100 ms entre frappes, une requête Spotlight à la fois, relance des filtres bornée à 0,1-5 s ; pas d'essai de saturation. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Délais, annulation et plafonds de sortie présents ; deux délais contredisent l'usage (F-RUNSCRIPT, F-SPOTLIGHT).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-delais.md",
+          "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Délais, annulation et plafonds de sortie présents ; deux délais contredisent l'usage (F-RUNSCRIPT, F-SPOTLIGHT). Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Points d'entrée chauds relus après une heuristique sur tout Sources ; annotations de complexité absentes sur plusieurs recherches.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/complexite.md",
+          "sha256": "9bc78f71f9dc2c611ecc62669c5c1ec7763e2a637d2fc32802784fab5cbc1b94"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/nested.txt",
+          "sha256": "eb2e39eea322edeeefa164ba623a3e46688d6c1ce432b66e21feaf4567a48bb4"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Points d'entrée chauds relus après une heuristique sur tout Sources ; annotations de complexité absentes sur plusieurs recherches. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Parcours AX bornés, caches bornés ; un parcours quadratique (n ≤ 4 000) et une requête de fichiers récents sans plafond.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/complexite.md",
+          "sha256": "9bc78f71f9dc2c611ecc62669c5c1ec7763e2a637d2fc32802784fab5cbc1b94"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-index-et-parcours.md",
+          "sha256": "86b5d5a435d60f0b762f92a76b7eb32d18d0159fc130ec72f584ffe6317c09d3"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Parcours AX bornés, caches bornés ; un parcours quadratique (n ≤ 4 000) et une requête de fichiers récents sans plafond. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Index TOML O(L) puis O(1), copies SQLite hors du fil principal avec cache ; coût disque des copies non mesuré.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/complexite.md",
+          "sha256": "9bc78f71f9dc2c611ecc62669c5c1ec7763e2a637d2fc32802784fab5cbc1b94"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Index TOML O(L) puis O(1), copies SQLite hors du fil principal avec cache ; coût disque des copies non mesuré. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Messages traduits et refus explicites ; reconstruction Spotlight et commandes système sans retour d'échec.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Messages traduits et refus explicites ; reconstruction Spotlight et commandes système sans retour d'échec. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Retour arrière des tâches d'automatisation et échange atomique relus ; interruption réelle non simulée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "234512128cf1ff939d9995f55e8a55f8a17c3ebc883a69fc98315031106b5d0e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Retour arrière des tâches d'automatisation et échange atomique relus ; interruption réelle non simulée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Frontières SwiftPM claires ; RoadieDaemon de 62 730 lignes sans frontières internes mesurées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "dab0fcd9eab59f69492a26a5102ffe0e9b76abc506cd8ca772a871e0f814649c"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/minimalisme-responsabilite.md",
+          "sha256": "d7fd81934814e6d2236b70d52c1cc73abc453f184ffd3c653adf044f5c8a090b"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Frontières SwiftPM claires ; RoadieDaemon de 62 730 lignes sans frontières internes mesurées. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Cycles de modules impossibles par SwiftPM ; cycles internes au module non analysés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "dab0fcd9eab59f69492a26a5102ffe0e9b76abc506cd8ca772a871e0f814649c"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Cycles de modules impossibles par SwiftPM ; cycles internes au module non analysés. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Symboles privés de macOS chargés par dlsym et protégés par des optionnels ; leur disparition dégraderait la fonction sans arrêt, non testé sur d'autres versions.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "234512128cf1ff939d9995f55e8a55f8a17c3ebc883a69fc98315031106b5d0e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Symboles privés de macOS chargés par dlsym et protégés par des optionnels ; leur disparition dégraderait la fonction sans arrêt, non testé sur d'autres versions. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Invariants, bornes et complexités commentés dans le code récent ; plusieurs recherches sans annotation.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/minimalisme-responsabilite.md",
+          "sha256": "d7fd81934814e6d2236b70d52c1cc73abc453f184ffd3c653adf044f5c8a090b"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/complexite.md",
+          "sha256": "9bc78f71f9dc2c611ecc62669c5c1ec7763e2a637d2fc32802784fab5cbc1b94"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Invariants, bornes et complexités commentés dans le code récent ; plusieurs recherches sans annotation. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Changements ciblés par session et tests associés ; trois fichiers de plus de 2 000 lignes alourdissent la maintenance.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/minimalisme-responsabilite.md",
+          "sha256": "d7fd81934814e6d2236b70d52c1cc73abc453f184ffd3c653adf044f5c8a090b"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Changements ciblés par session et tests associés ; trois fichiers de plus de 2 000 lignes alourdissent la maintenance. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Aucune revue indépendante : délégation Bridget absente du catalogue ; relecture par le même agent.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/contexte.md",
+          "sha256": "234512128cf1ff939d9995f55e8a55f8a17c3ebc883a69fc98315031106b5d0e"
+        }
+      ],
+      "level": 1,
+      "rating_rationale": "Aucune revue indépendante : délégation Bridget absente du catalogue ; relecture par le même agent. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Une seule dépendance d'exploitation, verrouillée et utilisée pour la configuration.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/controle-swift.md",
+          "sha256": "dab0fcd9eab59f69492a26a5102ffe0e9b76abc506cd8ca772a871e0f814649c"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T180010451804Z/stdout.json",
+          "sha256": "54345d5194d238b6017d0f3181f392109ce35023cc6b4bdfa8c134943dcb578e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Une seule dépendance d'exploitation, verrouillée et utilisée pour la configuration. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "~10 lignes suppressibles relevées sur un échantillon ; pas de recherche de code mort sur tout le dépôt.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/minimalisme-responsabilite.md",
+          "sha256": "d7fd81934814e6d2236b70d52c1cc73abc453f184ffd3c653adf044f5c8a090b"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "~10 lignes suppressibles relevées sur un échantillon ; pas de recherche de code mort sur tout le dépôt. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Signets et historiques lus sur copie ; affichage d'une valeur non appliquée pour un fichier TOML invalide (F-LITERAL-EMPTY).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181646448678Z/stdout.json",
+          "sha256": "c7f672cdc3f9cf0e2c9127d634230942445da773d3992263c4070dc145c2c14b"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Signets et historiques lus sur copie ; affichage d'une valeur non appliquée pour un fichier TOML invalide (F-LITERAL-EMPTY). Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "unknown",
+      "rationale": "Non vérifié dans cet audit ; preuve ou mesure insuffisante.",
+      "evidence": []
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Spec 088 et 127 rapprochées : Run Script plus restrictif que la spec, traduction complète vérifiée par recherche des textes restants.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-delais.md",
+          "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Spec 088 et 127 rapprochées : Run Script plus restrictif que la spec, traduction complète vérifiée par recherche des textes restants. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Chaque constat relié à sa reproduction, ses exécutions et ses variantes.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/constats.md",
+          "sha256": "51a67ad6cbeb3563ec8cb21a08146dc632fea2e7eb3301d23f6f8890306ff770"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/repro-audit129.swift",
+          "sha256": "6c47f3df161bf6ff2be1afe8354543fee940274ddbb64db556b0323edbc44391"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T181537082575Z/stdout.json",
+          "sha256": "eb0a4f9c29e11904f97f3a958f70808722ccc0c6d0b11703d8f9eef7a89cdf70"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Chaque constat relié à sa reproduction, ses exécutions et ses variantes. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Exigences de 2 spécifications sur 128 vérifiées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/variantes-delais.md",
+          "sha256": "e6ca0fcab580303d958502651c8e6863bdda6035a63749d32e761682ca13f9ff"
+        }
+      ],
+      "level": 1,
+      "rating_rationale": "Exigences de 2 spécifications sur 128 vérifiées. Le niveau supérieur exige une qualification plus complète."
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : ~10 lignes suppressibles à comportement constant, estimé sur un échantillon de fonctions d'enrobage (voir notes/minimalisme-responsabilite.md) ; non mesuré sur tout le dépôt.",
+  "responsibility": "Code récent commenté avec bornes et complexités ; volume ajouté au service des fonctions demandées ; trois fichiers de plus de 2 000 lignes augmentent la charge cognitive ; aucune revue indépendante dans cet audit."
+}

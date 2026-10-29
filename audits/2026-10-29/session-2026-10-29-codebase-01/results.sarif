@@ -1,0 +1,172 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Audit Code V15",
+          "version": "15.0.0"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "REL-SCRIPT-TIMEOUT",
+          "level": "warning",
+          "message": {
+            "text": "Action Run Script arrêtée après 10 secondes: Run Script reçoit le délai par défaut des Script Filters (10 s) ; la spec 088 ne le fixe qu'aux filtres. Reproduit : arrêt à 10,67 s, suite non exécutée."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "8a08a1d4fee37693ac4d"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-129/Sources/RoadieDaemon/AlfredWorkflowEngine.swift"
+                },
+                "region": {
+                  "startLine": 169
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "REL-SCRIPT-TIMEOUT",
+          "level": "warning",
+          "message": {
+            "text": "Action Run NSAppleScript arrêtée après 10 secondes: Même appel sans délai que Run Script, pour l'objet Run NSAppleScript ; même cause que le cas reproduit."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "5d7c9605b2f089a1a4a3"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-129/Sources/RoadieDaemon/AlfredWorkflowEngine.swift"
+                },
+                "region": {
+                  "startLine": 180
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "REL-SCRIPT-TIMEOUT",
+          "level": "warning",
+          "message": {
+            "text": "Tâche d'automatisation arrêtée après 10 secondes: Les tâches d'automatisation passent par AlfredScriptRunner.run sans délai : une tâche longue est arrêtée à 10 s."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "e45811aa3be246fadbaf"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-129/Sources/RoadieDaemon/AlfredAutomationTasks.swift"
+                },
+                "region": {
+                  "startLine": 58
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "REL-AUTH-TIMEOUT",
+          "level": "note",
+          "message": {
+            "text": "Reconstruction Spotlight interrompue si le mot de passe prend plus de 10 s: La commande `with administrator privileges` passe par un osascript arrêté à 10 s ; reproduit avec le même lanceur. Fermeture de la boîte d'authentification non observée."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "f0bae9b53a253e5ebfae"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "medium"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-129/Sources/RoadieDaemon/LauncherSystemCommands.swift"
+                },
+                "region": {
+                  "startLine": 109
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DATA-LITERAL-INDEX",
+          "level": "note",
+          "message": {
+            "text": "Index des littéraux : doublon non refusé après une valeur vide: Une clé à valeur vide n'est pas notée ; sa redéfinition est indexée au lieu d'être refusée comme doublon, contrairement à readLiteral. Test différentiel : une seule cause."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "870baf613327150cc291"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-129/Sources/RoadieDaemon/ConfigFileEditor.swift"
+                },
+                "region": {
+                  "startLine": 132
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "PERF-QUADRATIC-BFS",
+          "level": "note",
+          "message": {
+            "text": "Parcours en largeur quadratique des onglets de Firefox: removeFirst() sur un Array à chaque pas : O(n²) pour n ≤ 4 000 éléments par fenêtre ; borne écrite, complexité non annotée ; durée non mesurée."
+          },
+          "partialFingerprints": {
+            "auditV15/v1": "aa1d6c4fe7431fb33dcd"
+          },
+          "properties": {
+            "verification": "confirmed",
+            "confidence": "high"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///private/tmp/roadie-audit-129/Sources/RoadieDaemon/LauncherOpenItems.swift"
+                },
+                "region": {
+                  "startLine": 160
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

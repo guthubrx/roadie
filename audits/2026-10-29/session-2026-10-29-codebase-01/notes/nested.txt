@@ -1,0 +1,181 @@
+RoadieAX/WrittenFrameRegistry.swift:172: entries.filter { $0.value.hasRefusal && $0.value.refusalConfirmedAt == nil }.keys.sorted()
+RoadieCore/Config.swift:978: self.fileTypes = fileTypes.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+RoadieCore/Config.swift:979: self.fileExcludedFolders = fileExcludedFolders.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+RoadieCore/Config.swift:984: self.bttPauseKeys = bttPauseKeys.map { TargetGridConfig.normalizedKey($0, fallback: "") }.filter { !$0.isEmpty }
+RoadieDaemon/AlfredCompatibility.swift:63: stack += (workflow.connections[uid] ?? []).map(\.destination).filter { workflow.objects[$0] != nil }
+RoadieDaemon/AlfredScriptFilterResponse.swift:127: case 2: return words.allSatisfy { word in tokens.contains { $0.hasPrefix(word) } }
+RoadieDaemon/AlfredScriptFilterResponse.swift:131: guard let index = rest.firstIndex(where: { $0.hasPrefix(word) }) else { return false }
+RoadieDaemon/AlfredTextView.swift:173: if let dot = line.firstIndex(of: "."), line[..<dot].allSatisfy(\.isNumber), !line[..<dot].isEmpty,
+RoadieDaemon/AlfredWorkflow.swift:194: guard let close = rest[open...].firstIndex(of: "}") else { result += rest[open...]; return result }
+RoadieDaemon/AppTargetQueryService.swift:192: while let dot = ancestor.lastIndex(of: ".") {
+RoadieDaemon/AppTargetQueryService.swift:710: let actions = skipsMetadata ? [] : readActions(element).filter { !ignoredActions.contains($0) }
+RoadieDaemon/AutomationSnapshotService.swift:79: .sorted { $0.id < $1.id }
+RoadieDaemon/AutomationSnapshotService.swift:97: .sorted { $0.id < $1.id }
+RoadieDaemon/AutomationSnapshotService.swift:100: .sorted { $0.id < $1.id }
+RoadieDaemon/BTTShortcutBindingService.swift:165: let hold = modifiers.enumerated().compactMap { bits & (1 << $0.offset) == 0 ? nil : $0.element.rawValue }.sorted().joined(separator: "+")
+RoadieDaemon/BTTShortcutBindingService.swift:165: let hold = modifiers.enumerated().compactMap { bits & (1 << $0.offset) == 0 ? nil : $0.element.rawValue }.sorted().joined(separator: "+")
+RoadieDaemon/BorderController.swift:115: guard let group = stage.groups.first(where: { $0.windowIDs.contains(windowID) }) else { continue }
+RoadieDaemon/BorderController.swift:115: guard let group = stage.groups.first(where: { $0.windowIDs.contains(windowID) }) else { continue }
+RoadieDaemon/BorderController.swift:115: guard let group = stage.groups.first(where: { $0.windowIDs.contains(windowID) }) else { continue }
+RoadieDaemon/CLICommandRouter.swift:294: let specs = command.map { name in commandTable.filter { $0.names.contains(name) } } ?? commandTable
+RoadieDaemon/CLICommandRouter.swift:968: let complete = reports.filter { $0.state == .complete }.count, partial = reports.filter { $0.state == .partial }.count
+RoadieDaemon/CLICommandRouter.swift:984: let id = workflows.first { $0.id == entry.workflowID }.map { $0.bundleID.isEmpty ? $0.id : $0.bundleID } ?? entry.workflowID
+RoadieDaemon/CLICommandRouter.swift:993: for object in workflow.objects.values.sorted(by: { $0.uid < $1.uid }) where object.type == "trigger.remote" {
+RoadieDaemon/CommandSocketServer.swift:393: if let newline = chunk[0..<count].firstIndex(of: 0x0A) {
+RoadieDaemon/ConfigFileEditor.swift:100: guard let first = scalars.firstIndex(where: { !isSpace($0) }), scalars[first] != "#" else { continue }
+RoadieDaemon/ConfigFileEditor.swift:198: guard let first = scalars.firstIndex(where: { !isSpace($0) }), scalars[first] != "#" else { continue }
+RoadieDaemon/ConfigFileEditor.swift:271: guard let first = scalars.firstIndex(where: { !isSpace($0) }), scalars[first] != "#" else { continue }
+RoadieDaemon/ConfigFileEditor.swift:494: if state.isTopLevel, let first = scalars.firstIndex(where: { !isSpace($0) }),
+RoadieDaemon/ConfigFileEditor.swift:586: if state.isTopLevel, let first = scalars.firstIndex(where: { !isSpace($0) }),
+RoadieDaemon/DaemonSnapshot.swift:600: let activePersistentStage = persistentScope.stages.first { $0.id == persistentScope.activeStageID }
+RoadieDaemon/DaemonSnapshot.swift:914: let display = displays.first(where: { $0.id == scope.displayID })
+RoadieDaemon/DaemonSnapshot.swift:1251: scopedWindows.contains(where: { $0.window.id == focusedID && $0.scope == scope && $0.window.isTileCandidate }) {
+RoadieDaemon/DaemonSnapshot.swift:2357: let run = placed[runStart..<runEnd].sorted { ($0.secondary, $0.id) < ($1.secondary, $1.id) }
+RoadieDaemon/DaemonSnapshot.swift:2363: let unplaced = windowIDs.filter { frames[$0] == nil }.sorted()
+RoadieDaemon/DaemonSnapshot.swift:2389: config.tiling.displayOverrides.first { override in
+RoadieDaemon/DesktopCommands.swift:34: let scopes = state.scopes.filter { $0.displayID == display.id && $0.desktopID == id }
+RoadieDaemon/DesktopCommands.swift:202: let others = initial.scopes.filter { $0.displayID == origin && $0.desktopID != source }.map(\.desktopID).sorted()
+RoadieDaemon/DisplayCommands.swift:54: snapshot.windows.first { $0.window.id == id && $0.scope == activeScope }?.window
+RoadieDaemon/DisplayParkingService.swift:147: guard sourceStage.members.contains(where: { liveWindowIDs.contains($0.windowID) }) else {
+RoadieDaemon/DisplayParkingService.swift:147: guard sourceStage.members.contains(where: { liveWindowIDs.contains($0.windowID) }) else {
+RoadieDaemon/DisplayParkingService.swift:269: for desktopID in stagesByDesktop.keys.sorted() {
+RoadieDaemon/DisplayParkingService.swift:270: let sortedStages = stagesByDesktop[desktopID, default: []].sorted {
+RoadieDaemon/DisplayParkingService.swift:298: if let placeholderIndex = targetScope.stages.firstIndex(where: {
+RoadieDaemon/DisplayParkingService.swift:359: guard let index = state.scopes.firstIndex(where: { $0.displayID == display.id }) else { continue }
+RoadieDaemon/DisplayParkingService.swift:430: let localCandidates = candidates.filter { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }
+RoadieDaemon/DisplayParkingService.swift:465: } else if !state.scopes[scopeIndex].stages.contains(where: { $0.id == state.scopes[scopeIndex].activeStageID }),
+RoadieDaemon/DisplayParkingService.swift:517: let emptyConflictIndex = scope.stages.firstIndex(where: {
+RoadieDaemon/DisplayParkingService.swift:517: let emptyConflictIndex = scope.stages.firstIndex(where: {
+RoadieDaemon/DividerResizeRuntime.swift:175: let windows = snapshot.windows.filter { $0.scope == scope && $0.window.isTileCandidate }
+RoadieDaemon/DividerResizeRuntime.swift:195: !divider.hitRect.isEmpty && !occupied.contains { $0.intersects(divider.hitRect) }
+RoadieDaemon/FileAdministration.swift:180: urls.sorted(by: newerFirst),
+RoadieDaemon/Formatters.swift:35: snapshot.displays.first { $0.id == id }
+RoadieDaemon/Formatters.swift:208: let activeDisplay = activeDisplayID.flatMap { id in snapshot.displays.first { $0.id == id } }
+RoadieDaemon/Formatters.swift:214: .first { $0.displayID == displayID && $0.desktopID == desktopID }?
+RoadieDaemon/LauncherActions.swift:469: func row(for id: String?) -> Row? { id.flatMap { id in rows.first { $0.id == id } } }
+RoadieDaemon/LauncherAppCatalog.swift:83: for name in names.sorted() where !name.hasPrefix(".") {
+RoadieDaemon/LauncherAppCatalog.swift:89: for child in inner.sorted() where child.hasSuffix(".app") {
+RoadieDaemon/LauncherBookmarks.swift:225: } else if let equal = line.firstIndex(of: "=") {
+RoadieDaemon/LauncherCalculator.swift:108: if c == " " { chars.removeFirst(); continue }
+RoadieDaemon/LauncherCalculator.swift:114: chars.removeFirst()
+RoadieDaemon/LauncherCalculator.swift:121: while let d = chars.first, d.isLetter || d.isNumber { name.append(d); chars.removeFirst() }
+RoadieDaemon/LauncherFiles.swift:325: return (nil, exposing, "\(windows)/\(elementsFound)/\(documents) " + statuses.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: " "))
+RoadieDaemon/LauncherList.swift:209: let sorted = section == .screen ? all : all.sorted(by: before)
+RoadieDaemon/LauncherList.swift:233: func row(for id: String?) -> Row? { id.flatMap { id in rows.first { $0.id == id } } }
+RoadieDaemon/LauncherOpenItems.swift:160: let (element, depth) = queue.removeFirst()
+RoadieDaemon/LauncherOpenItems.swift:160: let (element, depth) = queue.removeFirst()
+RoadieDaemon/LauncherPhrase.swift:72: place = .destination(destinations.first { $0.kind == .desktop(newStageHome.0, id) }
+RoadieDaemon/LauncherPhrase.swift:101: if let exact = stages.first(where: { LauncherMatch.fold($0.title) == name }) { return (exact, span) }
+RoadieDaemon/LauncherSearchContext.swift:201: let scopes = state.scopes.filter { $0.displayID == display.id }.sorted { $0.desktopID < $1.desktopID }
+RoadieDaemon/LauncherSearchContext.swift:201: let scopes = state.scopes.filter { $0.displayID == display.id }.sorted { $0.desktopID < $1.desktopID }
+RoadieDaemon/LauncherSearchContext.swift:204: let occupied = scope.stages.contains { !$0.members.isEmpty }
+RoadieDaemon/LauncherSearchContext.swift:364: guard let search = searches.first(where: { $0.keyword.lowercased() == keyword.lowercased() }),
+RoadieDaemon/LauncherTheme.swift:216: guard !found.contains(where: { $0.id == id }) else { continue }
+RoadieDaemon/LauncherTheme.swift:220: return found.filter { !builtIDs.contains($0.id) }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+RoadieDaemon/LayoutMaintainer.swift:372: let display = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
+RoadieDaemon/LayoutMaintainer.swift:891: return "\(scope.description):\(mode):\(ids.sorted().joined(separator: ","))"
+RoadieDaemon/LayoutMaintainer.swift:984: "windowIDs": repairPlan.commands.map { String($0.window.id.rawValue) }.sorted().joined(separator: ",")
+RoadieDaemon/LayoutMaintainer.swift:1105: "windowIDs": resized.map { String($0.rawValue) }.sorted().joined(separator: ","),
+RoadieDaemon/LayoutMaintainer.swift:1133: "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+RoadieDaemon/LayoutMaintainer.swift:1146: "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+RoadieDaemon/LayoutMaintainer.swift:1351: displays.values.contains(where: { $0.contains(entry.window.frame.center) }),
+RoadieDaemon/LayoutMaintainer.swift:1670: var knownMinimums = treeMinimums.filter { $0.key != entry.window.id }.mapValues(\.size)
+RoadieDaemon/LayoutMaintainer.swift:2058: "priorityWindowIDs": priorityWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+RoadieDaemon/LayoutMaintainer.swift:2165: "windowIDs": retired.map { String($0.rawValue) }.sorted().joined(separator: ",")
+RoadieDaemon/LayoutMaintainer.swift:2297: let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
+RoadieDaemon/LayoutMaintainer.swift:2329: let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
+RoadieDaemon/LayoutMaintainer.swift:2761: let targetDisplay = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
+RoadieDaemon/LayoutMaintainer.swift:2982: "windowIDs": excludedIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+RoadieDaemon/LayoutMaintainer.swift:3288: let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+RoadieDaemon/LayoutMaintainer.swift:3380: let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+RoadieDaemon/LayoutMaintainer.swift:3605: let pinned = Set(free.filter { minimums[$0] > equal })
+RoadieDaemon/LayoutMaintainer.swift:3825: let stageIndex = source.stages.firstIndex(where: { $0.id == move.source.stageID }) {
+RoadieDaemon/LayoutMaintainer.swift:3876: let physicalDisplay = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
+RoadieDaemon/LayoutMaintainer.swift:3923: "windows": moves.map { String($0.window.id.rawValue) }.sorted().joined(separator: ","),
+RoadieDaemon/OverviewDragPreview.swift:104: if let s = displays[d].desktops[b].stages.firstIndex(where: { $0.scope == scope }) {
+RoadieDaemon/OverviewDragPreview.swift:104: if let s = displays[d].desktops[b].stages.firstIndex(where: { $0.scope == scope }) {
+RoadieDaemon/OverviewDragPreview.swift:116: if let e = displays[d].desktops[b].stages[s].entries.firstIndex(where: { $0.id == id }) {
+RoadieDaemon/OverviewDragPreview.swift:116: if let e = displays[d].desktops[b].stages[s].entries.firstIndex(where: { $0.id == id }) {
+RoadieDaemon/OverviewDragPreview.swift:116: if let e = displays[d].desktops[b].stages[s].entries.firstIndex(where: { $0.id == id }) {
+RoadieDaemon/OverviewDragPreview.swift:129: let index = before.flatMap { id in stages.firstIndex { $0.scope.stageID == id } } ?? stages.count
+RoadieDaemon/OverviewModel.swift:78: for desktopID in bureauIDs.sorted() {
+RoadieDaemon/OverviewModel.swift:82: var stageIDs = stored?.stages.filter {
+RoadieDaemon/OverviewPanel.swift:320: let alone = entry.scope.map { scope in model.entries.filter { $0.scope == scope }.count <= 1 } ?? false
+RoadieDaemon/OverviewPanel.swift:568: let focused = config.loupe && magnifiedID != nil && item.desktop.entries.contains { $0.id == magnifiedID }
+RoadieDaemon/PerformanceLogService.swift:57: let dates = events.map(\.timestamp).sorted()
+RoadieDaemon/RailController.swift:1065: let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
+RoadieDaemon/RailPanel.swift:522: let gaps = zip(thresholds, thresholds.dropFirst()).map { abs($0 - $1) }.filter { $0 > 0 }
+RoadieDaemon/RailPanel.swift:560: let next = stack.arrangedSubviews.compactMap { $0 as? StageCardView }.first { point.y > $0.frame.midY }
+RoadieDaemon/RailSettings.swift:397: guard let current, let equals = trimmed.firstIndex(of: "=") else { continue }
+RoadieDaemon/RestoreSafetyService.swift:172: && !displays.contains { $0.frame.cgRect.contains(center) }
+RoadieDaemon/RestoreSafetyService.swift:458: .filter { !desktopShown || $0.id != scope.activeStageID }
+RoadieDaemon/SelfTest.swift:108: let windows = snapshot.windows.filter {
+RoadieDaemon/SettingsCollectionCodec.swift:110: for group in oneOf where !group.contains(where: { row.fields[$0] != nil && row.fields[$0] != .unset && row.fields[$0] != .string("") }) {
+RoadieDaemon/SettingsCollectionEditor.swift:118: var raw = id.flatMap { id in rows.first(where: { $0.id == id })?.raw }
+RoadieDaemon/SettingsCollectionEditor.swift:400: .compactMap { row.raw[$0] }.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+RoadieDaemon/SettingsService.swift:230: let start = RoadieConfigLoader.validate(path: configPath).items.filter { $0.level == .error }
+RoadieDaemon/SettingsService.swift:534: let keys = Set(requests.compactMap { $0.hotkey.split(separator: "+").last.map(String.init) }.filter { $0.count == 1 })
+RoadieDaemon/SettingsShortcutsViews.swift:176: let stale = paused.items.filter { item in !roadieKeys.contains { $0.isBar && $0.keys == item.raw } }
+RoadieDaemon/SettingsViewModel.swift:112: let editable = found.filter { $0.readOnlyReason == nil }
+RoadieDaemon/SettingsViewModel.swift:124: BTTTriggerCatalog.shared.triggers.map { TargetHintService.normalized($0.command) }.filter { !$0.isEmpty }
+RoadieDaemon/ShortcutRecorderControl.swift:18: ?? layout[keyCode].flatMap { $0.count == 1 && !$0.contains("+") && !$0.contains(where: \.isWhitespace) ? $0 : nil }
+RoadieDaemon/SlashCommandCatalog.swift:342: let starts = candidates.filter { $0.keys.contains { $0.hasPrefix(word) } }
+RoadieDaemon/SlashCommandCatalog.swift:344: !candidate.keys.contains { $0.hasPrefix(word) } && candidate.haystack.contains(word)
+RoadieDaemon/SlashCommandRunner.swift:118: let numbers = Set(stages.compactMap { Int($0.id.rawValue) }).sorted().map(String.init)
+RoadieDaemon/StageCommands.swift:864: let to = anchor.flatMap { id in state.scopes[index].stages.firstIndex { $0.id == id } } ?? state.scopes[index].stages.count
+RoadieDaemon/StageCommands.swift:914: let to = anchor.flatMap { id in target.stages.firstIndex { $0.id == id } } ?? target.stages.count
+RoadieDaemon/StageCommands.swift:1134: let next = index.flatMap { ordered[($0 + 1)...].first { rest.contains($0) } }
+RoadieDaemon/StageCommands.swift:1510: "targetMembers": transition.targetMembers.map { String($0.rawValue) }.sorted().joined(separator: ","),
+RoadieDaemon/StageCommands.swift:1634: }.sorted { lhs, rhs in
+RoadieDaemon/StageNameUniqueness.swift:51: let ranked = copies.sorted { a, b in
+RoadieDaemon/StageStore.swift:455: for stage in scope.stages where stage.members.contains(where: { $0.windowID == windowID }) {
+RoadieDaemon/StageStore.swift:773: updated.windowIDs = updated.windowIDs.filter { seen.insert($0).inserted }
+RoadieDaemon/StageStore.swift:773: updated.windowIDs = updated.windowIDs.filter { seen.insert($0).inserted }
+RoadieDaemon/StageStore.swift:773: updated.windowIDs = updated.windowIDs.filter { seen.insert($0).inserted }
+RoadieDaemon/StageStore.swift:1273: if let index = stages.firstIndex(where: { $0.id == id }) {
+RoadieDaemon/StageStore.swift:1439: guard let memberIndex = stages[stageIndex].members.firstIndex(where: { $0.windowID == window.id }) else {
+RoadieDaemon/StateAudit.swift:157: !scope.stages.contains { $0.id == scope.activeStageID }
+RoadieDaemon/StateAudit.swift:252: if !state.scopes[scopeIndex].stages.contains(where: { $0.id == state.scopes[scopeIndex].activeStageID }) {
+RoadieDaemon/StateAudit.swift:269: !state.scopes[scopeIndex].stages[stageIndex].members.contains(where: { $0.windowID == focusedWindowID }) {
+RoadieDaemon/TargetGridService.swift:359: guard let index = labels.firstIndex(of: label) else { return nil }
+RoadieDaemon/TargetHintService.swift:619: let hasLiveMembers = stage.members.contains { liveWindowIDs.contains($0.windowID) }
+RoadieDaemon/TargetHintService.swift:619: let hasLiveMembers = stage.members.contains { liveWindowIDs.contains($0.windowID) }
+RoadieDaemon/TargetHintService.swift:701: let visibleStages = scope.stages.filter { stage in
+RoadieDaemon/TargetModeRuntimeController.swift:490: initialSubject = focused.flatMap { id in roadieTargets.first { $0.id == "window:\(id.rawValue)" } }.map(LauncherSubject.target)
+RoadieDaemon/TargetModeRuntimeController.swift:571: LauncherSearchContext.rankingContext(scope, stage: state.scopes.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+RoadieDaemon/TargetModeRuntimeController.swift:593: return state.scopes.first { $0.displayID == display.id && $0.desktopID == desktop }
+RoadieDaemon/TargetModeRuntimeController.swift:660: guard let app = catalog.current.first(where: { $0.bundleID == closed.bundleID }) ?? Self.app(bundleID: closed.bundleID),
+RoadieDaemon/TargetModeRuntimeController.swift:675: .compactMap { entry in catalog.current.first { $0.rankingKey == entry.key } }
+RoadieDaemon/TargetModeRuntimeController.swift:739: let focusedFrame = snapshot.focusedWindowID.flatMap { id in snapshot.windows.first { $0.window.id == id } }
+RoadieDaemon/TargetModeRuntimeController.swift:1111: let windows = loaded.entries.filter { $0.window.bundleID == bundle }
+RoadieDaemon/TargetModeRuntimeController.swift:1352: guard let fresh = entries.first(where: { $0.window.bundleID == bundleID && !known.contains($0.id) }) else { continue }
+RoadieDaemon/TargetModeRuntimeController.swift:1444: let known = Set(await switcher.load().entries.filter { $0.window.bundleID == window.bundleID }.map(\.id))
+RoadieDaemon/TargetModeRuntimeController.swift:1505: let windows = entries.filter { $0.window.bundleID == bundle }
+RoadieDaemon/TargetModeRuntimeController.swift:1510: let stage = stageTitle(windows.first { $0.id == id }?.scope).map { " · \($0)" } ?? ""
+RoadieDaemon/TargetModeRuntimeController.swift:1521: let windows = entries.filter { $0.window.bundleID == bundle }
+RoadieDaemon/TargetModeRuntimeController.swift:1528: ?? windows.first { $0.window.title == tab.title || $0.window.title.hasPrefix(tab.title + " ") }?.id
+RoadieDaemon/TargetModeRuntimeController.swift:1533: let stage = stageTitle(windows.first { $0.id == id }?.scope).map { " · \($0)" } ?? ""
+RoadieDaemon/TargetModeRuntimeController.swift:1719: let entry = snapshot.windows.first { $0.window.id == focused }
+RoadieDaemon/TargetOverlayPresenter.swift:274: badges.contains { badge in
+RoadieDaemon/TargetOverlayPresenter.swift:387: self.labels = Set(state.report.targets.map { $0.label.uppercased() }.filter { !$0.isEmpty })
+RoadieDaemon/TargetOverlayPresenter.swift:606: labels = Set(state.report.targets.map { $0.label.uppercased() }.filter { !$0.isEmpty })
+RoadieDaemon/TargetOverlayPresenter.swift:1661: items = items.enumerated().sorted { a, b in
+RoadieDaemon/TargetOverlayPresenter.swift:1690: let preselected = first ? grid.preselect.flatMap { uid in items.firstIndex { $0.uid == uid } } : nil
+RoadieDaemon/TargetOverlayPresenter.swift:2778: let barWindow = (launcher.barScreenFrame ?? pointerScreen).flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
+RoadieDaemon/TargetOverlayPresenter.swift:3413: if !occupied.contains(where: { $0.intersects(rect) }) {
+RoadieDaemon/TargetSearchModel.swift:160: highlightedIndex = targetID.flatMap { id in matches.firstIndex { $0.id == id } }
+RoadieDaemon/TitlebarContextMenuController.swift:578: guard let stages = grouped[desktopID]?.sorted(by: { $0.label < $1.label }) else { continue }
+RoadieDaemon/TreeDump.swift:84: .filter { $0.displayID == display.id }
+RoadieDaemon/WidthAdjustmentService.swift:48: snapshot.windows.first { entry in
+RoadieDaemon/WindowBookmarkCommands.swift:288: guard let member = stage.members.first(where: { $0.windowID == windowID }) else { continue }
+RoadieDaemon/WindowBookmarkCommands.swift:288: guard let member = stage.members.first(where: { $0.windowID == windowID }) else { continue }
+RoadieDaemon/WindowBookmarkCommands.swift:305: let focused = snapshot.windows.first(where: { $0.window.id == focusedID && $0.scope == scope && $0.window.isTileCandidate }) {
+RoadieDaemon/WindowCommands.swift:89: snapshot.windows.first { $0.window.id == previous && $0.scope == scope }?.window.id
+RoadieDaemon/WindowCommands.swift:544: let selected = preferredID.flatMap { id in snapshot.windows.first { $0.window.id == id } }
+RoadieDaemon/WindowCommands.swift:1078: let focused = snapshot.windows.first(where: { $0.window.id == focusedID && $0.scope == scope && $0.window.isTileCandidate }) {
+RoadieDaemon/WindowContextActions.swift:314: represented = stageList.filter {
+RoadieDaemon/WindowRuleAffinityService.swift:188: parts.append(slug([window.role, window.subrole].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "-")))
+RoadieDaemon/WindowSwitcherGrouping.swift:51: title: stageTitle, desktopTitle: [desktop, entry.displayName].filter { !$0.isEmpty }.joined(separator: " · "), entries: [entry]))
+RoadieDaemon/WindowSwitcherHotkeys.swift:180: Self.activeProfileIDs = Set(successes.keys.filter { id in successes[id] == plan.entries.filter { $0.profileID == id }.count })
+RoadieDaemon/WindowSwitcherPresentationViews.swift:78: let context = [entry?.desktopName, entry?.stageName].compactMap { $0 }.filter { !$0.isEmpty }
+RoadieDaemon/WindowSwitcherService.swift:238: let focusedID = systemFocusedID.flatMap { id in snapshot.windows.contains { $0.window.id == id } ? id : nil }
