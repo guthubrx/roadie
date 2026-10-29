@@ -42,7 +42,7 @@ final class WindowSwitcherDetailView: NSView {
     private let iconView = NSImageView()
     private let appLabel = NSTextField(labelWithString: "")
     private let contextLabel = NSTextField(labelWithString: "")
-    private let openButton = NSButton(title: "Ouvrir ↗", target: nil, action: nil)
+    private let openButton = NSButton(title: tr("Ouvrir ↗", "Open ↗"), target: nil, action: nil)
     private var switcherAppearance = WindowSwitcherAppearance(config: WindowSwitcherConfig())
 
     override var isFlipped: Bool { true }
@@ -63,7 +63,7 @@ final class WindowSwitcherDetailView: NSView {
         imageView.layer?.borderWidth = 0.5
         imageView.layer?.borderColor = NSColor.separatorColor.cgColor
         imageView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.12).cgColor
-        imageView.setAccessibilityLabel("Aperçu intégral de la fenêtre sélectionnée")
+        imageView.setAccessibilityLabel(tr("Aperçu intégral de la fenêtre sélectionnée", "Full preview of the selected window"))
         iconView.imageScaling = .scaleProportionallyUpOrDown
         openButton.bezelStyle = .rounded
         openButton.target = self

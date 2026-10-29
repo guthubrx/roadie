@@ -234,7 +234,7 @@ struct TargetSearchBar {
     var inputText: String {
         if let commandInput { return "/\(commandInput)▏" }
         if let properties { return properties }
-        return query.isEmpty ? "Rechercher ou saisir /commande" : "\(query)▏"
+        return query.isEmpty ? tr("Rechercher ou saisir /commande", "Search or type /command") : "\(query)▏"
     }
 
     var counterText: String? {
@@ -246,7 +246,7 @@ struct TargetSearchBar {
     var messageTextLines: [String] {
         switch message {
         case .info(let lines): return Array(lines.prefix(SearchBarLayout.maxMessageLines))
-        case .error(let text, let usage): return [text] + (usage.map { ["Usage : \($0)"] } ?? [])
+        case .error(let text, let usage): return [text] + (usage.map { [tr("Usage : ", "Usage: ") + $0] } ?? [])
         case nil: return []
         }
     }

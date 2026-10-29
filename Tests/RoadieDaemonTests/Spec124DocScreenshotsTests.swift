@@ -7,9 +7,11 @@ import Testing
 /// Session 124 : captures de la documentation, dessinées par le vrai rendu de Roadie avec des données
 /// d'exemple. Aucune fenêtre, aucun fichier, aucun fond d'écran de l'utilisateur n'est lu : les icônes
 /// viennent des applications d'Apple, les vignettes et les fichiers sont inventés.
+/// Chaque image existe en anglais (dossier racine, documentation par défaut) et en français (`fr/`), session 126.
 /// Ne fait rien sans `ROADIE_DOC_SHOTS_DIR` :
 /// `ROADIE_DOC_SHOTS_DIR=docs/assets/screenshots scripts/test --no-parallel --filter Spec124`.
 @MainActor
+@Suite(.serialized)
 struct Spec124DocScreenshots {
     private let output = ProcessInfo.processInfo.environment["ROADIE_DOC_SHOTS_DIR"].map { URL(fileURLWithPath: $0) }
 
@@ -87,27 +89,45 @@ struct Spec124DocScreenshots {
         return url.path
     }
 
+    /// Images de chaque langue : anglais d'abord, la langue d'origine rétablie ensuite.
+    private func eachLanguage(_ body: () async throws -> Void) async throws {
+        let saved = UILanguage.current
+        defer { UILanguage.current = saved }
+        for language in [UILanguage.en, .fr] {
+            UILanguage.current = language
+            try await body()
+        }
+    }
+
+    private var personal: String { tr("Perso", "Personal") }
+
     private func searchScene() -> TargetSearchBar {
         bar("note", [
-            header("Applications"),
-            row("Notes", "Ouverte · Perso", .file(App.notes)),
-            header("Fenêtres"),
-            row("Notes", "Idées de voyage", .file(App.notes), letter: "⇧K"),
-            header("Documents et onglets"),
-            row("Notes de version 2.4.pdf", "Aperçu · Documentation", .file(App.preview)),
-            header("Fichiers"),
-            row("Notes de réunion.md", "~/Documents/Projets", .file(sampleFile("Notes de réunion.md"))),
-            row("Notes partagées", "~/Documents", .file(sampleFile("Notes partagées", folder: true))),
-            row("notes-atelier.txt", "~/Bureau", .file(sampleFile("notes-atelier.txt"))),
+            header(tr("Applications", "Applications")),
+            row("Notes", tr("Ouverte", "Open") + " · \(personal)", .file(App.notes)),
+            header(tr("Fenêtres", "Windows")),
+            row("Notes", tr("Idées de voyage", "Travel ideas"), .file(App.notes), letter: "⇧K"),
+            header(tr("Documents et onglets", "Documents and tabs")),
+            row(tr("Notes de version 2.4.pdf", "Release notes 2.4.pdf"), tr("Aperçu · Documentation", "Preview · Documentation"), .file(App.preview)),
+            header(tr("Fichiers", "Files")),
+            row(tr("Notes de réunion.md", "Meeting notes.md"), tr("~/Documents/Projets", "~/Documents/Projects"),
+                .file(sampleFile(tr("Notes de réunion.md", "Meeting notes.md")))),
+            row(tr("Notes partagées", "Shared notes"), "~/Documents", .file(sampleFile(tr("Notes partagées", "Shared notes"), folder: true))),
+            row(tr("notes-atelier.txt", "workshop-notes.txt"), tr("~/Bureau", "~/Desktop"), .file(sampleFile(tr("notes-atelier.txt", "workshop-notes.txt")))),
         ], selected: 1, view: .list)
     }
 
     /// Même recherche après ⌘G : les fichiers seuls, en grille, nom sous chaque tuile (session 099 FR-002).
     private func filesGridScene() -> TargetSearchBar {
-        let files = ["Notes de réunion.md", "Notes de version 2.4.pdf", "notes-atelier.txt", "Notes partagées",
-                     "Notes de cours.docx", "Notes de frais.xlsx", "Notes de lecture.rtf", "Notes de présentation.key",
-                     "Notes de projet.numbers", "Notes du jardin.pages", "Notes archivées.zip", "Notes du séminaire.mov", "Notes vocales.m4a",
-                     "Notes de voyage"]
+        let files = UILanguage.current == .fr
+            ? ["Notes de réunion.md", "Notes de version 2.4.pdf", "notes-atelier.txt", "Notes partagées",
+               "Notes de cours.docx", "Notes de frais.xlsx", "Notes de lecture.rtf", "Notes de présentation.key",
+               "Notes de projet.numbers", "Notes du jardin.pages", "Notes archivées.zip", "Notes du séminaire.mov", "Notes vocales.m4a",
+               "Notes de voyage"]
+            : ["Meeting notes.md", "Release notes 2.4.pdf", "workshop-notes.txt", "Shared notes",
+               "Lecture notes.docx", "Expense notes.xlsx", "Reading notes.rtf", "Keynote notes.key",
+               "Project notes.numbers", "Garden notes.pages", "Archived notes.zip", "Seminar notes.mov", "Voice notes.m4a",
+               "Travel notes"]
         var state = bar("note", files.map { name in
             row(name, "", .file(sampleFile(name, folder: !name.contains("."))))
         }, selected: 0, view: .grid)
@@ -117,59 +137,64 @@ struct Spec124DocScreenshots {
 
     /// Workflow d'émojis en grille : le nom de l'émoji choisi en pied (session 099 FR-003).
     private func emojiGridScene() -> TargetSearchBar {
-        let emojis: [(String, String)] = [
-            ("❤️", "Cœur rouge"), ("🧡", "Cœur orange"), ("💛", "Cœur jaune"), ("💚", "Cœur vert"), ("💙", "Cœur bleu"),
-            ("💜", "Cœur violet"), ("🖤", "Cœur noir"), ("🤍", "Cœur blanc"), ("💔", "Cœur brisé"), ("💖", "Cœur étincelant"),
-            ("💕", "Deux cœurs"), ("💘", "Cœur avec flèche"), ("💓", "Cœur battant"), ("💗", "Cœur qui grandit"),
+        let emojis: [(String, String, String)] = [
+            ("❤️", "Cœur rouge", "Red heart"), ("🧡", "Cœur orange", "Orange heart"), ("💛", "Cœur jaune", "Yellow heart"),
+            ("💚", "Cœur vert", "Green heart"), ("💙", "Cœur bleu", "Blue heart"), ("💜", "Cœur violet", "Purple heart"),
+            ("🖤", "Cœur noir", "Black heart"), ("🤍", "Cœur blanc", "White heart"), ("💔", "Cœur brisé", "Broken heart"),
+            ("💖", "Cœur étincelant", "Sparkling heart"), ("💕", "Deux cœurs", "Two hearts"), ("💘", "Cœur avec flèche", "Heart with arrow"),
+            ("💓", "Cœur battant", "Beating heart"), ("💗", "Cœur qui grandit", "Growing heart"),
         ]
         let selected = 9
-        var state = bar("emoji coeur", emojis.map { row($0.1, "Retour copie \($0.0)", .image(emojiImage($0.0))) },
+        let copies = tr("Retour copie", "Return copies")
+        var state = bar(tr("emoji coeur", "emoji heart"), emojis.map { row(tr($0.1, $0.2), "\(copies) \($0.0)", .image(emojiImage($0.0))) },
                         selected: selected, view: .grid)
+        let chosen = emojis[selected]
         state.grid = SearchGrid(columns: LauncherViewMode.grid.columns ?? 7, showTitles: false,
-                                footer: "\(emojis[selected].1) · Retour copie \(emojis[selected].0)")
+                                footer: "\(tr(chosen.1, chosen.2)) · \(copies) \(chosen.0)")
         return state
     }
 
     private func verbsScene() -> TargetSearchBar {
         let safari = LauncherApp(bundleID: "com.apple.Safari", path: App.safari, name: "Safari", alternateNames: [])
         let rows = LauncherVerb.verbs(for: .app(safari)).map { verb in
-            row(verb.title(app: "Safari"), verb.needsDestination ? "Tab ou Retour : choisir" : "",
+            row(verb.title(app: "Safari"), verb.needsDestination ? tr("Tab ou Retour : choisir", "Tab or Return: choose") : "",
                 .symbol(verb.needsDestination ? "arrow.right.circle" : "play.circle"))
         }
-        return bar("", rows, selected: 1, properties: "Safari  ›  verbe ou destination…")
+        return bar("", rows, selected: 1, properties: "Safari  ›  " + tr("verbe ou destination…", "verb or destination…"))
     }
 
     private func phraseScene() -> TargetSearchBar {
-        bar("safari perso gauche", [
-            header("Phrase"),
-            row("Ouvrir Safari dans Perso, à gauche", "Retour fait l'action · ⌘S la garde", .file(App.safari)),
-            header("Applications"),
-            row("Safari", "Ouverte · Recherche", .file(App.safari)),
-            header("Stages et bureaux"),
-            row("Perso", "Stage · Bureau 1", .symbol("square.stack.3d.up"), letter: "⇧P"),
+        bar(tr("safari perso gauche", "safari personal left"), [
+            header(tr("Phrase", "Phrase")),
+            row(tr("Ouvrir Safari dans Perso, à gauche", "Open Safari in Personal, on the left"),
+                tr("Retour fait l'action · ⌘S la garde", "Return runs it · ⌘S saves it"), .file(App.safari)),
+            header(tr("Applications", "Applications")),
+            row("Safari", tr("Ouverte · Recherche", "Open · Research"), .file(App.safari)),
+            header(tr("Stages et bureaux", "Stages and desktops")),
+            row(personal, tr("Bureau 1 · 2 fenêtre(s)", "Desktop 1 · 2 window(s)"), .symbol("square.stack.3d.up"), letter: "⇧P"),
         ], selected: 1)
     }
 
     private func workflowScene() -> TargetSearchBar {
-        bar("heure tokyo", [
-            header("Fuseaux horaires"),
-            row("Tokyo : 22 h 32", "jeudi 29 octobre · Retour copie", .symbol("clock")),
-            row("Tokyo → Paris : 14 h 32", "8 heures de décalage", .symbol("arrow.left.arrow.right")),
-            row("Ajouter Tokyo aux favoris", "Mots-clés : heure, time", .symbol("star")),
+        bar(tr("heure tokyo", "time tokyo"), [
+            header(tr("Fuseaux horaires", "Time zones")),
+            row(tr("Tokyo : 22 h 32", "Tokyo: 10:32 PM"), tr("jeudi 29 octobre · Retour copie", "Thursday, October 29 · Return copies"), .symbol("clock")),
+            row(tr("Tokyo → Paris : 14 h 32", "Tokyo → Paris: 2:32 PM"), tr("8 heures de décalage", "8 hours behind"), .symbol("arrow.left.arrow.right")),
+            row(tr("Ajouter Tokyo aux favoris", "Add Tokyo to favorites"), tr("Mots-clés : heure, time", "Keywords: time, heure"), .symbol("star")),
             header("Workflows"),
-            row("Fuseaux horaires", "heure · workflow d'Alfred", .symbol("puzzlepiece.extension")),
+            row(tr("Fuseaux horaires", "Time zones"), tr("heure · workflow d'Alfred", "time · Alfred workflow"), .symbol("puzzlepiece.extension")),
         ], selected: 1)
     }
 
     private func calcScene() -> TargetSearchBar {
         let expression = "(1250*12)/7"
-        let calc = LauncherCalculator.evaluate(expression, locale: Locale(identifier: "fr_FR"))
+        let calc = LauncherCalculator.evaluate(expression, locale: Locale(identifier: tr("fr_FR", "en_US")))
         return bar(expression, [
-            header("Calcul"),
+            header(tr("Calcul", "Calculation")),
             row(calc?.text ?? "?", "\(calc?.expression ?? expression) · \(LauncherCalculator.returnHint(opensCalculator: false))",
                 .symbol("equal.square")),
             header("Web"),
-            row("Rechercher « (1250*12)/7 » sur Google", "www.google.com", .symbol("magnifyingglass")),
+            row(tr("Rechercher « (1250*12)/7 » sur Google", "Search Google for “(1250*12)/7”"), "www.google.com", .symbol("magnifyingglass")),
         ], selected: 1)
     }
 
@@ -256,21 +281,29 @@ struct Spec124DocScreenshots {
         guard let output else { return }
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let png = try #require(rep.representation(using: .png, properties: [:]))
-        try png.write(to: output.appendingPathComponent("\(name).png"))
+        let folder = UILanguage.current == .fr ? output.appendingPathComponent("fr") : output
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try png.write(to: folder.appendingPathComponent("\(name).png"))
     }
 
     @Test func launcherScenes() async throws {
         guard output != nil else { return }
         let main = theme("alfred-modern-dark")
-        for (name, state) in [("launcher-search", searchScene()), ("launcher-verbs", verbsScene()), ("launcher-phrase", phraseScene()),
-                              ("launcher-workflow", workflowScene()), ("launcher-calc", calcScene()),
-                              ("launcher-files-grid", filesGridScene()), ("launcher-emoji-grid", emojiGridScene())] {
-            try save(try await renderBar(state, theme: main), name)
+        try await eachLanguage {
+            for (name, state) in [("launcher-search", searchScene()), ("launcher-verbs", verbsScene()), ("launcher-phrase", phraseScene()),
+                                  ("launcher-workflow", workflowScene()), ("launcher-calc", calcScene()),
+                                  ("launcher-files-grid", filesGridScene()), ("launcher-emoji-grid", emojiGridScene())] {
+                try save(try await renderBar(state, theme: main), name)
+            }
         }
     }
 
     @Test func launcherThemes() async throws {
         guard output != nil else { return }
+        try await eachLanguage { try await launcherThemesImage() }
+    }
+
+    private func launcherThemesImage() async throws {
         var renders: [NSBitmapImageRep] = []
         for id in ["alfred-modern-dark", "alfred", "alfred-macos-dark", "frosty-teal"] {
             renders.append(try await renderBar(phraseScene(), theme: theme(id), backdrop: false))
@@ -300,16 +333,25 @@ struct Spec124DocScreenshots {
 
     private enum Look { case code, browser, notes, terminal, mail, calendar, board, music }
 
-    private let windows: [SampleWindow] = [
-        SampleWindow(app: "Terminal", path: App.terminal, title: "~/projets/atelier — zsh", look: .terminal, desktop: 1, stage: "Développement"),
-        SampleWindow(app: "Safari", path: App.safari, title: "Documentation de l'API", look: .browser, desktop: 1, stage: "Développement"),
-        SampleWindow(app: "Notes", path: App.notes, title: "Idées de voyage", look: .notes, desktop: 1, stage: "Perso"),
-        SampleWindow(app: "Musique", path: App.music, title: "Écoute en cours", look: .music, desktop: 1, stage: "Perso"),
-        SampleWindow(app: "Mail", path: App.mail, title: "Boîte de réception", look: .mail, desktop: 2, stage: "Communication"),
-        SampleWindow(app: "Calendrier", path: App.calendar, title: "Semaine 44", look: .calendar, desktop: 2, stage: "Communication"),
-        SampleWindow(app: "Freeform", path: App.freeform, title: "Plan du projet", look: .board, desktop: 2, stage: "Conception"),
-        SampleWindow(app: "Terminal", path: App.terminal, title: "Journal du serveur", look: .code, desktop: 2, stage: "Conception"),
-    ]
+    private var windows: [SampleWindow] {
+        let development = tr("Développement", "Development"), design = tr("Conception", "Design")
+        return [
+            SampleWindow(app: "Terminal", path: App.terminal, title: tr("~/projets/atelier — zsh", "~/projects/workshop — zsh"), look: .terminal,
+                         desktop: 1, stage: development),
+            SampleWindow(app: "Safari", path: App.safari, title: tr("Documentation de l'API", "API documentation"), look: .browser,
+                         desktop: 1, stage: development),
+            SampleWindow(app: "Notes", path: App.notes, title: tr("Idées de voyage", "Travel ideas"), look: .notes, desktop: 1, stage: personal),
+            SampleWindow(app: tr("Musique", "Music"), path: App.music, title: tr("Écoute en cours", "Now playing"), look: .music,
+                         desktop: 1, stage: personal),
+            SampleWindow(app: "Mail", path: App.mail, title: tr("Boîte de réception", "Inbox"), look: .mail, desktop: 2, stage: "Communication"),
+            SampleWindow(app: tr("Calendrier", "Calendar"), path: App.calendar, title: tr("Semaine 44", "Week 44"), look: .calendar,
+                         desktop: 2, stage: "Communication"),
+            SampleWindow(app: "Freeform", path: App.freeform, title: tr("Plan du projet", "Project plan"), look: .board, desktop: 2, stage: design),
+            SampleWindow(app: "Terminal", path: App.terminal, title: tr("Journal du serveur", "Server log"), look: .code, desktop: 2, stage: design),
+        ]
+    }
+
+    private var mainDisplay: String { tr("Écran principal", "Main display") }
 
     private func entries() -> [WindowSwitcherEntry] {
         windows.enumerated().map { index, sample in
@@ -318,7 +360,7 @@ struct Spec124DocScreenshots {
                 frame: Rect(x: 0, y: 0, width: 1280, height: 800), isOnScreen: true, isTileCandidate: true),
                 scope: StageScope(displayID: DisplayID(rawValue: "principal"), desktopID: DesktopID(rawValue: sample.desktop),
                                   stageID: StageID(rawValue: sample.stage)),
-                displayName: "Écran principal", desktopName: "Bureau \(sample.desktop)", stageName: sample.stage)
+                displayName: mainDisplay, desktopName: tr("Bureau", "Desktop") + " \(sample.desktop)", stageName: sample.stage)
         }
     }
 
@@ -396,6 +438,10 @@ struct Spec124DocScreenshots {
 
     @Test func windowSwitcher() async throws {
         guard output != nil else { return }
+        try await eachLanguage { try await windowSwitcherImage() }
+    }
+
+    private func windowSwitcherImage() async throws {
         let entries = entries()
         let images = thumbnails()
         let panel = WindowSwitcherPanel(appearance: WindowSwitcherAppearance(config: WindowSwitcherConfig()))
@@ -404,7 +450,7 @@ struct Spec124DocScreenshots {
         panel.appIcons = icons()
         panel.configure(profile: WindowSwitcherShortcutConfig())
         panel.layout(in: CGRect(x: 0, y: 0, width: 1600, height: 1000))
-        panel.render(entries: entries, selectedID: entries[1].id, query: "", images: images, previewImage: images[entries[1].id], emptyMessage: "Aucune fenêtre")
+        panel.render(entries: entries, selectedID: entries[1].id, query: "", images: images, previewImage: images[entries[1].id], emptyMessage: tr("Aucune fenêtre", "No windows"))
         let content = try #require(panel.contentView)
         content.layoutSubtreeIfNeeded()
         let panelRep = try #require(content.bitmapImageRepForCachingDisplay(in: content.bounds))
@@ -421,7 +467,11 @@ struct Spec124DocScreenshots {
 
     @Test func overview() async throws {
         guard output != nil else { return }
-        let displays = [DisplaySnapshot(id: DisplayID(rawValue: "principal"), index: 0, name: "Écran principal",
+        try await eachLanguage { try await overviewImage() }
+    }
+
+    private func overviewImage() async throws {
+        let displays = [DisplaySnapshot(id: DisplayID(rawValue: "principal"), index: 0, name: mainDisplay,
                                         frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: Rect(x: 0, y: 0, width: 1440, height: 900), isMain: true)]
         let size = CGSize(width: 1440, height: 860)
         let canvas = OverviewCanvas(frame: CGRect(origin: .zero, size: size))

@@ -95,12 +95,12 @@ public final class OverviewController {
         p.canvas.onOpen = { [weak self] entry in self?.activate(entry) }
         p.canvas.onDrop = { [weak self] intent in self?.drop(intent) }
         p.present(on: screen, config: config)
-        p.showMessage("Chargement des bureaux et stages…")
+        p.showMessage(tr("Chargement des bureaux et stages…", "Loading desktops and stages…"))
         loadTask = Task { [weak self] in
             guard let self else { return }
             let loaded = await self.service.load()
             guard !Task.isCancelled, self.sessionID == id, self.panel === p else { return }
-            guard let snapshot = loaded.snapshot else { p.showMessage("Inventaire indisponible. Fermez puis réessayez."); return }
+            guard let snapshot = loaded.snapshot else { p.showMessage(tr("Inventaire indisponible. Fermez puis réessayez.", "Inventory unavailable. Close and try again.")); return }
             p.canvas.model = OverviewModel(entries: loaded.entries, displays: snapshot.displays, state: loaded.persisted)
             let bureaux = p.canvas.model.displays.flatMap(\.desktops)
             p.canvas.focusedDesktop = bureaux.first(where: { $0.entries.contains { $0.id == loaded.context.focusedWindowID } })?.id
@@ -219,7 +219,8 @@ public final class OverviewController {
             let result = self.service.activate(entry)
             if result.outcome == .failed {
                 if let screen { panel.present(on: screen, config: panel.config) }
-                panel.showMessage("Impossible d’ouvrir cette fenêtre. Elle a peut-être été fermée. Échap pour quitter.")
+                panel.showMessage(tr("Impossible d’ouvrir cette fenêtre. Elle a peut-être été fermée. Échap pour quitter.",
+                                     "Could not open this window. It may have been closed. Press Esc to leave."))
                 self.events.append(RoadieEvent(type: "overview.activation_failed", details: ["windowID": String(entry.id.rawValue), "message": result.message]))
             } else { self.hide() }
         }
@@ -274,12 +275,12 @@ public final class OverviewController {
         guard display == source.displayID else {
             // Autre écran (SPEC-070) : la loupe ne suit pas, les deux écrans sont renumérotés.
             let result = commands.move(source.desktopID, from: source.displayID, toDisplay: display, position: target)
-            reload(after: result, failure: "Impossible de déplacer ce bureau vers cet écran.") { _ in source }
+            reload(after: result, failure: tr("Impossible de déplacer ce bureau vers cet écran.", "Could not move this desktop to this display.")) { _ in source }
             return
         }
         let displayID = source.displayID
         let mapping = DesktopReorder.mapping(from: source.desktopID, to: target)
-        reload(after: commands.move(source.desktopID, to: target, displayID: displayID), failure: "Impossible de déplacer ce bureau.") { desktop in
+        reload(after: commands.move(source.desktopID, to: target, displayID: displayID), failure: tr("Impossible de déplacer ce bureau.", "Could not move this desktop.")) { desktop in
             guard desktop.displayID == displayID, let moved = mapping[desktop.desktopID] else { return desktop }
             return OverviewDesktopID(displayID: displayID, desktopID: moved)
         }
@@ -290,7 +291,7 @@ public final class OverviewController {
         let commands = StageCommandService(service: snapshots, store: snapshots.effectiveStageStore, events: events)
         let result = commands.moveStage(scope.stageID, displayID: scope.displayID, from: scope.desktopID, to: desktop,
                                         before: before, targetDisplay: display)
-        reload(after: result, failure: "Impossible de déplacer cette stage.")
+        reload(after: result, failure: tr("Impossible de déplacer cette stage.", "Could not move this stage."))
     }
 
     /// Fenêtre déposée sur une carte d’une autre stage : elle rejoint cette stage (SPEC-067).
@@ -305,7 +306,7 @@ public final class OverviewController {
             _ = relocateHiddenWindows([entry.id], to: target.displayID, service: snapshots, store: snapshots.effectiveStageStore,
                                       events: events, cause: "window.move_display")
         }
-        reload(after: result, failure: "Impossible de déplacer cette fenêtre.")
+        reload(after: result, failure: tr("Impossible de déplacer cette fenêtre.", "Could not move this window."))
     }
 
     /// Recharge la vue ouverte après une modification réussie. Le relevé est refusé si l’état des stages
@@ -315,7 +316,7 @@ public final class OverviewController {
         guard let panel else { return }
         guard result.changed else {
             panel.canvas.cancelPreview()
-            if result.outcome == .failed { panel.showMessage(failure + " Échap pour quitter.") }
+            if result.outcome == .failed { panel.showMessage(failure + tr(" Échap pour quitter.", " Press Esc to leave.")) }
             return
         }
         let id = sessionID

@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Historique des navigateurs dans la barre (session 114), à côté des signets : pages vues ces derniers jours,
 /// lues dans les fichiers du navigateur sans le lancer. Une page est un `LauncherBookmark` rangé dans
@@ -6,7 +7,7 @@ import Foundation
 enum LauncherWebHistory {
     /// Pages gardées par profil : les plus visitées, de quoi couvrir l'usage courant sans tout lire.
     static let perProfile = 2000
-    static let folder = "Historique"
+    static var folder: String { tr("Historique", "History") }
 
     /// Pages qui correspondent, hors adresses déjà proposées (signets) ; meilleur appariement, puis les plus
     /// visitées. O(h × q × t + k log k).

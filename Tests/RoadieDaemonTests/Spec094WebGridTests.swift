@@ -81,9 +81,9 @@ struct Spec095GridLoadingTests {
         let ok = try await run(["loadingtext": "Chargement des volets"], script: "#!/bin/sh\necho '{\"items\":[{\"title\":\"A\"}]}'\n")
         #expect(ok.map(\.isWaiting) == [true, false])
         #expect(ok.first?.loadingText == "Chargement des volets" && ok.last?.loadingText == nil && ok.last?.items.count == 1)
-        // Sans texte : « Loading… » ; réponse illisible : la ligne dit l'échec.
+        // Sans texte : « Chargement… » (session 126, « Loading… » en anglais) ; réponse illisible : la ligne dit l'échec.
         let failed = try await run([:], script: "#!/bin/sh\necho pas du json\n")
-        #expect(failed.first?.loadingText == "Loading…")
+        #expect(failed.first?.loadingText == "Chargement…")
         #expect(failed.last?.loadingText == "Grille : réponse illisible" && failed.last?.isWaiting == false)
     }
 }

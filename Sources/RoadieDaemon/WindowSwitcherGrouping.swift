@@ -44,9 +44,9 @@ struct WindowSwitcherGroups {
             } else {
                 stageIndices[id] = stages.count
                 let stageTitle = entry.stageName.isEmpty
-                    ? (entry.scope == nil ? "Autres fenêtres" : "Stage sans nom") : entry.stageName
+                    ? (entry.scope == nil ? tr("Autres fenêtres", "Other windows") : tr("Stage sans nom", "Unnamed stage")) : entry.stageName
                 let desktop = entry.desktopName.isEmpty
-                    ? entry.scope.map { "Bureau \($0.desktopID.rawValue)" } ?? "Sans bureau" : entry.desktopName
+                    ? entry.scope.map { tr("Bureau", "Desktop") + " \($0.desktopID.rawValue)" } ?? tr("Sans bureau", "No desktop") : entry.desktopName
                 stages.append(SwitcherStageGroup(id: id, desktopID: SwitcherGroupID(scope: entry.scope, desktopOnly: true),
                     title: stageTitle, desktopTitle: [desktop, entry.displayName].filter { !$0.isEmpty }.joined(separator: " · "), entries: [entry]))
             }

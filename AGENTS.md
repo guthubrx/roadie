@@ -303,6 +303,9 @@ Session 124 : README FR/EN, guides docs/*/launcher.md et About GitHub mis à jou
 Session 125 installée : fenêtres toujours flottantes par application et titre (`[[exclusions.floating_windows]]`, `#` nombre,
 `*` texte, priorité 9 100), menu Fenêtre et Paramètres > Règles, `roadie window explain`, premier cadre. Rappels de
 Thunderbird confirmés par l'utilisateur. 2 272 tests / 331 suites. Reçu : specs/125-fenetres-appoint/validation.md.
+Session 126 installée : barre, sélecteur et vue d'ensemble en anglais ou en français selon macOS (`tr(fr, en)`,
+`UILanguage`, `ROADIE_LANGUAGE`, français fixé par `scripts/test`), verbes et bureaux trouvés dans les deux langues.
+Captures EN par défaut, FR dans `docs/assets/screenshots/fr/`. 2 276 tests / 332 suites. Reçu : specs/126-interface-anglaise/.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

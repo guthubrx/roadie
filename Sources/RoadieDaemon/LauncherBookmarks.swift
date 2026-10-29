@@ -235,8 +235,10 @@ enum FirefoxProfiles {
 
 enum FirefoxBookmarks {
     /// Racines de Firefox et leur nom affiché.
-    static let roots = ["menu________": "Menu des marque-pages", "toolbar_____": "Barre personnelle",
-                        "unfiled_____": "Autres marque-pages", "mobile______": "Mobile"]
+    static var roots: [String: String] {
+        ["menu________": tr("Menu des marque-pages", "Bookmarks Menu"), "toolbar_____": tr("Barre personnelle", "Bookmarks Toolbar"),
+         "unfiled_____": tr("Autres marque-pages", "Other Bookmarks"), "mobile______": "Mobile"]
+    }
 
     /// Signets, mots-clés et étiquettes d'un profil. O(n) lignes de `moz_bookmarks`.
     static func read(_ profile: FirefoxProfiles.Profile, profileLabel: String) -> [LauncherBookmark] {
@@ -370,7 +372,10 @@ enum FirefoxSession {
 // MARK: - Chromium et Safari
 
 enum ChromiumBookmarks {
-    static let rootNames = ["bookmark_bar": "Barre de favoris", "other": "Autres favoris", "synced": "Favoris sur mobile"]
+    static var rootNames: [String: String] {
+        ["bookmark_bar": tr("Barre de favoris", "Bookmarks bar"), "other": tr("Autres favoris", "Other bookmarks"),
+         "synced": tr("Favoris sur mobile", "Mobile bookmarks")]
+    }
 
     /// Profils (`Default`, `Profile N`) et leur nom dans `Local State`. O(p).
     static func profiles(_ root: URL) -> [(path: URL, name: String)] {
@@ -438,9 +443,9 @@ enum SafariBookmarks {
                 return
             }
             let name: String? = switch node["Title"] as? String {
-            case "BookmarksBar": "Barre des favoris"
-            case "BookmarksMenu": "Menu des signets"
-            case "com.apple.ReadingList": "Liste de lecture"
+            case "BookmarksBar": tr("Barre des favoris", "Favorites Bar")
+            case "BookmarksMenu": tr("Menu des signets", "Bookmarks Menu")
+            case "com.apple.ReadingList": tr("Liste de lecture", "Reading List")
             case "History", "", nil: nil
             case let title?: title
             }

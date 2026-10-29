@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Réglages trouvés par la barre (session 115), comme les « Essentiels : Réglages Système » d'Alfred : pages et
 /// réglages des Paramètres de Roadie, panneaux des Réglages Système. Ce sont des commandes de la section
@@ -13,12 +14,12 @@ enum LauncherSettingTargets {
         let categories = SettingCategory.allCases.map { category in
             LauncherSystemCommand(id: roadieCategoryPrefix + category.rawValue, title: category.label,
                                   keywords: ["paramètres", "settings", "roadie"], symbol: category.symbolName, confirms: false,
-                                  detail: "Paramètres de Roadie")
+                                  detail: tr("Paramètres de Roadie", "Roadie settings"))
         }
         let settings = descriptors.map { descriptor in
             LauncherSystemCommand(id: roadieSettingPrefix + descriptor.id, title: descriptor.label, keywords: [descriptor.key],
                                   symbol: descriptor.category.symbolName, confirms: false,
-                                  detail: "Paramètres de Roadie › \(descriptor.category.label)")
+                                  detail: tr("Paramètres de Roadie", "Roadie settings") + " › \(descriptor.category.label)")
         }
         return categories + settings
     }
@@ -37,7 +38,7 @@ enum LauncherSettingTargets {
             guard let name = localizedName(table, languages: languages) ?? fallbackNames[id]?.local(languages) else { continue }
             let english = localizedName(table, languages: ["en"]) ?? fallbackNames[id]?.en
             panes.append(LauncherSystemCommand(id: panePrefix + id, title: name, keywords: [english].compactMap { $0 },
-                                               symbol: "gearshape", confirms: false, detail: "Réglages Système"))
+                                               symbol: "gearshape", confirms: false, detail: tr("Réglages Système", "System Settings")))
         }
         return panes.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }

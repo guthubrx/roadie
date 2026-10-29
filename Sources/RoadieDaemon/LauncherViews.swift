@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Présentation des résultats de la barre (session 099) : liste, grille ou grandes tuiles.
 enum LauncherViewMode: String, Codable, Equatable, Sendable, CaseIterable {
@@ -24,9 +25,9 @@ enum LauncherViewMode: String, Codable, Equatable, Sendable, CaseIterable {
 
     var title: String {
         switch self {
-        case .list: "Liste"
-        case .grid: "Grille"
-        case .large: "Grandes tuiles"
+        case .list: tr("Liste", "List")
+        case .grid: tr("Grille", "Grid")
+        case .large: tr("Grandes tuiles", "Large tiles")
         }
     }
 

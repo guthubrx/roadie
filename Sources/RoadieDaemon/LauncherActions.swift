@@ -90,65 +90,81 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     // Cible à l'écran
     case click, doubleClick, rightClick, commandClick
 
-    var title: String {
+    /// Nom du verbe en français et en anglais (session 126) ; la recherche accepte les deux.
+    private var names: (fr: String, en: String) {
         switch self {
-        case .open: "Ouvrir ou aller à sa fenêtre"
-        case .newWindow: "Nouvelle fenêtre ici"
-        case .openIn: "Ouvrir dans…"
-        case .gatherIn: "Réunir ses fenêtres dans…"
-        case .hide: "Masquer l'application"
-        case .quit: "Quitter l'application"
-        case .forceQuit: "Forcer à quitter"
-        case .recentDocuments: "Documents récents…"
-        case .focus: "Aller à la fenêtre"
-        case .sendTo: "Envoyer vers…"
-        case .bringHere: "Amener ici"
-        case .float: "Faire flotter cette fenêtre"
-        case .tileWindow: "Remettre cette fenêtre au tuilage"
-        case .floatAlways: "Toujours faire flotter l'application"
-        case .tileAlways: "Toujours tuiler l'application"
-        case .clearTilingRule: "Retirer la règle de flottement"
-        case .reveal: "Montrer dans le Finder"
-        case .quickLook: "Aperçu (Quick Look)"
-        case .copyPath: "Copier le chemin"
-        case .saveProject: "Enregistrer comme projet"
-        case .reopenProject: "Rouvrir le projet"
-        case .deleteProject: "Supprimer le projet"
-        case .fullscreen: "Plein écran"
-        case .minimize: "Réduire"
-        case .close: "Fermer la fenêtre"
-        case .show: "Afficher"
-        case .moveTo: "Déplacer vers…"
-        case .click: "Clic"
-        case .doubleClick: "Double-clic"
-        case .rightClick: "Clic droit"
-        case .commandClick: "Cmd-clic (nouvel onglet)"
+        case .open: ("Ouvrir ou aller à sa fenêtre", "Open or go to its window")
+        case .newWindow: ("Nouvelle fenêtre ici", "New window here")
+        case .openIn: ("Ouvrir dans…", "Open in…")
+        case .gatherIn: ("Réunir ses fenêtres dans…", "Gather its windows in…")
+        case .hide: ("Masquer l'application", "Hide app")
+        case .quit: ("Quitter l'application", "Quit app")
+        case .forceQuit: ("Forcer à quitter", "Force quit")
+        case .recentDocuments: ("Documents récents…", "Recent documents…")
+        case .focus: ("Aller à la fenêtre", "Go to window")
+        case .sendTo: ("Envoyer vers…", "Send to…")
+        case .bringHere: ("Amener ici", "Bring here")
+        case .float: ("Faire flotter cette fenêtre", "Float this window")
+        case .tileWindow: ("Remettre cette fenêtre au tuilage", "Tile this window again")
+        case .floatAlways: ("Toujours faire flotter l'application", "Always float the app")
+        case .tileAlways: ("Toujours tuiler l'application", "Always tile the app")
+        case .clearTilingRule: ("Retirer la règle de flottement", "Remove the floating rule")
+        case .reveal: ("Montrer dans le Finder", "Reveal in Finder")
+        case .quickLook: ("Aperçu (Quick Look)", "Quick Look")
+        case .copyPath: ("Copier le chemin", "Copy path")
+        case .saveProject: ("Enregistrer comme projet", "Save as project")
+        case .reopenProject: ("Rouvrir le projet", "Reopen project")
+        case .deleteProject: ("Supprimer le projet", "Delete project")
+        case .fullscreen: ("Plein écran", "Full screen")
+        case .minimize: ("Réduire", "Minimize")
+        case .close: ("Fermer la fenêtre", "Close window")
+        case .show: ("Afficher", "Show")
+        case .moveTo: ("Déplacer vers…", "Move to…")
+        case .click: ("Clic", "Click")
+        case .doubleClick: ("Double-clic", "Double-click")
+        case .rightClick: ("Clic droit", "Right-click")
+        case .commandClick: ("Cmd-clic (nouvel onglet)", "Cmd-click (new tab)")
         }
     }
+
+    var title: String { tr(names.fr, names.en) }
 
     /// Titre court d'une ligne de destination directe : « Ouvrir dans Perso ».
     var destinationPrefix: String {
         switch self {
-        case .openIn: "Ouvrir dans"
-        case .gatherIn: "Réunir dans"
-        case .sendTo: "Envoyer vers"
-        case .moveTo: "Déplacer vers"
-        case .recentDocuments: "Ouvrir"
+        case .openIn: tr("Ouvrir dans", "Open in")
+        case .gatherIn: tr("Réunir dans", "Gather in")
+        case .sendTo: tr("Envoyer vers", "Send to")
+        case .moveTo: tr("Déplacer vers", "Move to")
+        case .recentDocuments: tr("Ouvrir", "Open")
         default: title
         }
     }
 
     /// Titre de la troisième étape : « Word › Documents récents ».
-    var destinationsTitle: String { self == .recentDocuments ? "Documents récents" : destinationPrefix }
+    var destinationsTitle: String { self == .recentDocuments ? tr("Documents récents", "Recent documents") : destinationPrefix }
 
-    /// Titre affiché : les verbes « toujours » nomment l'application (« Toujours faire flotter Firefox »).
-    func title(app: String) -> String {
+    /// Titres en français et en anglais : les verbes « toujours » nomment l'application
+    /// (« Toujours faire flotter Firefox »). O(1).
+    private func names(app: String) -> (fr: String, en: String) {
         switch self {
-        case .floatAlways: "Toujours faire flotter \(app)"
-        case .tileAlways: "Toujours tuiler \(app)"
-        case .clearTilingRule: "Retirer la règle de flottement de \(app)"
-        default: title
+        case .floatAlways: ("Toujours faire flotter \(app)", "Always float \(app)")
+        case .tileAlways: ("Toujours tuiler \(app)", "Always tile \(app)")
+        case .clearTilingRule: ("Retirer la règle de flottement de \(app)", "Remove \(app)'s floating rule")
+        default: names
         }
+    }
+
+    /// Titre affiché, dans la langue de l'interface.
+    func title(app: String) -> String {
+        let pair = names(app: app)
+        return tr(pair.fr, pair.en)
+    }
+
+    /// Le verbe correspond à la saisie dans l'une ou l'autre langue (« close » trouve « Fermer la fenêtre »). O(t).
+    func matches(_ query: String, app: String) -> Bool {
+        let pair = names(app: app)
+        return LauncherMatch.score(query, in: pair.fr) != nil || LauncherMatch.score(query, in: pair.en) != nil
     }
 
     var needsDestination: Bool { [.openIn, .gatherIn, .sendTo, .moveTo, .recentDocuments].contains(self) }
@@ -218,6 +234,8 @@ struct LauncherDestination: Equatable, Sendable {
     let kind: Kind
     let title: String
     let detail: String
+    /// Autres noms qui la trouvent, dans l'autre langue (« Desktop 2 » pour « Bureau 2 », session 126).
+    var aliases: [String] = []
 
     var id: String {
         switch kind {
@@ -321,22 +339,22 @@ struct LauncherVariant: Equatable, Sendable {
         switch modifier {
         case .control:
             let text = LauncherWeb.searchText(query)
-            return text.isEmpty ? nil : LauncherVariant(title: "⌃ ↩ Rechercher « \(text) » sur le web", effect: .webSearch(text))
+            return text.isEmpty ? nil : LauncherVariant(title: tr("⌃ ↩ Rechercher « \(text) » sur le web", "⌃ ↩ Search the web for “\(text)”"), effect: .webSearch(text))
         case .command:
             let fresh = LauncherDestination(kind: .newStage(name: nil, newStageHome.0, newStageHome.1),
-                                            title: "Nouvelle stage", detail: "bureau \(newStageHome.1.rawValue)")
+                                            title: tr("Nouvelle stage", "New stage"), detail: tr("bureau", "desktop") + " \(newStageHome.1.rawValue)")
             if isApp {
-                return LauncherVariant(title: "⌘ ↩ Ouvrir dans une nouvelle stage",
+                return LauncherVariant(title: tr("⌘ ↩ Ouvrir dans une nouvelle stage", "⌘ ↩ Open in a new stage"),
                                        effect: .action(LauncherAction(subject: subject, verb: .openIn, destination: fresh)))
             }
             guard window != nil else { return nil }
-            return LauncherVariant(title: "⌘ ↩ Envoyer dans une nouvelle stage",
+            return LauncherVariant(title: tr("⌘ ↩ Envoyer dans une nouvelle stage", "⌘ ↩ Send to a new stage"),
                                    effect: .action(LauncherAction(subject: subject, verb: .sendTo, destination: fresh, follow: true)))
         case .option:
             guard let activeStage, isApp || window != nil else { return nil }
             if window != nil, LauncherActionList.ownStage(of: subject) == activeStage { return nil }
-            let here = LauncherDestination(kind: .stage(activeStage), title: "Stage active", detail: "")
-            return LauncherVariant(title: "⌥ ↩ Amener ici, sans changer de stage",
+            let here = LauncherDestination(kind: .stage(activeStage), title: tr("Stage active", "Active stage"), detail: "")
+            return LauncherVariant(title: tr("⌥ ↩ Amener ici, sans changer de stage", "⌥ ↩ Bring here, stay on this stage"),
                                    effect: .action(LauncherAction(subject: subject, verb: .bringHere, destination: here)))
         }
     }
@@ -378,7 +396,7 @@ struct LauncherActionList: Equatable, Sendable {
         let folded = LauncherMatch.fold(query)
         let defaults = LauncherVerb.verbs(for: subject, tiling: tiling)
         let verbs = (ranking.map { LauncherVerb.learnedOrder(defaults, for: subject, ranking: $0) } ?? defaults)
-            .filter { folded.isEmpty || LauncherMatch.score(query, in: $0.title(app: subject.appName)) != nil }
+            .filter { folded.isEmpty || $0.matches(query, app: subject.appName) }
         list.rows.append(contentsOf: verbs.map(Row.verb))
         if !folded.isEmpty, let primary = LauncherVerb.primaryDestinationVerb(for: subject) {
             let direct = matching(destinations, verb: primary, subject: subject, query: query, newStageHome: newStageHome)
@@ -416,7 +434,9 @@ struct LauncherActionList: Equatable, Sendable {
         if folded.isEmpty {
             found = Array(accepted.prefix(limit))
         } else {
-            let scored = accepted.compactMap { destination in LauncherMatch.score(query, in: destination.title).map { (destination, $0) } }
+            let scored = accepted.compactMap { destination in
+                ([destination.title] + destination.aliases).compactMap { LauncherMatch.score(query, in: $0) }.max().map { (destination, $0) }
+            }
             found = scored.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0)
         }
         guard LauncherDestination.accepts(.newStage, verb: verb, subject: subject) else { return found }
@@ -427,8 +447,8 @@ struct LauncherActionList: Equatable, Sendable {
         }
         let named = !name.isEmpty && !taken
         found.append(LauncherDestination(kind: .newStage(name: named ? name : nil, newStageHome.0, newStageHome.1),
-                                         title: named ? "Nouvelle stage « \(name) »" : "Nouvelle stage",
-                                         detail: "bureau \(newStageHome.1.rawValue)"))
+                                         title: named ? tr("Nouvelle stage « \(name) »", "New stage “\(name)”") : tr("Nouvelle stage", "New stage"),
+                                         detail: tr("bureau", "desktop") + " \(newStageHome.1.rawValue)"))
         return found
     }
 

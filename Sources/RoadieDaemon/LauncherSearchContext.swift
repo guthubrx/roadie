@@ -203,18 +203,22 @@ enum LauncherPlacement {
                 let label = state.label(displayID: display.id, desktopID: scope.desktopID)
                 let occupied = scope.stages.contains { !$0.members.isEmpty }
                 if occupied || label != nil || scope.desktopID == current {
-                    desktops.append(LauncherDestination(kind: .desktop(display.id, scope.desktopID),
-                                                        title: "Bureau \(scope.desktopID.rawValue)" + (label.map { " · \($0)" } ?? ""),
-                                                        detail: display.name))
+                    let suffix = label.map { " · \($0)" } ?? ""
+                    var desktop = LauncherDestination(kind: .desktop(display.id, scope.desktopID),
+                                                      title: tr("Bureau", "Desktop") + " \(scope.desktopID.rawValue)" + suffix,
+                                                      detail: display.name)
+                    // « bureau 2 » et « desktop 2 » trouvent ce bureau dans les deux langues (session 126).
+                    desktop.aliases = ["Bureau \(scope.desktopID.rawValue)\(suffix)", "Desktop \(scope.desktopID.rawValue)\(suffix)"]
+                    desktops.append(desktop)
                 }
                 for stage in scope.stages {
                     let key = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stage.id)
                     guard let name = stageNames[key] else { continue }
                     stages.append(LauncherDestination(kind: .stage(key), title: name,
-                                                      detail: "bureau \(scope.desktopID.rawValue) · \(display.name)"))
+                                                      detail: tr("bureau", "desktop") + " \(scope.desktopID.rawValue) · \(display.name)"))
                 }
             }
-            screens.append(LauncherDestination(kind: .display(display.id), title: display.name, detail: "écran"))
+            screens.append(LauncherDestination(kind: .display(display.id), title: display.name, detail: tr("écran", "display")))
         }
         return stages + desktops + screens
     }
@@ -342,7 +346,7 @@ enum LauncherWeb {
     /// Nom du moteur d'une adresse de recherche : celui d'une recherche connue, sinon l'hôte. O(k).
     static func engineName(_ template: String, searches: [WebSearch]) -> String {
         if let known = (searches + WebSearch.defaults).first(where: { $0.url == template }) { return known.title }
-        let host = URL(string: template.replacingOccurrences(of: "{query}", with: "x"))?.host ?? "le web"
+        let host = URL(string: template.replacingOccurrences(of: "{query}", with: "x"))?.host ?? tr("le web", "the web")
         let name = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
         return name.split(separator: ".").first.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? name
     }
@@ -353,12 +357,13 @@ enum LauncherWeb {
         guard !query.isEmpty else { return [] }
         var rows: [LauncherWebRow] = []
         if let url = searchURL(template, query: query) {
-            rows.append(LauncherWebRow(kind: .search(url), title: "Rechercher « \(query) » sur \(engineName(template, searches: searches))"))
+            let engine = engineName(template, searches: searches)
+            rows.append(LauncherWebRow(kind: .search(url), title: tr("Rechercher « \(query) » sur \(engine)", "Search \(engine) for “\(query)”")))
         }
         for keyword in fallbacks {
             guard let search = searches.first(where: { $0.keyword.lowercased() == keyword.lowercased() }),
                   let url = searchURL(search.url, query: query), !rows.contains(where: { $0.kind == .search(url) }) else { continue }
-            rows.append(LauncherWebRow(kind: .search(url), title: "Rechercher « \(query) » sur \(search.title)"))
+            rows.append(LauncherWebRow(kind: .search(url), title: tr("Rechercher « \(query) » sur \(search.title)", "Search \(search.title) for “\(query)”")))
         }
         return rows
     }

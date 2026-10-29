@@ -39,7 +39,7 @@ extension OverviewDesktop {
     /// pour que l’aperçu suive l’élément à sa nouvelle place.
     func renumbered(_ number: Int) -> OverviewDesktop {
         let label = name.range(of: " · ").map { String(name[$0.lowerBound...]) } ?? ""
-        return OverviewDesktop(id: id, name: "Bureau \(number)\(label)", isActive: isActive, stages: stages)
+        return OverviewDesktop(id: id, name: tr("Bureau", "Desktop") + " \(number)\(label)", isActive: isActive, stages: stages)
     }
 }
 
@@ -63,13 +63,13 @@ extension OverviewModel {
         case .windowToNewStage(let id, let display, let desktop):
             guard let entry = copy.removeEntry(id) else { return self }
             let scope = StageScope(displayID: display, desktopID: desktop, stageID: OverviewPreviewIDs.newStage)
-            copy.insert(OverviewStage(scope: scope, name: "Nouvelle stage", entries: [entry.moved(to: scope)], isActive: false),
+            copy.insert(OverviewStage(scope: scope, name: tr("Nouvelle stage", "New stage"), entries: [entry.moved(to: scope)], isActive: false),
                         display: display, desktop: desktop, before: nil)
         case .windowToNewDesktop(let id, let display):
             guard let entry = copy.removeEntry(id) else { return self }
             let desktop = OverviewPreviewIDs.newDesktop(on: display, after: copy)
             let scope = StageScope(displayID: display, desktopID: desktop.desktopID, stageID: OverviewPreviewIDs.newStage)
-            copy.appendNewDesktop(on: display, stage: OverviewStage(scope: scope, name: "Nouvelle stage", entries: [entry.moved(to: scope)], isActive: false))
+            copy.appendNewDesktop(on: display, stage: OverviewStage(scope: scope, name: tr("Nouvelle stage", "New stage"), entries: [entry.moved(to: scope)], isActive: false))
         }
         return copy
     }
@@ -143,6 +143,6 @@ extension OverviewModel {
     private mutating func appendNewDesktop(on display: DisplayID, stage: OverviewStage) {
         guard let d = displays.firstIndex(where: { $0.id == display }) else { return }
         let id = OverviewPreviewIDs.newDesktop(on: display, after: self)
-        displays[d].desktops.append(OverviewDesktop(id: id, name: "Nouveau bureau", isActive: false, stages: [stage]))
+        displays[d].desktops.append(OverviewDesktop(id: id, name: tr("Nouveau bureau", "New desktop"), isActive: false, stages: [stage]))
     }
 }

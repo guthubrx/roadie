@@ -153,11 +153,11 @@ extension WindowSwitcherEntry {
 
     var stateBadges: [String] {
         var badges: [String] = []
-        if !isAvailable { badges.append("indisponible") }
-        if !visibilityKnown { badges.append("état non vérifié") }
-        if isMinimized { badges.append("réduite") }
-        if isHidden { badges.append("masquée") }
-        if isFullscreen { badges.append("plein écran") }
+        if !isAvailable { badges.append(tr("indisponible", "unavailable")) }
+        if !visibilityKnown { badges.append(tr("état non vérifié", "state unknown")) }
+        if isMinimized { badges.append(tr("réduite", "minimized")) }
+        if isHidden { badges.append(tr("masquée", "hidden")) }
+        if isFullscreen { badges.append(tr("plein écran", "full screen")) }
         return badges
     }
 }
@@ -165,12 +165,12 @@ extension WindowSwitcherEntry {
 extension WindowSwitcherAction {
     var menuTitle: String {
         switch self {
-        case .close: "Fermer la fenêtre"
-        case .minimize: "Réduire ou restaurer"
-        case .hideApp: "Masquer l'application"
-        case .quitApp: "Quitter l'application"
-        case .maximize: "Maximiser"
-        case .fullscreen: "Plein écran Roadie"
+        case .close: tr("Fermer la fenêtre", "Close window")
+        case .minimize: tr("Réduire ou restaurer", "Minimize or restore")
+        case .hideApp: tr("Masquer l'application", "Hide app")
+        case .quitApp: tr("Quitter l'application", "Quit app")
+        case .maximize: tr("Maximiser", "Maximize")
+        case .fullscreen: tr("Plein écran Roadie", "Roadie full screen")
         }
     }
 }
@@ -421,7 +421,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         hidesOnDeactivate = false
         level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        title = "Sélecteur de fenêtres Roadie"
+        title = tr("Sélecteur de fenêtres Roadie", "Roadie window switcher")
         setAccessibilityLabel(title)
 
         effect.material = .popover
@@ -434,10 +434,10 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         effect.layer?.masksToBounds = true
         contentView = effect
 
-        field.placeholderString = "Rechercher une fenêtre"
+        field.placeholderString = tr("Rechercher une fenêtre", "Search windows")
         field.sendsSearchStringImmediately = true
         field.delegate = self
-        field.setAccessibilityLabel("Rechercher une fenêtre")
+        field.setAccessibilityLabel(tr("Rechercher une fenêtre", "Search windows"))
 
         scrollView.hasVerticalScroller = true
         scrollView.scrollerStyle = .overlay
@@ -465,7 +465,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
             actionsButton.lastItem?.target = self
             actionsButton.lastItem?.action = #selector(actionChosen(_:))
         }
-        actionsButton.setAccessibilityLabel("Actions sur la fenêtre sélectionnée")
+        actionsButton.setAccessibilityLabel(tr("Actions sur la fenêtre sélectionnée", "Actions on the selected window"))
         actionsButton.isEnabled = false
 
         effect.addSubview(field)
@@ -486,7 +486,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         groups = WindowSwitcherGroups(entries: [])
         clearCards()
         previewPane.update(entry: nil, image: nil, icon: nil, appearance: switcherAppearance)
-        setStatus("Chargement des fenêtres…")
+        setStatus(tr("Chargement des fenêtres…", "Loading windows…"))
         relayout()
     }
 
@@ -534,7 +534,8 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     }
 
     func showActionError() {
-        selectionLabel.stringValue = "Action refusée par l’application. Réessayez ou choisissez une autre fenêtre."
+        selectionLabel.stringValue = tr("Action refusée par l’application. Réessayez ou choisissez une autre fenêtre.",
+                                        "The app refused the action. Try again or choose another window.")
         selectionLabel.textColor = .systemOrange
         relayout()
     }
@@ -864,7 +865,7 @@ private final class SwitcherGroupButton: NSButton {
         (cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
         target = self
         action = #selector(chosen)
-        setAccessibilityValue(selected ? "Sélectionné" : "Non sélectionné")
+        setAccessibilityValue(selected ? tr("Sélectionné", "Selected") : tr("Non sélectionné", "Not selected"))
     }
 
     required init?(coder: NSCoder) { nil }

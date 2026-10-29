@@ -171,7 +171,7 @@ final class OverviewCanvas: NSView {
         }
         needsDisplay = true
         setAccessibilityRole(.group)
-        setAccessibilityLabel("Vue d’ensemble des bureaux et stages")
+        setAccessibilityLabel(tr("Vue d’ensemble des bureaux et stages", "Overview of desktops and stages"))
         setAccessibilityValue("Loupe : " + (focusedDesktop.map { "\($0.displayID.rawValue), bureau \($0.desktopID.rawValue)" } ?? "aucune"))
         let children = plan.cards.map { card in
             let element = NSAccessibilityElement()
@@ -685,7 +685,7 @@ final class OverviewCanvas: NSView {
                  color: sameStage ? palette(0.78, 0.92, 1) : palette(0.70, 0.80, 0.86))
         }
         appIcons[item.entry.window.pid]?.draw(in: CGRect(x: caption.minX, y: caption.minY, width: 13, height: 13), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-        text(item.entry.window.appName + " · " + (item.entry.window.title.isEmpty ? "Fenêtre" : item.entry.window.title),
+        text(item.entry.window.appName + " · " + (item.entry.window.title.isEmpty ? tr("Fenêtre", "Window") : item.entry.window.title),
              in: CGRect(x: caption.minX + 18, y: caption.minY, width: max(0, caption.width - 18 - chipWidth - 6), height: 13), size: 9,
              color: selected ? palette(0.75, 0.90, 0.99) : palette(0.78, 0.86, 0.90))
     }

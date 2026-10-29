@@ -406,7 +406,7 @@ public final class WindowSwitcherController {
             query: model.query,
             images: images,
             previewImage: previewImage(for: model.selected?.id),
-            emptyMessage: "Aucune fenêtre dans ce contexte",
+            emptyMessage: tr("Aucune fenêtre dans ce contexte", "No windows here"),
             iconOnlyIDs: session.appearance.style == .thumbnails
                 ? Set(entries.lazy.filter { !self.thumbnails.hasCapturedImage(for: $0.id) }.map(\.id)) : []
         )

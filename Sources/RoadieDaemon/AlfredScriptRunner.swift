@@ -1,4 +1,5 @@
 import Darwin
+import RoadieCore
 import Foundation
 
 /// Script d'un objet de workflow (Script Filter, Run Script) : langage d'Alfred, source ou fichier,
@@ -109,9 +110,9 @@ enum AlfredScriptRunner {
 
         var message: String {
             switch self {
-            case .missingInterpreter(let name): "interpréteur absent : \(name)"
-            case .missingFile(let file): "script introuvable ou non exécutable : \(file)"
-            case .unknownLanguage(let type): "langage inconnu : \(type)"
+            case .missingInterpreter(let name): tr("interpréteur absent : \(name)", "interpreter missing: \(name)")
+            case .missingFile(let file): tr("script introuvable ou non exécutable : \(file)", "script missing or not executable: \(file)")
+            case .unknownLanguage(let type): tr("langage inconnu : \(type)", "unknown language: \(type)")
             case .spawn(let code): "lancement impossible (\(code))"
             }
         }

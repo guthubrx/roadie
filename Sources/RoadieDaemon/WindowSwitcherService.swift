@@ -173,7 +173,7 @@ struct WindowSwitcherService {
             scope: scope,
             displayName: snapshot.displays.first { $0.id == scope.displayID }?.name ?? "",
             desktopName: persisted.desktopLabels.first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?.label
-                ?? "Bureau \(scope.desktopID.rawValue)",
+                ?? tr("Bureau", "Desktop") + " \(scope.desktopID.rawValue)",
             stageName: stageLabels[scope] ?? ""
         )
     }

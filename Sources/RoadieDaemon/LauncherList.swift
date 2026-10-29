@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Liste du lanceur dans la barre de recherche (SPEC-073), logique pure. Sections fixes :
 /// Applications, Fenêtres, Stages et bureaux, À l'écran (cibles du mode recherche). Chaque section
@@ -86,12 +87,12 @@ struct LauncherList: Equatable, Sendable {
         var title: String {
             switch self {
             case .applications: "Applications"
-            case .projects: "Projets"
-            case .windows: "Fenêtres"
-            case .openItems: "Documents et onglets"
-            case .files: "Fichiers"
-            case .places: "Stages et bureaux"
-            case .screen: "À l'écran"
+            case .projects: tr("Projets", "Projects")
+            case .windows: tr("Fenêtres", "Windows")
+            case .openItems: tr("Documents et onglets", "Documents and tabs")
+            case .files: tr("Fichiers", "Files")
+            case .places: tr("Stages et bureaux", "Stages and desktops")
+            case .screen: tr("À l'écran", "On screen")
             }
         }
 
@@ -121,8 +122,8 @@ struct LauncherList: Equatable, Sendable {
 
     /// État affiché à côté d'une application (ouverte, stage et bureau de sa fenêtre).
     static func detail(running: Bool, location: String?) -> String {
-        guard running else { return "Application" }
-        return location.map { "Ouverte · \($0)" } ?? "Ouverte"
+        guard running else { return tr("Application", "App") }
+        return location.map { tr("Ouverte", "Open") + " · \($0)" } ?? tr("Ouverte", "Open")
     }
 
     /// Emplacement d'une application fermée, dossier personnel abrégé en `~`, comme Alfred.
@@ -257,7 +258,7 @@ struct LauncherList: Equatable, Sendable {
 
     /// Contenu d'un dossier tapé (SPEC-087) : lignes de fichiers sous « Chemin », la première choisie. O(n).
     static func path(_ files: [LauncherFile]) -> LauncherList {
-        idle(files.isEmpty ? [] : [.header("Chemin")] + files.map(Row.file))
+        idle(files.isEmpty ? [] : [.header(tr("Chemin", "Path"))] + files.map(Row.file))
     }
 
     /// Section ajoutée à la fin (repli, SPEC-089) ; choisie seulement si la liste n'avait rien. O(n).

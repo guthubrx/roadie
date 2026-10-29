@@ -1,4 +1,5 @@
 import AppKit
+import RoadieCore
 import Foundation
 
 /// Fenêtre de la vue Texte d'un workflow (session 117). Panneau qui n'active pas Roadie, comme les Paramètres,
@@ -143,7 +144,7 @@ final class WorkflowTextPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
             guard let self, self.generation == mine, self.panel.isVisible else { return }
             guard let response else {
                 self.view.loadingText = nil
-                self.view.footer = "Script : \(failure ?? "réponse illisible")"
+                self.view.footer = tr("Script : ", "Script: ") + (failure ?? tr("réponse illisible", "unreadable response"))
                 self.render()
                 return
             }

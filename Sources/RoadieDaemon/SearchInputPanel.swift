@@ -49,12 +49,12 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         field.isEditable = true
         field.isSelectable = true
         field.textColor = NSColor(calibratedWhite: 0.94, alpha: 1)
-        field.placeholderString = "Rechercher ou saisir /commande"
+        field.placeholderString = tr("Rechercher ou saisir /commande", "Search or type /command")
         field.cell?.usesSingleLineMode = true
         field.cell?.isScrollable = true
         field.delegate = self
         field.setAccessibilityIdentifier("RoadieCommandInput")
-        field.setAccessibilityLabel("Rechercher ou saisir une commande")
+        field.setAccessibilityLabel(tr("Rechercher ou saisir une commande", "Search or type a command"))
         contentView?.addSubview(field)
     }
 

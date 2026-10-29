@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Grille d'un workflow (SPEC-092) : tuiles, réglages d'affichage de la brique `userinterface.grid`,
 /// variables du schéma au moment de la grille. La barre l'affiche ; Retour repart de la grille avec la
@@ -28,7 +29,7 @@ struct AlfredGridView: Equatable, Sendable {
     /// Texte d'attente d'une brique : le sien, sinon « Loading… ».
     static func loadingText(_ object: AlfredObject) -> String {
         let text = (object.string("loadingtext") ?? "").trimmingCharacters(in: .whitespaces)
-        return text.isEmpty ? "Loading…" : text
+        return text.isEmpty ? tr("Chargement…", "Loading…") : text
     }
 
     /// `imageaspect` d'Alfred : 0 Carré, 1 Portrait, 2 Paysage, dans l'ordre du menu de la brique Grille

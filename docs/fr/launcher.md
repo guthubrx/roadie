@@ -10,8 +10,9 @@ d'Alfred (fichiers `.alfredworkflow`), sans Alfred et sans Powerpack.
 > Disponible dans `main` ; la version publiée 0.10.0 ne contient pas encore le lanceur. Il sera dans la prochaine
 > version. En attendant, [compilez depuis les sources](../../README.fr.md#build-et-lancement-de-développement).
 
-Les captures de ce guide sont dessinées par le moteur de rendu de Roadie, avec des fenêtres et des fichiers
-d'exemple.
+La barre suit la langue de macOS : en français sur un Mac réglé en français, en anglais sinon. Ce qui se tape
+fonctionne dans les deux langues. Les captures de ce guide sont dessinées par le moteur de rendu de Roadie, avec des
+fenêtres et des fichiers d'exemple.
 
 ## Ouvrir la barre
 
@@ -25,7 +26,7 @@ récentes.
 
 ## Chercher
 
-![Recherche « note »](../assets/screenshots/launcher-search.png)
+![Recherche « note »](../assets/screenshots/fr/launcher-search.png)
 
 Une seule saisie cherche partout, par sections :
 
@@ -57,12 +58,15 @@ Touches utiles :
 - `~/Doc` ou `/Applications/` liste le dossier ; Tab complète, ⌫ remonte d'un dossier.
 - `> commande` la lance dans Terminal, iTerm, Ghostty, Warp, kitty, WezTerm ou Alacritty.
 - Un calcul (`12*4,5`, `=sqrt(2)`) donne son résultat en tête ; Retour le copie.
+- Les mots marchent en français et en anglais, quelle que soit la langue de la barre : verbes (`fermer` ou `close`),
+  phrases (`gauche` ou `left`, `ici` ou `here`), commandes système (`verrouiller` ou `lock`), bureaux (`bureau 2` ou
+  `desktop 2`) et noms d'applications (`Calendrier` ou `Calendar`).
 
-![Calcul dans la barre](../assets/screenshots/launcher-calc.png)
+![Calcul dans la barre](../assets/screenshots/fr/launcher-calc.png)
 
 ## Agir : verbes, destinations et phrases
 
-![Verbes de Safari](../assets/screenshots/launcher-verbs.png)
+![Verbes de Safari](../assets/screenshots/fr/launcher-verbs.png)
 
 Tab (ou →) sur une ligne ouvre ses verbes. Pour une application : ouvrir ou aller à sa fenêtre, ouvrir dans…,
 amener ici, nouvelle fenêtre ici, documents récents…, réunir ses fenêtres dans…, masquer, quitter, forcer à
@@ -73,7 +77,7 @@ stage, bureau, écran ou « Nouvelle stage ».
 Pendant le choix d'une stage, les vraies fenêtres prennent leur future place et un fantôme marque la fenêtre à
 venir. Échap remet tout en place.
 
-![Phrase complète](../assets/screenshots/launcher-phrase.png)
+![Phrase complète](../assets/screenshots/fr/launcher-phrase.png)
 
 Une phrase complète fait tout d'un coup, en français ou en anglais : `safari perso gauche` ouvre Safari dans la
 stage Perso, à gauche. ⌘S garde l'action sous une abréviation et donne la commande `roadie launch … --position …`
@@ -89,7 +93,7 @@ Autres actions :
 
 ## Workflows d'Alfred, gratuitement
 
-![Résultats d'un workflow](../assets/screenshots/launcher-workflow.png)
+![Résultats d'un workflow](../assets/screenshots/fr/launcher-workflow.png)
 
 Chez Alfred, les workflows demandent le [Powerpack](https://www.alfredapp.com/powerpack/), payant : 34 £
 (licence simple) ou 59 £ (« Mega Supporter », mises à jour à vie). Roadie lit le même format et les fait tourner
@@ -105,7 +109,7 @@ raccourcis (à lier dans BetterTouchTool), grilles, vues Texte, Image et PDF, bo
 d'automatisation officielles. Quand un script s'adresse à Alfred (`tell application id
 "com.runningwithcrayons.Alfred"`), Roadie fait lui-même ce qui est demandé, sans ouvrir Alfred.
 
-![Workflow d'émojis en grille](../assets/screenshots/launcher-emoji-grid.png)
+![Workflow d'émojis en grille](../assets/screenshots/fr/launcher-emoji-grid.png)
 
 Sur un corpus de 102 workflows réels, 92 sont « complets » selon `roadie workflow list`. Cette commande donne
 l'état de chaque workflow (complet, partiel, inutilisable) et ce qui manque. Non repris : snippets, historique du
@@ -118,7 +122,7 @@ Commandes : `roadie workflow list [--hotkeys]`, `check DOSSIER`, `install FICHIE
 
 ## Apparence
 
-![Quatre thèmes d'Alfred](../assets/screenshots/launcher-themes.png)
+![Quatre thèmes d'Alfred](../assets/screenshots/fr/launcher-themes.png)
 
 Les neuf thèmes d'Alfred sont fournis, avec leurs couleurs, polices, arrondis et flou ; un thème exporté
 d'Alfred (`.alfredappearance`) dans `~/.config/roadies/themes` s'ajoute à la liste. Un thème différent peut
@@ -129,7 +133,7 @@ droite de la saisie indique la présentation (« ☰ Liste », « ▦ Grille »,
 résultats ; un clic sur elle, ou ⌘G, passe à la suivante. Roadie retient le choix pour chaque workflow, chaque
 dossier et pour les fichiers de la recherche.
 
-![La même recherche en grille : les fichiers seuls](../assets/screenshots/launcher-files-grid.png)
+![La même recherche en grille : les fichiers seuls](../assets/screenshots/fr/launcher-files-grid.png)
 
 ## Rapidité
 

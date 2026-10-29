@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Résultat d'un calcul tapé dans la barre (SPEC-087).
 struct LauncherCalculation: Equatable, Sendable {
@@ -37,7 +38,7 @@ enum LauncherCalculator {
 
     /// Effet de Retour annoncé sous le résultat. O(1).
     static func returnHint(opensCalculator: Bool) -> String {
-        opensCalculator ? "Retour copie et ouvre Calculette" : "Retour copie"
+        opensCalculator ? tr("Retour copie et ouvre Calculette", "Return copies and opens Calculator") : tr("Retour copie", "Return copies")
     }
 
     /// Caractères d'un calcul en cours de frappe (FR-009 : Maj + chiffre y écrit le chiffre).

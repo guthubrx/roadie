@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Effets d'un workflow sur le Mac, injectés : réels dans le démon, factices dans les tests (SPEC-088).
 protocol AlfredEffects: Sendable {
@@ -168,7 +169,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             let result = await AlfredScriptRunner.run(script, query: query, arguments: input, workflow: workflow, variables: variables)
             guard result.failure == nil, !result.timedOut else {
                 run.outcome.errors.append(result.failure ?? "timeout")
-                await effects.notify(title: workflow.name, text: "Script : \(result.failure ?? "délai dépassé")")
+                await effects.notify(title: workflow.name, text: tr("Script : ", "Script: ") + (result.failure ?? tr("délai dépassé", "timed out")))
                 return .stop
             }
             let output = AlfredRunScriptOutput.parse(result.text)
@@ -347,7 +348,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         case "automation.task":
             let uid = object.string("taskuid") ?? ""
             guard let task = AlfredAutomationTasks.task(uid, root: tasksRoot) else {
-                return missing("tâche absente : \(uid) (roadie workflow tasks update)", workflow, run)
+                return missing(tr("tâche absente : ", "task missing: ") + "\(uid) (roadie workflow tasks update)", workflow, run)
             }
             let settings = (object.config["tasksettings"]?.dict ?? [:]).mapValues { value -> String in
                 if case .bool(let flag) = value { return flag ? "1" : "0" }
@@ -394,9 +395,9 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
                 let result = await AlfredScriptRunner.run(AlfredScript(language: 8, source: "", file: file), query: query, arguments: input,
                                                           workflow: workflow, variables: variables)
                 guard result.failure == nil, !result.timedOut, let parsed = AlfredScriptFilterResponse.parse(result.output) else {
-                    let reason = result.failure ?? (result.timedOut ? "délai dépassé" : "réponse illisible")
+                    let reason = result.failure ?? (result.timedOut ? tr("délai dépassé", "timed out") : tr("réponse illisible", "unreadable response"))
                     run.outcome.errors.append(result.failure ?? (result.timedOut ? "timeout" : "grid"))
-                    waiting.loadingText = "Grille : \(reason)"
+                    waiting.loadingText = tr("Grille : ", "Grid: ") + reason
                     await effects.showGrid(waiting)
                     return .stop
                 }
@@ -423,7 +424,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
                 let path = Self.path(raw.isEmpty ? query : expand(raw), in: workflow)
                 guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
                     run.outcome.errors.append("text:file")
-                    await effects.notify(title: workflow.name, text: "Vue Texte : fichier illisible")
+                    await effects.notify(title: workflow.name, text: tr("Vue Texte : fichier illisible", "Text view: unreadable file"))
                     return .stop
                 }
                 view.chunks = [content]
@@ -440,7 +441,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             let path = Self.path(first, in: workflow)
             guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
                 run.outcome.errors.append("media:file")
-                await effects.notify(title: workflow.name, text: "Aperçu : fichier absent")
+                await effects.notify(title: workflow.name, text: tr("Aperçu : fichier absent", "Preview: file missing"))
                 return .stop
             }
             let kind: AlfredMediaView.Kind = object.type == "userinterface.pdf" ? .pdf : .image
@@ -460,7 +461,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
     private func missing(_ type: String, _ workflow: AlfredWorkflow, _ run: Run) -> Step {
         run.outcome.missing.append(type)
         let effects = effects
-        Task { await effects.notify(title: workflow.name, text: "Roadie ne prend pas encore en charge : \(type)") }
+        Task { await effects.notify(title: workflow.name, text: tr("Roadie ne prend pas encore en charge : \(type)", "Roadie does not support this yet: \(type)")) }
         return .stop
     }
 

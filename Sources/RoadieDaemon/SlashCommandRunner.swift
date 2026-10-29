@@ -143,7 +143,7 @@ public final class SlashCommandRunner {
             return routed(["stage", "create", id] + (name.map { [$0] } ?? []), command: command)
         case .stageRename(let name):
             guard let id = Self.currentStages(in: stageStore().state()).active else {
-                return reject(command, "no_current_stage", SlashError(message: "Stage courant inconnu.", usage: Self.usage("stage")))
+                return reject(command, "no_current_stage", SlashError(message: tr("Stage courant inconnu.", "Current stage unknown."), usage: Self.usage("stage")))
             }
             return routed(["stage", "rename", id, name], command: command)
         case .openSettings(let category):
@@ -163,10 +163,10 @@ public final class SlashCommandRunner {
         let text = "\(stdout)\n\(stderr)"
         let usage = Self.usage(command)
         if text.contains("no active window") || text.contains("no active tiled window") {
-            return reject(command, "no_active_window", SlashError(message: "Aucune fenêtre active.", usage: usage))
+            return reject(command, "no_active_window", SlashError(message: tr("Aucune fenêtre active.", "No active window."), usage: usage))
         }
         if argv.starts(with: ["display", "focus"]), text.contains(": no display") || text.contains(": unknown display") {
-            return reject(command, "no_other_display", SlashError(message: "Il n'y a pas d'autre écran.", usage: usage))
+            return reject(command, "no_other_display", SlashError(message: tr("Il n'y a pas d'autre écran.", "There is no other display."), usage: usage))
         }
         guard response.exitCode == 0 else {
             return reject(command, "router_failed", SlashError(message: Self.translated(stderr.isEmpty ? stdout : stderr), usage: usage))
@@ -192,7 +192,7 @@ public final class SlashCommandRunner {
         // Seul `config reload` dit `status=applied` en cas de succès ; `daemon heal` écrit `status=ok`.
         let reloadRefused = isReload && text.contains("status=") && !text.contains("status=applied")
         if argv.first != "doctor", response.exitCode != 0 || reloadRefused {
-            let message = lines.first { $0.hasPrefix("Rechargement refusé :") } ?? lines.first ?? "La commande a échoué."
+            let message = lines.first { $0.hasPrefix(tr("Rechargement refusé :", "Reload refused:")) } ?? lines.first ?? tr("La commande a échoué.", "The command failed.")
             return reject(command, "router_failed", SlashError(message: message, usage: Self.usage(command)))
         }
         return .info(Self.truncated(lines))
@@ -230,7 +230,7 @@ public final class SlashCommandRunner {
             .map { (id: $0.id, distance: RoadieConfigLoader.editDistance(id, $0.id)) }
             .filter { $0.distance <= 2 }
             .min { $0.distance < $1.distance }
-        return reject(command, "unknown_setting", SlashError(message: "Réglage inconnu : \(id).", usage: Self.usage("set"), suggestion: closest?.id))
+        return reject(command, "unknown_setting", SlashError(message: tr("Réglage inconnu : \(id).", "Unknown setting: \(id)."), usage: Self.usage("set"), suggestion: closest?.id))
     }
 
     /// Journal (R10) : nom de la commande et code de la raison, jamais la saisie ni les arguments.
@@ -255,11 +255,11 @@ public final class SlashCommandRunner {
         case 1:
             return .success(ids[0])
         case 0:
-            return .failure(StageFailure(code: "stage_not_found", error: SlashError(message: "Stage inconnu : \(name).", usage: Self.usage("stage"))))
+            return .failure(StageFailure(code: "stage_not_found", error: SlashError(message: tr("Stage inconnu : \(name).", "Unknown stage: \(name)."), usage: Self.usage("stage"))))
         default:
             let list = matches.map { "\($0.id.rawValue) (\($0.name))" }.joined(separator: ", ")
             return .failure(StageFailure(code: "stage_ambiguous", error: SlashError(
-                message: "Plusieurs stages portent ce nom : \(list). Utilisez le numéro.", usage: Self.usage("stage"))))
+                message: tr("Plusieurs stages portent ce nom : \(list). Utilisez le numéro.", "Several stages have this name: \(list). Use the number."), usage: Self.usage("stage"))))
         }
     }
 
@@ -300,12 +300,14 @@ public final class SlashCommandRunner {
     /// qui contiennent des compteurs (`applied=2 failed=0`) ne sont pas traduits. O(r), r = nombre de règles (borné, une vingtaine).
     static func translated(_ raw: String) -> String {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text == "status=applied" { return tr("Configuration rechargée.", "Configuration reloaded.") }
+        if text.hasPrefix("status=") { return tr("Rechargement refusé.", "Reload refused.") }
+        if text.hasPrefix("error=") { return tr("Rechargement refusé : ", "Reload refused: ") + text.dropFirst("error=".count) }
+        // Interface en anglais : les messages du routeur sont déjà en anglais (session 126).
+        guard UILanguage.current == .fr else { return text }
         if let name = between(text, "bookmark focus ", ": not found") { return "Bookmark introuvable : \(name)." }
         if let name = between(text, "bookmark focus ", ": display unavailable") { return "Bookmark \(name) : écran indisponible." }
         if let name = between(text, "bookmark focus ", ": focus failed") { return "Bookmark \(name) : le focus a échoué." }
-        if text == "status=applied" { return "Configuration rechargée." }
-        if text.hasPrefix("status=") { return "Rechargement refusé." }
-        if text.hasPrefix("error=") { return "Rechargement refusé : \(text.dropFirst("error=".count))" }
         if text.hasPrefix("no neighbor ") {
             let directions = ["left": "à gauche", "right": "à droite", "up": "au-dessus", "down": "en dessous"]
             return "Aucune fenêtre voisine \(directions[String(text.dropFirst("no neighbor ".count))] ?? "dans cette direction")."

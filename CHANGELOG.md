@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- La barre, le sélecteur de fenêtres et la vue d'ensemble suivent la langue de macOS (anglais ou français) ; les verbes,
+  commandes système et bureaux se trouvent dans les deux langues (`close` ou `fermer`). Captures de la documentation en
+  anglais par défaut, en français dans `docs/assets/screenshots/fr/`.
 - Fenêtres toujours flottantes par leur titre (`[[exclusions.floating_windows]]`, Paramètres > Règles, menu Fenêtre) :
   `# Reminder` fait flotter les rappels de Thunderbird sans faire flotter Thunderbird. `roadie window explain` dit
   pourquoi une fenêtre est tuilée. Critères de taille jugés sur le premier cadre de la fenêtre.

@@ -1556,12 +1556,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             launcherList.prepend(.phrase(action, LauncherPhrase.title(action)), header: "Phrase")
         }
         if let (name, alias) = launcher.aliases.alias(for: model.query), let action = launcher.aliasAction(alias) {
-            launcherList.prepend(.alias(name, action, LauncherPhrase.title(action)), header: "Abréviation")
+            launcherList.prepend(.alias(name, action, LauncherPhrase.title(action)), header: tr("Abréviation", "Abbreviation"))
         }
         // Commandes système (session 105), après la première section.
-        launcherList.insertSection("Système", LauncherSystemCommand.matches(model.query, in: launcher.systemCommands).map(LauncherList.Row.system))
+        launcherList.insertSection(tr("Système", "System"), LauncherSystemCommand.matches(model.query, in: launcher.systemCommands).map(LauncherList.Row.system))
         // Réglages de Roadie et des Réglages Système (session 115), après les sections principales.
-        launcherList.appendSection("Réglages", LauncherSystemCommand.matches(model.query, in: launcher.settingTargets, limit: 4)
+        launcherList.appendSection(tr("Réglages", "Settings"), LauncherSystemCommand.matches(model.query, in: launcher.settingTargets, limit: 4)
             .map(LauncherList.Row.system))
         // Mots-clés de workflows en cours de frappe (SPEC-088), après la première section.
         let keywords = launcher.workflowEntries.filter { $0.match(model.query) == .suggest }
@@ -1592,17 +1592,17 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             launcherList.appendSection("Web", webRows)
             if let (search, text) = LauncherWeb.keywordSearch(model.query, in: launcher.webSearches) {
                 if text.isEmpty {
-                    launcherList.prepend(.web(LauncherWebRow(kind: .hint(search), title: "\(search.title) : tapez la recherche")), header: "Web")
+                    launcherList.prepend(.web(LauncherWebRow(kind: .hint(search), title: tr("\(search.title) : tapez la recherche", "\(search.title): type your search"))), header: "Web")
                 } else if let url = LauncherWeb.searchURL(search.url, query: text) {
-                    launcherList.prepend(.web(LauncherWebRow(kind: .search(url), title: "Rechercher « \(text) » sur \(search.title)")), header: "Web")
+                    launcherList.prepend(.web(LauncherWebRow(kind: .search(url), title: tr("Rechercher « \(text) » sur \(search.title)", "Search \(search.title) for “\(text)”"))), header: "Web")
                 }
             } else if let search = launcher.webSearches.first(where: { $0.keyword.lowercased() == model.query.lowercased() }) {
                 // Mot-clé seul : l'invite, sans prendre la sélection (`g` ne cache pas Ghostty).
-                launcherList.insertSection("Web", [.web(LauncherWebRow(kind: .hint(search), title: "\(search.title) : tapez la recherche"))])
+                launcherList.insertSection("Web", [.web(LauncherWebRow(kind: .hint(search), title: tr("\(search.title) : tapez la recherche", "\(search.title): type your search")))])
             }
         }
         if let url = LauncherWeb.address(model.query) {
-            launcherList.prepend(.web(LauncherWebRow(kind: .address(url), title: "Ouvrir \(url.absoluteString)")), header: "Adresse")
+            launcherList.prepend(.web(LauncherWebRow(kind: .address(url), title: tr("Ouvrir", "Open") + " \(url.absoluteString)")), header: tr("Adresse", "Address"))
         }
         // Calcul (SPEC-087) : son résultat passe en tête et devient la ligne choisie.
         if let calc = LauncherCalculator.evaluate(model.query, locale: launcher.calcLocale, grouping: launcher.calcGrouping) {
@@ -1650,7 +1650,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             }
             guard entry.kind == .scriptFilter || entry.kind == .fileFilter else { rows.append(.workflowKeyword(entry)); continue }
             guard let answer = workflowResponses[entry.id], let response = answer.response else {
-                let waiting = workflowResponses[entry.id]?.error ?? (entry.runningSubtitle.isEmpty ? "Recherche…" : entry.runningSubtitle)
+                let waiting = workflowResponses[entry.id]?.error ?? (entry.runningSubtitle.isEmpty ? tr("Recherche…", "Searching…") : entry.runningSubtitle)
                 rows.append(.workflowItem(entry, AlfredItem(title: entry.title, subtitle: waiting, valid: false), index: 0))
                 continue
             }
@@ -1664,7 +1664,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                     return ua != ub ? ua > ub : a.offset < b.offset
                 }.map(\.element)
             }
-            if items.isEmpty { rows.append(.workflowItem(entry, AlfredItem(title: "Aucun résultat", subtitle: entry.title, valid: false), index: 0)) }
+            if items.isEmpty { rows.append(.workflowItem(entry, AlfredItem(title: tr("Aucun résultat", "No results"), subtitle: entry.title, valid: false), index: 0)) }
             rows += items.enumerated().map { .workflowItem(entry, $0.element, index: $0.offset) }
         }
         launcherList = .idle(rows)
@@ -1723,7 +1723,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             let title: String
             switch entry.kind {
             case .fallback: title = entry.title.replacingOccurrences(of: "{query}", with: text)
-            case .universalAction where entry.acceptsText: title = "\(entry.title) : « \(text) »"
+            case .universalAction where entry.acceptsText: title = tr("\(entry.title) : « \(text) »", "\(entry.title): “\(text)”")
             default: return nil
             }
             return .workflowItem(entry, AlfredItem(title: title, subtitle: entry.workflowName, arg: [text]), index: index)
@@ -1748,7 +1748,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             self.workflowRuns[key] = self.launcher.runScriptFilter(entry, argument) { [weak self] response, error in
                 guard let self, !self.finished, self.workflowRequested[key] == argument else { return }
                 self.workflowRuns[key] = nil
-                self.workflowResponses[key] = (argument, response, error ?? (response == nil ? "Réponse illisible" : nil))
+                self.workflowResponses[key] = (argument, response, error ?? (response == nil ? tr("Réponse illisible", "Unreadable response") : nil))
                 self.filesChanged = true
                 self.render()
                 if let rerun = response?.rerun {
@@ -2109,17 +2109,18 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     /// Lignes de l'étape « Garder » : l'abréviation tapée, la commande, ou la raison du refus.
     private func savingRows(_ action: LauncherAction, _ alias: Result<LauncherAlias, LauncherAlias.Refusal>) -> [SlashSuggestion] {
-        var rows = [SlashSuggestion(text: "Garder : \(LauncherPhrase.title(action))", kind: .header)]
+        var rows = [SlashSuggestion(text: tr("Garder : ", "Save: ") + LauncherPhrase.title(action), kind: .header)]
         switch alias {
         case .failure(let refusal):
-            rows.append(SlashSuggestion(text: "Cette action ne se garde pas", detail: refusal.message, kind: .result, icon: .symbol("xmark.circle")))
+            rows.append(SlashSuggestion(text: tr("Cette action ne se garde pas", "This action cannot be saved"), detail: refusal.message, kind: .result, icon: .symbol("xmark.circle")))
         case .success(let alias):
             let name = stepQuery.trimmingCharacters(in: .whitespaces)
-            let replaced = launcher.aliases.alias(for: name).map { " · remplace « \($0.1.name) »" } ?? ""
-            rows.append(SlashSuggestion(text: name.isEmpty ? "Abréviation…" : "Abréviation « \(name) »",
-                                        detail: LauncherAlias.isValidName(name) ? "Retour enregistre\(replaced)" : "1 à 12 caractères, sans espace",
+            let replaced = launcher.aliases.alias(for: name).map { tr(" · remplace « \($0.1.name) »", " · replaces “\($0.1.name)”") } ?? ""
+            rows.append(SlashSuggestion(text: name.isEmpty ? tr("Abréviation…", "Abbreviation…") : tr("Abréviation « \(name) »", "Abbreviation “\(name)”"),
+                                        detail: LauncherAlias.isValidName(name) ? tr("Retour enregistre", "Return saves") + replaced
+                                            : tr("1 à 12 caractères, sans espace", "1 to 12 characters, no spaces"),
                                         kind: .result, icon: .symbol("character.cursor.ibeam")))
-            rows.append(SlashSuggestion(text: alias.command, detail: savingCopied ? "Copiée dans le presse-papiers" : "⌘C copie la commande",
+            rows.append(SlashSuggestion(text: alias.command, detail: savingCopied ? tr("Copiée dans le presse-papiers", "Copied to the clipboard") : tr("⌘C copie la commande", "⌘C copies the command"),
                                         kind: .result, icon: .symbol("terminal")))
         }
         return rows
@@ -2132,7 +2133,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .success:
             finish(TargetActionResult(changed: true, message: "launcher alias saved: \(LauncherMatch.fold(name))"))
         case .failure:
-            finish(TargetActionResult(changed: false, message: "Abréviation non enregistrée", error: "alias_not_saved"))
+            finish(TargetActionResult(changed: false, message: tr("Abréviation non enregistrée", "Abbreviation not saved"), error: "alias_not_saved"))
         }
     }
 
@@ -2204,7 +2205,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .batchVerbs:
             actionList = .batch(selection, query: stepQuery)
         case .batchDestinations:
-            let title = "\(selection.count) choisi\(selection.count > 1 ? "s" : "")"
+            let title = tr("\(selection.count) choisi\(selection.count > 1 ? "s" : "")", "\(selection.count) selected")
             actionList = .destinations(for: .project(title), verb: LauncherActionList.batchDestinationVerb(selection), query: stepQuery,
                                        destinations: launcher.destinations, newStageHome: launcher.newStageHome)
         }
@@ -2514,7 +2515,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             commandModel?.setMessage(.info(lines))
             render()
         case .failed(let error):
-            let hint = error.suggestion.map { " Vouliez-vous dire « \($0) » ?" } ?? ""
+            let hint = error.suggestion.map { tr(" Vouliez-vous dire « \($0) » ?", " Did you mean “\($0)”?") } ?? ""
             commandModel?.setMessage(.error(error.message + hint, usage: error.usage))
             render()
         }
@@ -2599,7 +2600,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             if let subtitle = item.mods[bits]?.subtitle { suggestions[index].detail = subtitle }
         }
         if let copied = copiedRowID, let index = launcherList.rows.firstIndex(where: { $0.id == copied }) {
-            suggestions[index].detail = "Copié dans le presse-papiers"
+            suggestions[index].detail = tr("Copié dans le presse-papiers", "Copied to the clipboard")
         }
         // Sélection multiple : « ✓ » devant les lignes choisies (SPEC-091 FR-002).
         if !selection.isEmpty {
@@ -2639,7 +2640,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                                   aspect: grid.imageAspect)
         }
         if !selection.isEmpty {
-            let chosen = "\(selection.count) choisi\(selection.count > 1 ? "s" : "")"
+            let chosen = tr("\(selection.count) choisi\(selection.count > 1 ? "s" : "")", "\(selection.count) selected")
             bar.chip = bar.chip.map { "\($0) · \(chosen)" } ?? chosen
         }
         // Barre vide : aucune lettre ; sinon les cibles montrées en reçoivent une (SPEC-084).
@@ -2652,9 +2653,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .header(let title):
             return SlashSuggestion(text: title, kind: .header)
         case .workflow(let entry):
-            return SlashSuggestion(text: "Workflow : \(entry.title)", detail: entry.workflowName, kind: .result, icon: workflowIcon(nil, entry: entry))
+            return SlashSuggestion(text: tr("Workflow : ", "Workflow: ") + entry.title, detail: entry.workflowName, kind: .result, icon: workflowIcon(nil, entry: entry))
         case .verb(let verb):
-            return SlashSuggestion(text: verb.title(app: app), detail: verb.needsDestination ? "Tab ou Retour : choisir" : "",
+            return SlashSuggestion(text: verb.title(app: app), detail: verb.needsDestination ? tr("Tab ou Retour : choisir", "Tab or Return: choose") : "",
                                    kind: .result, icon: .symbol(verb.needsDestination ? "arrow.right.circle" : "play.circle"))
         case .destination(let verb, let destination):
             let symbol = switch destination.kind {
@@ -2697,11 +2698,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .file(let file):
             return SlashSuggestion(text: file.name, detail: file.location, kind: .result, icon: .file(file.path))
         case .phrase(let action, let title):
-            return SlashSuggestion(text: title, detail: "Retour fait l'action · ⌘S la garde", kind: .result, icon: icon(of: action, appPaths: appPaths))
+            return SlashSuggestion(text: title, detail: tr("Retour fait l'action · ⌘S la garde", "Return runs it · ⌘S saves it"), kind: .result, icon: icon(of: action, appPaths: appPaths))
         case .alias(let name, let action, let title):
-            return SlashSuggestion(text: title, detail: "Abréviation « \(name) »", kind: .result, icon: icon(of: action, appPaths: appPaths))
+            return SlashSuggestion(text: title, detail: tr("Abréviation « \(name) »", "Abbreviation “\(name)”"), kind: .result, icon: icon(of: action, appPaths: appPaths))
         case .project(let project):
-            return SlashSuggestion(text: project.name, detail: "Projet · \(project.windows.count) fenêtre\(project.windows.count > 1 ? "s" : "")",
+            return SlashSuggestion(text: project.name, detail: tr("Projet", "Project") + " · \(project.windows.count) " + tr("fenêtre", "window") + (project.windows.count > 1 ? "s" : ""),
                                    kind: .result, icon: .symbol("square.stack.3d.down.right"))
         case .action(_, let action, let title, let detail):
             return SlashSuggestion(text: title, detail: detail, kind: .result, icon: icon(of: action, appPaths: appPaths))
@@ -2716,22 +2717,23 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 return SlashSuggestion(text: row.title, detail: bookmark.detail, kind: .result, icon: icon)
             }
             let (detail, symbol): (String, String) = switch row.kind {
-            case .address: ("Retour ouvre · Tab : ouvrir dans une stage", "globe")
+            case .address: (tr("Retour ouvre · Tab : ouvrir dans une stage", "Return opens · Tab: open in a stage"), "globe")
             case .search(let url): (url.host ?? "", "magnifyingglass")
-            case .hint(let search): ("Tab ou Retour : « \(search.keyword) »", "keyboard")
+            case .hint(let search): (tr("Tab ou Retour : « \(search.keyword) »", "Tab or Return: “\(search.keyword)”"), "keyboard")
             case .bookmark: ("", "bookmark")
             }
             return SlashSuggestion(text: row.title, detail: detail, kind: .result, icon: .symbol(symbol))
         case .history(let query):
-            return SlashSuggestion(text: query, detail: "Recherche récente", kind: .result, icon: .symbol("clock.arrow.circlepath"))
+            return SlashSuggestion(text: query, detail: tr("Recherche récente", "Recent search"), kind: .result, icon: .symbol("clock.arrow.circlepath"))
         case .system(let command):
-            let detail = command.id == pendingSystem ? "Retour encore pour confirmer · Échap annule"
-                : command.confirms ? "Système · Retour deux fois" : command.detail ?? "Système"
+            let detail = command.id == pendingSystem ? tr("Retour encore pour confirmer · Échap annule", "Return again to confirm · Esc cancels")
+                : command.confirms ? tr("Système · Retour deux fois", "System · Return twice") : command.detail ?? tr("Système", "System")
             return SlashSuggestion(text: command.title, detail: detail, kind: .result, icon: .symbol(command.symbol))
         case .terminal(let command):
             let name = LauncherTerminal.appName(terminal)
-            if command.isEmpty { return SlashSuggestion(text: "\(name) : tapez une commande après >", detail: "", kind: .result, icon: .symbol("terminal")) }
-            let detail = terminal == "warp" ? "Retour ouvre Warp et copie la commande" : "Retour lance dans \(name)"
+            if command.isEmpty { return SlashSuggestion(text: tr("\(name) : tapez une commande après >", "\(name): type a command after >"), detail: "", kind: .result, icon: .symbol("terminal")) }
+            let detail = terminal == "warp" ? tr("Retour ouvre Warp et copie la commande", "Return opens Warp and copies the command")
+                : tr("Retour lance dans \(name)", "Return runs it in \(name)")
             return SlashSuggestion(text: command, detail: detail, kind: .result, icon: .symbol("terminal"))
         case .workflowKeyword(let entry):
             return SlashSuggestion(text: entry.title, detail: entry.subtitle.isEmpty ? "\(entry.keyword) · \(entry.workflowName)" : entry.subtitle,
@@ -2743,11 +2745,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                                    kind: .result, icon: .symbol("equal.square"))
         case .rule(let suggestion, let choice):
             let text = switch choice {
-            case .create: "Créer la règle : \(suggestion.appName) toujours dans \(suggestion.stageTitle)"
-            case .later: "Plus tard"
-            case .never: "Jamais pour \(suggestion.appName) dans \(suggestion.stageTitle)"
+            case .create: tr("Créer la règle : \(suggestion.appName) toujours dans \(suggestion.stageTitle)",
+                             "Create the rule: \(suggestion.appName) always in \(suggestion.stageTitle)")
+            case .later: tr("Plus tard", "Later")
+            case .never: tr("Jamais pour \(suggestion.appName) dans \(suggestion.stageTitle)", "Never for \(suggestion.appName) in \(suggestion.stageTitle)")
             }
-            let detail = choice == .create ? "\(suggestion.count) déplacements cette semaine" : choice == .later ? "Reproposer demain" : "Ne plus proposer"
+            let detail = choice == .create ? tr("\(suggestion.count) déplacements cette semaine", "\(suggestion.count) moves this week")
+                : choice == .later ? tr("Reproposer demain", "Ask again tomorrow") : tr("Ne plus proposer", "Don't ask again")
             return SlashSuggestion(text: text, detail: detail, kind: .result,
                                    icon: .symbol(choice == .create ? "lightbulb" : choice == .later ? "clock" : "nosign"))
         }
@@ -2803,11 +2807,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let selectable = Self.subject(of: launcherList.row(for: launcherSelection)).flatMap(LauncherSelection.key) != nil
         inputPanel?.selectionKeys = step == .objects ? SelectionKeys(hasSelection: !selection.isEmpty, rowSelectable: selectable) : SelectionKeys()
         inputPanel?.field.placeholderString = switch step {
-        case .objects: launcher.workflowGrid.map { "Filtrer : \($0.entry.workflowName)" } ?? "Rechercher ou saisir /commande"
-        case .verbs: "Verbe ou destination…"
-        case .destinations, .batchDestinations: "Stage, bureau ou écran…"
-        case .saving: "Abréviation (12 caractères au plus)…"
-        case .batchVerbs: "Verbe pour la sélection…"
+        case .objects: launcher.workflowGrid.map { tr("Filtrer : ", "Filter: ") + $0.entry.workflowName } ?? tr("Rechercher ou saisir /commande", "Search or type /command")
+        case .verbs: tr("Verbe ou destination…", "Verb or destination…")
+        case .destinations, .batchDestinations: tr("Stage, bureau ou écran…", "Stage, desktop or display…")
+        case .saving: tr("Abréviation (12 caractères au plus)…", "Abbreviation (12 characters at most)…")
+        case .batchVerbs: tr("Verbe pour la sélection…", "Verb for the selection…")
         }
         if let layout = searchBarLayout {
             let text = step != .objects ? stepQuery : commandModel.map { "/" + $0.input } ?? model.query

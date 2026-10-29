@@ -93,7 +93,7 @@ struct OverviewModel {
                         entries: grouped[scope] ?? [], isActive: active && stored?.activeStageID == stageID)
                 }
                 bureaux.append(OverviewDesktop(id: id,
-                    name: "Bureau \(desktopID.rawValue)" + (labels[id].map { " · \($0)" } ?? ""), isActive: active, stages: stages))
+                    name: tr("Bureau", "Desktop") + " \(desktopID.rawValue)" + (labels[id].map { " · \($0)" } ?? ""), isActive: active, stages: stages))
             }
             result.append(OverviewDisplay(id: displayID, name: names[displayID] ?? displayID.rawValue, desktops: bureaux))
         }

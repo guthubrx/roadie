@@ -39,7 +39,7 @@ classement qu'il apprend tient compte de la stage où tu travailles.
 ## Un lanceur qui fait tourner tes workflows d'Alfred
 
 <p align="center">
-  <img src="docs/assets/screenshots/launcher-search.png" alt="La barre de Roadie cherche « note » : application, fenêtre, document ouvert et fichiers" width="70%">
+  <img src="docs/assets/screenshots/fr/launcher-search.png" alt="La barre de Roadie cherche « note » : application, fenêtre, document ouvert et fichiers" width="70%">
 </p>
 
 Une seule saisie cherche partout : applications installées, fenêtres de tous les bureaux, documents
@@ -55,8 +55,8 @@ La barre reste rapide quand le Mac est chargé : les documents que tu as déjà 
 
 <table>
   <tr>
-    <td><img src="docs/assets/screenshots/launcher-verbs.png" alt="Verbes de Safari après Tab"></td>
-    <td><img src="docs/assets/screenshots/launcher-phrase.png" alt="Phrase « safari perso gauche »"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-verbs.png" alt="Verbes de Safari après Tab"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-phrase.png" alt="Phrase « safari perso gauche »"></td>
   </tr>
 </table>
 
@@ -69,8 +69,8 @@ fenêtres prennent leur future place ; Échap remet tout. Une phrase fait tout d
 
 <table>
   <tr>
-    <td><img src="docs/assets/screenshots/launcher-workflow.png" alt="Résultats d'un workflow"></td>
-    <td><img src="docs/assets/screenshots/launcher-emoji-grid.png" alt="Workflow d'émojis en grille"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-workflow.png" alt="Résultats d'un workflow"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-emoji-grid.png" alt="Workflow d'émojis en grille"></td>
   </tr>
 </table>
 
@@ -93,7 +93,7 @@ Pas repris : snippets, historique du presse-papiers d'Alfred, AppleScript compil
 ### Les thèmes d'Alfred aussi
 
 <p align="center">
-  <img src="docs/assets/screenshots/launcher-themes.png" alt="La même barre avec quatre thèmes d'Alfred" width="85%">
+  <img src="docs/assets/screenshots/fr/launcher-themes.png" alt="La même barre avec quatre thèmes d'Alfred" width="85%">
 </p>
 
 Les neuf thèmes d'Alfred sont fournis, et un thème exporté d'Alfred s'ajoute tel quel. La barre se
@@ -104,15 +104,16 @@ place en bas, au centre ou en haut, et se déplace à la souris.
 ## Sélecteur de fenêtres et vue d'ensemble
 
 <p align="center">
-  <img src="docs/assets/screenshots/window-switcher.png" alt="Sélecteur de fenêtres de Roadie" width="100%">
+  <img src="docs/assets/screenshots/fr/window-switcher.png" alt="Sélecteur de fenêtres de Roadie" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/screenshots/overview.png" alt="Vue d'ensemble des bureaux et des stages" width="100%">
+  <img src="docs/assets/screenshots/fr/overview.png" alt="Vue d'ensemble des bureaux et des stages" width="100%">
 </p>
 
 <sub>Captures dessinées par le moteur de rendu de Roadie avec des fenêtres et des fichiers d'exemple.
-L'interface est en français.</sub>
+La barre, le sélecteur et la vue d'ensemble suivent la langue de macOS (français ou anglais) ; la fenêtre des paramètres
+est en français.</sub>
 
 ## Ce que tu peux faire avec Roadie
 
@@ -704,7 +705,7 @@ appliqués dès la saisie d'une valeur valide. Les marges déclenchent une nouve
 disposition, même pour un changement d'un point. Les listes, les stages, les règles
 et les surcharges par écran ont leurs éditeurs intégrés. Un brouillon incomplet
 reste dans le champ sans remplacer la dernière valeur valide.
-L'interface est en français. Les commentaires du fichier TOML sont conservés.
+La fenêtre des paramètres est en français. Les commentaires du fichier TOML sont conservés.
 Une sauvegarde précède la première modification de la session. Une écriture invalide
 est refusée. Les tailles de police sont indépendantes. Les curseurs, le pas à pas
 et la saisie d'une taille valide les appliquent immédiatement. Les sessions ouvertes

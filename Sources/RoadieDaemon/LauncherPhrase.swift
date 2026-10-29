@@ -7,10 +7,10 @@ enum LauncherPosition: String, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .left: "à gauche"
-        case .right: "à droite"
-        case .full: "en plein écran"
-        case .float: "en flottant"
+        case .left: tr("à gauche", "on the left")
+        case .right: tr("à droite", "on the right")
+        case .full: tr("en plein écran", "full screen")
+        case .float: tr("en flottant", "floating")
         }
     }
 }
@@ -62,7 +62,7 @@ struct LauncherPhrase: Equatable, Sendable {
             if fresh.contains(word) || (word == "stage" && end >= 3 && fresh.contains(LauncherMatch.fold(words[end - 2]))) {
                 end -= word == "stage" ? 2 : 1
                 place = .destination(LauncherDestination(kind: .newStage(name: nil, newStageHome.0, newStageHome.1),
-                                                         title: "Nouvelle stage", detail: "bureau \(newStageHome.1.rawValue)"))
+                                                         title: tr("Nouvelle stage", "New stage"), detail: tr("bureau", "desktop") + " \(newStageHome.1.rawValue)"))
                 continue
             }
             if let number = Int(word), end >= 3 {
@@ -70,7 +70,7 @@ struct LauncherPhrase: Equatable, Sendable {
                 if desktop.contains(keyword) {
                     let id = DesktopID(rawValue: number)
                     place = .destination(destinations.first { $0.kind == .desktop(newStageHome.0, id) }
-                        ?? LauncherDestination(kind: .desktop(newStageHome.0, id), title: "Bureau \(number)", detail: ""))
+                        ?? LauncherDestination(kind: .desktop(newStageHome.0, id), title: tr("Bureau", "Desktop") + " \(number)", detail: ""))
                     end -= 2
                     continue
                 }
@@ -108,7 +108,7 @@ struct LauncherPhrase: Equatable, Sendable {
 
     /// Action de la phrase sur l'objet trouvé ; nil si elle ne s'y applique pas. O(1).
     func action(for subject: LauncherSubject, activeStage: StageScope?) -> LauncherAction? {
-        let here = activeStage.map { LauncherDestination(kind: .stage($0), title: "ici", detail: "") }
+        let here = activeStage.map { LauncherDestination(kind: .stage($0), title: tr("ici", "here"), detail: "") }
         func make(_ verb: LauncherVerb, _ destination: LauncherDestination?) -> LauncherAction {
             var action = LauncherAction(subject: subject, verb: verb, destination: destination)
             action.position = position
@@ -147,12 +147,12 @@ struct LauncherPhrase: Equatable, Sendable {
         let name = action.subject.appName
         let target = action.destination?.title ?? ""
         let base: String = switch action.verb {
-        case .open: "Ouvrir \(name)"
-        case .openIn: "Ouvrir \(name) dans \(target)"
-        case .bringHere: "Amener \(name) ici"
-        case .sendTo: "Envoyer \(name) vers \(target)"
-        case .focus: "Aller à \(name)"
-        case .moveTo: "Déplacer \(name) vers \(target)"
+        case .open: tr("Ouvrir \(name)", "Open \(name)")
+        case .openIn: tr("Ouvrir \(name) dans \(target)", "Open \(name) in \(target)")
+        case .bringHere: tr("Amener \(name) ici", "Bring \(name) here")
+        case .sendTo: tr("Envoyer \(name) vers \(target)", "Send \(name) to \(target)")
+        case .focus: tr("Aller à \(name)", "Go to \(name)")
+        case .moveTo: tr("Déplacer \(name) vers \(target)", "Move \(name) to \(target)")
         default: "\(action.verb.title) \(name)"
         }
         return action.position.map { "\(base), \($0.title)" } ?? base

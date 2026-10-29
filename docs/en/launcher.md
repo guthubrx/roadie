@@ -9,8 +9,8 @@ the screen. It runs Alfred workflows (`.alfredworkflow` files) without Alfred an
 > Available in `main`; the published 0.10.0 release does not include the launcher yet. It will ship in the next
 > release. Until then, [build from source](../../README.md#build-and-development-run).
 
-The interface is in French. The screenshots in this guide are drawn by Roadie's renderer with sample windows and
-files.
+The bar follows the macOS language: English, or French on a Mac set to French. What you type works in both
+languages. The screenshots in this guide are drawn by Roadie's renderer with sample windows and files.
 
 ## Open the bar
 
@@ -55,6 +55,9 @@ Useful keys:
 - `~/Doc` or `/Applications/` lists the folder; Tab completes, ⌫ goes up one folder.
 - `> command` runs it in Terminal, iTerm, Ghostty, Warp, kitty, WezTerm or Alacritty.
 - A calculation (`12*4.5`, `=sqrt(2)`) shows its result first; Return copies it.
+- Words work in English and French, whatever the bar's language: verbs (`close` or `fermer`), phrases (`left` or
+  `gauche`, `here` or `ici`), system commands (`lock` or `verrouiller`), desktops (`desktop 2` or `bureau 2`), and
+  app names (`Calendar` or `Calendrier`).
 
 ![Calculation in the bar](../assets/screenshots/launcher-calc.png)
 
@@ -72,7 +75,7 @@ puts everything back.
 
 ![A full phrase](../assets/screenshots/launcher-phrase.png)
 
-A full phrase does it all at once, in French or English: `safari perso left` opens Safari in the Perso stage, on
+A full phrase does it all at once, in English or French: `safari personal left` opens Safari in the Personal stage, on
 the left. ⌘S saves the action as an abbreviation and gives the `roadie launch … --position …` command to bind in
 BetterTouchTool.
 

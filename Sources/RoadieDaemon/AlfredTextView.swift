@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Vue Texte d'un workflow (session 117), brique `userinterface.text` d'Alfred 5.5 : texte à lire, à modifier ou
 /// Markdown rendu, rempli par l'argument reçu, un fichier ou un script relancé. Logique pure ; la fenêtre est
@@ -45,7 +46,7 @@ struct AlfredTextView: Equatable, Sendable {
         view.monospaced = object.int("fontmode") == 2
         view.footer = object.string("footertext") ?? ""
         let loading = (object.string("loadingtext") ?? "").trimmingCharacters(in: .whitespaces)
-        view.loadingText = loading.isEmpty ? "Loading…" : loading
+        view.loadingText = loading.isEmpty ? tr("Chargement…", "Loading…") : loading
         view.variables = variables
         return view
     }

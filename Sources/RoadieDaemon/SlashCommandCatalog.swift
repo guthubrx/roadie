@@ -73,29 +73,29 @@ public enum SlashCommandCatalog {
 
     /// Les 19 commandes du contrat, puis `/settings` et `/set`, dans l'ordre du contrat.
     public static let commands: [SlashCommand] = [
-        SlashCommand(name: "move", summary: "Déplacer le focus dans une direction", usage: "/move \(directionUsage)"),
-        SlashCommand(name: "swap", summary: "Échanger la fenêtre avec sa voisine", usage: "/swap \(directionUsage)"),
-        SlashCommand(name: "resize", summary: "Redimensionner la fenêtre", usage: "/resize \(directionUsage)"),
-        SlashCommand(name: "full", summary: "Plein écran natif", usage: "/full"),
-        SlashCommand(name: "max", summary: "Agrandir la fenêtre", usage: "/max"),
+        SlashCommand(name: "move", summary: tr("Déplacer le focus dans une direction", "Move focus in a direction"), usage: "/move \(directionUsage)"),
+        SlashCommand(name: "swap", summary: tr("Échanger la fenêtre avec sa voisine", "Swap the window with its neighbor"), usage: "/swap \(directionUsage)"),
+        SlashCommand(name: "resize", summary: tr("Redimensionner la fenêtre", "Resize the window"), usage: "/resize \(directionUsage)"),
+        SlashCommand(name: "full", summary: tr("Plein écran natif", "Native full screen"), usage: "/full"),
+        SlashCommand(name: "max", summary: tr("Agrandir la fenêtre", "Maximize the window"), usage: "/max"),
         SlashCommand(
-            name: "stage", aliases: ["s"], summary: "Changer de stage, en créer un, le renommer ou y envoyer la fenêtre",
-            usage: "/stage N|nom|new [nom]|rename nom|send N"),
-        SlashCommand(name: "screen", summary: "Passer à un autre écran", usage: "/screen \(directionUsage)|N"),
-        SlashCommand(name: "send", summary: "Envoyer la fenêtre sur un écran", usage: "/send N"),
-        SlashCommand(name: "desktop", aliases: ["d"], summary: "Passer à un autre bureau", usage: "/desktop N"),
-        SlashCommand(name: "layout", summary: "Changer la méthode de tuilage", usage: "/layout bsp|spatial|master|float"),
-        SlashCommand(name: "balance", summary: "Équilibrer les fenêtres", usage: "/balance"),
-        SlashCommand(name: "split", summary: "Choisir le sens de coupe", usage: "/split h|v"),
-        SlashCommand(name: "bm", aliases: ["b"], summary: "Aller à un bookmark ou en poser un", usage: "/bm nom|set nom"),
-        SlashCommand(name: "grid", summary: "Grille de clic", usage: "/grid [fenêtre]"),
-        SlashCommand(name: "letters", summary: "Mode lettres", usage: "/letters"),
-        SlashCommand(name: "doctor", summary: "Diagnostic de Roadie", usage: "/doctor"),
-        SlashCommand(name: "heal", summary: "Réparer le daemon", usage: "/heal"),
-        SlashCommand(name: "reload", summary: "Recharger la configuration", usage: "/reload"),
-        SlashCommand(name: "restart", summary: "Redémarrer le daemon", usage: "/restart"),
-        SlashCommand(name: "settings", summary: "Ouvrir la fenêtre de réglages", usage: "/settings [catégorie]"),
-        SlashCommand(name: "set", summary: "Lire, écrire ou rétablir un réglage", usage: "/set nom [valeur|défaut]"),
+            name: "stage", aliases: ["s"], summary: tr("Changer de stage, en créer un, le renommer ou y envoyer la fenêtre", "Switch stage, create or rename one, or send the window to it"),
+            usage: tr("/stage N|nom|new [nom]|rename nom|send N", "/stage N|name|new [name]|rename name|send N")),
+        SlashCommand(name: "screen", summary: tr("Passer à un autre écran", "Switch to another display"), usage: "/screen \(directionUsage)|N"),
+        SlashCommand(name: "send", summary: tr("Envoyer la fenêtre sur un écran", "Send the window to a display"), usage: "/send N"),
+        SlashCommand(name: "desktop", aliases: ["d"], summary: tr("Passer à un autre bureau", "Switch to another desktop"), usage: "/desktop N"),
+        SlashCommand(name: "layout", summary: tr("Changer la méthode de tuilage", "Change the tiling method"), usage: "/layout bsp|spatial|master|float"),
+        SlashCommand(name: "balance", summary: tr("Équilibrer les fenêtres", "Balance the windows"), usage: "/balance"),
+        SlashCommand(name: "split", summary: tr("Choisir le sens de coupe", "Choose the split direction"), usage: "/split h|v"),
+        SlashCommand(name: "bm", aliases: ["b"], summary: tr("Aller à un bookmark ou en poser un", "Go to a bookmark or set one"), usage: tr("/bm nom|set nom", "/bm name|set name")),
+        SlashCommand(name: "grid", summary: tr("Grille de clic", "Click grid"), usage: tr("/grid [fenêtre]", "/grid [window]")),
+        SlashCommand(name: "letters", summary: tr("Mode lettres", "Letter mode"), usage: "/letters"),
+        SlashCommand(name: "doctor", summary: tr("Diagnostic de Roadie", "Roadie diagnostics"), usage: "/doctor"),
+        SlashCommand(name: "heal", summary: tr("Réparer le daemon", "Repair the daemon"), usage: "/heal"),
+        SlashCommand(name: "reload", summary: tr("Recharger la configuration", "Reload the configuration"), usage: "/reload"),
+        SlashCommand(name: "restart", summary: tr("Redémarrer le daemon", "Restart the daemon"), usage: "/restart"),
+        SlashCommand(name: "settings", summary: tr("Ouvrir la fenêtre de réglages", "Open the settings window"), usage: tr("/settings [catégorie]", "/settings [category]")),
+        SlashCommand(name: "set", summary: tr("Lire, écrire ou rétablir un réglage", "Read, write or reset a setting"), usage: tr("/set nom [valeur|défaut]", "/set name [value|default]")),
     ]
 
     // MARK: - Résolution de mots
@@ -153,7 +153,7 @@ public enum SlashCommandCatalog {
     public static func parse(_ input: String) -> Result<SlashInvocation, SlashError> {
         let words = split(input, maxWords: 1)
         guard let head = words.first else {
-            return .failure(SlashError(message: "Saisissez une commande après « / »."))
+            return .failure(SlashError(message: tr("Saisissez une commande après « / ».", "Type a command after “/”.")))
         }
         guard let command = command(named: head) else { return .failure(unknown(head)) }
         return parseArguments(of: command, rest: words.count > 1 ? words[1] : "")
@@ -166,7 +166,7 @@ public enum SlashCommandCatalog {
             .map { (name: $0.name, distance: RoadieConfigLoader.editDistance(key, $0.name)) }
             .filter { $0.distance <= 2 }
             .min { $0.distance < $1.distance }
-        return SlashError(message: "Commande inconnue : /\(head)", suggestion: closest?.name)
+        return SlashError(message: tr("Commande inconnue : /\(head)", "Unknown command: /\(head)"), suggestion: closest?.name)
     }
 
     private static func fail(_ command: SlashCommand, _ message: String) -> Result<SlashInvocation, SlashError> {
@@ -183,12 +183,12 @@ public enum SlashCommandCatalog {
         case "max": return fixed(command, args, .router(argv: ["toggle", "maximize"]))
         case "stage": return parseStage(command, rest: rest)
         case "screen":
-            guard args.count == 1 else { return fail(command, "Indiquez une direction ou un numéro d'écran.") }
+            guard args.count == 1 else { return fail(command, tr("Indiquez une direction ou un numéro d'écran.", "Give a direction or a display number.")) }
             if let dir = normalizeDirection(args[0]) { return .success(.router(argv: ["display", "focus", dir])) }
             if let number = positive(args[0]) { return .success(.router(argv: ["display", "focus", String(number)])) }
-            return fail(command, "Direction ou numéro d'écran invalide : \(args[0]).")
-        case "send": return number(command, args, "un numéro d'écran") { .router(argv: ["window", "display", $0]) }
-        case "desktop": return number(command, args, "un numéro de bureau") { .router(argv: ["desktop", "focus", $0]) }
+            return fail(command, tr("Direction ou numéro d'écran invalide : \(args[0]).", "Invalid direction or display number: \(args[0])."))
+        case "send": return number(command, args, tr("un numéro d'écran", "a display number")) { .router(argv: ["window", "display", $0]) }
+        case "desktop": return number(command, args, tr("un numéro de bureau", "a desktop number")) { .router(argv: ["desktop", "focus", $0]) }
         case "layout": return parseLayout(command, args)
         case "balance": return fixed(command, args, .router(argv: ["balance"]))
         case "split": return parseSplit(command, args)
@@ -209,14 +209,14 @@ public enum SlashCommandCatalog {
     private static func fixed(
         _ command: SlashCommand, _ args: [String], _ invocation: SlashInvocation
     ) -> Result<SlashInvocation, SlashError> {
-        args.isEmpty ? .success(invocation) : fail(command, "Cette commande n'accepte pas d'argument.")
+        args.isEmpty ? .success(invocation) : fail(command, tr("Cette commande n'accepte pas d'argument.", "This command takes no argument."))
     }
 
     private static func direction(
         _ command: SlashCommand, _ args: [String], _ build: (String) -> SlashInvocation
     ) -> Result<SlashInvocation, SlashError> {
-        guard args.count == 1 else { return fail(command, "Indiquez une direction.") }
-        guard let dir = normalizeDirection(args[0]) else { return fail(command, "Direction invalide : \(args[0]).") }
+        guard args.count == 1 else { return fail(command, tr("Indiquez une direction.", "Give a direction.")) }
+        guard let dir = normalizeDirection(args[0]) else { return fail(command, tr("Direction invalide : \(args[0]).", "Invalid direction: \(args[0]).")) }
         return .success(build(dir))
     }
 
@@ -224,57 +224,57 @@ public enum SlashCommandCatalog {
         _ command: SlashCommand, _ args: [String], _ what: String, _ build: (String) -> SlashInvocation
     ) -> Result<SlashInvocation, SlashError> {
         guard args.count == 1, let value = positive(args[0]) else {
-            return fail(command, "Indiquez \(what) (entier à partir de 1).")
+            return fail(command, tr("Indiquez \(what) (entier à partir de 1).", "Give \(what) (a whole number from 1)."))
         }
         return .success(build(String(value)))
     }
 
     private static func parseStage(_ command: SlashCommand, rest: String) -> Result<SlashInvocation, SlashError> {
         let parts = split(rest, maxWords: 1)
-        guard let first = parts.first else { return fail(command, "Indiquez un numéro, un nom ou une action.") }
+        guard let first = parts.first else { return fail(command, tr("Indiquez un numéro, un nom ou une action.", "Give a number, a name or an action.")) }
         let tail = parts.count > 1 ? parts[1] : nil
         switch TargetHintService.normalized(first) {
         case "new":
             return .success(.stageCreate(name: tail))
         case "rename":
-            guard let tail else { return fail(command, "Indiquez le nouveau nom du stage.") }
+            guard let tail else { return fail(command, tr("Indiquez le nouveau nom du stage.", "Give the new stage name.")) }
             return .success(.stageRename(tail))
         case "send":
-            guard let tail, let id = positive(tail) else { return fail(command, "Indiquez le numéro du stage cible.") }
+            guard let tail, let id = positive(tail) else { return fail(command, tr("Indiquez le numéro du stage cible.", "Give the target stage number.")) }
             return .success(.router(argv: ["stage", "assign", String(id)]))
         default:
             // Un mot numérique est toujours un identifiant ; sinon toute la saisie est le nom du stage.
             guard Int(first) != nil else { return .success(.stageSwitchByName(rest.trimmingCharacters(in: .whitespacesAndNewlines))) }
-            guard tail == nil, let id = positive(first) else { return fail(command, "Numéro de stage invalide : \(rest).") }
+            guard tail == nil, let id = positive(first) else { return fail(command, tr("Numéro de stage invalide : \(rest).", "Invalid stage number: \(rest).")) }
             return .success(.router(argv: ["stage", "switch", String(id)]))
         }
     }
 
     private static func parseLayout(_ command: SlashCommand, _ args: [String]) -> Result<SlashInvocation, SlashError> {
         let modes = ["bsp": "bsp", "spatial": "spatialBsp", "master": "masterStack", "float": "float"]
-        guard args.count == 1 else { return fail(command, "Indiquez une méthode de tuilage.") }
+        guard args.count == 1 else { return fail(command, tr("Indiquez une méthode de tuilage.", "Give a tiling method.")) }
         guard let mode = modes[TargetHintService.normalized(args[0])] else {
-            return fail(command, "Méthode invalide : \(args[0]). Valeurs permises : bsp, spatial, master, float.")
+            return fail(command, tr("Méthode invalide : \(args[0]). Valeurs permises : bsp, spatial, master, float.", "Invalid method: \(args[0]). Allowed: bsp, spatial, master, float."))
         }
         return .success(.router(argv: ["mode", mode]))
     }
 
     private static func parseSplit(_ command: SlashCommand, _ args: [String]) -> Result<SlashInvocation, SlashError> {
-        guard args.count == 1 else { return fail(command, "Indiquez h (horizontal) ou v (vertical).") }
+        guard args.count == 1 else { return fail(command, tr("Indiquez h (horizontal) ou v (vertical).", "Give h (horizontal) or v (vertical).")) }
         switch TargetHintService.normalized(args[0]) {
         case "h", "horizontal": return .success(.router(argv: ["layout", "split", "horizontal"]))
         case "v", "vertical": return .success(.router(argv: ["layout", "split", "vertical"]))
-        default: return fail(command, "Sens invalide : \(args[0]). Valeurs permises : h, v.")
+        default: return fail(command, tr("Sens invalide : \(args[0]). Valeurs permises : h, v.", "Invalid direction: \(args[0]). Allowed: h, v."))
         }
     }
 
     private static func parseBookmark(_ command: SlashCommand, rest: String) -> Result<SlashInvocation, SlashError> {
         let parts = split(rest, maxWords: 1)
-        guard let first = parts.first else { return fail(command, "Indiquez le nom du bookmark.") }
+        guard let first = parts.first else { return fail(command, tr("Indiquez le nom du bookmark.", "Give the bookmark name.")) }
         guard TargetHintService.normalized(first) == "set" else {
             return .success(.router(argv: ["bookmark", "jump", rest.trimmingCharacters(in: .whitespacesAndNewlines)]))
         }
-        guard parts.count > 1 else { return fail(command, "Indiquez le nom du bookmark à poser.") }
+        guard parts.count > 1 else { return fail(command, tr("Indiquez le nom du bookmark à poser.", "Give the name of the bookmark to set.")) }
         return .success(.router(argv: ["bookmark", "set", parts[1]]))
     }
 
@@ -283,7 +283,7 @@ public enum SlashCommandCatalog {
         switch args.map(TargetHintService.normalized) {
         case []: scope = "display"
         case ["fenetre"], ["window"]: scope = "focused_window"
-        default: return fail(command, "Argument invalide. Valeur permise : fenêtre.")
+        default: return fail(command, tr("Argument invalide. Valeur permise : fenêtre.", "Invalid argument. Allowed: window."))
         }
         return .success(.routerDeferred(argv: ["grid", "interactive", "--scope", scope]))
     }
@@ -293,7 +293,7 @@ public enum SlashCommandCatalog {
         guard !text.isEmpty else { return .success(.openSettings(category: nil)) }
         guard let category = resolveCategory(text) else {
             let valid = SettingCategory.allCases.map(\.rawValue).joined(separator: ", ")
-            return fail(command, "Catégorie inconnue : \(text). Catégories valides : \(valid).")
+            return fail(command, tr("Catégorie inconnue : \(text). Catégories valides : \(valid).", "Unknown category: \(text). Valid categories: \(valid)."))
         }
         return .success(.openSettings(category: category))
     }

@@ -156,6 +156,6 @@ struct ClosedWindow: Equatable, Sendable {
     /// « il y a 3 min », « il y a 2 h ».
     static func ago(_ date: Date, now: Date) -> String {
         let minutes = max(1, Int(now.timeIntervalSince(date) / 60))
-        return minutes < 60 ? "il y a \(minutes) min" : "il y a \(minutes / 60) h"
+        return minutes < 60 ? tr("il y a \(minutes) min", "\(minutes) min ago") : tr("il y a \(minutes / 60) h", "\(minutes / 60) h ago")
     }
 }

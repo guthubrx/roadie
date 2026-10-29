@@ -31,7 +31,7 @@ Alfred workflows run there too, without the Powerpack.
 | **Window manager** | Automatic tiling, named stages, per-display virtual desktops, side rail, window switcher (Cmd+Tab), overview |
 | **Launcher** | Apps, windows, open documents and tabs, files, browser bookmarks and history, settings, calculator, web, Alfred workflows |
 
-They work together. The launcher knows where to put what it opens: in the Perso stage, on the other
+They work together. The launcher knows where to put what it opens: in the Personal stage, on the other
 display, on the left. It finds a window hidden in an inactive stage or on another desktop. And the
 ranking it learns takes the stage you are working in into account.
 
@@ -55,13 +55,13 @@ Spotlight results are added afterwards without reshuffling the list.
 <table>
   <tr>
     <td><img src="docs/assets/screenshots/launcher-verbs.png" alt="Safari's verbs after Tab"></td>
-    <td><img src="docs/assets/screenshots/launcher-phrase.png" alt="The phrase &quot;safari perso gauche&quot;"></td>
+    <td><img src="docs/assets/screenshots/launcher-phrase.png" alt="The phrase &quot;safari personal left&quot;"></td>
   </tr>
 </table>
 
 Tab on a row opens its verbs: open in a stage, bring here, send to a desktop or display, gather an
 app's windows, float, quit… While you choose, the real windows move to their future place; Escape
-puts everything back. A phrase does it all at once: `safari perso left` opens Safari in the Perso
+puts everything back. A phrase does it all at once: `safari personal left` opens Safari in the Personal
 stage, on the left, and ⌘S saves it as an abbreviation.
 
 ### Alfred workflows, for free
@@ -109,7 +109,8 @@ the bottom, center or top, and you can drag it.
   <img src="docs/assets/screenshots/overview.png" alt="Overview of desktops and stages" width="100%">
 </p>
 
-<sub>Screenshots drawn by Roadie's renderer with sample windows and files. The interface is in French.</sub>
+<sub>Screenshots drawn by Roadie's renderer with sample windows and files. The launcher, window switcher and overview
+follow the macOS language (English or French); the settings window is in French.</sub>
 
 ## What you can do with Roadie
 
@@ -703,7 +704,7 @@ The settings window provides categories, search, and changes as soon as a typed
 value is valid. Margins trigger a new layout, including one-point changes. Lists,
 stages, rules and per-display overrides have built-in editors. Incomplete input
 stays in the field without replacing the last valid value.
-The interface is in French. TOML comments are preserved.
+The settings window is in French. TOML comments are preserved.
 A backup precedes the first change of the session. Invalid writes are
 rejected. Font sizes are independent and apply immediately through sliders,
 steppers, or valid typed values. Open sessions retain their input when fonts change.

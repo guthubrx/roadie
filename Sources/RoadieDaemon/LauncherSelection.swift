@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Sélection multiple du lanceur (SPEC-091) : applications, fenêtres et fichiers réunis, dans l'ordre
 /// d'ajout, gardés quand la saisie change.
@@ -68,14 +69,14 @@ struct LauncherSelection: Equatable, Sendable {
     static func title(_ verb: LauncherVerb, count: Int) -> String {
         let n = " (\(count))"
         return switch verb {
-        case .sendTo: "Envoyer vers…" + n
-        case .bringHere: "Amener ici" + n
-        case .close: "Fermer les fenêtres" + n
-        case .minimize: "Réduire les fenêtres" + n
-        case .quit: "Quitter les applications" + n
-        case .hide: "Masquer les applications" + n
-        case .copyPath: "Copier les chemins" + n
-        case .reveal: "Montrer dans le Finder" + n
+        case .sendTo: tr("Envoyer vers…", "Send to…") + n
+        case .bringHere: tr("Amener ici", "Bring here") + n
+        case .close: tr("Fermer les fenêtres", "Close windows") + n
+        case .minimize: tr("Réduire les fenêtres", "Minimize windows") + n
+        case .quit: tr("Quitter les applications", "Quit apps") + n
+        case .hide: tr("Masquer les applications", "Hide apps") + n
+        case .copyPath: tr("Copier les chemins", "Copy paths") + n
+        case .reveal: tr("Montrer dans le Finder", "Reveal in Finder") + n
         default: verb.title + n
         }
     }
@@ -104,11 +105,12 @@ extension LauncherActionList {
     /// contient une, sinon celles d'une ouverture (stages). O(v + d).
     static func batch(_ selection: LauncherSelection, query: String) -> LauncherActionList {
         var list = LauncherActionList()
-        list.appendHeader("\(selection.count) choisi\(selection.count > 1 ? "s" : "") ›")
+        list.appendHeader(tr("\(selection.count) choisi\(selection.count > 1 ? "s" : "") ›", "\(selection.count) selected ›"))
         let folded = LauncherMatch.fold(query)
         for verb in LauncherSelection.verbs {
             let count = selection.applicable(verb).count
-            guard count > 0, folded.isEmpty || LauncherMatch.score(query, in: LauncherSelection.title(verb, count: count)) != nil else { continue }
+            guard count > 0, folded.isEmpty || LauncherMatch.score(query, in: LauncherSelection.title(verb, count: count)) != nil
+                || verb.matches(query, app: "") else { continue }
             list.appendVerb(verb)
         }
         return list

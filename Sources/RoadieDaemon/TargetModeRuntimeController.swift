@@ -332,7 +332,7 @@ public final class TargetModeRuntimeController: NSObject {
             } catch {
                 events.append(RoadieEvent(type: "project.delete_failed", details: ["reason": "persistence"]))
                 let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
-                Task { await effects.notify(title: "Roadie", text: "Impossible de supprimer le projet.") }
+                Task { await effects.notify(title: "Roadie", text: tr("Impossible de supprimer le projet.", "Could not delete the project.")) }
             }
             return
         default:
@@ -621,7 +621,7 @@ public final class TargetModeRuntimeController: NSObject {
         context.pendingRules = suggestions.count
         var idle: [LauncherList.Row] = []
         if let first = suggestions.first {
-            idle += [.header("Règle proposée"), .rule(first, .create), .rule(first, .later), .rule(first, .never)]
+            idle += [.header(tr("Règle proposée", "Suggested rule")), .rule(first, .create), .rule(first, .later), .rule(first, .never)]
         }
         let windowTargets = Dictionary(targets.filter { $0.kind == .window }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         // Fenêtre active lue dans l'application au premier plan (session 098) : `snapshot.focusedWindowID`
@@ -635,7 +635,7 @@ public final class TargetModeRuntimeController: NSObject {
             "focused": focused.map { String($0.rawValue) } ?? "none",
             "recent": recentIDs.prefix(3).map { String($0.rawValue) }.joined(separator: ","),
             "previous": previous?.id ?? "none"]))
-        if let previous { idle += [.header("Revenir"), .target(previous)] }
+        if let previous { idle += [.header(tr("Revenir", "Go back")), .target(previous)] }
         let batchMoves = memory.undoableBatch(at: now, currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope })
         if batchMoves.count > 1, let move = batchMoves.last, let from = move.from, let info = stageInfo(from) {
             // Envoi groupé (SPEC-091) : une ligne pour tout le lot.
@@ -643,8 +643,9 @@ public final class TargetModeRuntimeController: NSObject {
                                       scope: TargetScopeSnapshot(scope: move.to, windowId: move.windowID), actions: [.focus])
             let action = LauncherAction(subject: .target(target), verb: .sendTo,
                                         destination: LauncherDestination(kind: .stage(from), title: info.title, detail: ""))
-            idle += [.header("Annuler"), .action("undo-batch", action, "Remettre les \(batchMoves.count) fenêtres à leur place",
-                                                 "envoi groupé \(ClosedWindow.ago(move.at, now: now))")]
+            idle += [.header(tr("Annuler", "Undo")), .action("undo-batch", action,
+                                                 tr("Remettre les \(batchMoves.count) fenêtres à leur place", "Put the \(batchMoves.count) windows back"),
+                                                 tr("envoi groupé", "sent together") + " \(ClosedWindow.ago(move.at, now: now))")]
         } else if let move = memory.undoable(at: now, currentScope: { id in snapshot.windows.first { $0.window.id == id }?.scope }),
            let from = move.from, let info = stageInfo(from) {
             let target = windowTargets["window:\(move.windowID.rawValue)"]
@@ -652,8 +653,8 @@ public final class TargetModeRuntimeController: NSObject {
                                 scope: TargetScopeSnapshot(scope: move.to, windowId: move.windowID), actions: [.focus])
             let action = LauncherAction(subject: .target(target), verb: .sendTo,
                                         destination: LauncherDestination(kind: .stage(from), title: info.title, detail: ""))
-            idle += [.header("Annuler"), .action("undo", action, "Remettre \(move.appName) dans \(info.title)",
-                                                 "déplacée \(ClosedWindow.ago(move.at, now: now))")]
+            idle += [.header(tr("Annuler", "Undo")), .action("undo", action, tr("Remettre \(move.appName) dans \(info.title)", "Put \(move.appName) back in \(info.title)"),
+                                                 tr("déplacée", "moved") + " \(ClosedWindow.ago(move.at, now: now))")]
         }
         let closedRows = ClosedWindow.recent(in: state, at: now).compactMap { closed -> LauncherList.Row? in
             guard let app = catalog.current.first(where: { $0.bundleID == closed.bundleID }) ?? Self.app(bundleID: closed.bundleID),
@@ -661,10 +662,10 @@ public final class TargetModeRuntimeController: NSObject {
             let action = LauncherAction(subject: .app(app), verb: .openIn,
                                         destination: LauncherDestination(kind: .stage(closed.stage), title: info.title, detail: ""))
             return .action("closed:\(closed.bundleID):\(closed.title)", action,
-                           "Rouvrir \(app.name)" + (closed.title.isEmpty ? "" : " · \(closed.title)"),
-                           "fermée \(ClosedWindow.ago(closed.closedAt, now: now)) · \(info.title)")
+                           tr("Rouvrir", "Reopen") + " \(app.name)" + (closed.title.isEmpty ? "" : " · \(closed.title)"),
+                           tr("fermée", "closed") + " \(ClosedWindow.ago(closed.closedAt, now: now)) · \(info.title)")
         }
-        if !closedRows.isEmpty { idle += [.header("Fermées récemment")] + closedRows }
+        if !closedRows.isEmpty { idle += [.header(tr("Fermées récemment", "Recently closed"))] + closedRows }
         let targetModeConfig = service.effectiveConfig.experimental.targetMode
         if targetModeConfig.idleFrequentEnabled, let rankingContext {
             let ranking = context.ranking
@@ -674,11 +675,11 @@ public final class TargetModeRuntimeController: NSObject {
                 .compactMap { entry in catalog.current.first { $0.rankingKey == entry.key } }
                 .filter { $0.bundleID != focusedBundle }
                 .prefix(targetModeConfig.idleFrequentCount)
-            if !habits.isEmpty { idle += [.header("Souvent ici")] + habits.map { .app($0, detail: "souvent dans cette stage") } }
+            if !habits.isEmpty { idle += [.header(tr("Souvent ici", "Often here"))] + habits.map { .app($0, detail: tr("souvent dans cette stage", "often in this stage")) } }
         }
         let recent = targetModeConfig.idleRecentSearchesEnabled
             ? LauncherHistoryStore().load().recent(targetModeConfig.idleRecentSearchesCount) : []
-        if !recent.isEmpty { idle += [.header("Recherches récentes")] + recent.map(LauncherList.Row.history) }
+        if !recent.isEmpty { idle += [.header(tr("Recherches récentes", "Recent searches"))] + recent.map(LauncherList.Row.history) }
         context.idleRows = idle
         // Documents et onglets de l'ouverture précédente montrés tout de suite (moins d'une minute), puis
         // remplacés par la lecture du moment, qui interroge chaque application et navigateur (session 123).
@@ -1386,7 +1387,7 @@ public final class TargetModeRuntimeController: NSObject {
             } catch {
                 events.append(RoadieEvent(type: "project.save_failed", details: ["reason": "persistence"]))
                 let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
-                await effects.notify(title: "Roadie", text: "Impossible d'enregistrer le projet « \(stage.name) ».")
+                await effects.notify(title: "Roadie", text: tr("Impossible d'enregistrer le projet « \(stage.name) ».", "Could not save the project “\(stage.name)”."))
             }
         }
         return TargetActionResult(changed: false, message: "project save scheduled: \(stage.name)")
@@ -1586,7 +1587,7 @@ public final class TargetModeRuntimeController: NSObject {
                 try memoryStore.updateChecked { $0.decline(suggestion, choice, at: now) }
             } catch {
                 return failedRuleChoice(choice, reason: "persistence", error: "rule_choice_not_saved",
-                                        message: "Impossible d'enregistrer le choix de règle.")
+                                        message: tr("Impossible d'enregistrer le choix de règle.", "Could not save the rule choice."))
             }
         }
         events.append(RoadieEvent(type: "launcher.rule_choice", details: ["choice": choice.rawValue, "bundleID": suggestion.bundleID]))
@@ -1594,7 +1595,7 @@ public final class TargetModeRuntimeController: NSObject {
         let snapshot = service.snapshot(followFocus: false)
         guard let display = snapshot.displays.first(where: { $0.id == suggestion.stage.displayID }) else {
             return failedRuleChoice(choice, reason: "display", error: "display",
-                                    message: "Impossible de créer la règle : écran indisponible.")
+                                    message: tr("Impossible de créer la règle : écran indisponible.", "Could not create the rule: display unavailable."))
         }
         let window = snapshot.windows.first { $0.window.bundleID == suggestion.bundleID }?.window
             ?? WindowSnapshot(id: WindowID(rawValue: 1), pid: 0, appName: suggestion.appName, bundleID: suggestion.bundleID, title: "",
@@ -1602,7 +1603,7 @@ public final class TargetModeRuntimeController: NSObject {
         let result = ruleAffinity.saveAffinity(kind: .app, window: window, scope: suggestion.stage, display: display)
         guard result.changed else {
             return failedRuleChoice(choice, reason: "affinity", error: "rule_create_not_saved",
-                                    message: "Impossible de créer la règle.")
+                                    message: tr("Impossible de créer la règle.", "Could not create the rule."))
         }
         memoryStore.update { $0.decline(suggestion, choice, at: now) }
         return TargetActionResult(changed: true, message: result.message)
@@ -1826,10 +1827,10 @@ public final class TargetModeRuntimeController: NSObject {
             destination = LauncherDestination(kind: .stage(scope), title: name, detail: "")
         } else if command.bool("here") {
             guard let scope = activeStageScope() else { _ = refused("launcher launch", "stage"); return }
-            destination = LauncherDestination(kind: .stage(scope), title: "Stage active", detail: "")
+            destination = LauncherDestination(kind: .stage(scope), title: tr("Stage active", "Active stage"), detail: "")
         } else if command.bool("newStage") {
             let display = state.activeDisplayID ?? service.snapshot(followFocus: false).displays.first?.id ?? DisplayID(rawValue: "none")
-            destination = LauncherDestination(kind: .newStage(name: nil, display, state.currentDesktopID(for: display)), title: "Nouvelle stage", detail: "")
+            destination = LauncherDestination(kind: .newStage(name: nil, display, state.currentDesktopID(for: display)), title: tr("Nouvelle stage", "New stage"), detail: "")
         }
         let url = URL(fileURLWithPath: path)
         let subject: LauncherSubject

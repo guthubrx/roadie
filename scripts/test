@@ -10,4 +10,5 @@ trap cleanup EXIT
 
 # Pas de `exec` (REL-041) : il remplacerait ce shell et le trap EXIT ne supprimerait jamais tmp_home.
 # `set -e` propage le code de sortie de swift test après le nettoyage.
-HOME="$tmp_home" "$script_dir/with-xcode" swift test "$@"
+# Textes de l'interface en français, comme les attendent les tests (session 126).
+HOME="$tmp_home" ROADIE_LANGUAGE="${ROADIE_LANGUAGE:-fr}" "$script_dir/with-xcode" swift test "$@"

@@ -50,9 +50,12 @@ struct LauncherAlias: Codable, Equatable, Sendable {
 
         var message: String {
             switch self {
-            case .notDurable: "Seules les applications et les fichiers se gardent : une fenêtre ou une stage peut disparaître."
-            case .anonymousStage: "Nommez d'abord cette stage : une stage anonyme ne se retrouve pas."
-            case .unsupportedVerb: "Ce verbe ne se garde pas ; gardez Ouvrir, Ouvrir dans ou Amener ici."
+            case .notDurable: tr("Seules les applications et les fichiers se gardent : une fenêtre ou une stage peut disparaître.",
+                                 "Only apps and files can be saved: a window or a stage may disappear.")
+            case .anonymousStage: tr("Nommez d'abord cette stage : une stage anonyme ne se retrouve pas.",
+                                     "Name this stage first: an unnamed stage cannot be found again.")
+            case .unsupportedVerb: tr("Ce verbe ne se garde pas ; gardez Ouvrir, Ouvrir dans ou Amener ici.",
+                                      "This verb cannot be saved; save Open, Open in or Bring here.")
             }
         }
     }
@@ -70,10 +73,10 @@ struct LauncherAlias: Codable, Equatable, Sendable {
             action = LauncherAction(subject: subject, verb: .openIn, destination: LauncherDestination(kind: .stage(scope), title: stage, detail: ""))
         } else if newStage {
             action = LauncherAction(subject: subject, verb: .openIn,
-                                    destination: LauncherDestination(kind: .newStage(name: nil, home.0, home.1), title: "Nouvelle stage", detail: ""))
+                                    destination: LauncherDestination(kind: .newStage(name: nil, home.0, home.1), title: tr("Nouvelle stage", "New stage"), detail: ""))
         } else if here {
             guard let activeStage else { return nil }
-            action = LauncherAction(subject: subject, verb: .bringHere, destination: LauncherDestination(kind: .stage(activeStage), title: "ici", detail: ""))
+            action = LauncherAction(subject: subject, verb: .bringHere, destination: LauncherDestination(kind: .stage(activeStage), title: tr("ici", "here"), detail: ""))
         } else {
             action = LauncherAction(subject: subject, verb: .open, destination: nil)
         }

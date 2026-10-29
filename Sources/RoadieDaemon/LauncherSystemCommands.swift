@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import RoadieCore
 
 /// Commandes système de la barre (session 105), comme la section Système d'Alfred : verrouiller,
 /// suspendre les écrans, tout quitter… Les commandes lourdes demandent un second Retour.
@@ -14,28 +15,42 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
     /// Détail de la ligne ; nil : « Système » (session 115 : « Réglages Système », « Paramètres de Roadie »).
     var detail: String? = nil
 
+    /// Titre dans la langue de l'interface ; les deux noms restent des mots-clés (session 126).
+    init(id: String, fr: String, en: String, keywords: [String], symbol: String, confirms: Bool) {
+        self.init(id: id, title: tr(fr, en), keywords: keywords + [fr, en], symbol: symbol, confirms: confirms)
+    }
+
+    init(id: String, title: String, keywords: [String], symbol: String, confirms: Bool, detail: String? = nil) {
+        self.id = id
+        self.title = title
+        self.keywords = keywords
+        self.symbol = symbol
+        self.confirms = confirms
+        self.detail = detail
+    }
+
     /// `confirmQuitAll` : réglage `confirm_quit_all`.
     static func all(confirmQuitAll: Bool = true) -> [LauncherSystemCommand] {
         [
-            .init(id: "lock", title: "Verrouiller l'écran", keywords: ["verrouiller", "lock"], symbol: "lock", confirms: false),
-            .init(id: "sleep-displays", title: "Suspendre les écrans", keywords: ["écrans", "displays", "sleep displays"],
+            .init(id: "lock", fr: "Verrouiller l'écran", en: "Lock screen", keywords: ["verrouiller", "lock"], symbol: "lock", confirms: false),
+            .init(id: "sleep-displays", fr: "Suspendre les écrans", en: "Sleep displays", keywords: ["écrans", "displays", "sleep displays"],
                   symbol: "display", confirms: false),
-            .init(id: "sleep", title: "Suspendre l'activité", keywords: ["veille", "suspendre", "sleep"], symbol: "moon", confirms: false),
-            .init(id: "screensaver", title: "Économiseur d'écran", keywords: ["économiseur", "screensaver"], symbol: "sparkles.tv", confirms: false),
-            .init(id: "quit-all", title: "Tout quitter", keywords: ["quitter tout", "quit all"], symbol: "xmark.circle", confirms: confirmQuitAll),
-            .init(id: "show-trash", title: "Afficher la corbeille", keywords: ["corbeille", "trash"], symbol: "trash", confirms: false),
-            .init(id: "empty-trash", title: "Vider la corbeille", keywords: ["corbeille", "empty trash"], symbol: "trash.slash", confirms: true),
-            .init(id: "eject-all", title: "Tout éjecter", keywords: ["éjecter", "eject"], symbol: "eject", confirms: false),
-            .init(id: "volume-up", title: "Monter le son", keywords: ["volume", "son +"], symbol: "speaker.wave.3", confirms: false),
-            .init(id: "volume-down", title: "Baisser le son", keywords: ["volume", "son -"], symbol: "speaker.wave.1", confirms: false),
-            .init(id: "mute", title: "Couper ou remettre le son", keywords: ["muet", "mute", "volume"], symbol: "speaker.slash", confirms: false),
-            .init(id: "logout", title: "Fermer la session", keywords: ["déconnexion", "log out"], symbol: "rectangle.portrait.and.arrow.right", confirms: true),
-            .init(id: "restart", title: "Redémarrer", keywords: ["restart", "reboot"], symbol: "restart", confirms: true),
-            .init(id: "shutdown", title: "Éteindre", keywords: ["shut down", "arrêter"], symbol: "power", confirms: true),
+            .init(id: "sleep", fr: "Suspendre l'activité", en: "Sleep", keywords: ["veille", "suspendre", "sleep"], symbol: "moon", confirms: false),
+            .init(id: "screensaver", fr: "Économiseur d'écran", en: "Screen saver", keywords: ["économiseur", "screensaver"], symbol: "sparkles.tv", confirms: false),
+            .init(id: "quit-all", fr: "Tout quitter", en: "Quit all", keywords: ["quitter tout", "quit all"], symbol: "xmark.circle", confirms: confirmQuitAll),
+            .init(id: "show-trash", fr: "Afficher la corbeille", en: "Show trash", keywords: ["corbeille", "trash"], symbol: "trash", confirms: false),
+            .init(id: "empty-trash", fr: "Vider la corbeille", en: "Empty trash", keywords: ["corbeille", "empty trash"], symbol: "trash.slash", confirms: true),
+            .init(id: "eject-all", fr: "Tout éjecter", en: "Eject all", keywords: ["éjecter", "eject"], symbol: "eject", confirms: false),
+            .init(id: "volume-up", fr: "Monter le son", en: "Volume up", keywords: ["volume", "son +"], symbol: "speaker.wave.3", confirms: false),
+            .init(id: "volume-down", fr: "Baisser le son", en: "Volume down", keywords: ["volume", "son -"], symbol: "speaker.wave.1", confirms: false),
+            .init(id: "mute", fr: "Couper ou remettre le son", en: "Mute or unmute", keywords: ["muet", "mute", "volume"], symbol: "speaker.slash", confirms: false),
+            .init(id: "logout", fr: "Fermer la session", en: "Log out", keywords: ["déconnexion", "log out"], symbol: "rectangle.portrait.and.arrow.right", confirms: true),
+            .init(id: "restart", fr: "Redémarrer", en: "Restart", keywords: ["restart", "reboot"], symbol: "restart", confirms: true),
+            .init(id: "shutdown", fr: "Éteindre", en: "Shut down", keywords: ["shut down", "arrêter"], symbol: "power", confirms: true),
             // Session 119 : « reload » et la reconstruction de l'index de macOS, dans l'Avancé d'Alfred.
-            .init(id: "reload-apps", title: "Recharger les applications", keywords: ["reload", "recharger"], symbol: "arrow.clockwise",
+            .init(id: "reload-apps", fr: "Recharger les applications", en: "Reload apps", keywords: ["reload", "recharger"], symbol: "arrow.clockwise",
                   confirms: false),
-            .init(id: "rebuild-spotlight", title: "Reconstruire l'index Spotlight", keywords: ["spotlight", "mdutil", "index"],
+            .init(id: "rebuild-spotlight", fr: "Reconstruire l'index Spotlight", en: "Rebuild Spotlight index", keywords: ["spotlight", "mdutil", "index"],
                   symbol: "magnifyingglass.circle", confirms: true),
         ]
     }
