@@ -315,6 +315,8 @@ Audit V15 du 29 octobre 2026 (audits/2026-10-29/session-2026-10-29-codebase-01) 
 Session 129 installée : ses six constats corrigés (actions de workflow sans délai comme Alfred, commandes système
 attendues 600 s avec notification d'échec, index des littéraux, parcours Firefox O(n)), code mort retiré.
 2 272 tests / 332 suites, PID 79678, santé 5/5. Reçu : specs/129-corrections-audit/validation.md.
+Session 130 : 0.11.1 publiée (corrections de l'audit). Notes docs/releases/v0.11.1*.md, reçu
+specs/130-release-0111/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

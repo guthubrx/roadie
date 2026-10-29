@@ -14,8 +14,8 @@ les applications d'un projet dans une stage, retrouve-les dans le rail et passe 
 l'autre sur chaque écran. Tape quelques lettres pour ouvrir une application, une fenêtre, un fichier
 ou une page web, et choisis où elle s'ouvre. Tes workflows d'Alfred y tournent aussi, sans Powerpack.
 
-**[Télécharger Roadie 0.11.0](https://github.com/guthubrx/roadie/releases/tag/v0.11.0)** ·
-[Découvrir les nouveautés](docs/releases/v0.11.0.md) · [Guide d'installation](#installation-manuelle)
+**[Télécharger Roadie 0.11.1](https://github.com/guthubrx/roadie/releases/tag/v0.11.1)** ·
+[Découvrir les nouveautés](docs/releases/v0.11.1.md) · [Guide d'installation](#installation-manuelle)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">

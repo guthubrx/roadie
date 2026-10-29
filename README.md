@@ -14,8 +14,8 @@ Group a project's apps in a stage, find them in the side rail and switch desktop
 Type a few letters to open an app, a window, a file or a web page, and choose where it opens. Your
 Alfred workflows run there too, without the Powerpack.
 
-**[Download Roadie 0.11.0](https://github.com/guthubrx/roadie/releases/tag/v0.11.0)** ·
-[What's new](docs/releases/v0.11.0.en.md) · [Installation guide](#manual-installation)
+**[Download Roadie 0.11.1](https://github.com/guthubrx/roadie/releases/tag/v0.11.1)** ·
+[What's new](docs/releases/v0.11.1.en.md) · [Installation guide](#manual-installation)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie workspaces across multiple displays" width="100%">

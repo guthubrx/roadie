@@ -3,7 +3,7 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
-## Non publié
+## 0.11.1 - 2026-10-29
 
 ### Corrections
 
