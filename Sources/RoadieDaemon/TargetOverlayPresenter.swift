@@ -963,8 +963,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var openItems: [LauncherOpenItem] = []
     /// Signets des navigateurs (session 104), arrivés après l'ouverture.
     private var bookmarks: [LauncherBookmark] = []
+    /// Signets et pages pliés en fond à leur lecture, pas à chaque frappe (session 123).
+    private var bookmarkIndex = LauncherBookmarkIndex([])
     /// Pages de l'historique des navigateurs (session 114).
-    private var history: [LauncherBookmark] = []
+    private var historyIndex = LauncherBookmarkIndex([])
     /// Commande système en attente du second Retour (session 105).
     private var pendingSystem: String?
     /// Chemin tapé (SPEC-087) : lecture du dossier en fond, éléments de la saisie `pathFor`.
@@ -1020,20 +1022,24 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     func append(_ targets: [RoadieTarget], windowOrder: Int) {
         guard !finished else { return }
+        LauncherOpenClock.current?.mark("scan_first")
         model.append(targets) { Self.rank($0, windowOrder: windowOrder, pointerScreen: pointerScreen) }
         render()
     }
 
     func finishLoading() {
         guard !finished else { return }
+        LauncherOpenClock.current?.mark("scan_done")
         isLoading = false
         render()
     }
 
     func start() -> TargetActionResult? {
+        LauncherOpenClock.current?.mark("session_init")
         guard installEventTap() else {
             return TargetActionResult(changed: false, message: "target_search: event tap unavailable", error: "event_tap_unavailable")
         }
+        LauncherOpenClock.current?.mark("event_tap")
         NSApplication.shared.setActivationPolicy(.accessory)
         // Une fenêtre par écran : la barre reste sur l'écran du pointeur choisi à l'ouverture.
         windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: style) }
@@ -1050,17 +1056,25 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         launcher.subscribeGrid { [weak self] view in self?.updateGrid(view) }
         inputPanel = input
         if let text = launcher.initialQuery, !text.isEmpty { model.replaceQuery(text) }
+        LauncherIconRaster.redraw = { [weak self] in self?.windows.forEach { $0.redraw() } }
+        LauncherRecentFiles.shared.refresh(extraTypes: launcher.fileTypes, excluded: launcher.fileExcluded)
+        LauncherOpenClock.current?.mark("windows_created")
         render()
+        LauncherOpenClock.current?.mark("first_render")
         input.beginEditing()
         if launcher.restoredQuery { input.selectAllText() }
         launcher.loadOpenItems { [weak self] items in
             guard let self, !self.finished else { return }
+            LauncherOpenClock.current?.mark("open_items")
             self.openItems = items
             self.filesChanged = true
             self.render()
         }
-        launcher.loadBookmarks { [weak self] bookmarks in
+        launcher.loadBookmarks { [weak self] index in
             guard let self, !self.finished else { return }
+            LauncherOpenClock.current?.mark("bookmarks")
+            let bookmarks = index.entries.map(\.bookmark)
+            self.bookmarkIndex = index
             self.bookmarks = bookmarks
             // Mots-clés Firefox avec %s : des recherches par mot-clé de plus (« w chat »).
             let taken = Set(self.launcher.webSearches.map { $0.keyword.lowercased() })
@@ -1070,12 +1084,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         launcher.loadHistory { [weak self] pages in
             guard let self, !self.finished else { return }
-            self.history = pages
+            LauncherOpenClock.current?.mark("web_history")
+            self.historyIndex = pages
             self.filesChanged = true
             self.render()
         }
         launcher.refreshApps { [weak self] apps in
             guard let self, !self.finished else { return }
+            LauncherOpenClock.current?.mark("apps_refreshed")
+            // Catalogue relu sans changement : rien à redessiner (session 123).
+            guard apps != self.launcher.apps else { return }
             self.launcher.apps = apps
             self.launcherQuery = nil
             self.render()
@@ -1435,7 +1453,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// ligne est choisie ; nouvelles cibles seulement : la ligne choisie est gardée si elle reste. O(a + n).
     /// Lignes de la barre, puis la présentation choisie pour leur source (session 099).
     private func refreshLauncher() {
-        refreshLauncherRows()
+        LauncherOpenClock.measure("rows") { refreshLauncherRows() }
         viewSource = currentViewSource()
         applyViewMode()
     }
@@ -1512,7 +1530,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             refreshPath()
             return
         }
-        refreshFiles()
+        LauncherOpenClock.measure("files") { refreshFiles() }
         let ids = model.matches.map(\.id)
         guard model.query != launcherQuery || ids != launcherTargetIDs || filesChanged else { return }
         let queryChanged = model.query != launcherQuery
@@ -1550,11 +1568,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         launcherList.insertSection("Workflows", keywords.prefix(4).map(LauncherList.Row.workflowKeyword))
         // Signets des navigateurs (session 104), avant les replis ; un mot-clé Firefox tapé seul passe en tête.
         if phrase == nil {
-            let marks = LauncherBookmark.matches(model.query, in: bookmarks)
+            let marks = LauncherBookmark.matches(model.query, in: bookmarkIndex)
             launcherList.appendSection("Signets", marks.map { .web(LauncherWebRow(kind: .bookmark($0), title: $0.title)) })
             // Historique (session 114) : pages déjà vues, hors signets proposés.
             let shown = Set(marks.map { LauncherWebHistory.normalized($0.url) })
-            launcherList.appendSection("Historique", LauncherWebHistory.matches(model.query, in: history, excluding: shown).map {
+            launcherList.appendSection("Historique", LauncherWebHistory.matches(model.query, in: historyIndex, excluding: shown).map {
                 .web(LauncherWebRow(kind: .bookmark($0), title: $0.title))
             })
             let typed = model.query.trimmingCharacters(in: .whitespaces).lowercased()
@@ -1927,7 +1945,14 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let parsed = LauncherFileQuery.parse(query, keywords: launcher.fileKeywords)
         let needle = LauncherMatch.fold(parsed.needle)
         // Contenu ou étiquette : le nom ne dit rien des fichiers qui restent, la liste attend Spotlight.
-        files = needle.isEmpty || parsed.mode != .name ? [] : files.filter { LauncherMatch.fold($0.name).contains(needle) }
+        var shown = needle.isEmpty || parsed.mode != .name ? [] : files.filter { LauncherMatch.fold($0.name).contains(needle) }
+        // Fichiers récents (session 123) : même règle que Spotlight, montrés avant sa réponse, qui les remplace.
+        if parsed.mode == .name, LauncherFileRules.shouldSearch(query, keywords: launcher.fileKeywords) {
+            let known = Set(shown.map(\.path))
+            shown += LauncherRecentFiles.shared.matches(parsed.needle).filter { !known.contains($0.path) }
+            shown = Array(LauncherFileRules.ordered(shown).prefix(LauncherFileRules.limit))
+        }
+        files = shown
         fileSearch.keywords = launcher.fileKeywords
         fileSearch.extraTypes = launcher.fileTypes
         fileSearch.excluded = launcher.fileExcluded
@@ -2497,6 +2522,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     private func tick() {
         guard !finished else { return }
+        LauncherOpenClock.current?.tick(interval: 0.05)
         if let target = model.highlighted, let verb = model.pendingReturn(at: Date()) {
             finishActivating(target, verb)
             return
@@ -2506,7 +2532,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
     }
 
+    /// Dessin de la barre, chronométré pendant l'ouverture (session 123).
     private func render() {
+        if let clock = LauncherOpenClock.current { clock.measureRender(renderNow) } else { renderNow() }
+    }
+
+    private func renderNow() {
         schedulePreview()
         if case .saving(let action, let alias) = step {
             let rows = savingRows(action, alias)
@@ -3229,6 +3260,9 @@ private final class TargetOverlayWindow: NSPanel {
         overlay.updateStyle(style)
     }
 
+    /// Une icône réduite en fond est arrivée (session 123).
+    func redraw() { overlay.needsDisplay = true }
+
     /// Mode recherche : nouvelles étiquettes et barre de saisie (nil = pas de barre sur cet écran).
     func update(badges: [TargetOverlayBadge], searchBar: TargetSearchBar?, ghost: LauncherGhost? = nil) {
         let view = overlay
@@ -3333,6 +3367,11 @@ private final class TargetOverlayView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        guard searchBar != nil, let clock = LauncherOpenClock.current else { return drawNow(dirtyRect) }
+        clock.measureDraw { drawNow(dirtyRect) }
+    }
+
+    private func drawNow(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         if let ghost { drawGhost(ghost) }
         var occupied: [CGRect] = []

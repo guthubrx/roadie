@@ -513,9 +513,13 @@ enum SearchBarRenderer {
         let side = metrics.icon
         let iconRect = CGRect(x: iconX, y: row.midY - side / 2, width: side, height: side)
         switch suggestion.icon {
-        case .file?, .image?:
-            icon(suggestion.icon)?.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1,
-                                        respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        case .file(let path)?:
+            // Icône réduite en fond (session 123) : absente, elle arrive au prochain dessin.
+            LauncherIconRaster.image("file:\(path)", size: iconRect.size) { LauncherIconRaster.fileIcon(path) }?
+                .draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        case .image(let path)?:
+            LauncherIconRaster.image("image:\(path)", size: iconRect.size) { thumbnailImage(path) }?
+                .draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         case .symbol?:
             // Tuile de la taille d'une icône d'application : même poids visuel dans la liste.
             let tile = iconRect.insetBy(dx: side * 0.06, dy: side * 0.06)
@@ -605,6 +609,21 @@ enum SearchBarRenderer {
         }
     }
 
+    /// Dessin d'une barre fictive dans une petite image (session 123) : le premier dessin du processus, qui charge
+    /// polices et symboles (65 ms mesurées), n'est plus payé à la première ouverture. O(1).
+    static func warmUp(style: TargetOverlayStyle) {
+        let bounds = CGRect(x: 0, y: 0, width: 900, height: 500)
+        let rows = [SlashSuggestion(text: "Applications", detail: "", kind: .header),
+                    SlashSuggestion(text: "Roadie", detail: "Préparation", kind: .result, icon: .symbol("app")),
+                    SlashSuggestion(text: "Réglages", detail: "Préparation", kind: .result, icon: .symbol("gearshape"))]
+        let bar = TargetSearchBar(query: "r", matchCount: 2, properties: nil, isLoading: false, suggestions: rows,
+                                  selectedSuggestion: 1, richRows: true)
+        let image = NSImage(size: bounds.size)
+        image.lockFocus()
+        draw(bar, in: bounds, style: style)
+        image.unlockFocus()
+    }
+
     /// Dernière vignette nette, sinon celle du rail ou du sélecteur ; jamais l'icône de repli du cache.
     /// Remplaçable par les tests de rendu, qui n'ont pas de capture. O(1).
     static var thumbnail: @MainActor (WindowID) -> NSImage? = { id in
@@ -614,31 +633,36 @@ enum SearchBarRenderer {
 
     /// Vignette déjà capturée (vue d'ensemble, puis rail et sélecteur) aux proportions de la fenêtre,
     /// avec la pastille de son application ; sans vignette, l'icône de l'application. Ne capture jamais.
+    /// Icônes et vignette réduites en fond (session 123) ; vignette pas encore prête : l'icône seule.
     private static func drawWindow(_ id: WindowID, app: String?, in rect: CGRect) {
-        let appIcon = icon(app.map(SlashSuggestion.Icon.file))
+        func appIcon(_ size: CGSize) -> NSImage? {
+            app.flatMap { path in LauncherIconRaster.image("file:\(path)", size: size) { LauncherIconRaster.fileIcon(path) } }
+        }
         guard let thumbnail = thumbnail(id), thumbnail.size.width > 0, thumbnail.size.height > 0 else {
-            appIcon?.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
-                          hints: [.interpolation: NSImageInterpolation.high.rawValue])
+            appIcon(rect.size)?.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             return
         }
         let scale = min(rect.width / thumbnail.size.width, rect.height / thumbnail.size.height)
         let size = CGSize(width: thumbnail.size.width * scale, height: thumbnail.size.height * scale)
         let frame = CGRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height)
+        // Une nouvelle capture est une autre image : elle a sa propre réduction.
+        nonisolated(unsafe) let capture = thumbnail
+        guard let small = LauncherIconRaster.image("window:\(id.rawValue):\(ObjectIdentifier(thumbnail).hashValue)",
+                                                   size: frame.size, source: { capture }) else {
+            appIcon(rect.size)?.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            return
+        }
         let path = NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4)
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
-        thumbnail.draw(in: frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
-                       hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        small.draw(in: frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         NSGraphicsContext.restoreGraphicsState()
         NSColor.white.withAlphaComponent(0.25).setStroke()
         path.lineWidth = 0.5
         path.stroke()
-        if let appIcon {
-            let badge = rect.width * 0.46
-            appIcon.draw(in: CGRect(x: rect.maxX - badge * 0.8, y: rect.minY - badge * 0.15, width: badge, height: badge),
-                         from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
-                         hints: [.interpolation: NSImageInterpolation.high.rawValue])
-        }
+        let badge = rect.width * 0.46
+        appIcon(CGSize(width: badge, height: badge))?.draw(in: CGRect(x: rect.maxX - badge * 0.8, y: rect.minY - badge * 0.15, width: badge, height: badge),
+                                                          from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
     /// Icônes des lignes du lanceur, gardées pendant la vie du processus. O(1) après la première lecture.

@@ -142,13 +142,15 @@ struct LauncherList: Equatable, Sendable {
         let filesOnly = fileQuery.filesOnly
         let query = filesOnly ? fileQuery.needle : rawQuery
         guard !LauncherMatch.fold(query).isEmpty else { return }
-        struct Candidate { let row: Row; let id: String; let key: String; let section: Section; let score: Int; let name: String; var order = 0 }
+        struct Candidate { let row: Row; let id: String; let key: String; let section: Section; let score: Int; let name: String; var order = 0
+            /// Fichier déjà ouvert (date d'usage connue de Spotlight).
+            var used = true }
         var candidates: [Candidate] = []
         for (order, file) in files.enumerated() {
             // Spotlight a trouvé le nom par « contient » : retenu même si l'appariement est faible.
             let score = LauncherMatch.score(query, in: file.name) ?? 1
             candidates.append(Candidate(row: .file(file), id: file.rankingKey, key: file.rankingKey, section: .files,
-                                        score: score, name: file.name, order: order))
+                                        score: score, name: file.name, order: order, used: file.lastUsed != nil))
         }
         for item in filesOnly ? [] : openItems {
             guard let score = item.score(query) else { continue }
@@ -174,7 +176,7 @@ struct LauncherList: Equatable, Sendable {
                                         section: Section.of(target.kind), score: score, name: target.title))
         }
         // Ordre : choix appris pour cette requête dans cette stage, puis partout, puis pour une requête
-        // plus longue, puis l'appariement, puis la fréquence-récence dans cette stage, puis partout,
+        // plus longue, puis fichier déjà ouvert (session 123), puis l'appariement, puis la fréquence-récence dans cette stage, puis partout,
         // puis la section et le nom (SPEC-076 R1).
         func before(_ a: Candidate, _ b: Candidate) -> Bool {
             let local = (ranking.exactUses(a.key, query: query, context: context), ranking.exactUses(b.key, query: query, context: context))
@@ -183,6 +185,10 @@ struct LauncherList: Equatable, Sendable {
             if exact.0 != exact.1 { return exact.0 > exact.1 }
             let prefix = (ranking.prefixUses(a.key, query: query), ranking.prefixUses(b.key, query: query))
             if prefix.0 != prefix.1 { return prefix.0 > prefix.1 }
+            // Fichiers (session 123) : un fichier déjà ouvert passe devant un fichier jamais ouvert, comme dans
+            // Alfred. Les fichiers ouverts s'affichent tout de suite ; ceux que Spotlight ajoute ensuite se rangent
+            // dessous au lieu de les chasser de la liste.
+            if a.section == .files, b.section == .files, a.used != b.used { return a.used }
             if a.score != b.score { return a.score > b.score }
             let here = (ranking.frecency(a.key, at: now, context: context), ranking.frecency(b.key, at: now, context: context))
             if here.0 != here.1 { return here.0 > here.1 }

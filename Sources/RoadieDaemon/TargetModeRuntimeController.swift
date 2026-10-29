@@ -181,6 +181,8 @@ public final class TargetModeRuntimeController: NSObject {
     private var openGrid: (id: String, update: @MainActor (AlfredGridView) -> Void)?
     /// Application au premier plan à l'ouverture de la barre, rendue au clavier après Échap (session 097).
     private var escapeFocus: LauncherFocusSnapshot?
+    /// Derniers documents et onglets ouverts lus pour la barre (session 123).
+    private var lastOpenItems: (at: Date, items: [LauncherOpenItem])?
     private var styleTimer: Timer?
     /// Aperçu actif du lanceur (SPEC-078) : cadres relevés avant, stage de départ si une bascule a eu lieu.
     private struct ActivePreview {
@@ -223,8 +225,17 @@ public final class TargetModeRuntimeController: NSObject {
     }
 
     public func start() {
-        // Index des applications prêt avant la première ouverture de la barre (SPEC-073).
-        LauncherAppCatalog.shared.refresh()
+        // Index des applications prêt avant la première ouverture de la barre (SPEC-073), et leurs icônes
+        // réduites en fond à la taille des lignes (session 123).
+        let rowIcon = LauncherRowMetrics(fontSize: TargetOverlayStyle.launcher(service.effectiveConfig.experimental.targetMode).commandTextFontSize).icon
+        LauncherAppCatalog.shared.refresh { apps in LauncherIconRaster.prewarm(paths: apps.map(\.path), side: rowIcon) }
+        let barConfig = service.effectiveConfig.experimental.targetMode
+        LauncherRecentFiles.shared.refresh(extraTypes: barConfig.fileTypes, excluded: barConfig.fileExcludedFolders)
+        // Premier dessin de la barre fait hors écran : polices et moteur de dessin prêts avant la première ouverture.
+        let style = TargetOverlayStyle.launcher(service.effectiveConfig.experimental.targetMode)
+        DispatchQueue.main.async { SearchBarRenderer.warmUp(style: style) }
+        // Panneaux des Réglages Système lus en fond (session 123) : la première ouverture n'attend plus.
+        DispatchQueue.global(qos: .utility).async { _ = LauncherSettingTargetsCache.shared.systemPanes() }
         guard observer == nil else { return }
         observer = DistributedNotificationCenter.default().addObserver(
             forName: TargetModeRuntimeNotification.name,
@@ -442,11 +453,14 @@ public final class TargetModeRuntimeController: NSObject {
             finish(TargetActionResult(changed: false, message: "target_overlay_disabled", error: "target_overlay_disabled"), command: command.name)
             return
         }
+        let clock = LauncherOpenClock.begin()
         // Focus clavier rendu après Échap (session 097) : lu avant que le panneau prenne le clavier.
         escapeFocus = NSWorkspace.shared.frontmostApplication
             .flatMap { $0.processIdentifier == getpid() ? nil : LauncherFocusSnapshot.capture($0) }
         // Touches de la barre prioritaires sur BTT (session 108) : ses raccourcis en conflit se mettent en pause.
+        clock.mark("focus_capture")
         LauncherBTTPause.shared.barOpened(pauseKeys: config.bttPauseKeys)
+        clock.mark("btt_pause")
         // Barre immédiate (FR-009) : cibles Roadie tout de suite, puis toutes les fenêtres visibles, lues
         // en arrière-plan, chacune affichée dès qu'elle est lue. 2 s par fenêtre au moins : la barre
         // n'attend plus la plus lente, une page chargée peut donc être lue en entier.
@@ -455,7 +469,11 @@ public final class TargetModeRuntimeController: NSObject {
         appTargets.timeoutMs = max(appTargets.timeoutMs, 2000)
         let scanConfig = appTargets
         let targets = TargetHintService(service: service, appTargetsConfig: appTargets)
-        let roadieTargets = targets.list(TargetQueryOptions(source: .roadie, maxResults: TargetSearchModel.maxTargets)).targets
+        // Un seul relevé des fenêtres pour les cibles et le contexte de la barre (session 123).
+        let snapshot = service.snapshot(followFocus: false)
+        clock.mark("snapshot")
+        let roadieTargets = targets.list(TargetQueryOptions(source: .roadie, maxResults: TargetSearchModel.maxTargets), snapshot: snapshot).targets
+        clock.mark("roadie_targets")
         let events = events
         events.append(RoadieEvent(type: "target_mode.search_started", details: [
             "targetCount": String(roadieTargets.count)
@@ -506,11 +524,15 @@ public final class TargetModeRuntimeController: NSObject {
                 }
                 return targets.activate(target: target, action: verb)
             },
-            launcher: launcherContext(initialSubject: initialSubject, targets: roadieTargets, initialQuery: command.string("query")),
+            launcher: launcherContext(initialSubject: initialSubject, targets: roadieTargets, initialQuery: command.string("query"), snapshot: snapshot),
             onFinish: { [weak self] result in
+                if let self { clock.finish(events: self.events) }
                 self?.finish(result, command: command.name)
             }
         )
+        clock.mark("session_start")
+        // Premier tour libre du fil principal : la fenêtre peut être dessinée à l'écran.
+        DispatchQueue.main.async { MainActor.assumeIsolated { clock.mark("main_free") } }
     }
 
     /// Lanceur de la barre (SPEC-073) : index des applications gardé en mémoire et rafraîchi à chaque
@@ -529,14 +551,16 @@ public final class TargetModeRuntimeController: NSObject {
         }
     }
 
-    private func launcherContext(initialSubject: LauncherSubject? = nil, targets: [RoadieTarget] = [], initialQuery: String? = nil) -> LauncherSearchContext {
+    private func launcherContext(initialSubject: LauncherSubject? = nil, targets: [RoadieTarget] = [], initialQuery: String? = nil,
+                                 snapshot provided: DaemonSnapshot? = nil) -> LauncherSearchContext {
         let catalog = LauncherAppCatalog.shared
         catalog.setExtraRoots(service.effectiveConfig.experimental.targetMode.appSearchPaths)
         let rankingStore = LauncherRankingStore()
         let state = service.effectiveStageStore.state()
         let running = Set(NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular }.compactMap(\.bundleIdentifier))
-        let snapshot = service.snapshot(followFocus: false)
+        let snapshot = provided ?? service.snapshot(followFocus: false)
+        LauncherOpenClock.current?.mark("context_snapshot")
         let names = WindowSwitcherService.stageLabels(in: state, liveWindowIDs: Set(snapshot.windows.map(\.window.id)))
         let homeDisplay = state.activeDisplayID ?? snapshot.displays.first?.id ?? DisplayID(rawValue: "none")
         let homeDesktop = state.currentDesktopID(for: homeDisplay)
@@ -602,7 +626,9 @@ public final class TargetModeRuntimeController: NSObject {
         let windowTargets = Dictionary(targets.filter { $0.kind == .window }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         // Fenêtre active lue dans l'application au premier plan (session 098) : `snapshot.focusedWindowID`
         // désignait la fenêtre retenue pour la stage du premier écran (iTerm2 sur l'autre écran).
+        LauncherOpenClock.current?.mark("idle_rows")
         let focused = service.focusedWindowID()
+        LauncherOpenClock.current?.mark("focused_window")
         let recentIDs = WindowSwitcherFocusHistory.shared.recentIDs
         let previous = Self.previousWindow(recent: recentIDs, focused: focused, targets: windowTargets)
         events.append(RoadieEvent(type: "launcher.idle_back", details: [
@@ -654,10 +680,19 @@ public final class TargetModeRuntimeController: NSObject {
             ? LauncherHistoryStore().load().recent(targetModeConfig.idleRecentSearchesCount) : []
         if !recent.isEmpty { idle += [.header("Recherches récentes")] + recent.map(LauncherList.Row.history) }
         context.idleRows = idle
-        context.loadOpenItems = { [service] done in
+        // Documents et onglets de l'ouverture précédente montrés tout de suite (moins d'une minute), puis
+        // remplacés par la lecture du moment, qui interroge chaque application et navigateur (session 123).
+        let previousItems = lastOpenItems.flatMap { now.timeIntervalSince($0.at) < 60 ? $0.items : nil }
+        context.loadOpenItems = { [service, weak self] done in
+            if let previousItems { done(previousItems) }
             Task { @MainActor in
+                LauncherOpenClock.current?.mark("open_items_begin")
                 let entries = await WindowSwitcherService(service: service).load().entries
-                done(await Self.openItems(entries, stageTitle: { scope in scope.flatMap { names[$0] } }))
+                LauncherOpenClock.current?.mark("open_items_entries")
+                let items = await Self.openItems(entries, stageTitle: { scope in scope.flatMap { names[$0] } })
+                self?.lastOpenItems = (Date(), items)
+                LauncherOpenClock.current?.mark("open_items_fresh")
+                done(items)
             }
         }
         context.activateOpenItem = { [weak self] item in
@@ -686,7 +721,9 @@ public final class TargetModeRuntimeController: NSObject {
         context.performBatch = { [weak self] actions in self?.performBatch(actions) ?? TargetActionResult(changed: false, message: "launcher_unavailable") }
         context.undo = { [weak self] in self?.undoLastMove() ?? TargetActionResult(changed: false, message: "launcher_unavailable") }
         context.initialQuery = initialQuery
+        LauncherOpenClock.current?.mark("stores")
         workflowContext(&context, webSearchURL: webSearchURL)
+        LauncherOpenClock.current?.mark("workflows")
         context.workflowGrid = pendingGrid
         let viewStore = LauncherViewStore()
         context.viewBook = viewStore.load()
@@ -721,7 +758,7 @@ public final class TargetModeRuntimeController: NSObject {
             let browsers = barConfig.bookmarkBrowsers, days = barConfig.webHistoryDays
             context.loadHistory = { done in
                 DispatchQueue.global(qos: .userInitiated).async {
-                    let pages = LauncherWebHistoryStore.shared.load(browsers: browsers, days: days)
+                    let pages = LauncherWebHistoryStore.shared.loadIndex(browsers: browsers, days: days)
                     DispatchQueue.main.async { MainActor.assumeIsolated { done(pages) } }
                 }
             }
@@ -730,7 +767,7 @@ public final class TargetModeRuntimeController: NSObject {
             let browsers = barConfig.bookmarkBrowsers
             context.loadBookmarks = { done in
                 DispatchQueue.global(qos: .userInitiated).async {
-                    let bookmarks = LauncherBookmarkStore.shared.load(browsers: browsers)
+                    let bookmarks = LauncherBookmarkStore.shared.loadIndex(browsers: browsers)
                     DispatchQueue.main.async { MainActor.assumeIsolated { done(bookmarks) } }
                 }
             }
@@ -752,6 +789,7 @@ public final class TargetModeRuntimeController: NSObject {
             context.initialQuery = resumed
             context.restoredQuery = true
         }
+        LauncherOpenClock.current?.mark("context")
         context.webSearch = { [events, weak self] text in
             guard let url = LauncherWeb.searchURL(webSearchURL, query: text) else {
                 return TargetActionResult(changed: false, message: "launcher web: invalid url", error: "web_search_url")

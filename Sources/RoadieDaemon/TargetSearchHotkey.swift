@@ -192,7 +192,9 @@ public final class TargetSearchHotkey {
                 return OSStatus(eventNotHandledErr)
             }
             let hotkey = Unmanaged<TargetSearchHotkey>.fromOpaque(userData).takeUnretainedValue()
-            return MainActor.assumeIsolated { hotkey.handle(identifier) }
+            // Attente de la touche avant son traitement (session 123) : même horloge que l'événement Carbon.
+            let lagMs = max(0, (ProcessInfo.processInfo.systemUptime - GetEventTime(event)) * 1000)
+            return MainActor.assumeIsolated { hotkey.handle(identifier, lagMs: lagMs) }
         }
         InstallEventHandler(
             GetApplicationEventTarget(), callback, 1, &spec,
@@ -201,10 +203,11 @@ public final class TargetSearchHotkey {
     }
 
     /// Plusieurs fonctions partagent la cible Carbon : ne jamais absorber un autre raccourci.
-    func handle(_ identifier: EventHotKeyID) -> OSStatus {
+    func handle(_ identifier: EventHotKeyID, lagMs: Double? = nil) -> OSStatus {
         guard identifier.signature == signature, identifier.id == 1 else {
             return OSStatus(eventNotHandledErr)
         }
+        LauncherOpenClock.pendingKeyLagMs = lagMs
         onPress()
         return noErr
     }

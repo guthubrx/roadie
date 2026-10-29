@@ -30,11 +30,7 @@ struct LauncherBookmark: Equatable, Hashable, Sendable {
 
     /// Titre, puis étiquettes et mot-clé, puis adresse (3 lettres au moins). O(q × t).
     func score(_ query: String) -> Int? {
-        if let score = LauncherMatch.score(query, in: title) { return score }
-        let needle = LauncherMatch.fold(query)
-        if tags.contains(where: { LauncherMatch.fold($0).hasPrefix(needle) }) { return 3 }
-        guard needle.count >= 3, LauncherMatch.fold(url).contains(needle) else { return nil }
-        return 1
+        LauncherBookmarkIndex.Entry(self).score(LauncherMatch.Query(query), needle: LauncherMatch.fold(query))
     }
 
     /// Navigateur, profil et dossier, pour le détail de la ligne.
@@ -45,10 +41,17 @@ struct LauncherBookmark: Equatable, Hashable, Sendable {
 
     /// Signets qui correspondent, meilleurs d'abord ; à score égal, le titre le plus court. O(b × q × t + k log k).
     static func matches(_ query: String, in bookmarks: [LauncherBookmark], limit: Int = 6) -> [LauncherBookmark] {
-        guard LauncherMatch.fold(query).count >= 2 else { return [] }
+        matches(query, in: LauncherBookmarkIndex(bookmarks), limit: limit)
+    }
+
+    /// Même recherche dans un index déjà plié (session 123). O(b × t) pour écarter, O(k × q × t + k log k) sinon.
+    static func matches(_ query: String, in index: LauncherBookmarkIndex, limit: Int = 6) -> [LauncherBookmark] {
+        let needle = LauncherMatch.fold(query)
+        guard needle.count >= 2 else { return [] }
+        let prepared = LauncherMatch.Query(query)
         var scored: [(bookmark: LauncherBookmark, score: Int)] = []
-        for bookmark in bookmarks {
-            if let score = bookmark.score(query) { scored.append((bookmark, score)) }
+        for entry in index.entries {
+            if let score = entry.score(prepared, needle: needle) { scored.append((entry.bookmark, score)) }
         }
         scored.sort { $0.score != $1.score ? $0.score > $1.score : $0.bookmark.title.count < $1.bookmark.title.count }
         // Un même signet dans plusieurs profils ou navigateurs : une seule ligne (adresse ou titre déjà vus).
@@ -457,7 +460,7 @@ final class LauncherBookmarkStore: @unchecked Sendable {
     static let shared = LauncherBookmarkStore()
 
     private let lock = NSLock()
-    private var cached: (browsers: [String], at: Date, bookmarks: [LauncherBookmark])?
+    private var cached: (browsers: [String], at: Date, index: LauncherBookmarkIndex)?
     let iconFolder: URL
 
     init(iconFolder: URL = URL(fileURLWithPath: NSString(string: TestEnvironment.launcherFile("favicons")).expandingTildeInPath, isDirectory: true)) {
@@ -465,17 +468,22 @@ final class LauncherBookmarkStore: @unchecked Sendable {
     }
 
     func load(browsers: [String], now: Date = Date()) -> [LauncherBookmark] {
+        loadIndex(browsers: browsers, now: now).entries.map(\.bookmark)
+    }
+
+    /// Signets pliés pour la recherche (session 123), gardés avec la lecture : préparés une fois, en fond. O(b × t).
+    func loadIndex(browsers: [String], now: Date = Date()) -> LauncherBookmarkIndex {
         lock.lock()
         if let cached, cached.browsers == browsers, now.timeIntervalSince(cached.at) < 60 {
             defer { lock.unlock() }
-            return cached.bookmarks
+            return cached.index
         }
         lock.unlock()
-        let bookmarks = read(browsers: browsers)
+        let index = LauncherBookmarkIndex(read(browsers: browsers))
         lock.lock()
-        cached = (browsers, now, bookmarks)
+        cached = (browsers, now, index)
         lock.unlock()
-        return bookmarks
+        return index
     }
 
     /// O(fichiers + signets).
@@ -533,4 +541,36 @@ final class LauncherBookmarkStore: @unchecked Sendable {
     static func isSVG(_ data: Data) -> Bool {
         String(decoding: data.prefix(256), as: UTF8.self).lowercased().contains("<svg")
     }
+}
+
+/// Signets ou pages pliés une fois pour la recherche (session 123) : à chaque frappe, seule la saisie est pliée.
+/// Préparé quand la liste arrive, hors frappe. O(n × t) à la construction.
+struct LauncherBookmarkIndex: Sendable {
+    struct Entry: Sendable {
+        let bookmark: LauncherBookmark
+        let title: LauncherMatch.Prepared
+        let tags: [String]
+        let url: String
+        let urlLetters: UInt64
+
+        init(_ bookmark: LauncherBookmark) {
+            self.bookmark = bookmark
+            title = LauncherMatch.Prepared(bookmark.title)
+            tags = bookmark.tags.map(LauncherMatch.fold)
+            url = LauncherMatch.fold(bookmark.url)
+            urlLetters = LauncherMatch.letters(url)
+        }
+
+        /// Titre, puis étiquettes et mot-clé, puis adresse (3 lettres au moins). O(q × t).
+        func score(_ query: LauncherMatch.Query?, needle: String) -> Int? {
+            if let query, let score = LauncherMatch.score(query, in: title) { return score }
+            if tags.contains(where: { $0.hasPrefix(needle) }) { return 3 }
+            guard needle.count >= 3, LauncherMatch.letters(needle) & ~urlLetters == 0, url.contains(needle) else { return nil }
+            return 1
+        }
+    }
+
+    let entries: [Entry]
+
+    init(_ bookmarks: [LauncherBookmark]) { entries = bookmarks.map(Entry.init) }
 }

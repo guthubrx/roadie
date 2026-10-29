@@ -268,7 +268,8 @@ public struct TargetHintService {
         self.appTargetsConfig = appTargetsConfig ?? service.effectiveConfig.experimental.appTargets
     }
 
-    public func list(_ options: TargetQueryOptions = TargetQueryOptions()) -> TargetQueryReport {
+    /// `snapshot` : relevé déjà pris par l'appelant (barre, session 123), pour ne pas relire les fenêtres.
+    public func list(_ options: TargetQueryOptions = TargetQueryOptions(), snapshot provided: DaemonSnapshot? = nil) -> TargetQueryReport {
         guard targetModeConfig.enabled else {
             eventLog.append(RoadieEvent(type: "targets.list_failed", details: [
                 "source": options.source.rawValue,
@@ -276,7 +277,7 @@ public struct TargetHintService {
             ]))
             return TargetQueryReport(query: options, targets: [], error: "target_mode_disabled")
         }
-        let snapshot = service.snapshot(followFocus: false)
+        let snapshot = provided ?? service.snapshot(followFocus: false)
         let state = stageStore.state()
         var report = Self.report(from: snapshot, state: state, options: options)
         if options.source == .app || (options.source == .all && (appTargetsConfig.enabled || options.includeAppTargets)) {

@@ -128,6 +128,28 @@ enum LauncherFileRules {
         return !relative.split(separator: "/").contains { $0.hasPrefix(".") || $0 == "node_modules" }
     }
 
+    /// Même requête que `predicate`, dans la syntaxe de Spotlight, pour `MDQuery` hors du fil principal
+    /// (session 123). O(t + mots).
+    static func queryString(_ query: LauncherFileQuery, extraTypes: [String] = []) -> String {
+        let kinds = "(" + (contentTypes + extraTypes).map { "kMDItemContentTypeTree == \"\(quoted($0))\"" }.joined(separator: " || ") + ")"
+        switch query.mode {
+        case .name:
+            return "kMDItemDisplayName == \"*\(quoted(query.needle))*\"cd && \(kinds)"
+        case .content:
+            let words = query.needle.split(whereSeparator: \.isWhitespace).map { "kMDItemTextContent == \"\(quoted(String($0)))*\"cdw" }
+            return (words + [kinds]).joined(separator: " && ")
+        case .tag:
+            let names = [query.needle] + (tagColors[LauncherMatch.fold(query.needle)].map { [$0] } ?? [])
+            return names.map { "kMDItemUserTags == \"\(quoted($0))*\"cd" }.joined(separator: " || ")
+        }
+    }
+
+    /// Fichiers utilisés ces `days` derniers jours, des familles cherchées : la liste locale instantanée.
+    static func recentQueryString(days: Int, extraTypes: [String] = []) -> String {
+        let kinds = "(" + (contentTypes + extraTypes).map { "kMDItemContentTypeTree == \"\(quoted($0))\"" }.joined(separator: " || ") + ")"
+        return "kMDItemLastUsedDate >= $time.today(-\(days)) && \(kinds)"
+    }
+
     static func predicate(_ needle: String, extraTypes: [String] = []) -> NSPredicate {
         let name = NSPredicate(format: "kMDItemDisplayName LIKE[cd] %@", "*\(needle)*")
         return NSCompoundPredicate(andPredicateWithSubpredicates: [name, types(extraTypes)])
@@ -142,13 +164,101 @@ enum LauncherFileRules {
     }
 }
 
-/// Recherche Spotlight du lanceur : une requête à la fois, la précédente arrêtée, résultats rendus
-/// sur le fil principal. 120 ms d'attente après la dernière frappe.
+/// Requête Spotlight synchrone, à lancer hors du fil principal (session 123) : dossier personnel, les plus
+/// récemment utilisés d'abord, chemins montrés seulement. `limit` nil : tous. O(r) attributs lus au plus.
+enum LauncherSpotlight {
+    nonisolated static func files(_ queryString: String, excluded: [String], limit: Int?) -> [LauncherFile] {
+        guard let query = MDQueryCreate(kCFAllocatorDefault, queryString as CFString, nil, [kMDItemLastUsedDate] as CFArray) else { return [] }
+        MDQuerySetSearchScope(query, [kMDQueryScopeHome] as CFArray, 0)
+        guard MDQueryExecute(query, CFOptionFlags(kMDQuerySynchronous.rawValue)) else { return [] }
+        // Comme `NSMetadataQuery` trié par date décroissante : les fichiers datés du plus récent au plus ancien,
+        // puis ceux jamais ouverts. Date lue dans le tri de la requête, sans relire l'élément. O(r).
+        let count = MDQueryGetResultCount(query)
+        var dated: [CFIndex] = [], undated: [CFIndex] = []
+        for index in 0..<count {
+            let value = MDQueryGetAttributeValueOfResultAtIndex(query, kMDItemLastUsedDate, index)
+                .map { Unmanaged<CFTypeRef>.fromOpaque($0).takeUnretainedValue() }
+            if value is Date { dated.append(index) } else { undated.append(index) }
+        }
+        var files: [LauncherFile] = []
+        for index in dated.reversed() + undated {
+            if let limit, files.count >= limit { break }
+            guard let raw = MDQueryGetResultAtIndex(query, index) else { continue }
+            let item = Unmanaged<MDItem>.fromOpaque(raw).takeUnretainedValue()
+            guard let path = MDItemCopyAttribute(item, kMDItemPath) as? String,
+                  LauncherFileRules.isShown(path, excluded: excluded) else { continue }
+            let types = MDItemCopyAttribute(item, kMDItemContentTypeTree) as? [String] ?? []
+            files.append(LauncherFile(path: path,
+                                      name: MDItemCopyAttribute(item, kMDItemDisplayName) as? String ?? (path as NSString).lastPathComponent,
+                                      isFolder: types.contains("public.folder"),
+                                      lastUsed: MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date))
+        }
+        return LauncherFileRules.ordered(files)
+    }
+}
+
+/// Fichiers déjà ouverts (dix ans : un millier de fichiers ici), lus en fond et gardés 5 minutes (session 123) : la barre y cherche
+/// à chaque frappe, avec la règle de Spotlight (nom qui contient la saisie, casse et accents ignorés), avant
+/// que Spotlight ne réponde pour tous les fichiers.
+final class LauncherRecentFiles: @unchecked Sendable {
+    static let shared = LauncherRecentFiles()
+    static let days = 3650
+
+    private struct Entry { let file: LauncherFile; let name: String }
+    private let lock = NSLock()
+    private var cached: (key: String, at: Date, entries: [Entry])?
+    private var loading = false
+
+    /// Relit la liste en fond si elle a plus de 5 minutes ou d'autres réglages. O(1) sur l'appelant.
+    func refresh(extraTypes: [String], excluded: [String], now: Date = Date()) {
+        let key = "\(extraTypes)|\(excluded)"
+        let start = lock.withLock { () -> Bool in
+            if loading { return false }
+            if let cached, cached.key == key, now.timeIntervalSince(cached.at) < 300 { return false }
+            loading = true
+            return true
+        }
+        guard start else { return }
+        DispatchQueue.global(qos: .utility).async { [self] in
+            let files = LauncherSpotlight.files(LauncherFileRules.recentQueryString(days: Self.days, extraTypes: extraTypes),
+                                                excluded: excluded, limit: nil)
+            let entries = files.map { Entry(file: $0, name: LauncherMatch.fold($0.name)) }
+            lock.withLock {
+                cached = (key, Date(), entries)
+                loading = false
+            }
+        }
+    }
+
+    /// Fichiers récents dont le nom contient la saisie, les plus récents d'abord. O(n).
+    func matches(_ needle: String, limit: Int = LauncherFileRules.limit) -> [LauncherFile] {
+        let folded = LauncherMatch.fold(needle)
+        guard !folded.isEmpty else { return [] }
+        let entries = lock.withLock { cached?.entries ?? [] }
+        var found: [LauncherFile] = []
+        for entry in entries where entry.name.contains(folded) {
+            found.append(entry.file)
+            if found.count == limit { break }
+        }
+        return found
+    }
+}
+
+/// Recherche Spotlight du lanceur, hors du fil principal (session 123) : une requête à la fois, une requête
+/// dépassée par une frappe suivante n'est pas lancée ou son résultat est ignoré. 120 ms d'attente après la
+/// dernière frappe.
 @MainActor
 final class LauncherFileSearch {
-    private var query: NSMetadataQuery?
+    private static let queue = DispatchQueue(label: "roadie.launcher.spotlight", qos: .userInitiated)
+    /// Dernière requête voulue, lue par la file de fond.
+    private final class Latest: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func next() -> Int { lock.withLock { value += 1; return value } }
+        func isCurrent(_ token: Int) -> Bool { lock.withLock { value == token } }
+    }
+    private let latest = Latest()
     private var pending: DispatchWorkItem?
-    private var observer: NSObjectProtocol?
     /// Mots-clés `in` et `tags` réglés (session 113).
     var keywords = LauncherFileKeywords()
     /// Types ajoutés et dossiers écartés (session 119).
@@ -158,9 +268,16 @@ final class LauncherFileSearch {
     func search(_ text: String, done: @escaping @MainActor ([LauncherFile]) -> Void) {
         cancel()
         guard LauncherFileRules.shouldSearch(text, keywords: keywords) else { done([]); return }
-        let needle = LauncherFileQuery.parse(text, keywords: keywords)
-        let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.start(needle, done: done) }
+        let string = LauncherFileRules.queryString(LauncherFileQuery.parse(text, keywords: keywords), extraTypes: extraTypes)
+        let excluded = excluded, latest = latest, token = latest.next()
+        let work = DispatchWorkItem {
+            Self.queue.async {
+                guard latest.isCurrent(token) else { return }
+                let files = LauncherSpotlight.files(string, excluded: excluded, limit: LauncherFileRules.limit)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { if latest.isCurrent(token) { done(files) } }
+                }
+            }
         }
         pending = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
@@ -169,39 +286,7 @@ final class LauncherFileSearch {
     func cancel() {
         pending?.cancel()
         pending = nil
-        query?.stop()
-        query = nil
-        if let observer { NotificationCenter.default.removeObserver(observer) }
-        observer = nil
-    }
-
-    private func start(_ needle: LauncherFileQuery, done: @escaping @MainActor ([LauncherFile]) -> Void) {
-        let query = NSMetadataQuery()
-        query.searchScopes = [NSMetadataQueryUserHomeScope]
-        query.predicate = LauncherFileRules.predicate(needle, extraTypes: extraTypes)
-        let excluded = excluded
-        query.sortDescriptors = [NSSortDescriptor(key: NSMetadataItemLastUsedDateKey, ascending: false)]
-        observer = NotificationCenter.default.addObserver(forName: .NSMetadataQueryDidFinishGathering, object: query, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, self.query === query else { return }
-                query.disableUpdates()
-                var files: [LauncherFile] = []
-                for index in 0..<query.resultCount where files.count < LauncherFileRules.limit {
-                    guard let item = query.result(at: index) as? NSMetadataItem,
-                          let path = item.value(forAttribute: NSMetadataItemPathKey) as? String,
-                          LauncherFileRules.isShown(path, excluded: excluded) else { continue }
-                    let types = item.value(forAttribute: "kMDItemContentTypeTree") as? [String] ?? []
-                    files.append(LauncherFile(path: path,
-                                              name: item.value(forAttribute: NSMetadataItemDisplayNameKey) as? String ?? (path as NSString).lastPathComponent,
-                                              isFolder: types.contains("public.folder"),
-                                              lastUsed: item.value(forAttribute: NSMetadataItemLastUsedDateKey) as? Date))
-                }
-                self.cancel()
-                done(LauncherFileRules.ordered(files))
-            }
-        }
-        self.query = query
-        query.start()
+        _ = latest.next()
     }
 }
 
