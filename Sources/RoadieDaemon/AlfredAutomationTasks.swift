@@ -60,6 +60,15 @@ enum AlfredAutomationTasks {
                                             timeout: nil, directory: task.folder)
     }
 
+    private static let automaticLock = NSLock()
+    nonisolated(unsafe) private static var automaticRoots: Set<String> = []
+
+    /// Vrai la première fois pour ce dossier dans ce processus : une tâche absente ne déclenche qu'un seul
+    /// téléchargement automatique (session 131). Sous verrou. O(1).
+    static func claimAutomaticUpdate(for root: URL) -> Bool {
+        automaticLock.withLock { automaticRoots.insert(root.standardizedFileURL.path).inserted }
+    }
+
     /// Télécharge l'archive publique et remplace les tâches installées ; la licence BSD est gardée à
     /// côté. Outils système (`curl`, `ditto`). Bloquant : commande en ligne seulement.
     static func update(root: URL = root) throws -> Int {

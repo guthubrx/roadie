@@ -52,6 +52,15 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
                   confirms: false),
             .init(id: "rebuild-spotlight", fr: "Reconstruire l'index Spotlight", en: "Rebuild Spotlight index", keywords: ["spotlight", "mdutil", "index"],
                   symbol: "magnifyingglass.circle", confirms: true),
+            // Session 131 : tâches d'Alfred « Apparence » et « Captures d'écran », depuis la barre seule.
+            .init(id: "dark-mode", fr: "Basculer le mode sombre", en: "Toggle dark mode", keywords: ["mode sombre", "dark mode", "apparence", "appearance"],
+                  symbol: "circle.lefthalf.filled", confirms: false),
+            .init(id: "screenshot-screen", fr: "Capture de l'écran", en: "Screenshot of the screen", keywords: ["capture", "screenshot", "écran", "screen"],
+                  symbol: "camera.viewfinder", confirms: false),
+            .init(id: "screenshot-area", fr: "Capture d'une zone", en: "Screenshot of an area", keywords: ["capture", "screenshot", "zone", "area"],
+                  symbol: "rectangle.dashed", confirms: false),
+            .init(id: "screenshot-window", fr: "Capture d'une fenêtre", en: "Screenshot of a window", keywords: ["capture", "screenshot", "fenêtre", "window"],
+                  symbol: "macwindow", confirms: false),
         ]
     }
 
@@ -107,7 +116,25 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
         case "reload-apps": LauncherAppCatalog.shared.refresh()
         // macOS demande le mot de passe d'un administrateur ; l'index se reconstruit ensuite en arrière-plan (plus d'une heure).
         case "rebuild-spotlight": script("do shell script \"/usr/bin/mdutil -E /\" with administrator privileges")
+        case "dark-mode": script("tell application \"System Events\" to tell appearance preferences to set dark mode to not dark mode")
+        case "screenshot-screen", "screenshot-area", "screenshot-window":
+            // La barre se ferme d'abord, pour ne pas être sur l'image.
+            let arguments = Self.screenshotArguments(id) + [Self.screenshotPath()]
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                process("/usr/sbin/screencapture", arguments)
+            }
         default:
+            // Raccourci de l'app Raccourcis (session 131).
+            if id.hasPrefix(LauncherAppleShortcuts.prefix) {
+                process("/usr/bin/shortcuts", ["run", String(id.dropFirst(LauncherAppleShortcuts.prefix.count))])
+                return
+            }
+            // Élément d'un menu de l'application active (session 131).
+            if id.hasPrefix("menu:") {
+                if let index = Int(id.dropFirst("menu:".count)) { LauncherMenuSearch.shared.press(index) }
+                return
+            }
             // Réglages trouvés (session 115) : panneau des Réglages Système, page ou réglage de Roadie.
             if id.hasPrefix(LauncherSettingTargets.panePrefix),
                let url = LauncherSettingTargets.paneURL(String(id.dropFirst(LauncherSettingTargets.panePrefix.count))) {
@@ -119,6 +146,27 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
                 SettingsWindowController.shared.show(category: descriptor.category, query: descriptor.label)
             }
         }
+    }
+
+    /// Options de `screencapture` : écran principal, zone choisie (Espace passe à une fenêtre), fenêtre choisie. O(1).
+    static func screenshotArguments(_ id: String) -> [String] {
+        switch id {
+        case "screenshot-area": ["-i"]
+        case "screenshot-window": ["-iW"]
+        default: ["-m"]
+        }
+    }
+
+    /// Fichier d'une capture : dossier réglé dans macOS (`com.apple.screencapture location`), sinon le Bureau ; nom
+    /// daté comme ceux de macOS. O(1).
+    static func screenshotPath(now: Date = Date(), location: String? = UserDefaults(suiteName: "com.apple.screencapture")?.string(forKey: "location"),
+                               home: String = NSHomeDirectory()) -> String {
+        let folder = location.map { ($0 as NSString).expandingTildeInPath }.flatMap { $0.isEmpty ? nil : $0 }
+            ?? (home as NSString).appendingPathComponent("Desktop")
+        let format = DateFormatter()
+        format.locale = Locale(identifier: "en_US_POSIX")
+        format.dateFormat = "yyyy-MM-dd' \(tr("à", "at")) 'HH.mm.ss"
+        return (folder as NSString).appendingPathComponent(tr("Capture d'écran", "Screenshot") + " " + format.string(from: now) + ".png")
     }
 
     /// Délai d'un script : une boîte de mot de passe ou de confirmation (session, redémarrage) attend
@@ -159,5 +207,51 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
 
     private static func notify(_ text: String) async {
         _ = await LauncherBrowsers.run("display notification \"\(text.applescriptEscaped)\" with title \"Roadie\"", timeout: 3)
+    }
+}
+
+/// Raccourcis de l'app Raccourcis dans la barre (session 131), comme la famille « Raccourcis » des tâches d'Alfred :
+/// lus par `shortcuts list` en fond, gardés 10 minutes, montrés comme des commandes « Système ».
+final class LauncherAppleShortcuts: @unchecked Sendable {
+    static let shared = LauncherAppleShortcuts()
+    static let prefix = "shortcut:"
+
+    private let lock = NSLock()
+    private var names: [String] = []
+    private var readAt: Date?
+    private var reading = false
+
+    /// Noms de la sortie de `shortcuts list` : une ligne par raccourci, espaces retirés, sans doublon. O(n).
+    static func parse(_ output: String) -> [String] {
+        var seen = Set<String>()
+        return output.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    /// Commandes de la barre pour les raccourcis connus. O(n).
+    var commands: [LauncherSystemCommand] {
+        lock.withLock { names }.map {
+            LauncherSystemCommand(id: Self.prefix + $0, title: $0, keywords: ["raccourci", "shortcut", "raccourcis", "shortcuts"],
+                                  symbol: "square.2.layers.3d", confirms: false, detail: tr("Raccourci", "Shortcut"))
+        }
+    }
+
+    /// Relit la liste en fond si elle a plus de 10 minutes. O(1) sur l'appelant.
+    func refresh(now: Date = Date()) {
+        let start = lock.withLock { () -> Bool in
+            if reading { return false }
+            if let readAt, now.timeIntervalSince(readAt) < 600 { return false }
+            reading = true
+            return true
+        }
+        guard start, !TestEnvironment.isRunningTests else { lock.withLock { reading = false }; return }
+        Task {
+            let output = await LauncherBrowsers.runProcess("/usr/bin/shortcuts", ["list"], timeout: 5)
+            lock.withLock {
+                if let output { names = Self.parse(output) }
+                readAt = Date()
+                reading = false
+            }
+        }
     }
 }

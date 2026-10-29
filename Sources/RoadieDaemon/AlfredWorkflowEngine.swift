@@ -78,6 +78,13 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
     var workflows: [AlfredWorkflow] = []
     /// Dossier des tâches d'automatisation (tests : dossier d'essai).
     var tasksRoot = AlfredAutomationTasks.root
+    /// Mise à jour des tâches quand l'une manque (session 131) : Alfred les embarque, Roadie les télécharge à la
+    /// première utilisation. Tests : mise à jour simulée.
+    var updateTasks: @Sendable (URL) throws -> Int = { root in
+        // Jamais de téléchargement pendant les tests, sauf mise à jour simulée injectée.
+        guard !TestEnvironment.isRunningTests else { throw CocoaError(.featureUnsupported) }
+        return try AlfredAutomationTasks.update(root: root)
+    }
 
     init(effects: AlfredEffects, workflows: [AlfredWorkflow] = []) {
         self.effects = effects
@@ -354,7 +361,15 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             return .next((object.int("outputmode") ?? 0) == 0 ? [output] : input, variables, branch: nil)
         case "automation.task":
             let uid = object.string("taskuid") ?? ""
-            guard let task = AlfredAutomationTasks.task(uid, root: tasksRoot) else {
+            // Tâche absente : une seule mise à jour par processus et par dossier, puis nouvelle lecture (session 131).
+            var found = AlfredAutomationTasks.task(uid, root: tasksRoot)
+            if found == nil, AlfredAutomationTasks.claimAutomaticUpdate(for: tasksRoot) {
+                let root = tasksRoot, update = updateTasks
+                let updated = await Task.detached(priority: .userInitiated) { (try? update(root)) != nil }.value
+                effects.log("workflow.tasks_update", ["outcome": updated ? "updated" : "failed"])
+                if updated { found = AlfredAutomationTasks.task(uid, root: tasksRoot) }
+            }
+            guard let task = found else {
                 return missing(tr("tâche absente : ", "task missing: ") + "\(uid) (roadie workflow tasks update)", workflow, run)
             }
             let settings = (object.config["tasksettings"]?.dict ?? [:]).mapValues { value -> String in

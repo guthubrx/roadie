@@ -59,14 +59,14 @@ Format : `- [ ] Tnnn [Pn] [USn] description (fichiers) - vérification`. Tests a
 
 ## Phase 7 - US6 Barre sans workflow (P2)
 
-- [ ] T015 [P2] [US6] Tests puis `LauncherMenuSearch` : parcours borné des menus (logique de chemin et de filtre
+- [x] T015 [P2] [US6] Tests puis `LauncherMenuSearch` : parcours borné des menus (logique de chemin et de filtre
   pure, lecture AX à part) ; ligne « Menus » dans la barre, Retour presse l'élément (`Sources/RoadieDaemon/LauncherMenuSearch.swift`,
   `TargetOverlayPresenter.swift`, `TargetModeRuntimeController.swift`, `Tests/RoadieDaemonTests/Spec131MenuSearchTests.swift`) - durée de lecture des menus mesurée sur une
   application réelle (SC-003 : moins de 1 s).
-- [ ] T016 [P2] [US6] Commandes système ajoutées : mode sombre, capture d'écran (écran, zone, fenêtre), raccourcis Apple
+- [x] T016 [P2] [US6] Commandes système ajoutées : mode sombre, capture d'écran (écran, zone, fenêtre), raccourcis Apple
   (liste en cache, lancement), relancer et quitter les autres (verbes d'application) (`LauncherSystemCommands.swift`,
   `TargetModeRuntimeController.swift`, tests dans `Spec131SystemCommandsTests.swift`).
-- [ ] T017 [P2] [US6] Tâche d'automatisation absente : une mise à jour par processus puis relecture
+- [x] T017 [P2] [US6] Tâche d'automatisation absente : une mise à jour par processus puis relecture
   (`AlfredWorkflowEngine.swift`, `AlfredAutomationTasks.swift`) - test avec une mise à jour simulée.
 
 ## Phase 8 - US7 Alfred 6 (P3)

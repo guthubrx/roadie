@@ -129,11 +129,16 @@ enum LauncherBrowsers {
     /// `osascript` dans son propre processus, 2 s au plus : un navigateur bloqué ne retient pas la barre.
     /// nil si le script échoue (autorisation refusée, navigateur fermé entre-temps).
     static func run(_ script: String, timeout: TimeInterval = 2) async -> String? {
+        await runProcess("/usr/bin/osascript", ["-e", script], timeout: timeout)
+    }
+
+    /// Lance un outil, rend sa sortie si son code est 0 ; arrêté au délai (session 131 : `shortcuts list`). O(sortie).
+    static func runProcess(_ path: String, _ arguments: [String], timeout: TimeInterval) async -> String? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-                process.arguments = ["-e", script]
+                process.executableURL = URL(fileURLWithPath: path)
+                process.arguments = arguments
                 let output = Pipe()
                 process.standardOutput = output
                 process.standardError = FileHandle.nullDevice

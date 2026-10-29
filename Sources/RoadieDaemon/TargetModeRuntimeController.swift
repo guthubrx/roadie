@@ -596,6 +596,11 @@ public final class TargetModeRuntimeController: NSObject {
                 .map { StageScope(displayID: display.id, desktopID: desktop, stageID: $0.activeStageID) }
         })
         context.rankingContext = rankingContext
+        // Session 131 : menus de l'application au premier plan, relus à chaque ouverture.
+        LauncherMenuSearch.shared.reset()
+        if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            context.frontApplication = (front.processIdentifier, front.localizedName ?? "")
+        }
         context.pickModifier = LauncherPickModifier(config: service.effectiveConfig.experimental.targetMode.pickModifier)
         let modes = service.effectiveConfig.experimental.targetMode
         context.returnEffects = [.command: LauncherReturnEffect(config: modes.returnCommand, modifier: .command),
@@ -760,7 +765,9 @@ public final class TargetModeRuntimeController: NSObject {
         context.calcLocale = LauncherCalculator.locale(barConfig.calcDecimal)
         context.calcGrouping = barConfig.calcGrouping
         context.pathSort = barConfig.pathSort
-        context.systemCommands = LauncherSystemCommand.all(confirmQuitAll: barConfig.confirmQuitAll)
+        // Session 131 : raccourcis de l'app Raccourcis, lus en fond pour les prochaines ouvertures.
+        LauncherAppleShortcuts.shared.refresh()
+        context.systemCommands = LauncherSystemCommand.all(confirmQuitAll: barConfig.confirmQuitAll) + LauncherAppleShortcuts.shared.commands
         if barConfig.webHistoryDays > 0 {
             let browsers = barConfig.bookmarkBrowsers, days = barConfig.webHistoryDays
             context.loadHistory = { done in

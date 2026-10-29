@@ -98,6 +98,8 @@ struct LauncherSearchContext {
     var savePlacement: (SearchBarPlacement?) -> Void = { _ in }
     /// Commandes système proposées (session 105).
     var systemCommands = LauncherSystemCommand.all()
+    /// Application au premier plan à l'ouverture de la barre, pour `menu …` (session 131).
+    var frontApplication: (pid: pid_t, name: String)?
     /// Ordre des éléments d'un chemin tapé (session 105) : `name`, `modified` ou `created`.
     var pathSort = "name"
     /// Réglages trouvés par la barre (session 115) ; vide si `settings_in_search` est faux.

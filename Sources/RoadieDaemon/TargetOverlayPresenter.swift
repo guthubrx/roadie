@@ -1536,6 +1536,28 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             syncHighlight()
             return
         }
+        // `menu …` (session 131) : éléments des menus de l'application au premier plan.
+        if let menuQuery = LauncherMenuSearch.query(model.query), let front = launcher.frontApplication {
+            let menus = LauncherMenuSearch.shared
+            menus.load(pid: front.pid, appName: front.name, events: EventLog()) { [weak self] in
+                guard let self, !self.finished else { return }
+                self.launcherQuery = nil
+                self.render()
+            }
+            pruneWorkflows(keeping: [])
+            launcherQuery = model.query
+            let found = menus.rows(menuQuery)
+            var rows: [LauncherList.Row] = [.header(tr("Menus de \(front.name)", "\(front.name) menus"))]
+            if found.isEmpty {
+                rows.append(.system(LauncherSystemCommand(id: "menu:none", title: menus.isLoading ? tr("Lecture des menus…", "Reading menus…")
+                                                                                  : tr("Aucun élément", "No item"),
+                                                          keywords: [], symbol: "filemenu.and.selection", confirms: false, detail: front.name)))
+            }
+            launcherList = .idle(rows + found.map(LauncherList.Row.system))
+            if launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
+            syncHighlight()
+            return
+        }
         let runs = launcher.workflowEntries.compactMap { entry -> (entry: AlfredEntry, argument: String)? in
             if case .run(let argument) = entry.match(model.query) { return (entry, argument) }
             return nil
