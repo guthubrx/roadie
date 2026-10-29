@@ -1070,6 +1070,8 @@ public final class TargetModeRuntimeController: NSObject {
                                         configuration: NSWorkspace.OpenConfiguration())
             case .relaunch:
                 relaunch(app)
+            case .pinApp:
+                LauncherAppsPins().toggle(app.bundleID)
             case .quitOthers:
                 // Session 131 : comme « Tout quitter » (session 105), sauf l'application choisie.
                 let keep = Set(NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).map(\.processIdentifier))

@@ -35,7 +35,7 @@ struct Spec131TextTests {
                                    detail: "", url: "https://example.com", browserWindow: 1, tabIndex: 2)
         #expect(LauncherVerb.verbs(for: .openItem(tab)) == [.open, .closeTab, .copyURL, .newWindowTab])
         let app = LauncherApp(bundleID: "com.apple.TextEdit", path: "/System/Applications/TextEdit.app", name: "TextEdit", alternateNames: [])
-        #expect(LauncherVerb.verbs(for: .app(app)).suffix(2) == [.relaunch, .quitOthers])
+        #expect(LauncherVerb.verbs(for: .app(app)).suffix(3) == [.relaunch, .quitOthers, .pinApp])
         // Mots compris dans les deux langues.
         #expect(LauncherVerb.extractURLs.matches("extract", app: "") && LauncherVerb.extractURLs.matches("extraire", app: ""))
         #expect(LauncherVerb.trash.matches("corbeille", app: "") && LauncherVerb.trash.matches("trash", app: ""))

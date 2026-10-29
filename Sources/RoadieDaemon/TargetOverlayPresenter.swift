@@ -1488,6 +1488,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return .workflow(entry.id, itemsAreFiles: files)
         }
         if Self.isPath(model.query) { return .folder(LauncherPathRules.parts(model.query).directory) }
+        if LauncherAppsGrid.query(model.query) != nil { return .apps }
         return launcherList.rows.contains { if case .file = $0 { return true } else { return false } } ? .files : nil
     }
 
@@ -1533,6 +1534,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             launcherQuery = model.query
             launcherList = .idle([.header("Terminal"), .terminal(command)])
             launcherSelection = launcherList.best
+            syncHighlight()
+            return
+        }
+        // `apps …` (session 131, Launchpad d'Alfred 6) : toutes les applications par catégorie, épinglées en tête.
+        if let appsQuery = LauncherAppsGrid.query(model.query) {
+            pruneWorkflows(keeping: [])
+            launcherQuery = model.query
+            let sections = LauncherAppsGrid.sections(apps: launcher.apps, query: appsQuery, pins: LauncherAppsPins().load())
+            launcherList = .idle(sections.flatMap { [LauncherList.Row.header($0.title)] + $0.apps.map { .app($0, detail: "") } })
+            if launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
             syncHighlight()
             return
         }

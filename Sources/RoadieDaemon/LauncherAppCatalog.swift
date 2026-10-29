@@ -8,6 +8,8 @@ struct LauncherApp: Equatable, Sendable {
     let name: String
     /// Autres noms cherchés : nom de fichier, noms déclarés dans `Info.plist` (`Calculator`).
     let alternateNames: [String]
+    /// Catégorie déclarée dans `Info.plist` (`LSApplicationCategoryType`), pour la grille Apps (session 131).
+    var category = ""
 
     var rankingKey: String { "app:\(bundleID)" }
 }
@@ -107,6 +109,8 @@ final class LauncherAppCatalog: @unchecked Sendable {
         where candidate != name && !alternates.contains(candidate) {
             alternates.append(candidate)
         }
-        return LauncherApp(bundleID: bundleID, path: path, name: name, alternateNames: alternates)
+        var app = LauncherApp(bundleID: bundleID, path: path, name: name, alternateNames: alternates)
+        app.category = info["LSApplicationCategoryType"] as? String ?? ""
+        return app
     }
 }

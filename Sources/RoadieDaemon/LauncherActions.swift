@@ -104,8 +104,8 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     case copyText, webSearch, extractURLs, emailText, largeType
     // Onglet ouvert (session 131).
     case closeTab, copyURL, newWindowTab
-    // Application (session 131) : relancer, quitter toutes les autres.
-    case relaunch, quitOthers
+    // Application (session 131) : relancer, quitter toutes les autres, épingler en tête de la grille Apps.
+    case relaunch, quitOthers, pinApp
     // Projets (SPEC-080) : stage gardée, rouverte, supprimée.
     case saveProject, reopenProject, deleteProject
     // Stage, bureau
@@ -171,6 +171,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .newWindowTab: ("Ouvrir dans une nouvelle fenêtre", "Open in a new window")
         case .relaunch: ("Relancer l'application", "Relaunch app")
         case .quitOthers: ("Quitter les autres applications", "Quit other apps")
+        case .pinApp: ("Épingler ou retirer d'Apps", "Pin or unpin in Apps")
         }
     }
 
@@ -242,7 +243,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     /// dépendent de `tiling` ; sans état connu, « Faire flotter » seul (bascule SPEC-047). O(1).
     static func verbs(for subject: LauncherSubject, tiling: LauncherTilingState? = nil) -> [LauncherVerb] {
         switch subject {
-        case .app: return [.open, .openIn, .bringHere, .newWindow, .recentDocuments, .gatherIn, .hide, .quit, .forceQuit, .relaunch, .quitOthers]
+        case .app: return [.open, .openIn, .bringHere, .newWindow, .recentDocuments, .gatherIn, .hide, .quit, .forceQuit, .relaunch, .quitOthers, .pinApp]
         case .file(let file):
             // Session 131 : actions d'Alfred sur un fichier ; un dossier se parcourt ou ouvre un terminal, un
             // paquet (application, bibliothèque) montre son contenu.

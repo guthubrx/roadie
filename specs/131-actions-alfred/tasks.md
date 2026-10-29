@@ -77,7 +77,7 @@ Format : `- [ ] Tnnn [Pn] [USn] description (fichiers) - vérification`. Tests a
 - [x] T020 [P3] [US7] Style des vues de workflow `workflow_view_style` (theme, glassy-dark, flat-dark, glassy-light),
   réglage FR/EN, appliqué aux panneaux Texte, Image, PDF (`WorkflowTextPanel.swift`, `WorkflowMediaPanel.swift`,
   config et catalogue) - test du réglage et rendu hors écran vérifié.
-- [ ] T021 [P3] [US7] Apps : catégories, filtre, épinglage, grille dans la barre par le mot-clé `apps`
+- [x] T021 [P3] [US7] Apps : catégories, filtre, épinglage, grille dans la barre par le mot-clé `apps`
   (`Sources/RoadieDaemon/LauncherAppsGrid.swift`, `TargetOverlayPresenter.swift`, `Tests/RoadieDaemonTests/Spec131AppsGridTests.swift`).
 - [ ] T022 [P3] [US7] SF Symbols : données CoreGlyphs (noms, catégories, mots-clés, versions), recherche, panneau
   conforme au modèle et au style `workflow_view_style`, mot-clé `symbols`, Retour copie le nom (`Sources/RoadieDaemon/LauncherSymbols.swift`,

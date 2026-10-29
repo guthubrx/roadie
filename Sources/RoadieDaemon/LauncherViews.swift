@@ -50,6 +50,8 @@ struct LauncherViewSource: Equatable, Sendable {
     static func workflow(_ entryID: String, itemsAreFiles: Bool) -> Self { Self(key: "wf:\(entryID)", namesInFooter: !itemsAreFiles) }
     static func folder(_ directory: String) -> Self { Self(key: "path:\(directory)", namesInFooter: false) }
     static let files = Self(key: "files", namesInFooter: false)
+    /// Grille Apps (session 131, Launchpad d'Alfred 6) : en grille tant que l'utilisateur n'a rien choisi.
+    static let apps = Self(key: "apps", namesInFooter: false)
 
     /// Lignes montrées dans une grille : sans titres de section ; pour les fichiers de la recherche, les
     /// fichiers seuls (applications et fenêtres restent dans la liste). O(n).
@@ -76,7 +78,7 @@ struct LauncherViewBook: Codable, Equatable, Sendable {
     var choices: [String: Choice] = [:]
 
     func mode(for source: LauncherViewSource?) -> LauncherViewMode {
-        source.flatMap { choices[$0.key]?.mode } ?? .list
+        source.flatMap { choices[$0.key]?.mode } ?? (source == .apps ? .grid : .list)
     }
 
     /// Retient le choix ; au-delà de la borne, le plus ancien part. O(s) au dépassement, O(1) sinon.
