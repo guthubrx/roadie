@@ -295,6 +295,9 @@ par défaut), taille automatique selon le texte ou 12 à 64 points (`switcher.ap
 Reçu : specs/121-icone-selecteur/validation.md.
 Session 122 installée : sélecteur réduit aux fenêtres (ni « Roadie », ni résumé, ni aide des touches ou du relâchement). 2 259 tests / 326 suites.
 Reçu : specs/122-selecteur-epure/validation.md.
+Session 123 installée : barre rapide sous charge (fil principal bloqué 1,2 s → 0,26 s au plus, historique 1 à 9 ms par
+touche, fichiers ouverts en 50 ms et gardés devant ceux de Spotlight, ADR 021). 2 264 tests / 329 suites.
+Reçu : specs/123-barre-rapide/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
