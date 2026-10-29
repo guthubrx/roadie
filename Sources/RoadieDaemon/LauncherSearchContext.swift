@@ -29,6 +29,8 @@ struct LauncherSearchContext {
     var shownStages: Set<StageScope> = []
     /// Touche des raccourcis 1 à 9 (SPEC-085).
     var pickModifier = LauncherPickModifier.command
+    /// Effets réglés de ⌘, ⌥ et ⌃ + Retour (session 131).
+    var returnEffects: [LauncherModifier: LauncherReturnEffect] = [.command: .newStage, .option: .here, .control: .web]
     /// Identité de cette stage pour le classement appris (SPEC-076) : `stage:<nom>` ou `scope:<place>`.
     var rankingContext: String?
     /// Objet dont la barre montre tout de suite les verbes (Capslock + Maj + F) ; nil : la liste.

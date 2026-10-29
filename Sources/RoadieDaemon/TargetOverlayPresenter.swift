@@ -1667,6 +1667,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 rows += items.enumerated().map { .workflowItem(entry, $0.element, index: $0.offset) }
                 continue
             }
+            // Session 131 : dictionnaire de macOS et applications ouvertes, sans script.
+            if entry.kind == .dictionary || entry.kind == .runningApps {
+                let items = entry.kind == .dictionary
+                    ? AlfredSystemObjects.dictionaryItems(argument, showAllWords: entry.showAllWords)
+                    : AlfredSystemObjects.runningAppItems(argument, apps: AlfredSystemObjects.runningApps(), outputType: entry.outputType,
+                                                          prefix: entry.outputPrefix)
+                rows += items.enumerated().map { .workflowItem(entry, $0.element, index: $0.offset) }
+                continue
+            }
             guard entry.kind == .scriptFilter || entry.kind == .fileFilter else { rows.append(.workflowKeyword(entry)); continue }
             guard let answer = workflowResponses[entry.id], let response = answer.response else {
                 let waiting = workflowResponses[entry.id]?.error ?? (entry.runningSubtitle.isEmpty ? tr("Recherche…", "Searching…") : entry.runningSubtitle)
@@ -2405,10 +2414,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .web(let row):
             guard let url = row.url else { return nil }
             subject = .url(url)
-        case .phrase, .alias, .project, .action, .rule, .openItem, .calc, .workflowKeyword, .workflowItem, .history, .terminal, .system, .header, nil: return nil
+        case .openItem(let item): subject = .openItem(item)
+        case .calc(let calc): subject = .text(calc.text)
+        case .phrase, .alias, .project, .action, .rule, .workflowKeyword, .workflowItem, .history, .terminal, .system, .header, nil: return nil
         }
         return LauncherVariant.of(subject, modifier: modifier, query: model.query,
-                                  newStageHome: launcher.newStageHome, activeStage: launcher.activeStage)
+                                  newStageHome: launcher.newStageHome, activeStage: launcher.activeStage,
+                                  effect: launcher.returnEffects[modifier])
     }
 
     private func finishVariant(_ variant: LauncherVariant) {
@@ -2421,6 +2433,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             launcher.recordQuery(model.query)
             cleanup()
             onFinish?(launcher.webSearch(text))
+        case .copy(let text):
+            // Session 131 : la barre reste ouverte, la ligne montre « copié » comme ⌘C.
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            copiedRowID = launcherSelection
+            render()
+        case .verbs(let subject):
+            enterVerbs(subject)
+            render()
         }
     }
 

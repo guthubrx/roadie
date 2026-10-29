@@ -132,6 +132,14 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
         await MainActor.run { presentText(view) }
     }
 
+    func systemCommand(_ id: String) async {
+        await MainActor.run { LauncherSystemCommand.all().first { $0.id == id }?.run() }
+    }
+
+    func music(_ script: String) async {
+        _ = await LauncherBrowsers.run(script, timeout: 10)
+    }
+
     func showMedia(_ view: AlfredMediaView) async {
         let presentMedia = presentMedia
         await MainActor.run { presentMedia(view) }

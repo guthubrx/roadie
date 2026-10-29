@@ -42,17 +42,17 @@ Format : `- [ ] Tnnn [Pn] [USn] description (fichiers) - vérification`. Tests a
 
 ## Phase 5 - US4 Modificateurs (P2)
 
-- [ ] T011 [P2] [US4] Réglages `return_cmd`, `return_alt`, `return_ctrl` (config, catalogue des paramètres FR/EN,
+- [x] T011 [P2] [US4] Réglages `return_cmd`, `return_alt`, `return_ctrl` (config, catalogue des paramètres FR/EN,
   `LauncherVariant.of`) ; défauts identiques à aujourd'hui (`RoadieCore/Config.swift`, `SettingsCatalog*.swift`,
   `LauncherActions.swift`, `Tests/RoadieDaemonTests/Spec131ReturnModifiersTests.swift`) - test des défauts et d'un choix.
 
 ## Phase 6 - US5 Briques de workflow (P2)
 
-- [ ] T012 [P2] [US5] Tests : tables des commandes système et Musique (numéros de research R2, R3, inconnu refusé),
+- [x] T012 [P2] [US5] Tests : tables des commandes système et Musique (numéros de research R2, R3, inconnu refusé),
   dictionnaire, applications ouvertes (`Tests/RoadieDaemonTests/Spec131WorkflowObjectsTests.swift`).
-- [ ] T013 [P2] [US5] `AlfredSystemObjects` : commandes système (avec confirmation), Musique, définition du
+- [x] T013 [P2] [US5] `AlfredSystemObjects` : commandes système (avec confirmation), Musique, définition du
   dictionnaire, applications ouvertes filtrées (`Sources/RoadieDaemon/AlfredSystemObjects.swift`) - T012 réussit.
-- [ ] T014 [P2] [US5] Branchement dans le moteur (`action.systemcommand`, `action.itunescommand`) et comme entrées
+- [x] T014 [P2] [US5] Branchement dans le moteur (`action.systemcommand`, `action.itunescommand`) et comme entrées
   de la barre (`input.dictionaryfilter`, `input.runningappsfilter`), compatibilité marquée complète
   (`AlfredWorkflowEngine.swift`, `AlfredWorkflowIndex.swift`, `AlfredCompatibility.swift`, `TargetOverlayPresenter.swift`)
   - test d'exécution d'un workflow de chaque type.

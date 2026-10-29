@@ -398,47 +398,108 @@ enum LauncherPickModifier: String, Sendable {
     }
 }
 
+/// Effet réglable de ⌘, ⌥ et ⌃ + Retour (session 131), comme les listes « Action Modifiers » d'Alfred.
+enum LauncherReturnEffect: String, CaseIterable, Sendable {
+    case newStage = "new-stage", here, send, web, copy, reveal, quicklook, verbs, none
+
+    /// Valeur du réglage ; une valeur inconnue rend l'effet par défaut de la touche. O(1).
+    init(config value: String, modifier: LauncherModifier) {
+        self = LauncherReturnEffect(rawValue: value) ?? Self.defaultEffect(modifier)
+    }
+
+    /// Comportement de la session 075 : ⌘ nouvelle stage, ⌥ ici, ⌃ web.
+    static func defaultEffect(_ modifier: LauncherModifier) -> LauncherReturnEffect {
+        switch modifier {
+        case .command: .newStage
+        case .option: .here
+        case .control: .web
+        }
+    }
+}
+
 /// Ce que Retour fait quand une touche est tenue, et ce que la ligne annonce avant.
 struct LauncherVariant: Equatable, Sendable {
     enum Effect: Equatable, Sendable {
         case action(LauncherAction)
         case webSearch(String)
+        /// Session 131 : copier un texte, ouvrir les verbes de l'objet.
+        case copy(String)
+        case verbs(LauncherSubject)
     }
 
     let title: String
     let effect: Effect
 
-    /// ⌘ : dans une nouvelle stage du bureau affiché, et Roadie y va. ⌥ : vers la stage active, sans
-    /// changer la stage affichée. ⌃ : le texte tapé sur le web. Cibles à l'écran : ⌘ reste le ⌘-clic de
-    /// la SPEC-021, donc pas de variante ici. nil : Retour fait l'action normale. O(1).
+    /// Effet de la touche tenue sur l'objet de la ligne ; nil si l'effet ne s'applique pas à cet objet (Retour fait
+    /// alors l'action normale). Nouvelle stage : dans une nouvelle stage du bureau affiché, et Roadie y va ; envoyer :
+    /// la même sans y aller ; ici : vers la stage active sans changer la stage affichée ; web : le texte tapé sur le
+    /// web. Cibles à l'écran : ⌘ reste le ⌘-clic de la SPEC-021. O(1).
     static func of(_ subject: LauncherSubject, modifier: LauncherModifier, query: String,
-                   newStageHome: (DisplayID, DesktopID), activeStage: StageScope?) -> LauncherVariant? {
+                   newStageHome: (DisplayID, DesktopID), activeStage: StageScope?,
+                   effect: LauncherReturnEffect? = nil) -> LauncherVariant? {
+        let effect = effect ?? LauncherReturnEffect.defaultEffect(modifier)
+        let key = switch modifier {
+        case .command: "⌘ ↩"
+        case .option: "⌥ ↩"
+        case .control: "⌃ ↩"
+        }
         let window: RoadieTarget? = if case .target(let target) = subject, target.kind == .window { target } else { nil }
         // Un fichier se comporte comme une application : il s'ouvre, dans une stage ou ici.
         let isApp = switch subject {
         case .app, .file, .url: true
         case .target, .project, .text, .openItem: false
         }
-        switch modifier {
-        case .control:
+        let fresh = LauncherDestination(kind: .newStage(name: nil, newStageHome.0, newStageHome.1),
+                                        title: tr("Nouvelle stage", "New stage"), detail: tr("bureau", "desktop") + " \(newStageHome.1.rawValue)")
+        switch effect {
+        case .none:
+            return nil
+        case .web:
             let text = LauncherWeb.searchText(query)
-            return text.isEmpty ? nil : LauncherVariant(title: tr("⌃ ↩ Rechercher « \(text) » sur le web", "⌃ ↩ Search the web for “\(text)”"), effect: .webSearch(text))
-        case .command:
-            let fresh = LauncherDestination(kind: .newStage(name: nil, newStageHome.0, newStageHome.1),
-                                            title: tr("Nouvelle stage", "New stage"), detail: tr("bureau", "desktop") + " \(newStageHome.1.rawValue)")
+            return text.isEmpty ? nil : LauncherVariant(title: tr("\(key) Rechercher « \(text) » sur le web", "\(key) Search the web for “\(text)”"),
+                                                        effect: .webSearch(text))
+        case .newStage, .send:
+            let follow = effect == .newStage
             if isApp {
-                return LauncherVariant(title: tr("⌘ ↩ Ouvrir dans une nouvelle stage", "⌘ ↩ Open in a new stage"),
+                return LauncherVariant(title: tr("\(key) Ouvrir dans une nouvelle stage", "\(key) Open in a new stage"),
                                        effect: .action(LauncherAction(subject: subject, verb: .openIn, destination: fresh)))
             }
             guard window != nil else { return nil }
-            return LauncherVariant(title: tr("⌘ ↩ Envoyer dans une nouvelle stage", "⌘ ↩ Send to a new stage"),
-                                   effect: .action(LauncherAction(subject: subject, verb: .sendTo, destination: fresh, follow: true)))
-        case .option:
+            return LauncherVariant(title: follow ? tr("\(key) Envoyer dans une nouvelle stage", "\(key) Send to a new stage")
+                                                 : tr("\(key) Envoyer dans une nouvelle stage, sans y aller", "\(key) Send to a new stage, stay here"),
+                                   effect: .action(LauncherAction(subject: subject, verb: .sendTo, destination: fresh, follow: follow)))
+        case .here:
             guard let activeStage, isApp || window != nil else { return nil }
             if window != nil, LauncherActionList.ownStage(of: subject) == activeStage { return nil }
             let here = LauncherDestination(kind: .stage(activeStage), title: tr("Stage active", "Active stage"), detail: "")
-            return LauncherVariant(title: tr("⌥ ↩ Amener ici, sans changer de stage", "⌥ ↩ Bring here, stay on this stage"),
+            return LauncherVariant(title: tr("\(key) Amener ici, sans changer de stage", "\(key) Bring here, stay on this stage"),
                                    effect: .action(LauncherAction(subject: subject, verb: .bringHere, destination: here)))
+        case .copy:
+            let text: String? = switch subject {
+            case .app(let app): app.path
+            case .file(let file): file.path
+            case .url(let url): url.absoluteString
+            case .target(let target): target.title
+            case .text(let text): text
+            case .openItem(let item): item.url ?? item.title
+            case .project(let name): name
+            }
+            return text.map { LauncherVariant(title: tr("\(key) Copier", "\(key) Copy"), effect: .copy($0)) }
+        case .reveal, .quicklook:
+            let path: String? = switch subject {
+            case .file(let file): file.path
+            case .app(let app) where effect == .reveal: app.path
+            default: nil
+            }
+            guard let path else { return nil }
+            let file = LauncherFile(path: path, name: (path as NSString).lastPathComponent, isFolder: false, lastUsed: nil)
+            return effect == .reveal
+                ? LauncherVariant(title: tr("\(key) Montrer dans le Finder", "\(key) Reveal in Finder"),
+                                  effect: .action(LauncherAction(subject: .file(file), verb: .reveal, destination: nil)))
+                : LauncherVariant(title: tr("\(key) Aperçu (Quick Look)", "\(key) Quick Look"),
+                                  effect: .action(LauncherAction(subject: .file(file), verb: .quickLook, destination: nil)))
+        case .verbs:
+            return LauncherVariant(title: tr("\(key) Verbes…", "\(key) Verbs…"), effect: .verbs(subject))
         }
     }
 }

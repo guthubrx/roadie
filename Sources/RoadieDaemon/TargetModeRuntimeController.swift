@@ -597,6 +597,10 @@ public final class TargetModeRuntimeController: NSObject {
         })
         context.rankingContext = rankingContext
         context.pickModifier = LauncherPickModifier(config: service.effectiveConfig.experimental.targetMode.pickModifier)
+        let modes = service.effectiveConfig.experimental.targetMode
+        context.returnEffects = [.command: LauncherReturnEffect(config: modes.returnCommand, modifier: .command),
+                                 .option: LauncherReturnEffect(config: modes.returnOption, modifier: .option),
+                                 .control: LauncherReturnEffect(config: modes.returnControl, modifier: .control)]
         context.initialSubject = initialSubject
         context.tiling = { id in
             guard let entry = snapshot.windows.first(where: { $0.window.id == id }) else { return nil }

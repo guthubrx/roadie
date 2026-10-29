@@ -29,7 +29,7 @@ enum AlfredCompatibility {
     /// Entrées par lesquelles Roadie démarre un workflow.
     static var entryTypes: Set<String> {
         ["input.scriptfilter", "input.keyword", "input.listfilter", "input.filefilter", "trigger.hotkey", "trigger.external",
-         "trigger.action", "trigger.universalaction", "trigger.fallback",
+         "trigger.action", "trigger.universalaction", "trigger.fallback", "input.dictionaryfilter", "input.runningappsfilter",
          // Session 120 : bouton d'Alfred Remote, appelé par `roadie workflow trigger` comme un déclencheur externe.
          "trigger.remote"]
     }

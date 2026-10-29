@@ -118,6 +118,8 @@ public struct SettingDescriptor: Equatable, Sendable {
         case ("target_mode.bar_position", "center"): return tr("Au centre, liste dessous", "Center, list below")
         case ("target_mode.bar_position", "top"): return tr("En haut, liste dessous (comme Alfred)", "Top, list below (like Alfred)")
         case ("target_mode.terminal_app", let app): return LauncherTerminal.appName(app)
+        case ("target_mode.return_cmd", let effect), ("target_mode.return_alt", let effect), ("target_mode.return_ctrl", let effect):
+            return Self.returnEffectLabel(effect)
         case ("target_mode.path_sort", "name"): return tr("Par nom", "By name")
         case ("target_mode.path_sort", "modified"): return tr("Modifiés récemment d'abord", "Recently modified first")
         case ("target_mode.path_sort", "created"): return tr("Créés récemment d'abord", "Recently created first")
@@ -139,6 +141,22 @@ public struct SettingDescriptor: Equatable, Sendable {
         default: return value
         }
         return "\(label) (\(value))"
+    }
+
+    /// Effet de ⌘, ⌥ ou ⌃ + Retour (session 131), dans la langue de l'interface. O(1).
+    static func returnEffectLabel(_ value: String) -> String {
+        switch value {
+        case "new-stage": tr("Ouvrir ou envoyer dans une nouvelle stage", "Open or send to a new stage")
+        case "here": tr("Amener dans la stage active", "Bring to the active stage")
+        case "send": tr("Envoyer dans une nouvelle stage, sans y aller", "Send to a new stage, stay here")
+        case "web": tr("Chercher le texte tapé sur le web", "Search the typed text on the web")
+        case "copy": tr("Copier (chemin, adresse ou titre)", "Copy (path, address or title)")
+        case "reveal": tr("Montrer dans le Finder", "Reveal in Finder")
+        case "quicklook": tr("Aperçu (Quick Look)", "Quick Look")
+        case "verbs": tr("Ouvrir les verbes", "Open the verbs")
+        case "none": tr("Rien de plus que Retour", "Same as Return")
+        default: value
+        }
     }
 
     /// Une valeur déjà présente reste visible même si elle n'est pas proposée à l'écriture. O(c).
@@ -447,6 +465,19 @@ extension SettingsCatalog {
         entry(.raccourcis, "experimental.target_mode", "pick_modifier", tr("Touche des raccourcis 1 à 9", "Key for shortcuts 1 to 9"),
               tr("Touche tenue avec un chiffre pour ouvrir une ligne de la barre : command (⌘), shift (⇧), alt (⌥) ou control (⌃). Avec shift, les chiffres de la rangée du haut ne s'écrivent plus dans la recherche en AZERTY.", "Key held with a digit to open a row of the bar: command (⌘), shift (⇧), alt (⌥) or control (⌃). With shift, top-row digits no longer type into search on AZERTY keyboards."),
               .choice(["command", "shift", "alt", "control"]), .string("command")),
+        // Session 131 : listes « Action Modifiers » d'Alfred.
+        entry(.recherche, "experimental.target_mode", "return_cmd", tr("⌘ Retour", "⌘ Return"),
+              tr("Ce que fait Retour avec la touche Commande tenue dans la barre ; la ligne choisie l'annonce.",
+                 "What Return does with Command held in the bar; the selected row announces it."),
+              .choice(TargetModeConfig.returnEffects), .string("new-stage")),
+        entry(.recherche, "experimental.target_mode", "return_alt", tr("⌥ Retour", "⌥ Return"),
+              tr("Ce que fait Retour avec la touche Option tenue dans la barre ; la ligne choisie l'annonce.",
+                 "What Return does with Option held in the bar; the selected row announces it."),
+              .choice(TargetModeConfig.returnEffects), .string("here")),
+        entry(.recherche, "experimental.target_mode", "return_ctrl", tr("⌃ Retour", "⌃ Return"),
+              tr("Ce que fait Retour avec la touche Contrôle tenue dans la barre ; la ligne choisie l'annonce.",
+                 "What Return does with Control held in the bar; the selected row announces it."),
+              .choice(TargetModeConfig.returnEffects), .string("web")),
         entry(.raccourcis, "experimental.target_mode", "view_cycle_hotkey", tr("Touche des présentations", "View key"),
               tr("Dans la barre, fait passer les résultats d'un workflow, d'un dossier ou les fichiers de la liste à la grille, puis aux grandes tuiles. Le chip à droite de la saisie fait de même. Vide : désactivée.", "In the bar, switches the results of a workflow, a folder or files from list to grid, then to large tiles. The chip on the right of the field does the same. Empty: off."),
               .text, .string("command+g")),

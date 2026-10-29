@@ -70,6 +70,8 @@ final class RecordedEffects: AlfredEffects, @unchecked Sendable {
     func terminal(folder: String) async { note("terminal-folder:\(folder)") }
     func shortcut(_ name: String, input: String?) async -> String { note("shortcut:\(name):\(input ?? "-")"); return "sortie" }
     func dialog(title: String, text: String, buttons: [String]) async -> Int? { note("dialog:\(title)"); return dialogChoice }
+    func systemCommand(_ id: String) async { note("system:\(id)") }
+    func music(_ script: String) async { note("music:" + (script.split(separator: "\n").dropFirst().first.map(String.init) ?? "")) }
     private var recordedGrids: [AlfredGridView] = []
     var lastGrid: AlfredGridView? { lock.withLock { recordedGrids.last } }
     var grids: [AlfredGridView] { lock.withLock { recordedGrids } }

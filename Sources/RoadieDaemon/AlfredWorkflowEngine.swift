@@ -33,6 +33,10 @@ protocol AlfredEffects: Sendable {
     func showText(_ view: AlfredTextView) async
     /// Vue Image ou PDF (session 118) : fenêtre d'aperçu ; Retour repart de la brique avec le chemin.
     func showMedia(_ view: AlfredMediaView) async
+    /// Commande système de la barre, par son identifiant (session 131).
+    func systemCommand(_ id: String) async
+    /// Script AppleScript pour Musique (session 131).
+    func music(_ script: String) async
 }
 
 /// Bilan d'une exécution : étapes, briques manquantes, erreurs (sans contenu de l'utilisateur).
@@ -65,6 +69,8 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         "userinterface.grid",
         // Session 117, 118.
         "userinterface.text", "userinterface.image", "userinterface.pdf",
+        // Session 131.
+        "action.systemcommand", "action.itunescommand", "input.dictionaryfilter", "input.runningappsfilter",
     ]
 
     let effects: AlfredEffects
@@ -306,7 +312,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         case "trigger.hotkey", "trigger.external", "trigger.action", "trigger.universalaction", "trigger.fallback", "trigger.remote":
             // Déclencheur atteint par une flèche : il passe la main tel quel.
             return pass
-        case "input.listfilter", "input.filefilter":
+        case "input.listfilter", "input.filefilter", "input.dictionaryfilter", "input.runningappsfilter":
             let keyword = expand(object.string("keyword") ?? "")
             await effects.showBar(keyword.isEmpty ? query : "\(keyword) \(query)")
             return .stop
@@ -362,6 +368,28 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             }
             let output = AlfredRunScriptOutput.parse(result.text)
             return .next(output.arg, variables.merging(output.variables) { $1 }, branch: nil)
+        // MARK: Session 131
+        case "action.systemcommand":
+            let number = object.int("command") ?? -1
+            guard let id = AlfredSystemObjects.systemCommandID(number) else {
+                run.outcome.errors.append("systemcommand:\(number)")
+                return .stop
+            }
+            if object.bool("confirm") {
+                let title = LauncherSystemCommand.all().first { $0.id == id }?.title ?? id
+                guard await effects.dialog(title: workflow.name, text: tr("Confirmer : \(title) ?", "Confirm: \(title)?"),
+                                           buttons: [tr("Confirmer", "Confirm"), tr("Annuler", "Cancel")]) == 1 else { return .stop }
+            }
+            await effects.systemCommand(id)
+            return pass
+        case "action.itunescommand":
+            let number = object.int("command") ?? -1
+            guard let script = AlfredSystemObjects.musicScript(number) else {
+                run.outcome.errors.append("musiccommand:\(number)")
+                return .stop
+            }
+            await effects.music(script)
+            return pass
         case "utility.dialog":
             let buttons = ["button1", "button2", "button3"].map { expand(object.string($0) ?? "") }
             guard let chosen = await effects.dialog(title: text("title", default: workflow.name), text: text("description", default: ""),

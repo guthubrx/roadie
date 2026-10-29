@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 struct AlfredEntry: Equatable, Sendable {
     enum Kind: String, Sendable {
         case scriptFilter, keyword, listFilter, fileFilter
+        /// Session 131 : Recherche dans le dictionnaire, Filtre des applications ouvertes.
+        case dictionary, runningApps
         /// Déclencheurs (SPEC-089) : pas de mot-clé tapé.
         case hotkey, external, fileAction, universalAction, fallback
         /// Grille ouverte par un schéma (SPEC-092) : jamais indexée par mot-clé.
@@ -42,6 +44,11 @@ struct AlfredEntry: Equatable, Sendable {
     var hotkeyText = ""
     /// Filtre de liste (SPEC-089 FR-005) : ses éléments fixes, sans script.
     var listItems: [AlfredItem] = []
+    /// Dictionnaire (session 131) : proposer aussi les mots qui complètent la saisie.
+    var showAllWords = false
+    /// Applications ouvertes (session 131) : argument (0 chemin, 1 nom, 2 identifiant) et son préfixe.
+    var outputType = 0
+    var outputPrefix = ""
 
     var id: String { "wf:\(workflowID):\(objectUID)" }
 
@@ -155,6 +162,8 @@ final class AlfredWorkflowIndex: @unchecked Sendable {
                 case "input.keyword": .keyword
                 case "input.listfilter": .listFilter
                 case "input.filefilter": .fileFilter
+                case "input.dictionaryfilter": .dictionary
+                case "input.runningappsfilter": .runningApps
                 default: nil
                 }
                 guard let kind, object.config["disabled"]?.bool != true else { continue }
@@ -173,6 +182,9 @@ final class AlfredWorkflowIndex: @unchecked Sendable {
                 entry.filtersResults = object.bool("alfredfiltersresults")
                 entry.filterMode = object.int("alfredfiltersresultsmatchmode") ?? 0
                 entry.runningSubtitle = object.string("runningsubtext") ?? ""
+                entry.showAllWords = object.bool("showallwords")
+                entry.outputType = object.int("outputtype") ?? 0
+                entry.outputPrefix = object.string("outputprefix") ?? ""
                 if kind == .listFilter {
                     entry.filtersResults = true
                     entry.filterMode = object.int("matchmode") ?? 0

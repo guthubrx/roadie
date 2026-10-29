@@ -781,6 +781,11 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     /// Modificateur des raccourcis 1 à 9 du lanceur (SPEC-085) : `command`, `shift`, `alt` ou `control`.
     /// Une autre valeur revient à `command`.
     public var pickModifier: String
+    /// Effet de ⌘, ⌥ et ⌃ + Retour dans la barre (session 131) : `new-stage`, `here`, `send`, `web`, `copy`, `reveal`,
+    /// `quicklook`, `verbs` ou `none`.
+    public var returnCommand: String
+    public var returnOption: String
+    public var returnControl: String
     /// Workflows dans la barre (SPEC-088) ; `alfredWorkflows` : lire aussi ceux installés dans Alfred.
     public var workflowsEnabled: Bool
     public var alfredWorkflows: Bool
@@ -864,6 +869,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public static let defaultActionsHotkey = "command+control+alt+shift+f"
     public static let defaultWebSearchURL = "https://www.google.com/search?q={query}"
     public static let pickModifiers = ["command", "shift", "alt", "control"]
+    public static let returnEffects = ["new-stage", "here", "send", "web", "copy", "reveal", "quicklook", "verbs", "none"]
     public static let barScreens = ["mouse", "active", "main"]
     public static let barPositions = ["bottom", "center", "top"]
     /// Séparateur décimal du résultat d'un calcul (session 119) : réglages de macOS, point ou virgule.
@@ -884,6 +890,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         actionsHotkey: String = TargetModeConfig.defaultActionsHotkey,
         webSearchURL: String = TargetModeConfig.defaultWebSearchURL,
         pickModifier: String = "command",
+        returnCommand: String = "new-stage",
+        returnOption: String = "here",
+        returnControl: String = "web",
         workflowsEnabled: Bool = true,
         alfredWorkflows: Bool = true,
         webSearches: [WebSearch]? = nil,
@@ -939,6 +948,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.actionsHotkey = TargetGridConfig.normalizedKey(actionsHotkey, fallback: "")
         self.webSearchURL = webSearchURL
         self.pickModifier = TargetModeConfig.pickModifiers.contains(pickModifier) ? pickModifier : "command"
+        self.returnCommand = TargetModeConfig.returnEffects.contains(returnCommand) ? returnCommand : "new-stage"
+        self.returnOption = TargetModeConfig.returnEffects.contains(returnOption) ? returnOption : "here"
+        self.returnControl = TargetModeConfig.returnEffects.contains(returnControl) ? returnControl : "web"
         self.workflowsEnabled = workflowsEnabled
         self.alfredWorkflows = alfredWorkflows
         self.webSearches = webSearches
@@ -1007,6 +1019,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case actionsHotkey = "actions_hotkey"
         case webSearchURL = "web_search_url"
         case pickModifier = "pick_modifier"
+        case returnCommand = "return_cmd"
+        case returnOption = "return_alt"
+        case returnControl = "return_ctrl"
         case workflowsEnabled = "workflows_enabled"
         case alfredWorkflows = "alfred_workflows"
         case webSearches = "web_searches"
@@ -1073,6 +1088,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             actionsHotkey: try c.decodeIfPresent(String.self, forKey: .actionsHotkey) ?? TargetModeConfig.defaultActionsHotkey,
             webSearchURL: try c.decodeIfPresent(String.self, forKey: .webSearchURL) ?? TargetModeConfig.defaultWebSearchURL,
             pickModifier: try c.decodeIfPresent(String.self, forKey: .pickModifier) ?? "command",
+            returnCommand: try c.decodeIfPresent(String.self, forKey: .returnCommand) ?? "new-stage",
+            returnOption: try c.decodeIfPresent(String.self, forKey: .returnOption) ?? "here",
+            returnControl: try c.decodeIfPresent(String.self, forKey: .returnControl) ?? "web",
             workflowsEnabled: try c.decodeIfPresent(Bool.self, forKey: .workflowsEnabled) ?? true,
             alfredWorkflows: try c.decodeIfPresent(Bool.self, forKey: .alfredWorkflows) ?? true,
             webSearches: try c.decodeIfPresent([WebSearch].self, forKey: .webSearches),
@@ -1803,7 +1821,7 @@ private enum ConfigValidationRules {
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations", "double_click_maximize"],
-            "experimental.target_mode": Set<String>(["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family", "theme", "theme_dark", "visible_results", "bar_screen", "bar_position", "bar_save_position", "terminal_app", "bookmarks_enabled", "bookmark_browsers", "app_search_paths", "learning_enabled", "path_sort", "confirm_quit_all", "calc_opens_calculator", "learn_verb_order", "content_search_keyword", "tag_search_keyword", "web_history_days", "settings_in_search", "open_keyword", "find_keyword", "file_types", "file_excluded_folders", "calc_decimal", "calc_grouping", "show_scrollbar", "btt_pause_keys"]).union(LauncherBarKeys.actions.map(\.configKey)),
+            "experimental.target_mode": Set<String>(["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "actions_hotkey", "web_search_url", "pick_modifier", "return_cmd", "return_alt", "return_ctrl", "workflows_enabled", "alfred_workflows", "web_searches", "fallback_searches", "idle_frequent_enabled", "idle_frequent_count", "idle_recent_searches_enabled", "idle_recent_searches_count", "view_cycle_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size", "search_font_family", "command_font_family", "theme", "theme_dark", "visible_results", "bar_screen", "bar_position", "bar_save_position", "terminal_app", "bookmarks_enabled", "bookmark_browsers", "app_search_paths", "learning_enabled", "path_sort", "confirm_quit_all", "calc_opens_calculator", "learn_verb_order", "content_search_keyword", "tag_search_keyword", "web_history_days", "settings_in_search", "open_keyword", "find_keyword", "file_types", "file_excluded_folders", "calc_decimal", "calc_grouping", "show_scrollbar", "btt_pause_keys"]).union(LauncherBarKeys.actions.map(\.configKey)),
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],
