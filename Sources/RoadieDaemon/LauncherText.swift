@@ -36,9 +36,13 @@ enum LauncherText {
         return found
     }
 
-    /// Objet de Capslock + Maj + F : le texte sélectionné s'il n'est pas vide, sinon la fenêtre active. O(t).
+    /// Objet de Capslock + Maj + F : le texte sélectionné s'il n'est pas vide, sinon la fenêtre active. Une sélection
+    /// qui n'est qu'une adresse web devient une adresse, avec ses verbes (ouvrir, ouvrir dans une stage…). O(t).
     static func initialSubject(selection: String?, window: LauncherSubject?) -> LauncherSubject? {
-        guard let selection, !selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return window }
+        guard let selection else { return window }
+        let trimmed = selection.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return window }
+        if let address = addresses(in: trimmed).first, address.kind == .web, address.text == trimmed { return .url(address.url) }
         return .text(selection)
     }
 

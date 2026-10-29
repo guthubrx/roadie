@@ -38,7 +38,7 @@ Une seule saisie cherche partout, par sections :
 | Stages et bureaux | Les stages, les bureaux Roadie et les écrans |
 | Signets et historique | Firefox (tous les profils, étiquettes, mots-clés), Safari et Chrome |
 | Réglages | Les pages et réglages de Roadie, les panneaux des Réglages Système |
-| Système | Verrouiller, suspendre les écrans, tout quitter, vider la corbeille, son… |
+| Système | Verrouiller, suspendre les écrans, tout quitter, vider la corbeille, son, mode sombre, captures d'écran, raccourcis de l'app Raccourcis… |
 | Web | Adresse tapée, recherches par mot-clé (`yt chat`, `g`, `wp`), recherche de repli |
 
 La correspondance tolère les initiales (`vsc` trouve Visual Studio Code) et ignore accents et majuscules. Roadie
@@ -50,12 +50,17 @@ Touches utiles :
 - ↑ ↓ ou la souris pour choisir, Retour pour ouvrir. ⌘1 à ⌘9 ouvrent directement une ligne.
 - Maj + la lettre en pastille (« ⇧K ») ouvre une fenêtre, une stage ou un bureau.
 - ⌘ + Retour ouvre dans une nouvelle stage, ⌥ + Retour amène ici, ⌃ + Retour cherche sur le web. La ligne
-  annonce l'action tant que la touche est tenue.
+  annonce l'action tant que la touche est tenue. Ces trois effets se règlent dans Paramètres > Recherche, comme
+  dans Alfred : nouvelle stage, ici, envoyer sans y aller, web, copier, Finder, aperçu ou verbes.
 - ⌘C copie la ligne (chemin, adresse, résultat), ⌘Y montre l'aperçu Quick Look, ⌘L affiche en grand.
 - Une espace en tête ne cherche que des fichiers. `open nom` et `find nom` aussi. `in mots` cherche dans le
   contenu, `tags rouge` par étiquette du Finder.
 - `~/Doc` ou `/Applications/` liste le dossier ; Tab complète, ⌫ remonte d'un dossier.
 - `> commande` la lance dans Terminal, iTerm, Ghostty, Warp, kitty, WezTerm ou Alacritty.
+- `menu exporter` cherche dans les menus de l'application qui était au premier plan ; Retour choisit l'élément.
+- `apps` montre toutes les applications en grille, par catégorie, celles épinglées en tête (comme le Launchpad
+  d'Alfred 6) ; `apps mus` filtre. `symbols heart` ouvre le navigateur SF Symbols : grille, nom, catégories,
+  aperçu en quatre tailles et version minimale de chaque système ; Retour copie le nom.
 - Un calcul (`12*4,5`, `=sqrt(2)`) donne son résultat en tête ; Retour le copie.
 - Les mots marchent en français et en anglais, quelle que soit la langue de la barre : verbes (`fermer` ou `close`),
   phrases (`gauche` ou `left`, `ici` ou `here`), commandes système (`verrouiller` ou `lock`), bureaux (`bureau 2` ou
@@ -72,6 +77,16 @@ amener ici, nouvelle fenêtre ici, documents récents…, réunir ses fenêtres 
 quitter. Pour une fenêtre : aller à, envoyer vers…, amener ici, faire flotter ou tuiler (cette fenêtre ou
 toujours l'application), plein écran, réduire, fermer. Un verbe suivi de « … » demande une destination :
 stage, bureau, écran ou « Nouvelle stage ».
+
+Les actions d'Alfred sont aussi là. Une application se relance, quitte toutes les autres ou s'épingle dans Apps.
+Un fichier (ou plusieurs, en sélection multiple) se copie dans le presse-papiers, se copie ou se déplace vers un
+dossier (tapez un chemin, ou choisissez un dossier habituel ou récent ; « en remplaçant » met d'abord l'ancien à
+la corbeille), s'ouvre avec une autre application, part par e-mail, va à la corbeille, reçoit un alias, une
+étiquette du Finder ou ses informations (type, taille, dates, empreinte SHA-256). Un dossier se parcourt dans la
+barre ou ouvre un terminal ; un paquet montre son contenu. Un texte (Tab sur la recherche web, ou Capslock + Maj
++ F avec un texte sélectionné) se copie, se cherche sur le web, part par e-mail, s'affiche en grand ou donne ses
+adresses web et e-mail, chacune avec ses verbes. Un onglet ouvert se ferme, donne son adresse ou s'ouvre dans une
+nouvelle fenêtre. Les actions universelles des workflows s'ajoutent aux verbes des textes, adresses et fichiers.
 
 Pendant le choix d'une stage, les vraies fenêtres prennent leur future place et un fantôme marque la fenêtre à
 venir. Échap remet tout en place.
@@ -103,16 +118,17 @@ gratuitement :
 
 Ce qui est repris : mots-clés et Script Filters (avec leur cache), schéma complet (scripts, conditions,
 utilitaires, copie et collage, notification, ouverture d'adresse ou de fichier), touches ⌘ ⌥ ⌃ par ligne,
-filtres de liste et de fichiers, recherches de repli, actions sur fichier en verbes, déclencheurs externes,
-raccourcis (à lier dans BetterTouchTool), grilles, vues Texte, Image et PDF, boutons d'Alfred Remote, tâches
-d'automatisation officielles. Quand un script s'adresse à Alfred (`tell application id
+filtres de liste et de fichiers, recherche dans le dictionnaire, applications ouvertes, commandes système et de
+Musique, recherches de repli, actions sur fichier, texte et adresse en verbes, déclencheurs externes, raccourcis
+(à lier dans BetterTouchTool), grilles, vues Texte (tableaux Markdown compris), Image et PDF, boutons d'Alfred
+Remote, tâches d'automatisation officielles (téléchargées à leur première utilisation). Quand un script s'adresse à Alfred (`tell application id
 "com.runningwithcrayons.Alfred"`), Roadie fait lui-même ce qui est demandé, sans ouvrir Alfred.
 
 ![Workflow d'émojis en grille](../assets/screenshots/fr/launcher-emoji-grid.png)
 
 Sur un corpus de 102 workflows réels, 92 sont « complets » selon `roadie workflow list`. Cette commande donne
-l'état de chaque workflow (complet, partiel, inutilisable) et ce qui manque. Non repris : snippets, historique du
-presse-papiers d'Alfred, scripts AppleScript compilés.
+l'état de chaque workflow (complet, partiel, inutilisable) et ce qui manque. Non repris : snippets, Contacts, historique du
+presse-papiers d'Alfred, scripts AppleScript compilés, IA et transformation de texte d'Alfred 6.
 
 Un workflow tourne avec les droits de Roadie, comme dans Alfred : n'installez que ceux que vous connaissez.
 
@@ -123,14 +139,17 @@ Commandes : `roadie workflow list [--hotkeys]`, `check DOSSIER`, `install FICHIE
 
 ![Quatre thèmes d'Alfred](../assets/screenshots/fr/launcher-themes.png)
 
-Les neuf thèmes d'Alfred sont fournis, avec leurs couleurs, polices, arrondis et flou ; un thème exporté
+Les neuf thèmes d'Alfred 5 et les deux thèmes en verre d'Alfred 6 (Glassy Dark, Glassy Light) sont fournis, avec
+leurs couleurs, polices, arrondis et flou ; un thème exporté
 d'Alfred (`.alfredappearance`) dans `~/.config/roadies/themes` s'ajoute à la liste. Un thème différent peut
 servir en mode sombre (`theme_dark`). La barre se place en bas, au centre ou en haut, sur l'écran de la souris
 ou de la fenêtre active ; elle se déplace à la souris et retient sa place. Les résultats d'un workflow, d'un
 dossier ou d'une recherche de fichiers se montrent en liste, en grille ou en grandes tuiles. La pastille à
 droite de la saisie indique la présentation (« ☰ Liste », « ▦ Grille », « ▣ Grandes tuiles ») et le nombre de
 résultats ; un clic sur elle, ou ⌘G, passe à la suivante. Roadie retient le choix pour chaque workflow, chaque
-dossier et pour les fichiers de la recherche.
+dossier et pour les fichiers de la recherche. Les fenêtres des workflows (Texte, Image, PDF) et le navigateur SF
+Symbols prennent le style choisi (`workflow_view_style`) : comme macOS, couleurs du thème, ou les styles d'Alfred 6
+Glassy Dark, Flat Dark et Glassy Light.
 
 ![La même recherche en grille : les fichiers seuls](../assets/screenshots/fr/launcher-files-grid.png)
 

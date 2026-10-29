@@ -3,6 +3,23 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
+## Non publié
+
+### Nouveautés
+
+- Actions d'Alfred dans la barre : sur un ou plusieurs fichiers (copier, copier ou déplacer vers un dossier, en
+  remplaçant ou non, ouvrir avec, e-mail, corbeille, alias, informations avec empreinte SHA-256, étiquettes,
+  parcourir, terminal, contenu d'un paquet), sur un texte tapé ou sélectionné (copier, web, adresses extraites,
+  e-mail, grand texte), sur un onglet (fermer, copier l'adresse, nouvelle fenêtre) et sur une application
+  (relancer, quitter les autres, épingler dans Apps). Actions universelles des workflows sur textes et adresses.
+- ⌘, ⌥ et ⌃ + Retour réglables dans Paramètres > Recherche.
+- `menu …` : éléments des menus de l'application active ; commandes mode sombre, captures d'écran et raccourcis
+  de l'app Raccourcis.
+- Workflows : Commande système, Commande Musique, Recherche dans le dictionnaire, Filtre des applications
+  ouvertes ; tâches d'automatisation téléchargées à leur première utilisation.
+- Nouveautés annoncées d'Alfred 6 : grille `apps` par catégorie, navigateur SF Symbols (`symbols`), thèmes de
+  barre Glassy Dark et Glassy Light, styles des fenêtres de workflow, tableaux Markdown dans la vue Texte.
+
 ## 0.11.1 - 2026-10-29
 
 ### Corrections

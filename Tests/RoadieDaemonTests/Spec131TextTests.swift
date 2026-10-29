@@ -25,6 +25,10 @@ struct Spec131TextTests {
         #expect(LauncherText.initialSubject(selection: "bonjour", window: window) == .text("bonjour"))
         #expect(LauncherText.initialSubject(selection: "  \n", window: window) == window)
         #expect(LauncherText.initialSubject(selection: nil, window: nil) == nil)
+        // Convergence T026 : une sélection qui n'est qu'une adresse devient une adresse (verbe « ouvrir »).
+        #expect(LauncherText.initialSubject(selection: " https://roadie.example/doc \n", window: window)
+                == .url(URL(string: "https://roadie.example/doc")!))
+        #expect(LauncherText.initialSubject(selection: "voir https://roadie.example", window: window) == .text("voir https://roadie.example"))
     }
 
     @Test func verbsOfTextURLTabAndApp() {

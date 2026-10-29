@@ -58,7 +58,8 @@ struct Spec077FileListTests {
 
     @Test func fileVerbsAndVariants() throws {
         let subject = LauncherSubject.file(report)
-        #expect(LauncherVerb.verbs(for: subject) == [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath])
+        // Session 131 : les actions d'Alfred suivent les verbes de la SPEC-077.
+        #expect(LauncherVerb.verbs(for: subject).prefix(6) == [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath])
         let home = (DisplayID(rawValue: "A"), DesktopID(rawValue: 1))
         let active = StageScope(displayID: DisplayID(rawValue: "A"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
         guard case .action(let command)? = LauncherVariant.of(subject, modifier: .command, query: "rap", newStageHome: home, activeStage: active)?.effect,

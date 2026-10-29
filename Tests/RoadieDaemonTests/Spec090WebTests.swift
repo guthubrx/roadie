@@ -56,7 +56,7 @@ struct Spec090WebTests {
 
     @Test func urlSubjectVerbsAndVariants() {
         let url = URL(string: "https://github.com/x")!
-        #expect(LauncherVerb.verbs(for: .url(url)) == [.open, .openIn, .bringHere, .copyPath])
+        #expect(LauncherVerb.verbs(for: .url(url)) == [.open, .openIn, .bringHere, .copyPath, .emailText, .largeType])
         let variant = LauncherVariant.of(.url(url), modifier: .command, query: "github.com/x",
                                          newStageHome: (DisplayID(rawValue: "A"), DesktopID(rawValue: 1)), activeStage: nil)
         #expect(variant?.title == "⌘ ↩ Ouvrir dans une nouvelle stage")

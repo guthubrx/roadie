@@ -85,7 +85,13 @@ Format : `- [ ] Tnnn [Pn] [USn] description (fichiers) - vérification`. Tests a
 
 ## Phase 9 - Finition
 
-- [ ] T023 Documentation FR/EN du lanceur et des fonctions (`docs/fr/launcher.md`, `docs/en/launcher.md`), changelog.
-- [ ] T024 Référence Alfred : lignes passées à « Déjà dans Roadie », Snippet et Contact Action gardés « En partie »
+- [x] T023 Documentation FR/EN du lanceur et des fonctions (`docs/fr/launcher.md`, `docs/en/launcher.md`), changelog.
+- [x] T024 Référence Alfred : lignes passées à « Déjà dans Roadie », Snippet et Contact Action gardés « En partie »
   avec la raison, ligne Alfred 6 réécrite (`docs/analyses/2026-10-25-reference-alfred.html`).
-- [ ] T025 Textes ajoutés présents en FR et EN (FR-015), suite complète, tests de scripts, installation signée, santé, reçu `specs/131-actions-alfred/validation.md`.
+- [x] T025 Textes ajoutés présents en FR et EN (FR-015), suite complète, tests de scripts, installation signée, santé, reçu `specs/131-actions-alfred/validation.md`.
+
+## Convergence
+
+- [x] T026 [P1] [US2] FR-003 « ouvrir l'adresse » : une sélection qui n'est qu'une adresse web devient un objet adresse
+  (verbes ouvrir, ouvrir dans une stage, copier…) au lieu d'un texte (`LauncherText.swift`,
+  `Tests/RoadieDaemonTests/Spec131TextTests.swift`) - test de la sélection adresse, texte et vide.

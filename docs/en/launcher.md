@@ -35,7 +35,7 @@ One query searches everywhere, grouped in sections:
 | Stages and desktops | Stages, Roadie desktops and displays |
 | Bookmarks and history | Firefox (all profiles, tags, keywords), Safari and Chrome |
 | Settings | Roadie's settings pages and the System Settings panes |
-| System | Lock, sleep displays, quit all, empty trash, volume… |
+| System | Lock, sleep displays, quit all, empty trash, volume, dark mode, screenshots, Shortcuts… |
 | Web | Typed address, keyword searches (`yt cats`, `g`, `wp`), fallback search |
 
 Matching accepts initials (`vsc` finds Visual Studio Code) and ignores accents and case. Roadie learns your
@@ -47,12 +47,17 @@ Useful keys:
 - ↑ ↓ or the mouse to select, Return to open. ⌘1 to ⌘9 open a row directly.
 - Shift + the letter in the badge ("⇧K") opens a window, stage or desktop.
 - ⌘ + Return opens in a new stage, ⌥ + Return brings here, ⌃ + Return searches the web. The row announces the
-  action while the key is held.
+  action while the key is held. All three are configurable in Settings > Search, as in Alfred: new stage, here,
+  send without following, web, copy, Finder, Quick Look or verbs.
 - ⌘C copies the row (path, address, result), ⌘Y shows Quick Look, ⌘L shows it in large type.
 - A leading space searches files only, so do `open name` and `find name`. `in words` searches file contents,
   `tags red` searches by Finder tag (keywords are configurable).
 - `~/Doc` or `/Applications/` lists the folder; Tab completes, ⌫ goes up one folder.
 - `> command` runs it in Terminal, iTerm, Ghostty, Warp, kitty, WezTerm or Alacritty.
+- `menu export` searches the menus of the app that was in front; Return picks the item.
+- `apps` shows every app as a grid, by category, pinned apps first (like Alfred 6's Launchpad); `apps mus` filters.
+  `symbols heart` opens the SF Symbols browser: grid, name, categories, preview in four sizes and the minimum version
+  of each system; Return copies the name.
 - A calculation (`12*4.5`, `=sqrt(2)`) shows its result first; Return copies it.
 - Words work in English and French, whatever the bar's language: verbs (`close` or `fermer`), phrases (`left` or
   `gauche`, `here` or `ici`), system commands (`lock` or `verrouiller`), desktops (`desktop 2` or `bureau 2`), and
@@ -68,6 +73,16 @@ Tab (or →) on a row opens its verbs. For an app: open or go to its window, ope
 recent documents…, gather its windows in…, hide, quit, force quit. For a window: go to, send to…, bring here, float
 or tile (this window or always the app), full screen, minimize, close. A verb ending with "…" asks for a
 destination: stage, desktop, display or "New stage".
+
+Alfred's actions are there too. An app can be relaunched, quit all others, or be pinned in Apps. A file (or
+several, with multiple selection) can be copied to the clipboard, copied or moved to a folder (type a path, or
+pick a usual or recent folder; "replacing" first moves the old one to the Trash), opened with another app, sent by
+email, moved to the Trash, given an alias, a Finder tag, or shown with its info (type, size, dates, SHA-256). A
+folder can be browsed in the bar or opened in a terminal; a package shows its contents. Text (Tab on the web
+search, or Capslock + Shift + F with selected text) can be copied, searched on the web, sent by email, shown in
+large type, or split into its web and email addresses, each with its own verbs. An open tab can be closed, have
+its address copied, or open in a new window. Workflow universal actions join the verbs of text, addresses and
+files.
 
 While you pick a stage, the real windows move to their future place and a ghost marks the window to come. Escape
 puts everything back.
@@ -98,15 +113,16 @@ In Alfred, workflows require the paid [Powerpack](https://www.alfredapp.com/powe
 
 Supported: keywords and Script Filters (with their cache), the full object graph (scripts, conditionals,
 utilities, copy and paste, notifications, open URL or file), per-row ⌘ ⌥ ⌃ modifiers, list and file filters,
-fallback searches, file actions as verbs, external triggers, hotkeys (bound in BetterTouchTool), grids, Text, Image
-and PDF views, Alfred Remote buttons and the official automation tasks. When a script talks to Alfred (`tell
+dictionary lookup, running apps, system and Music commands, fallback searches, file, text and address actions as
+verbs, external triggers, hotkeys (bound in BetterTouchTool), grids, Text (Markdown tables included), Image and PDF
+views, Alfred Remote buttons and the official automation tasks (downloaded on first use). When a script talks to Alfred (`tell
 application id "com.runningwithcrayons.Alfred"`), Roadie does the job itself, without opening Alfred.
 
 ![An emoji workflow shown as a grid](../assets/screenshots/launcher-emoji-grid.png)
 
 Out of a corpus of 102 real workflows, 92 are "complete" according to `roadie workflow list`. That command shows
-each workflow's status (complete, partial, unusable) and what is missing. Not supported: snippets, Alfred's
-clipboard history, compiled AppleScript.
+each workflow's status (complete, partial, unusable) and what is missing. Not supported: snippets, Contacts, Alfred's
+clipboard history, compiled AppleScript, Alfred 6's AI and text transformation.
 
 A workflow runs with Roadie's permissions, as in Alfred: only install workflows you trust.
 
@@ -117,13 +133,16 @@ Commands: `roadie workflow list [--hotkeys]`, `check FOLDER`, `install FILE`, `r
 
 ![Four Alfred themes](../assets/screenshots/launcher-themes.png)
 
-Alfred's nine themes are included, with their colors, fonts, corners and blur; a theme exported from Alfred
+Alfred 5's nine themes and Alfred 6's two glass themes (Glassy Dark, Glassy Light) are included, with their colors,
+fonts, corners and blur; a theme exported from Alfred
 (`.alfredappearance`) in `~/.config/roadies/themes` joins the list. Dark mode can use another theme
 (`theme_dark`). The bar sits at the bottom, center or top, on the display of the mouse or of the active window;
 drag it to move it and it remembers its place. Results of a workflow, a folder or a file search can be shown as a
 list, a grid or large tiles. The pill on the right of the field shows the current view ("☰ Liste", "▦ Grille",
 "▣ Grandes tuiles") and the number of results; click it, or press ⌘G, to switch to the next view. Roadie remembers
-the choice for each workflow, each folder and for file results.
+the choice for each workflow, each folder and for file results. Workflow windows (Text, Image, PDF) and the SF
+Symbols browser follow the chosen style (`workflow_view_style`): like macOS, theme colors, or Alfred 6's Glassy
+Dark, Flat Dark and Glassy Light.
 
 ![The same search as a grid: files only](../assets/screenshots/launcher-files-grid.png)
 

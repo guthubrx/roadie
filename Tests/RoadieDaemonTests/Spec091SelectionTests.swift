@@ -40,7 +40,9 @@ struct Spec091SelectionTests {
         #expect(selection.applicable(.quit).count == 1 && selection.applicable(.copyPath).count == 1)
         let list = LauncherActionList.batch(selection, query: "")
         #expect(list.rows.compactMap(\.id) == ["verb:sendTo", "verb:bringHere", "verb:close", "verb:minimize", "verb:quit", "verb:hide",
-                                               "verb:copyPath", "verb:reveal"])
+                                               "verb:copyPath", "verb:reveal", "verb:copyFile", "verb:copyTo", "verb:moveFileTo",
+                                               "verb:copyReplace", "verb:moveReplace", "verb:openWith", "verb:email", "verb:trash",
+                                               "verb:makeAlias", "verb:addTag"])
         #expect(LauncherActionList.batch(selection, query: "ferm").rows.compactMap(\.id) == ["verb:close"])
         #expect(LauncherSelection.title(.close, count: 2) == "Fermer les fenêtres (2)")
         let display = DisplayID(rawValue: "A")
