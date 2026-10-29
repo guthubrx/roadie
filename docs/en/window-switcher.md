@@ -127,6 +127,12 @@ Profiles can inherit the common appearance or override organization, style, prev
 size and font. Clearing an override restores the common value. Application bundle
 identifier exclusions apply to every profile.
 
+The application icon appears left of each window title, in thumbnails and list
+(`app_icon`, on by default). Its automatic size follows the two text lines beside it,
+up to a fifth of the thumbnail. `app_icon_size` sets 12 to 64 points; 0 means automatic.
+An icon taller than the text makes the title row taller. The Icons style always keeps
+its icon, at that size.
+
 Actions target the selected window: close, minimize or restore, hide or normally
 quit the application, maximize, and Roadie fullscreen. Applications can still ask
 to save documents before quitting.

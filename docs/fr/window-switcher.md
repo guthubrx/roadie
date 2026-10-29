@@ -135,6 +135,12 @@ Tu peux définir jusqu'à neuf profils de raccourcis. Chaque profil possède :
 Chaque profil peut suivre l'apparence commune ou remplacer l'organisation, le style, le grand aperçu, la taille des vignettes et la police. Vider une valeur personnalisée rétablit le choix commun.
 
 Les exclusions par identifiant d'application s'appliquent à tous les profils.
+
+L'icône de l'application s'affiche à gauche du titre de chaque fenêtre, en vignettes
+et en liste (`app_icon`, activé par défaut). Sa taille automatique suit les deux lignes
+de texte à côté, sans dépasser un cinquième de la vignette. `app_icon_size` fixe une
+taille de 12 à 64 points ; 0 revient à l'automatique. Une icône plus haute que le texte
+agrandit la ligne du titre. Le style Icônes garde toujours son icône, à cette taille.
 Les commandes d'action ciblent la fenêtre sélectionnée : fermer, réduire ou
 restaurer, masquer ou quitter normalement l'application, maximiser, plein écran
 Roadie. Quitter une application reste soumis à ses éventuelles demandes de

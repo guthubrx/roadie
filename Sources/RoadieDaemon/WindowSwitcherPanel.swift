@@ -18,6 +18,9 @@ struct WindowSwitcherAppearance: Equatable {
     var preview: Bool
     var presentation: WindowSwitcherPresentation
     var thumbnailHeightLimit: CGFloat = 140
+    var appIcon = true
+    /// 0 : automatique.
+    var appIconSize: CGFloat = 0
 
     init(config: WindowSwitcherConfig, profile: WindowSwitcherShortcutConfig? = nil) {
         style = WindowSwitcherStyle.from(profile?.styleOverride ?? config.style)
@@ -27,11 +30,35 @@ struct WindowSwitcherAppearance: Equatable {
         fontFamily = profile?.fontFamilyOverride ?? config.fontFamily
         preview = profile?.previewOverride ?? config.preview
         presentation = WindowSwitcherPresentation(rawValue: profile?.presentationOverride ?? config.presentation) ?? .classic
+        appIcon = config.appIcon
+        appIconSize = CGFloat(config.appIconSize)
     }
 
     var compactCaptions: Bool { presentation != .classic && style == .thumbnails }
-    var captionHeight: CGFloat {
+    /// Hauteur du texte sous la vignette : une ligne en présentation compacte, deux sinon.
+    var textHeight: CGFloat {
         compactCaptions ? ceil(fontSize * 1.4) + 4 : WindowSwitcherGrid.labelsHeight(fontSize: fontSize)
+    }
+    /// Une taille choisie plus grande que le texte agrandit la ligne du titre ; la taille automatique y tient toujours.
+    var captionHeight: CGFloat {
+        style == .thumbnails && appIconSize > 0 ? max(textHeight, iconSide + 4) : textHeight
+    }
+
+    /// Côté de l'icône de l'application (session 121), 0 sans icône. Automatique : la hauteur du texte à côté
+    /// (titre et application), 22 points au plus en une ligne ; 28 en liste ; 56 pour le style Icônes, où l'icône
+    /// est l'image de la carte et reste donc affichée. La carte limite encore la taille automatique à sa largeur.
+    var iconSide: CGFloat {
+        switch style {
+        case .icons: appIconSize > 0 ? appIconSize : 56
+        case .list: appIcon ? (appIconSize > 0 ? appIconSize : 28) : 0
+        case .thumbnails:
+            !appIcon ? 0 : appIconSize > 0 ? appIconSize : compactCaptions ? min(22, textHeight - 2) : (textHeight - 4).rounded()
+        }
+    }
+
+    /// Icône du titre d'une carte de cette largeur : un cinquième au plus en automatique, la moitié sinon. O(1).
+    func captionIconSide(cardWidth: CGFloat) -> CGFloat {
+        min(iconSide, (cardWidth * (appIconSize > 0 ? 0.5 : 0.2)).rounded())
     }
 
     func imageHeight(cardWidth: CGFloat) -> CGFloat {
@@ -77,11 +104,11 @@ enum WindowSwitcherGrid {
         switch appearance.style {
         case .list:
             columns = 1
-            card = CGSize(width: width, height: max(44, labels + 16))
+            card = CGSize(width: width, height: max(44, max(labels, appearance.iconSide) + 16))
         case .icons:
-            let cardWidth = min(max(minCardWidth, appearance.fontSize * 7), max(1, width))
+            let cardWidth = min(max(minCardWidth, appearance.fontSize * 7, appearance.iconSide + 16), max(1, width))
             columns = fit(count: count, width: width, cardWidth: cardWidth)
-            card = CGSize(width: cardWidth, height: 8 + 56 + 8 + labels + 8)
+            card = CGSize(width: cardWidth, height: 8 + appearance.iconSide + 8 + labels + 8)
         case .thumbnails:
             let base = min(max(appearance.thumbnailWidth, minCardWidth), 400)
             let cardWidth: CGFloat
@@ -197,16 +224,21 @@ final class WindowSwitcherCardView: NSView {
         addSubview(imageView)
         addSubview(titleField)
         addSubview(subtitleField)
-        place(imageView, titleField, subtitleField, style: appearance.style, labels: appearance.captionHeight, imageHeight: appearance.presentation == .overview ? max(0, bounds.height - appearance.captionHeight - 22) : appearance.imageHeight(cardWidth: bounds.width))
-        if appearance.compactCaptions {
-            subtitleField.isHidden = true
-            let iconSize = min(22, appearance.captionHeight - 2)
-            let icon = NSImageView(frame: CGRect(x: 8, y: titleField.frame.minY + (appearance.captionHeight - iconSize) / 2, width: iconSize, height: iconSize))
+        place(imageView, titleField, subtitleField, appearance: appearance, imageHeight: appearance.presentation == .overview ? max(0, bounds.height - appearance.captionHeight - 22) : appearance.imageHeight(cardWidth: bounds.width))
+        imageView.isHidden = appearance.style == .list && appearance.iconSide == 0
+        if appearance.compactCaptions { subtitleField.isHidden = true }
+        let side = appearance.style == .thumbnails ? appearance.captionIconSide(cardWidth: bounds.width) : 0
+        if side > 0 {
+            // Icône à gauche du texte, centrée sur la ligne du titre ; le texte se décale d'autant.
+            let captionTop = imageView.frame.maxY + 6
+            let icon = NSImageView(frame: CGRect(x: 8, y: captionTop + (appearance.captionHeight - side) / 2, width: side, height: side))
             icon.image = appIcon ?? NSImage(systemSymbolName: "app", accessibilityDescription: entry.window.appName)
             icon.imageScaling = .scaleProportionallyUpOrDown
             addSubview(icon)
-            titleField.frame = CGRect(x: icon.frame.maxX + 6, y: titleField.frame.minY,
-                                      width: max(0, bounds.width - icon.frame.maxX - 14), height: appearance.captionHeight)
+            let textX = icon.frame.maxX + 6
+            for field in [titleField, subtitleField] {
+                field.frame = CGRect(x: textX, y: field.frame.minY, width: max(0, bounds.width - textX - 8), height: field.frame.height)
+            }
         }
         titleField.toolTip = title
         subtitleField.toolTip = subtitle
@@ -219,24 +251,29 @@ final class WindowSwitcherCardView: NSView {
         nil
     }
 
-    private func place(_ imageView: NSImageView, _ title: NSTextField, _ subtitle: NSTextField, style: WindowSwitcherStyle, labels: CGFloat, imageHeight: CGFloat) {
+    private func place(_ imageView: NSImageView, _ title: NSTextField, _ subtitle: NSTextField, appearance: WindowSwitcherAppearance, imageHeight: CGFloat) {
         let width = bounds.width
-        switch style {
+        let labels = appearance.captionHeight, text = appearance.textHeight, side = appearance.iconSide
+        switch appearance.style {
         case .thumbnails:
             let imageHeight = min(imageHeight, max(0, bounds.height - labels - 22))
             imageView.frame = CGRect(x: 8, y: 8, width: width - 16, height: imageHeight)
-            title.frame = CGRect(x: 8, y: 8 + imageHeight + 6, width: width - 16, height: labels * 0.55)
-            subtitle.frame = CGRect(x: 8, y: 8 + imageHeight + 6 + labels * 0.5, width: width - 16, height: labels * 0.5)
+            // Texte centré dans sa ligne, plus haute que lui si l'icône choisie est grande.
+            let top = 8 + imageHeight + 6 + (labels - text) / 2
+            title.frame = CGRect(x: 8, y: top, width: width - 16, height: appearance.compactCaptions ? text : text * 0.55)
+            subtitle.frame = CGRect(x: 8, y: top + text * 0.5, width: width - 16, height: text * 0.5)
         case .icons:
-            imageView.frame = CGRect(x: (width - 56) / 2, y: 8, width: 56, height: 56)
+            imageView.frame = CGRect(x: (width - side) / 2, y: 8, width: side, height: side)
             title.alignment = .center
             subtitle.alignment = .center
-            title.frame = CGRect(x: 4, y: 72, width: width - 8, height: labels * 0.55)
-            subtitle.frame = CGRect(x: 4, y: 72 + labels * 0.5, width: width - 8, height: labels * 0.5)
+            title.frame = CGRect(x: 4, y: side + 16, width: width - 8, height: labels * 0.55)
+            subtitle.frame = CGRect(x: 4, y: side + 16 + labels * 0.5, width: width - 8, height: labels * 0.5)
         case .list:
-            imageView.frame = CGRect(x: 12, y: (bounds.height - 28) / 2, width: 28, height: 28)
-            title.frame = CGRect(x: 52, y: 6, width: width - 64, height: labels * 0.55)
-            subtitle.frame = CGRect(x: 52, y: 6 + labels * 0.5, width: width - 64, height: labels * 0.5)
+            imageView.frame = CGRect(x: 12, y: (bounds.height - side) / 2, width: side, height: side)
+            let textX: CGFloat = side > 0 ? 12 + side + 12 : 12
+            let top = (bounds.height - labels) / 2
+            title.frame = CGRect(x: textX, y: top, width: width - textX - 12, height: labels * 0.55)
+            subtitle.frame = CGRect(x: textX, y: top + labels * 0.5, width: width - textX - 12, height: labels * 0.5)
         }
     }
 

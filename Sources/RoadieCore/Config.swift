@@ -1783,7 +1783,7 @@ private enum ConfigValidationRules {
             "window_placement": ["new_apps_target", "new_window_side"],
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
             "overview": ["enabled", "presentation", "loupe", "magnification", "hotkey", "background_blur", "selection_color", "selection_width"],
-            "switcher": ["enabled", "presentation", "style", "auto_size", "thumbnail_width", "font_size", "font_family", "preview", "excluded_bundles", "shortcuts"],
+            "switcher": ["enabled", "presentation", "style", "auto_size", "thumbnail_width", "font_size", "font_family", "preview", "app_icon", "app_icon_size", "excluded_bundles", "shortcuts"],
             "experimental.target_mode.web_searches": ["keyword", "title", "url"],
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family"],
             "experimental": [],

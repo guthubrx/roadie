@@ -22,10 +22,10 @@ struct SettingsCatalogTests {
         // Spec075 : raccourci des verbes et recherche web. Spec088 : deux réglages des workflows. Session 096 : quatre réglages de la barre vide.
         // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
         // terminal, signets, tri, apprentissage, confirmation). Session 108 : douze touches de la barre.
-        // Session 110 : Calculette ouverte par un calcul. Session 111 : ordre appris des verbes. Session 113 : mots-clés in et tags. Session 114 : historique web. Session 115 : réglages dans la barre et touche ⌘,. Session 119 : cinq réglages simples de la barre.
-        #expect(simple.count == 243)
+        // Session 110 : Calculette ouverte par un calcul. Session 111 : ordre appris des verbes. Session 113 : mots-clés in et tags. Session 114 : historique web. Session 115 : réglages dans la barre et touche ⌘,. Session 119 : cinq réglages simples de la barre. Session 121 : icône du sélecteur et sa taille.
+        #expect(simple.count == 245)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 163)
+        #expect(simple.count - railSimple.count == 165)
     }
 
     @Test
@@ -168,7 +168,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 243)
+        #expect(expected.count == 245)
     }
 
     // MARK: - Défauts
@@ -266,9 +266,9 @@ struct SettingsCatalogTests {
             }
             checked += 1
         }
-        // 36 réglages hors rail ont une plage (session 096 : deux nombres de lignes de la barre vide ;
+        // 37 réglages hors rail ont une plage (session 121 : taille de l'icône du sélecteur ; session 096 : deux nombres de lignes de la barre vide ;
         // session 101 : nombre de résultats montrés ; session 114 : jours d'historique web).
-        #expect(checked == 36)
+        #expect(checked == 37)
     }
 
     // MARK: - Recherche

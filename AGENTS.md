@@ -290,6 +290,9 @@ historique des navigateurs, réglages dans la barre et ⌘,, documents récents 
 des workflows, petites reprises (open, find, types, calcul, défilement, recherches web, Spotlight), boutons Remote et
 cache des Script Filters. 2 252 tests / 324 suites, PID 18000, santé 5/5. Corpus : 92 workflows sur 102 complets.
 Reçus : specs/111-ordre-verbes/ à specs/120-remote-cache/.
+Session 121 installée : icône de l'application à gauche du titre dans le sélecteur (`switcher.app_icon`, activée
+par défaut), taille automatique selon le texte ou 12 à 64 points (`switcher.app_icon_size`). 2 257 tests / 325 suites.
+Reçu : specs/121-icone-selecteur/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

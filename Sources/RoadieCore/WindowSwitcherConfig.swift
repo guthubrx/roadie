@@ -16,6 +16,10 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
     public var fontFamily: String
     public var preview: Bool
     public var presentation: String
+    /// Icône de l'application à côté du titre de chaque fenêtre (session 121).
+    public var appIcon: Bool
+    /// 0 : taille automatique, selon le texte. Sinon bornée à 12…64 points.
+    public var appIconSize: Double
     public var excludedBundles: [String]
     /// Au plus neuf profils. Un identifiant déjà vu est ignoré : le premier profil gagne.
     public var shortcuts: [WindowSwitcherShortcutConfig]
@@ -30,7 +34,9 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         preview: Bool = true,
         excludedBundles: [String] = [],
         shortcuts: [WindowSwitcherShortcutConfig] = [WindowSwitcherShortcutConfig()],
-        presentation: String = "classic"
+        presentation: String = "classic",
+        appIcon: Bool = true,
+        appIconSize: Double = 0
     ) {
         self.enabled = enabled
         self.style = Self.styles.contains(style) ? style : "thumbnails"
@@ -41,6 +47,8 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         self.fontFamily = family.isEmpty ? "system" : family
         self.preview = preview
         self.presentation = WindowSwitcherPresentation(rawValue: presentation)?.rawValue ?? "classic"
+        self.appIcon = appIcon
+        self.appIconSize = appIconSize <= 0 ? 0 : min(64, max(12, appIconSize))
         self.excludedBundles = excludedBundles
         self.shortcuts = Self.normalizedShortcuts(shortcuts)
     }
@@ -65,6 +73,8 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         case fontFamily = "font_family"
         case preview
         case presentation
+        case appIcon = "app_icon"
+        case appIconSize = "app_icon_size"
         case excludedBundles = "excluded_bundles"
         case shortcuts
     }
@@ -82,7 +92,9 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
             preview: try c.decodeIfPresent(Bool.self, forKey: .preview) ?? defaults.preview,
             excludedBundles: try c.decodeIfPresent([String].self, forKey: .excludedBundles) ?? defaults.excludedBundles,
             shortcuts: try c.decodeIfPresent([WindowSwitcherShortcutConfig].self, forKey: .shortcuts) ?? defaults.shortcuts,
-            presentation: try c.decodeIfPresent(String.self, forKey: .presentation) ?? defaults.presentation
+            presentation: try c.decodeIfPresent(String.self, forKey: .presentation) ?? defaults.presentation,
+            appIcon: try c.decodeIfPresent(Bool.self, forKey: .appIcon) ?? defaults.appIcon,
+            appIconSize: try c.decodeFlexibleDouble(forKey: .appIconSize) ?? defaults.appIconSize
         )
     }
 }
