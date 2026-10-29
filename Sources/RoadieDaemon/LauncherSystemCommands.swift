@@ -87,26 +87,26 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
                 event?.flags = [.maskCommand, .maskControl]
                 event?.post(tap: .cghidEventTap)
             }
-        case "sleep-displays": Self.process("/usr/bin/pmset", ["displaysleepnow"])
-        case "sleep": Self.process("/usr/bin/pmset", ["sleepnow"])
-        case "screensaver": Self.process("/usr/bin/open", ["-a", "ScreenSaverEngine"])
+        case "sleep-displays": process("/usr/bin/pmset", ["displaysleepnow"])
+        case "sleep": process("/usr/bin/pmset", ["sleepnow"])
+        case "screensaver": process("/usr/bin/open", ["-a", "ScreenSaverEngine"])
         case "quit-all":
             let own = ProcessInfo.processInfo.processIdentifier
             let apps = NSWorkspace.shared.runningApplications
             let pids = Set(Self.quitAllTargets(apps.map { ($0.bundleIdentifier, $0.activationPolicy == .regular, $0.processIdentifier) }, ownPID: own))
             apps.filter { pids.contains($0.processIdentifier) }.forEach { $0.terminate() }
         case "show-trash": NSWorkspace.shared.open(URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".Trash"))
-        case "empty-trash": Self.script("tell application \"Finder\" to empty trash")
-        case "eject-all": Self.script("tell application \"Finder\" to eject (every disk whose ejectable is true)")
-        case "volume-up": Self.script("set volume output volume ((output volume of (get volume settings)) + 10)")
-        case "volume-down": Self.script("set volume output volume ((output volume of (get volume settings)) - 10)")
-        case "mute": Self.script("set volume output muted (not (output muted of (get volume settings)))")
-        case "logout": Self.script("tell application \"System Events\" to log out")
-        case "restart": Self.script("tell application \"System Events\" to restart")
-        case "shutdown": Self.script("tell application \"System Events\" to shut down")
+        case "empty-trash": script("tell application \"Finder\" to empty trash")
+        case "eject-all": script("tell application \"Finder\" to eject (every disk whose ejectable is true)")
+        case "volume-up": script("set volume output volume ((output volume of (get volume settings)) + 10)")
+        case "volume-down": script("set volume output volume ((output volume of (get volume settings)) - 10)")
+        case "mute": script("set volume output muted (not (output muted of (get volume settings)))")
+        case "logout": script("tell application \"System Events\" to log out")
+        case "restart": script("tell application \"System Events\" to restart")
+        case "shutdown": script("tell application \"System Events\" to shut down")
         case "reload-apps": LauncherAppCatalog.shared.refresh()
         // macOS demande le mot de passe d'un administrateur ; l'index se reconstruit ensuite en arrière-plan (plus d'une heure).
-        case "rebuild-spotlight": Self.script("do shell script \"/usr/bin/mdutil -E /\" with administrator privileges")
+        case "rebuild-spotlight": script("do shell script \"/usr/bin/mdutil -E /\" with administrator privileges")
         default:
             // Réglages trouvés (session 115) : panneau des Réglages Système, page ou réglage de Roadie.
             if id.hasPrefix(LauncherSettingTargets.panePrefix),
@@ -121,14 +121,43 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
         }
     }
 
-    private static func script(_ source: String) {
-        Task { _ = await LauncherBrowsers.run(source, timeout: 10) }
+    /// Délai d'un script : une boîte de mot de passe ou de confirmation (session, redémarrage) attend
+    /// l'utilisateur ; l'arrêter plus tôt annulerait la commande sans le dire (audit du 29 octobre 2026).
+    static let scriptTimeout: TimeInterval = 600
+
+    /// Script dans un `try` : il rend « ok », ou le numéro de son erreur. O(n).
+    static func guarded(_ source: String) -> String {
+        "try\n\(source)\nreturn \"ok\"\non error number errorNumber\nreturn errorNumber as text\nend try"
     }
 
-    private static func process(_ path: String, _ arguments: [String]) {
+    /// Message d'échec d'après la réponse du script gardé ; nil pour une réussite ou une annulation par
+    /// l'utilisateur (-128). Sans réponse (osascript arrêté ou absent) : échec sans numéro. O(1).
+    static func failureMessage(_ title: String, answer: String?) -> String? {
+        let answer = answer?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard answer != "ok", answer != "-128" else { return nil }
+        return tr("\(title) : échec", "\(title): failed") + (answer.map { " (\($0))" } ?? "")
+    }
+
+    /// Lance un script de la commande et signale son échec par une notification (session 129).
+    private func script(_ source: String) {
+        let title = title
+        Task {
+            let answer = await LauncherBrowsers.run(Self.guarded(source), timeout: Self.scriptTimeout)
+            if let message = Self.failureMessage(title, answer: answer) { await Self.notify(message) }
+        }
+    }
+
+    private func process(_ path: String, _ arguments: [String]) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
-        try? process.run()
+        do { try process.run() } catch {
+            let message = tr("\(title) : échec", "\(title): failed")
+            Task { await Self.notify(message) }
+        }
+    }
+
+    private static func notify(_ text: String) async {
+        _ = await LauncherBrowsers.run("display notification \"\(text.applescriptEscaped)\" with title \"Roadie\"", timeout: 3)
     }
 }

@@ -72,6 +72,8 @@ final class AlfredProcess: @unchecked Sendable {
 /// Exécution des scripts des workflows (SPEC-088 FR-004) : interpréteur selon le type d'Alfred,
 /// dossier du workflow, environnement, délai, plafond de sortie, groupe de processus propre.
 enum AlfredScriptRunner {
+    /// Délai des filtres, qui tournent pendant la frappe (SPEC-088 FR-004). Les actions (Run Script, NSAppleScript,
+    /// tâches d'automatisation, raccourcis) passent `nil` : elles vont à leur terme, comme dans Alfred (session 129).
     static let defaultTimeout: TimeInterval = 10
     static let maxOutput = 5 * 1024 * 1024
 
@@ -217,7 +219,7 @@ enum AlfredScriptRunner {
     /// Lance le script hors du fil principal ; `done` reçoit l'issue (sur une file quelconque). O(sortie).
     @discardableResult
     static func start(_ script: AlfredScript, query: String, arguments: [String], workflow: AlfredWorkflow,
-                      variables: [String: String], keyword: String? = nil, timeout: TimeInterval = defaultTimeout,
+                      variables: [String: String], keyword: String? = nil, timeout: TimeInterval? = defaultTimeout,
                       directory: URL? = nil, done: @escaping @Sendable (AlfredScriptResult) -> Void) -> AlfredProcess {
         let process = AlfredProcess()
         var script = bridged(script, cli: BTTShortcutBindingService().executable, shim: AlfredBridge.shim)
@@ -240,7 +242,7 @@ enum AlfredScriptRunner {
     }
 
     static func run(_ script: AlfredScript, query: String, arguments: [String], workflow: AlfredWorkflow,
-                    variables: [String: String], keyword: String? = nil, timeout: TimeInterval = defaultTimeout,
+                    variables: [String: String], keyword: String? = nil, timeout: TimeInterval? = defaultTimeout,
                     directory: URL? = nil) async -> AlfredScriptResult {
         await withCheckedContinuation { continuation in
             start(script, query: query, arguments: arguments, workflow: workflow, variables: variables, keyword: keyword,
@@ -250,7 +252,8 @@ enum AlfredScriptRunner {
 
     /// `posix_spawn` dans un nouveau groupe de processus : l'arrêt atteint aussi les enfants du script
     /// (research R5). Entrée vide, erreurs jetées, sortie lue jusqu'au plafond. Bloquant : hors fil principal.
-    static func spawn(_ argv: [String], environment: [String: String], directory: URL, timeout: TimeInterval,
+    /// `timeout` nil : aucun délai, seule l'annulation arrête le script.
+    static func spawn(_ argv: [String], environment: [String: String], directory: URL, timeout: TimeInterval?,
                       process: AlfredProcess) -> AlfredScriptResult {
         var result = AlfredScriptResult()
         var fds: [Int32] = [0, 0]
@@ -305,7 +308,7 @@ enum AlfredScriptRunner {
             process.signal(SIGTERM)
             DispatchQueue.global().asyncAfter(deadline: .now() + 1) { process.signal(SIGINT) }
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
+        if let timeout { DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer) }
         var buffer = [UInt8](repeating: 0, count: 65_536)
         while true {
             let count = read(fds[0], &buffer, buffer.count)

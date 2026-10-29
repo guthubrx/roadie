@@ -57,7 +57,7 @@ enum AlfredAutomationTasks {
         }
         return await AlfredScriptRunner.run(AlfredScript(language: task.scriptType, source: task.script), query: arguments.joined(separator: "\t"),
                                             arguments: arguments, workflow: workflow, variables: variables.merging(merged) { $1 },
-                                            directory: task.folder)
+                                            timeout: nil, directory: task.folder)
     }
 
     /// Télécharge l'archive publique et remplace les tâches installées ; la licence BSD est gardée à

@@ -22,9 +22,9 @@ struct Spec114WebHistoryTests {
         let pages = [page("Guide Roadie", "https://example.com/guide", visits: 2),
                      page("Roadie releases", "https://github.com/guthubrx/roadie/releases", visits: 9),
                      page("Roadie", "https://roadie.example/", visits: 50)]
-        let found = LauncherWebHistory.matches("roadie", in: pages, excluding: ["https://roadie.example"])
+        let found = LauncherWebHistory.matches("roadie", in: LauncherBookmarkIndex(pages), excluding: ["https://roadie.example"])
         #expect(found.map(\.url) == ["https://github.com/guthubrx/roadie/releases", "https://example.com/guide"])
-        #expect(LauncherWebHistory.matches("r", in: pages, excluding: []).isEmpty)
+        #expect(LauncherWebHistory.matches("r", in: LauncherBookmarkIndex(pages), excluding: []).isEmpty)
     }
 
     @Test func firefoxPlacesAreReadWithinTheWindow() throws {

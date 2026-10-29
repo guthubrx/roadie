@@ -166,7 +166,8 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
         switch object.type {
         case "action.script":
             guard let script = AlfredScript(object: object) else { return pass }
-            let result = await AlfredScriptRunner.run(script, query: query, arguments: input, workflow: workflow, variables: variables)
+            let result = await AlfredScriptRunner.run(script, query: query, arguments: input, workflow: workflow, variables: variables,
+                                                      timeout: nil)
             guard result.failure == nil, !result.timedOut else {
                 run.outcome.errors.append(result.failure ?? "timeout")
                 await effects.notify(title: workflow.name, text: tr("Script : ", "Script: ") + (result.failure ?? tr("délai dépassé", "timed out")))
@@ -178,7 +179,7 @@ final class AlfredWorkflowEngine: @unchecked Sendable {
             var source = object.string("applescript") ?? ""
             if source.contains("alfred_script") { source += "\non run argv\nreturn alfred_script(item 1 of argv)\nend run" }
             let result = await AlfredScriptRunner.run(AlfredScript(language: 6, source: source), query: query, arguments: [query],
-                                                      workflow: workflow, variables: variables)
+                                                      workflow: workflow, variables: variables, timeout: nil)
             return .next([AlfredRunScriptOutput.parse(result.text).arg.first ?? ""], variables, branch: nil)
         case "action.openurl":
             let url = text("url").trimmingCharacters(in: .whitespacesAndNewlines)

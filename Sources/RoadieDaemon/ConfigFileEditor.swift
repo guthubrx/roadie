@@ -129,7 +129,8 @@ public enum ConfigFileEditor {
             }
             var end = result.comment ?? scalars.count
             while end > start, isSpace(scalars[end - 1]) { end -= 1 }
-            guard end > start else { continue }
+            // Valeur vide : illisible comme dans `readLiteral`, et une redéfinition reste un doublon (audit du 29 octobre 2026).
+            guard end > start else { rejectedKeys.insert(path); continue }
             literals[path.joined(separator: "\u{1F}")] = String(String.UnicodeScalarView(scalars[start..<end]))
         }
         for path in rejectedKeys { literals[path.joined(separator: "\u{1F}")] = nil }

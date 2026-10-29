@@ -1648,10 +1648,10 @@ public final class TargetModeRuntimeController: NSObject {
         case .copyPath:
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(files.joined(separator: "\n"), forType: .string)
-            return TargetActionResult(changed: true, message: "launcher batch: \(files.count) chemins copiés")
+            return TargetActionResult(changed: true, message: "launcher batch: \(files.count) " + tr("chemins copiés", "paths copied"))
         case .reveal:
             NSWorkspace.shared.activateFileViewerSelecting(files.map { URL(fileURLWithPath: $0) })
-            return TargetActionResult(changed: true, message: "launcher batch: \(files.count) dans le Finder")
+            return TargetActionResult(changed: true, message: "launcher batch: \(files.count) " + tr("dans le Finder", "in Finder"))
         default:
             break
         }

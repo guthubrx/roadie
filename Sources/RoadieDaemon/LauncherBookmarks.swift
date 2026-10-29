@@ -472,10 +472,6 @@ final class LauncherBookmarkStore: @unchecked Sendable {
         self.iconFolder = iconFolder
     }
 
-    func load(browsers: [String], now: Date = Date()) -> [LauncherBookmark] {
-        loadIndex(browsers: browsers, now: now).entries.map(\.bookmark)
-    }
-
     /// Signets pliés pour la recherche (session 123), gardés avec la lecture : préparés une fois, en fond. O(b × t).
     func loadIndex(browsers: [String], now: Date = Date()) -> LauncherBookmarkIndex {
         lock.lock()

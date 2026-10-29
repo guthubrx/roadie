@@ -490,8 +490,9 @@ it is a path.
 **Workflows**: the bar runs Alfred-format workflows, those installed in Alfred (read without
 changing them, synced folder followed) and those in `~/.config/roadies/workflows`. Typing their
 keyword (`emoji heart`) shows only their rows, under their name; from 2 letters, matching
-keywords appear in a « Workflows » section (Tab or Return completes). The script runs in the
-background (100 ms after the last keystroke, stopped by the next one, 10 s at most). Return
+keywords appear in a « Workflows » section (Tab or Return completes). A filter script runs in the
+background (100 ms after the last keystroke, stopped by the next one, 10 s at most); actions (Run
+Script, Run NSAppleScript, automation tasks, shortcuts) run to completion, as in Alfred. Return
 follows the workflow graph: scripts, conditions, splits, replacements, URL, file, Finder, copy
 (auto-paste included), notification, sound, speech, written file. Holding ⌘, ⌥ or ⌃ shows what the
 row will do; Tab completes, ⌘C copies, ⌘Y previews. A workflow runs with Roadie's rights, as it

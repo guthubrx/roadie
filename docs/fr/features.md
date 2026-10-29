@@ -511,7 +511,8 @@ second `/` (`/sbin/`), c'est un chemin.
 Alfred (lus sans les modifier, dossier synchronisé suivi) et ceux de `~/.config/roadies/workflows`.
 Taper leur mot-clé (`emoji heart`) montre seulement leurs lignes, sous leur nom ; dès 2 lettres,
 les mots-clés possibles apparaissent dans une section « Workflows » (Tab ou Retour complète).
-Le script tourne en fond (100 ms après la dernière frappe, arrêté à la suivante, 10 s au plus).
+Le script d'un filtre tourne en fond (100 ms après la dernière frappe, arrêté à la suivante, 10 s au plus) ;
+les actions (Run Script, Run NSAppleScript, tâches d'automatisation, raccourcis) vont à leur terme, comme dans Alfred.
 Retour suit le schéma du workflow : scripts, conditions, découpes, remplacements, adresse,
 fichier, Finder, copie (collage automatique compris), notification, son, parole, fichier écrit.
 Tenir ⌘, ⌥ ou ⌃ montre ce que la ligne fera ; Tab complète, ⌘C copie, ⌘Y montre l'aperçu.

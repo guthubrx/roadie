@@ -187,7 +187,7 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
         }
     }
 
-    /// `shortcuts run` avec fichiers d'entrée et de sortie temporaires ; 30 s au plus.
+    /// `shortcuts run` avec fichiers d'entrée et de sortie temporaires ; sans délai, comme Alfred (session 129).
     func shortcut(_ name: String, input: String?) async -> String {
         guard !name.isEmpty else { return "" }
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-shortcut-\(UUID().uuidString)")
@@ -202,7 +202,7 @@ final class AlfredLiveEffects: AlfredEffects, @unchecked Sendable {
         let workflow = AlfredWorkflow(id: "shortcut", bundleID: "", name: name, description: "", version: "", folder: folder, source: .roadie,
                                       disabled: false, objects: [:], connections: [:], variables: [:], userSettings: [], prefs: [:])
         let script = AlfredScript(language: 0, source: #"exec /usr/bin/shortcuts "$@""#)
-        _ = await AlfredScriptRunner.run(script, query: "", arguments: arguments, workflow: workflow, variables: [:], timeout: 30)
+        _ = await AlfredScriptRunner.run(script, query: "", arguments: arguments, workflow: workflow, variables: [:], timeout: nil)
         return (try? String(contentsOf: folder.appendingPathComponent("out"), encoding: .utf8)) ?? ""
     }
 

@@ -36,7 +36,7 @@ public enum UILanguage: String, Sendable {
 
     /// Texte du fichier de configuration habituel, s'il existe.
     public static func configFileText() -> String? {
-        try? String(contentsOfFile: NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath, encoding: .utf8)
+        try? String(contentsOfFile: RoadieConfigLoader.defaultConfigPath(), encoding: .utf8)
     }
 }
 

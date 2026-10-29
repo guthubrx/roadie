@@ -311,6 +311,10 @@ Session 127 installée : interface entièrement traduite (`tr(fr, en)`, ~1 300 t
 choix confirmé. 2 278 tests / 333 suites. Reçu : specs/127-traduction-complete/validation.md.
 Session 128 : 0.11.0 publiée (sessions 073 à 127 : lanceur, workflows d'Alfred, interface EN/FR). Notes
 docs/releases/v0.11.0*.md, reçu specs/128-release-0110/validation.md.
+Audit V15 du 29 octobre 2026 (audits/2026-10-29/session-2026-10-29-codebase-01) : inconclusive, aucun défaut grave.
+Session 129 installée : ses six constats corrigés (actions de workflow sans délai comme Alfred, commandes système
+attendues 600 s avec notification d'échec, index des littéraux, parcours Firefox O(n)), code mort retiré.
+2 272 tests / 332 suites, PID 79678, santé 5/5. Reçu : specs/129-corrections-audit/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

@@ -3,6 +3,20 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
+## Non publié
+
+### Corrections
+
+- Les actions des workflows (Run Script, Run NSAppleScript, tâches d'automatisation, raccourcis)
+  ne sont plus arrêtées après 10 s (30 s pour un raccourci) : elles vont à leur terme, comme dans
+  Alfred. Les filtres gardent leur délai de 10 s.
+- Les commandes système de la barre attendent jusqu'à 10 minutes (mot de passe de « Reconstruire
+  l'index Spotlight », confirmation d'une fermeture de session) et signalent un échec par une
+  notification ; une annulation reste silencieuse.
+- Paramètres : une clé sans valeur suivie de la même clé avec une valeur n'est plus affichée ;
+  elle est refusée comme doublon, comme à l'écriture.
+- Choix d'un onglet de Firefox : parcours en temps linéaire.
+
 ## 0.11.0 - 2026-10-29
 
 ### Nouveautés

@@ -10,12 +10,7 @@ enum LauncherWebHistory {
     static var folder: String { tr("Historique", "History") }
 
     /// Pages qui correspondent, hors adresses déjà proposées (signets) ; meilleur appariement, puis les plus
-    /// visitées. O(h × q × t + k log k).
-    static func matches(_ query: String, in pages: [LauncherBookmark], excluding shown: Set<String>, limit: Int = 4) -> [LauncherBookmark] {
-        matches(query, in: LauncherBookmarkIndex(pages), excluding: shown, limit: limit)
-    }
-
-    /// Même recherche dans un index déjà plié (session 123) : 2 300 pages en quelques millisecondes.
+    /// visitées. Index déjà plié (session 123) : 2 300 pages en quelques millisecondes. O(h × q × t + k log k).
     static func matches(_ query: String, in index: LauncherBookmarkIndex, excluding shown: Set<String>, limit: Int = 4) -> [LauncherBookmark] {
         let needle = LauncherMatch.fold(query)
         guard needle.count >= 2 else { return [] }
@@ -110,12 +105,8 @@ final class LauncherWebHistoryStore: @unchecked Sendable {
     private let lock = NSLock()
     private var cached: (key: String, at: Date, index: LauncherBookmarkIndex)?
 
-    /// `days` : fenêtre de l'historique. O(fichiers + pages).
-    func load(browsers: [String], days: Int, now: Date = Date()) -> [LauncherBookmark] {
-        loadIndex(browsers: browsers, days: days, now: now).entries.map(\.bookmark)
-    }
-
-    /// Pages pliées pour la recherche (session 123), gardées avec la lecture : préparées une fois, en fond. O(p × t).
+    /// Pages pliées pour la recherche (session 123), gardées avec la lecture : préparées une fois, en fond.
+    /// `days` : fenêtre de l'historique. O(fichiers + p × t).
     func loadIndex(browsers: [String], days: Int, now: Date = Date()) -> LauncherBookmarkIndex {
         let key = "\(browsers.joined(separator: ","))/\(days)"
         lock.lock()

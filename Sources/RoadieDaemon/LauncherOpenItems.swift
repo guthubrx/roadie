@@ -151,14 +151,15 @@ enum LauncherBrowsers {
 /// onglets sont des boutons d'accessibilité (`AXRadioButton`) titrés comme l'onglet. Un appui le choisit.
 enum FirefoxTabSelector {
     /// Cherche dans la fenêtre donnée, sinon dans toutes les fenêtres de Firefox ; vrai si un onglet a été
-    /// pressé. Parcours en largeur borné : 14 niveaux, 4 000 éléments par fenêtre.
+    /// pressé. Parcours en largeur borné : 14 niveaux, 4 000 éléments par fenêtre. File lue par un indice
+    /// (et non `removeFirst`, O(n) par retrait) : O(n) par fenêtre, n ≤ 4 000 (audit du 29 octobre 2026).
     static func select(title: String, in windows: [AXUIElement]) -> Bool {
         for window in windows {
             var queue: [(element: AXUIElement, depth: Int)] = [(window, 0)]
-            var visited = 0
-            while !queue.isEmpty, visited < 4_000 {
-                let (element, depth) = queue.removeFirst()
-                visited += 1
+            var head = 0
+            while head < queue.count, head < 4_000 {
+                let (element, depth) = queue[head]
+                head += 1
                 if string(element, kAXRoleAttribute) == kAXRadioButtonRole, string(element, kAXTitleAttribute) == title {
                     return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
                 }
