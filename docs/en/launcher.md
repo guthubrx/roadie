@@ -6,8 +6,7 @@ Roadie's bar is a full launcher, running in the same process as the window manag
 windows, files and web pages. It also knows where to put what it opens: which stage, which desktop, which side of
 the screen. It runs Alfred workflows (`.alfredworkflow` files) without Alfred and without the Powerpack.
 
-> Available in `main`; the published 0.10.0 release does not include the launcher yet. It will ship in the next
-> release. Until then, [build from source](../../README.md#build-and-development-run).
+> Included since Roadie 0.11.0.
 
 The bar follows the macOS language (English, or French on a Mac set to French), or the language chosen in
 Settings > General > Interface language. What you type works in both languages. The screenshots in this guide are drawn by Roadie's renderer with sample windows and files.

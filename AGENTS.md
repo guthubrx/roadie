@@ -309,6 +309,8 @@ Captures EN par défaut, FR dans `docs/assets/screenshots/fr/`. 2 276 tests / 33
 Session 127 installée : interface entièrement traduite (`tr(fr, en)`, ~1 300 textes), réglage `[interface] language`
 (`auto` par défaut, `fr`, `en`, relance de Roadie). Poste de l'utilisateur en `en-US` : Roadie s'y affiche en anglais,
 choix confirmé. 2 278 tests / 333 suites. Reçu : specs/127-traduction-complete/validation.md.
+Session 128 : 0.11.0 publiée (sessions 073 à 127 : lanceur, workflows d'Alfred, interface EN/FR). Notes
+docs/releases/v0.11.0*.md, reçu specs/128-release-0110/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
