@@ -264,8 +264,8 @@ public struct TargetMacroService {
             pid: getpid(),
             outputPath: outputURL.path
         ))
-        notifyRecording("Enregistrement macro demarre: \(safeName)")
-        var finalNotification = "Enregistrement macro arrete: \(safeName)"
+        notifyRecording(tr("Enregistrement macro demarre: \(safeName)", "Macro recording started: \(safeName)"))
+        var finalNotification = tr("Enregistrement macro arrete: \(safeName)", "Macro recording stopped: \(safeName)")
         defer {
             CGEvent.tapEnable(tap: tap, enable: false)
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
@@ -287,10 +287,10 @@ public struct TargetMacroService {
         do {
             let data = try JSONEncoder.roadie.encode(recording)
             try data.write(to: outputURL, options: .atomic)
-            finalNotification = "Enregistrement macro termine: \(safeName) (\(capture.events.count) events)"
+            finalNotification = tr("Enregistrement macro termine: \(safeName) (\(capture.events.count) events)", "Macro recording finished: \(safeName) (\(capture.events.count) events)")
             return TargetActionResult(changed: true, message: "recorded \(safeName) events=\(capture.events.count)")
         } catch {
-            finalNotification = "Echec enregistrement macro: \(safeName)"
+            finalNotification = tr("Echec enregistrement macro: \(safeName)", "Macro recording failed: \(safeName)")
             return TargetActionResult(changed: false, message: "record write failed: \(error.localizedDescription)", error: "record_write_failed")
         }
     }

@@ -375,19 +375,19 @@ public enum SlashCommandCatalog {
         case "move", "swap", "resize", "screen":
             return rank(directionCandidates, word: word)
         case "layout":
-            return rank(arguments([("bsp", "Partition binaire"), ("spatial", "Partition spatiale"),
-                                   ("master", "Maître et pile"), ("float", "Flottant")]), word: word)
+            return rank(arguments([("bsp", tr("Partition binaire", "Binary partition")), ("spatial", tr("Partition spatiale", "Spatial partition")),
+                                   ("master", tr("Maître et pile", "Main and stack")), ("float", tr("Flottant", "Floating"))]), word: word)
         case "split":
             return rank(arguments([("h", "horizontal"), ("v", "vertical")]), word: word)
         case "stage":
             let names = context.stageNames.map { Candidate(SlashSuggestion(text: $0, detail: "stage", kind: .argument), keys: [$0]) }
             let numbers = context.stageNumbers.map { Candidate(SlashSuggestion(text: $0, detail: "stage", kind: .argument), keys: [$0]) }
-            let actions = arguments([("new", "Nouveau stage"), ("rename", "Renommer le stage courant"),
-                                     ("send", "Envoyer la fenêtre vers un stage")])
+            let actions = arguments([("new", tr("Nouveau stage", "New stage")), ("rename", tr("Renommer le stage courant", "Rename the current stage")),
+                                     ("send", tr("Envoyer la fenêtre vers un stage", "Send the window to a stage"))])
             return rank(numbers + names + actions, word: word)
         case "bm":
             let names = context.bookmarkNames.map { Candidate(SlashSuggestion(text: $0, detail: "bookmark", kind: .argument), keys: [$0]) }
-            return rank(names + arguments([("set", "Poser un bookmark")]), word: word)
+            return rank(names + arguments([("set", tr("Poser un bookmark", "Set a bookmark"))]), word: word)
         case "set":
             return rank(settingCandidates, word: word)
         case "settings":

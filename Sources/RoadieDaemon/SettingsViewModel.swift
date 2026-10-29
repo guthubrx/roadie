@@ -220,7 +220,7 @@ final class SettingsViewModel: ObservableObject {
 
     /// « valide » ou « N erreurs, M avertissements ».
     var validityText: String {
-        guard validity.errorCount > 0 || validity.warningCount > 0 else { return "valide" }
+        guard validity.errorCount > 0 || validity.warningCount > 0 else { return tr("valide", "valid") }
         return "\(Self.count(validity.errorCount, "erreur")), \(Self.count(validity.warningCount, "avertissement"))"
     }
 
@@ -343,9 +343,18 @@ final class SettingsViewModel: ObservableObject {
             appliedDrafts[descriptor.id] = nil
             // Rétablir retire la ligne ; une écriture qui répète le défaut n'a rien à rétablir.
             values[descriptor.id] = (new, isDefault: isReset || new == descriptor.defaultValue)
+            if descriptor.id == "interface.language" { restartForLanguage() }
         case .rejected(let reason):
             errors[descriptor.id] = reason
         }
+    }
+
+    /// La langue est lue au lancement (session 127) : Roadie se relance pour l'appliquer, comme `roadie daemon
+    /// restart`. Jamais pendant les tests ni pour un autre fichier que la configuration habituelle.
+    private func restartForLanguage() {
+        guard !TestEnvironment.isRunningTests, service.configPath == RoadieConfigLoader.defaultConfigPath() else { return }
+        notice = tr("Roadie redémarre pour changer de langue…", "Roadie is restarting to change the language…")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { _ = CLICommandRouter().run(["daemon", "restart"]) }
     }
 
     // MARK: - Actions de la catégorie Général
@@ -364,8 +373,8 @@ final class SettingsViewModel: ObservableObject {
     func reloadConfig() {
         let result = ConfigReloadService.shared.reload(path: service.configPath)
         notice = result.status == .applied
-            ? "Configuration rechargée."
-            : "Rechargement refusé : \(result.error ?? "fichier invalide")"
+            ? tr("Configuration rechargée.", "Configuration reloaded.")
+            : tr("Rechargement refusé : ", "Reload refused: ") + (result.error ?? tr("fichier invalide", "invalid file"))
         refresh()
     }
 }

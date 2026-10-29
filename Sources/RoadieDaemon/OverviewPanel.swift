@@ -19,7 +19,7 @@ final class OverviewPanel: NSPanel, NSWindowDelegate {
     init(events: EventLog = EventLog()) {
         self.events = events
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        title = "Roadie · Vue d’ensemble"
+        title = tr("Roadie · Vue d’ensemble", "Roadie · Overview")
         appearance = NSAppearance(named: .darkAqua)
         isReleasedWhenClosed = false
         acceptsMouseMovedEvents = true
@@ -172,7 +172,7 @@ final class OverviewCanvas: NSView {
         needsDisplay = true
         setAccessibilityRole(.group)
         setAccessibilityLabel(tr("Vue d’ensemble des bureaux et stages", "Overview of desktops and stages"))
-        setAccessibilityValue("Loupe : " + (focusedDesktop.map { "\($0.displayID.rawValue), bureau \($0.desktopID.rawValue)" } ?? "aucune"))
+        setAccessibilityValue(tr("Loupe : ", "Magnifier: ") + (focusedDesktop.map { tr("\($0.displayID.rawValue), bureau \($0.desktopID.rawValue)", "\($0.displayID.rawValue), desktop \($0.desktopID.rawValue)") } ?? tr("aucune", "none")))
         let children = plan.cards.map { card in
             let element = NSAccessibilityElement()
             element.setAccessibilityRole(.button)
@@ -182,7 +182,7 @@ final class OverviewCanvas: NSView {
             if let window {
                 element.setAccessibilityFrame(window.convertToScreen(convert(card.frame, to: nil)))
             }
-            element.setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Ouvrir") { [weak self] in
+            element.setAccessibilityCustomActions([NSAccessibilityCustomAction(name: tr("Ouvrir", "Open")) { [weak self] in
                 self?.onOpen?(card.entry); return true
             }])
             return element

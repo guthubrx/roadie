@@ -1569,19 +1569,19 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         // Signets des navigateurs (session 104), avant les replis ; un mot-clé Firefox tapé seul passe en tête.
         if phrase == nil {
             let marks = LauncherBookmark.matches(model.query, in: bookmarkIndex)
-            launcherList.appendSection("Signets", marks.map { .web(LauncherWebRow(kind: .bookmark($0), title: $0.title)) })
+            launcherList.appendSection(tr("Signets", "Bookmarks"), marks.map { .web(LauncherWebRow(kind: .bookmark($0), title: $0.title)) })
             // Historique (session 114) : pages déjà vues, hors signets proposés.
             let shown = Set(marks.map { LauncherWebHistory.normalized($0.url) })
-            launcherList.appendSection("Historique", LauncherWebHistory.matches(model.query, in: historyIndex, excluding: shown).map {
+            launcherList.appendSection(tr("Historique", "History"), LauncherWebHistory.matches(model.query, in: historyIndex, excluding: shown).map {
                 .web(LauncherWebRow(kind: .bookmark($0), title: $0.title))
             })
             let typed = model.query.trimmingCharacters(in: .whitespaces).lowercased()
             if let keyword = bookmarks.first(where: { $0.keyword?.lowercased() == typed && !$0.url.contains("%s") }) {
-                launcherList.prepend(.web(LauncherWebRow(kind: .bookmark(keyword), title: keyword.title)), header: "Signet")
+                launcherList.prepend(.web(LauncherWebRow(kind: .bookmark(keyword), title: keyword.title)), header: tr("Signet", "Bookmark"))
             }
         }
         // Recherches de repli et actions universelles sur texte des workflows, en bas (SPEC-089 FR-003, FR-004).
-        launcherList.appendSection("Repli", fallbackRows(model.query))
+        launcherList.appendSection(tr("Repli", "Fallback"), fallbackRows(model.query))
         // Web (SPEC-090) : repli en bas ; recherche par mot-clé et adresse tapée en tête, choisies.
         let webRows = LauncherWeb.fallbackRows(model.query, template: launcher.webSearchTemplate,
                                                searches: launcher.webSearches, fallbacks: launcher.fallbackSearches).map(LauncherList.Row.web)
@@ -1606,7 +1606,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         // Calcul (SPEC-087) : son résultat passe en tête et devient la ligne choisie.
         if let calc = LauncherCalculator.evaluate(model.query, locale: launcher.calcLocale, grouping: launcher.calcGrouping) {
-            launcherList.prepend(.calc(calc), header: "Calcul")
+            launcherList.prepend(.calc(calc), header: tr("Calcul", "Calculation"))
         }
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
         syncHighlight()

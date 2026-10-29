@@ -1,20 +1,21 @@
 import Foundation
+import RoadieCore
 import TOMLKit
 
 enum SettingsCollectionWriter {
     static func edit(_ original: String, descriptor: SettingDescriptor, value: CollectionValue?) throws -> String {
-        guard let spec = descriptor.collection else { throw SettingsFileError(message: "Collection inconnue.") }
+        guard let spec = descriptor.collection else { throw SettingsFileError(message: tr("Collection inconnue.", "Unknown collection.")) }
         switch spec.shape {
         case .list(let kind, _, _, _, _):
             let literal: String?
             if let value {
-                guard case .list(let items) = value else { throw SettingsFileError(message: "Liste attendue.") }
+                guard case .list(let items) = value else { throw SettingsFileError(message: tr("Liste attendue.", "List expected.")) }
                 literal = "[" + (try items.map { try SettingsCollectionCodec.literal($0, kind: kind) }).joined(separator: ", ") + "]"
             } else { literal = nil }
             return try result(ConfigFileEditor.editStructuredValue(original, table: descriptor.tablePath, key: descriptor.key, value: literal))
         case .advanced(let table):
             guard value != nil else { return try result(ConfigFileEditor.replaceCollectionSections(original, table: table, fragments: [])) }
-            guard case .advanced(let text) = value! else { throw SettingsFileError(message: "Fragment TOML attendu.") }
+            guard case .advanced(let text) = value! else { throw SettingsFileError(message: tr("Fragment TOML attendu.", "TOML fragment expected.")) }
             var fragment = text
             let path = table.components(separatedBy: ".")
             let parent = path.dropLast().joined(separator: ".")
@@ -35,7 +36,7 @@ enum SettingsCollectionWriter {
             return try result(ConfigFileEditor.replaceCollectionSections(original, table: table, fragments: fragment.isEmpty ? [] : [fragment]))
         case .rows(let table, let fields, _, _):
             guard let value else { return try result(ConfigFileEditor.replaceCollectionSections(original, table: table, fragments: [])) }
-            guard case .rows(let rows) = value else { throw SettingsFileError(message: "Tableau de lignes attendu.") }
+            guard case .rows(let rows) = value else { throw SettingsFileError(message: tr("Tableau de lignes attendu.", "Table of rows expected.")) }
             let root = try TOMLTable(string: original)
             let sourceArray = SettingsCollectionCodec.node(root, path: table.components(separatedBy: "."))?.array
             let fragments = ConfigFileEditor.collectionRowFragments(original, table: table)
@@ -47,7 +48,7 @@ enum SettingsCollectionWriter {
                 var fragment: String
                 if let index = row.sourceIndex {
                     guard let sourceArray, index < sourceArray.count, let sourceTable = sourceArray[index].table,
-                          index < oldRows.count else { throw SettingsFileError(message: "La ligne source n'existe plus. Recharge la collection.") }
+                          index < oldRows.count else { throw SettingsFileError(message: tr("La ligne source n'existe plus. Recharge la collection.", "The source row no longer exists. Reload the collection.")) }
                     old = oldRows[index]
                     if index < fragments.count {
                         fragment = ConfigFileEditor.mapCollectionHeaders(fragments[index], from: table, to: "__roadie_row", rootIsArray: false)
@@ -68,7 +69,7 @@ enum SettingsCollectionWriter {
                     case .failure(.inlineTable), .failure(.dottedKey):
                         // Forme compacte héritée : développer cette seule ligne, pas le document.
                         let parsed = try TOMLTable(string: fragment)
-                        guard let rowTable = parsed["__roadie_row"]?.table else { throw SettingsFileError(message: "Ligne TOML invalide.") }
+                        guard let rowTable = parsed["__roadie_row"]?.table else { throw SettingsFileError(message: tr("Ligne TOML invalide.", "Invalid TOML row.")) }
                         let comments = ConfigFileEditor.collectionComments(fragment)
                         fragment = comments + canonical(rowTable)
                         fragment = try result(ConfigFileEditor.editStructuredValue(fragment, table: parent, key: field.path.last!, value: literal))

@@ -839,7 +839,7 @@ public final class TargetModeRuntimeController: NSObject {
                     "ms": String(Int(Date().timeIntervalSince(started) * 1000)), "status": String(result.status),
                     "items": String(response?.items.count ?? -1), "cancelled": String(result.cancelled), "timedOut": String(result.timedOut)]))
                 guard !result.cancelled else { return }
-                let error = result.failure ?? (result.timedOut ? "délai dépassé" : nil)
+                let error = result.failure ?? (result.timedOut ? tr("délai dépassé", "timed out") : nil)
                 DispatchQueue.main.async { MainActor.assumeIsolated { done(response, error) } }
             }
         }
@@ -992,7 +992,7 @@ public final class TargetModeRuntimeController: NSObject {
                 _ = AlfredScriptRunner.start(AlfredScript(language: 8, source: "", file: file), query: input, arguments: [input],
                                              workflow: workflow, variables: variables, keyword: "") { result in
                     guard !result.cancelled else { return }
-                    let failure: String? = result.failure ?? (result.timedOut ? "délai dépassé" : nil)
+                    let failure: String? = result.failure ?? (result.timedOut ? tr("délai dépassé", "timed out") : nil)
                     let response: AlfredTextResponse? = failure == nil ? AlfredTextResponse.parse(result.text) : nil
                     DispatchQueue.main.async { MainActor.assumeIsolated { done(response, failure) } }
                 }
@@ -1056,7 +1056,7 @@ public final class TargetModeRuntimeController: NSObject {
                     let deleted = try StageProjectStore().delete(name)
                     return TargetActionResult(changed: deleted, message: "project delete: \(deleted)")
                 } catch {
-                    return TargetActionResult(changed: false, message: "Projet non supprimé", error: "project_not_deleted")
+                    return TargetActionResult(changed: false, message: tr("Projet non supprimé", "Project not deleted"), error: "project_not_deleted")
                 }
             default: return refused(label, "verb")
             }

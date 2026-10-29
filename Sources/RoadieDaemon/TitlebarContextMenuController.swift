@@ -403,10 +403,10 @@ public final class TitlebarContextMenuController {
         let menu = NSMenu(title: "Roadie")
         addWindowSubmenu(window: window, windowID: windowID, sourceScope: sourceScope, pin: pin, to: menu)
         addAffinitySubmenu(window: window, windowID: windowID, sourceScope: sourceScope, to: menu)
-        addSubmenu(title: "Envoyer la fenêtre vers stage", kind: .stage, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
+        addSubmenu(title: tr("Envoyer la fenêtre vers stage", "Send window to stage"), kind: .stage, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         addDesktopStageSubmenu(windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
-        addSubmenu(title: "Envoyer la fenêtre vers desktop", kind: .desktop, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
-        addSubmenu(title: "Envoyer la fenêtre vers écran", kind: .display, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
+        addSubmenu(title: tr("Envoyer la fenêtre vers desktop", "Send window to desktop"), kind: .desktop, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
+        addSubmenu(title: tr("Envoyer la fenêtre vers écran", "Send window to display"), kind: .display, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         return menu
     }
 
@@ -417,17 +417,17 @@ public final class TitlebarContextMenuController {
         to menu: NSMenu
     ) {
         guard sourceScope != nil else { return }
-        let parent = NSMenuItem(title: "Affinité d'ouverture", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: tr("Affinité d'ouverture", "Open affinity"), action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: parent.title)
         addActionItem(
-            title: "Toujours ouvrir cette app ici",
+            title: tr("Toujours ouvrir cette app ici", "Always open this app here"),
             kind: .affinityApp,
             windowID: windowID,
             sourceScope: sourceScope,
             to: submenu
         )
         addActionItem(
-            title: "Toujours ouvrir cette app + ce titre ici",
+            title: tr("Toujours ouvrir cette app + ce titre ici", "Always open this app + this title here"),
             kind: .affinityAppTitle,
             windowID: windowID,
             sourceScope: sourceScope,
@@ -436,7 +436,7 @@ public final class TitlebarContextMenuController {
         )
         submenu.addItem(.separator())
         addActionItem(
-            title: "Retirer l'affinité pour cette app",
+            title: tr("Retirer l'affinité pour cette app", "Remove the affinity for this app"),
             kind: .removeAffinityApp,
             windowID: windowID,
             sourceScope: sourceScope,
@@ -453,10 +453,10 @@ public final class TitlebarContextMenuController {
         pin: PersistentWindowPin?,
         to menu: NSMenu
     ) {
-        let parent = NSMenuItem(title: "Fenêtre", action: nil, keyEquivalent: "")
-        let submenu = NSMenu(title: "Fenêtre")
+        let parent = NSMenuItem(title: tr("Fenêtre", "Window"), action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: tr("Fenêtre", "Window"))
         addActionItem(
-            title: "Maximiser / restaurer (garder le navrail)",
+            title: tr("Maximiser / restaurer (garder le navrail)", "Maximize / restore (keep the rail)"),
             kind: .maximize,
             windowID: windowID,
             sourceScope: sourceScope,
@@ -466,53 +466,53 @@ public final class TitlebarContextMenuController {
         if let pin {
             let stateTitle: String
             switch pin.pinScope {
-            case .stage: stateTitle = "État actuel : flottante dans cette stage"
-            case .desktop: stateTitle = "Pin actuel : ce desktop"
-            case .allDesktops: stateTitle = "Pin actuel : tous les desktops"
+            case .stage: stateTitle = tr("État actuel : flottante dans cette stage", "Current state: floating in this stage")
+            case .desktop: stateTitle = tr("Pin actuel : ce desktop", "Current pin: this desktop")
+            case .allDesktops: stateTitle = tr("Pin actuel : tous les desktops", "Current pin: all desktops")
             }
             let stateItem = NSMenuItem(title: stateTitle, action: nil, keyEquivalent: "")
             stateItem.isEnabled = false
             submenu.addItem(stateItem)
             submenu.addItem(.separator())
             let choices: [(String, WindowContextActionKind, WindowPinScope)] = [
-                ("Flotter dans cette stage", .floatStage, .stage),
-                ("Pin sur ce desktop", .pinDesktop, .desktop),
-                ("Pin sur tous les desktops", .pinAllDesktops, .allDesktops)
+                (tr("Flotter dans cette stage", "Float in this stage"), .floatStage, .stage),
+                (tr("Pin sur ce desktop", "Pin to this desktop"), .pinDesktop, .desktop),
+                (tr("Pin sur tous les desktops", "Pin to all desktops"), .pinAllDesktops, .allDesktops)
             ]
             for (title, kind, scope) in choices where scope != pin.pinScope {
                 addActionItem(title: title, kind: kind, windowID: windowID, sourceScope: sourceScope, to: submenu)
             }
             addActionItem(
-                title: pin.pinScope == .stage ? "Revenir au tuilage" : "Retirer le pin",
+                title: pin.pinScope == .stage ? tr("Revenir au tuilage", "Back to tiling") : tr("Retirer le pin", "Remove the pin"),
                 kind: .unpin,
                 windowID: windowID,
                 sourceScope: sourceScope,
                 to: submenu
             )
         } else {
-            addActionItem(title: "Flotter dans cette stage", kind: .floatStage, windowID: windowID, sourceScope: sourceScope, to: submenu)
-            addActionItem(title: "Pin sur ce desktop", kind: .pinDesktop, windowID: windowID, sourceScope: sourceScope, to: submenu)
-            addActionItem(title: "Pin sur tous les desktops", kind: .pinAllDesktops, windowID: windowID, sourceScope: sourceScope, to: submenu)
+            addActionItem(title: tr("Flotter dans cette stage", "Float in this stage"), kind: .floatStage, windowID: windowID, sourceScope: sourceScope, to: submenu)
+            addActionItem(title: tr("Pin sur ce desktop", "Pin to this desktop"), kind: .pinDesktop, windowID: windowID, sourceScope: sourceScope, to: submenu)
+            addActionItem(title: tr("Pin sur tous les desktops", "Pin to all desktops"), kind: .pinAllDesktops, windowID: windowID, sourceScope: sourceScope, to: submenu)
         }
         // Choix durable de toute l'application (SPEC-075), dans sa règle `affinity-app-…`.
         submenu.addItem(.separator())
         let rule = WindowRuleAffinityService().tilingChoice(for: window)
         if rule != .float {
-            addActionItem(title: "Toujours faire flotter \(window.appName)", kind: .floatAlways, windowID: windowID, sourceScope: sourceScope, to: submenu)
+            addActionItem(title: tr("Toujours faire flotter \(window.appName)", "Always float \(window.appName)"), kind: .floatAlways, windowID: windowID, sourceScope: sourceScope, to: submenu)
         }
         if rule == .float || (rule == nil && !window.isTileCandidate && pin == nil) {
-            addActionItem(title: "Toujours tuiler \(window.appName)", kind: .tileAlways, windowID: windowID, sourceScope: sourceScope, to: submenu)
+            addActionItem(title: tr("Toujours tuiler \(window.appName)", "Always tile \(window.appName)"), kind: .tileAlways, windowID: windowID, sourceScope: sourceScope, to: submenu)
         }
         if rule != nil {
-            addActionItem(title: "Retirer la règle de flottement de \(window.appName)", kind: .clearTiling, windowID: windowID, sourceScope: sourceScope, to: submenu)
+            addActionItem(title: tr("Retirer la règle de flottement de \(window.appName)", "Remove \(window.appName)'s floating rule"), kind: .clearTiling, windowID: windowID, sourceScope: sourceScope, to: submenu)
         }
         // Fenêtres de ce titre seulement (session 125) : un rappel, une boîte de dialogue, une palette.
         // Liste « Fenêtres toujours flottantes », aussi modifiable dans Paramètres > Règles.
         if let listed = FloatingWindowSettings().listedTitle(for: window) {
-            addActionItem(title: "Ne plus faire flotter les fenêtres « \(listed) »", kind: .clearTitleFloat, windowID: windowID,
+            addActionItem(title: tr("Ne plus faire flotter les fenêtres « \(listed) »", "Stop floating “\(listed)” windows"), kind: .clearTitleFloat, windowID: windowID,
                           sourceScope: sourceScope, to: submenu)
         } else if rule != .float, let title = FloatingWindowTitles.text(fromTitle: window.title) {
-            addActionItem(title: "Toujours faire flotter les fenêtres « \(title) »", kind: .floatTitleAlways, windowID: windowID,
+            addActionItem(title: tr("Toujours faire flotter les fenêtres « \(title) »", "Always float “\(title)” windows"), kind: .floatTitleAlways, windowID: windowID,
                           sourceScope: sourceScope, to: submenu)
         }
         parent.submenu = submenu
@@ -564,7 +564,7 @@ public final class TitlebarContextMenuController {
     ) {
         let filtered = destinations.filter { $0.kind == .desktopStage && !$0.isCurrent && $0.isAvailable }
         guard !filtered.isEmpty else { return }
-        let parent = NSMenuItem(title: "Envoyer la fenêtre vers desktop/stage", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: tr("Envoyer la fenêtre vers desktop/stage", "Send window to desktop/stage"), action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: parent.title)
         let grouped = Dictionary(grouping: filtered) { destination in
             destination.parentID ?? ""
@@ -572,11 +572,11 @@ public final class TitlebarContextMenuController {
         var parentLabels: [String: String] = [:]
         for destination in filtered {
             guard let parentID = destination.parentID else { continue }
-            parentLabels[parentID] = destination.parentLabel ?? "Desktop \(parentID)"
+            parentLabels[parentID] = destination.parentLabel ?? tr("Bureau \(parentID)", "Desktop \(parentID)")
         }
         for desktopID in grouped.keys.sorted(by: desktopSort) {
             guard let stages = grouped[desktopID]?.sorted(by: { $0.label < $1.label }) else { continue }
-            let desktopItem = NSMenuItem(title: parentLabels[desktopID] ?? "Desktop \(desktopID)", action: nil, keyEquivalent: "")
+            let desktopItem = NSMenuItem(title: parentLabels[desktopID] ?? tr("Bureau \(desktopID)", "Desktop \(desktopID)"), action: nil, keyEquivalent: "")
             let stageMenu = NSMenu(title: desktopItem.title)
             for destination in stages {
                 let item = NSMenuItem(title: destination.label, action: #selector(TitlebarMenuActionTarget.choose(_:)), keyEquivalent: "")

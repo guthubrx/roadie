@@ -32,7 +32,7 @@ struct SettingsView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Rechercher dans tous les réglages", text: $typedQuery)
+            TextField(tr("Rechercher dans tous les réglages", "Search all settings"), text: $typedQuery)
                 .textFieldStyle(.roundedBorder)
                 .onExitCommand { typedQuery = ""; model.query = "" }
                 .padding([.horizontal, .top], 10)
@@ -86,10 +86,10 @@ struct SettingsView: View {
         let results = model.searchResults
         return List {
             if results.isEmpty {
-                Text("Aucun réglage").foregroundStyle(.secondary)
+                Text(tr("Aucun réglage", "No settings")).foregroundStyle(.secondary)
             } else {
                 sidebarButton(selected: model.searchFocus == nil) { model.searchFocus = nil; scrollTarget = nil } label: {
-                    Label("Tous les résultats (\(results.reduce(0) { $0 + $1.descriptors.count }))", systemImage: "line.3.horizontal.decrease")
+                    Label(tr("Tous les résultats (\(results.reduce(0) { $0 + $1.descriptors.count }))", "All results (\(results.reduce(0) { $0 + $1.descriptors.count }))"), systemImage: "line.3.horizontal.decrease")
                 }
             }
             ForEach(results) { section in
@@ -110,7 +110,7 @@ struct SettingsView: View {
                     }
                 }
                 if section.descriptors.count > 8 {
-                    Text("et \(section.descriptors.count - 8) autres")
+                    Text(tr("et \(section.descriptors.count - 8) autres", "and \(section.descriptors.count - 8) more"))
                         .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.tertiary)
                         .padding(.leading, 26)
                 }
@@ -138,7 +138,7 @@ struct SettingsView: View {
                 if model.isLocked { invalidBanner }
                 if model.isSearching {
                     if model.sections.isEmpty {
-                        Text(String("Aucun réglage ne correspond à « \(model.query) »."))
+                        Text(String(tr("Aucun réglage ne correspond à « \(model.query) ».", "No setting matches “\(model.query)”.")))
                             .foregroundStyle(.secondary)
                     }
                     lazyResults(model.sections)
@@ -200,13 +200,13 @@ struct SettingsView: View {
 
     private var invalidBanner: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Le fichier de configuration est invalide", systemImage: "exclamationmark.triangle.fill")
+            Label(tr("Le fichier de configuration est invalide", "The configuration file is invalid"), systemImage: "exclamationmark.triangle.fill")
                 .font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
                 .foregroundStyle(.red)
             ForEach(Array(model.validity.messages.enumerated()), id: \.offset) { _, message in
                 Text(message).font(.system(size: fonts.settingsHelpFontSize)).textSelection(.enabled)
             }
-            Button("Corriger dans l'éditeur intégré") { advancedOpen = true }
+            Button(tr("Corriger dans l'éditeur intégré", "Fix in the built-in editor")) { advancedOpen = true }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -236,30 +236,30 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             grouped(SettingsCatalog.descriptors(in: .general))
             VStack(alignment: .leading, spacing: 10) {
-                SettingsFormRow("Fichier de configuration", fonts: fonts) {
+                SettingsFormRow(tr("Fichier de configuration", "Configuration file"), fonts: fonts) {
                     Text(model.service.configPath)
                         .font(.system(size: fonts.settingsTextFontSize, design: .monospaced))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                SettingsFormRow("État", fonts: fonts) {
+                SettingsFormRow(tr("État", "Status"), fonts: fonts) {
                     Text(model.validityText).foregroundStyle(model.isLocked ? .red : .primary)
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 10) {
-                            Button("Recharger") { model.reloadConfig() }
-                            Button("Diagnostic") { model.runDiagnostic() }
+                            Button(tr("Recharger", "Reload")) { model.reloadConfig() }
+                            Button(tr("Diagnostic", "Diagnostics")) { model.runDiagnostic() }
                         }.fixedSize(horizontal: true, vertical: false)
                         VStack(alignment: .leading, spacing: 8) {
-                            Button("Recharger") { model.reloadConfig() }
-                            Button("Diagnostic") { model.runDiagnostic() }
+                            Button(tr("Recharger", "Reload")) { model.reloadConfig() }
+                            Button(tr("Diagnostic", "Diagnostics")) { model.runDiagnostic() }
                         }
                     }
-                    SettingsDisclosureSection("Outils avancés") {
+                    SettingsDisclosureSection(tr("Outils avancés", "Advanced tools")) {
                         VStack(alignment: .leading, spacing: 10) {
-                            Button("Éditeur intégré") { advancedOpen = true }
-                            Button("Ouvrir dans un éditeur externe") { openConfigFile() }
+                            Button(tr("Éditeur intégré", "Built-in editor")) { advancedOpen = true }
+                            Button(tr("Ouvrir dans un éditeur externe", "Open in an external editor")) { openConfigFile() }
                         }
                     }
                 }
@@ -317,13 +317,15 @@ private struct SettingRow: View {
         descriptor.label.replacingOccurrences(of: " (points)", with: "")
             .replacingOccurrences(of: "(secondes)", with: "(s)")
             .replacingOccurrences(of: "(millisecondes)", with: "(ms)")
+            .replacingOccurrences(of: "(seconds)", with: "(s)")
+            .replacingOccurrences(of: "(milliseconds)", with: "(ms)")
     }
     private var reset: (() -> Void)? {
         guard descriptor.readOnlyReason == nil, !model.isDefault(descriptor), !model.isLocked else { return nil }
         return { model.reset(descriptor) }
     }
     private var helpText: String {
-        [descriptor.help, descriptor.label.contains(" (points)") ? "Unité : points." : nil,
+        [descriptor.help, descriptor.label.contains(" (points)") ? tr("Unité : points.", "Unit: points.") : nil,
          descriptor.readOnlyReason ?? model.rangeText(descriptor)].compactMap { $0 }.joined(separator: "\n\n")
     }
 
@@ -334,7 +336,7 @@ private struct SettingRow: View {
                     SettingsFieldLabel(title: displayLabel, help: helpText, fonts: fonts, prominent: true)
                     if let reset { SettingsResetButton(action: reset) }
                 }
-                if descriptor.readOnlyReason != nil { Button("Éditeur intégré") { advancedOpen = true } }
+                if descriptor.readOnlyReason != nil { Button(tr("Éditeur intégré", "Built-in editor")) { advancedOpen = true } }
                 else { control.disabled(model.isLocked).accessibilityLabel(descriptor.label) }
             } else {
                 SettingsFormRow(displayLabel, help: helpText, fonts: fonts, reset: reset) {
@@ -372,7 +374,7 @@ private struct SettingRow: View {
     private var control: some View {
         if let collection = descriptor.collection {
             if case .advanced = collection.shape {
-                Button("Modifier dans l'éditeur intégré") { advancedOpen = true }
+                Button(tr("Modifier dans l'éditeur intégré", "Edit in the built-in editor")) { advancedOpen = true }
             } else {
                 if descriptor.id == "switcher.shortcuts" {
                     SettingsSwitcherProfilesView(model: model, descriptor: descriptor)
@@ -414,7 +416,7 @@ private struct SettingRow: View {
                     field.frame(width: max(70, fonts.settingsTextFontSize * 4.5))
                     Stepper("", onIncrement: { model.step(descriptor, by: 1) }, onDecrement: { model.step(descriptor, by: -1) })
                         .labelsHidden()
-                        .accessibilityLabel("Ajuster : \(descriptor.label)")
+                        .accessibilityLabel(tr("Ajuster : \(descriptor.label)", "Adjust: \(descriptor.label)"))
                 }
             }
             if descriptor.id == "overview.background_blur", case .double(let percent) = model.value(descriptor) {
@@ -458,7 +460,7 @@ private struct SettingRow: View {
 
     /// Saisie immédiate ; Retour ou perte du focus termine seulement le brouillon.
     private var field: some View {
-        TextField(descriptor.defaultValue == .unset ? "non défini" : "", text: Binding(
+        TextField(descriptor.defaultValue == .unset ? tr("non défini", "not set") : "", text: Binding(
             get: { model.text(for: descriptor) },
             set: { model.editText(descriptor, raw: $0) }
         ))
@@ -498,7 +500,7 @@ private struct OverviewBlurPreview: View {
                 Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fill)
             } else {
                 Color(nsColor: .windowBackgroundColor)
-                Text("Fond d’écran illisible : flou système").font(.caption).foregroundStyle(.secondary)
+                Text(tr("Fond d’écran illisible : flou système", "Wallpaper unreadable: system blur")).font(.caption).foregroundStyle(.secondary)
             }
             Color(nsColor: OverviewWallpaper.veil)
             HStack(spacing: 10) {
@@ -511,7 +513,7 @@ private struct OverviewBlurPreview: View {
         .frame(width: 240, height: 135)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3)))
-        .accessibilityLabel("Aperçu du flou : \(Int(percent)) %")
+        .accessibilityLabel(tr("Aperçu du flou : \(Int(percent)) %", "Blur preview: \(Int(percent))%"))
     }
 }
 

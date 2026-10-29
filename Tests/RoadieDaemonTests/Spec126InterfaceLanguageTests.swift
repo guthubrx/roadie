@@ -11,10 +11,10 @@ struct Spec126InterfaceLanguageTests {
                                                          name: "Safari", alternateNames: []))
 
     @Test func languageFollowsMacOSAndTheEnvironmentWins() {
-        #expect(UILanguage.detect(["fr-FR", "en-US"], environment: [:]) == .fr)
-        #expect(UILanguage.detect(["en-GB", "fr-FR"], environment: [:]) == .en)
-        #expect(UILanguage.detect(["de-DE"], environment: [:]) == .en)
-        #expect(UILanguage.detect([], environment: [:]) == .en)
+        #expect(UILanguage.detect(["fr-FR", "en-US"], environment: [:], configText: nil) == .fr)
+        #expect(UILanguage.detect(["en-GB", "fr-FR"], environment: [:], configText: nil) == .en)
+        #expect(UILanguage.detect(["de-DE"], environment: [:], configText: nil) == .en)
+        #expect(UILanguage.detect([], environment: [:], configText: nil) == .en)
         #expect(UILanguage.detect(["fr-FR"], environment: ["ROADIE_LANGUAGE": "en"]) == .en)
         #expect(UILanguage.detect(["en-US"], environment: ["ROADIE_LANGUAGE": "xx"]) == .en)
         #expect(tr("Fenêtres", "Windows") == (UILanguage.current == .fr ? "Fenêtres" : "Windows"))
@@ -45,5 +45,27 @@ struct Spec126InterfaceLanguageTests {
         for query in ["verrouiller", "lock screen", "vider la corbeille", "empty trash", "redémarrer", "restart"] {
             #expect(!LauncherSystemCommand.matches(query, in: commands).isEmpty, "\(query)")
         }
+    }
+}
+
+/// Session 127 : la langue se choisit aussi dans la configuration, avant celle de macOS.
+struct Spec127InterfaceLanguageSettingTests {
+    @Test func configChoiceWinsOverMacOSButNotOverTheEnvironment() {
+        let french = "[tiling]\ngaps_inner = 4\n\n[interface]\nsettings_text_font_size = 16\nlanguage = \"fr\" # choix\n"
+        #expect(UILanguage.configured(french) == .fr)
+        #expect(UILanguage.configured("[interface]\nlanguage = \"auto\"\n") == nil)
+        #expect(UILanguage.configured("[other]\nlanguage = \"fr\"\n") == nil)
+        #expect(UILanguage.detect(["en-US"], environment: [:], configText: french) == .fr)
+        #expect(UILanguage.detect(["fr-FR"], environment: [:], configText: "[interface]\nlanguage = \"en\"\n") == .en)
+        #expect(UILanguage.detect(["en-US"], environment: ["ROADIE_LANGUAGE": "en"], configText: french) == .en)
+        #expect(UILanguage.detect(["fr-FR"], environment: [:], configText: nil) == .fr)
+    }
+
+    @Test func settingIsOfferedWithItsThreeChoices() throws {
+        let descriptor = try #require(SettingsCatalog.find(id: "interface.language"))
+        #expect(descriptor.kind == .choice(["auto", "fr", "en"]))
+        #expect(descriptor.defaultValue == .string("auto"))
+        #expect(descriptor.choiceLabel("fr") == "Français" && descriptor.choiceLabel("en") == "English")
+        #expect(InterfaceConfig(language: "de").language == "auto")
     }
 }

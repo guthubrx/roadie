@@ -605,7 +605,7 @@ public struct TargetHintService {
             targets.append(RoadieTarget(
                 id: "desktop:\(scope.displayID.rawValue)/\(scope.desktopID.rawValue)",
                 kind: .desktop,
-                title: "Desktop \(scope.desktopID.rawValue)",
+                title: tr("Bureau \(scope.desktopID.rawValue)", "Desktop \(scope.desktopID.rawValue)"),
                 subtitle: tr("Écran", "Display") + " \(displayIndex)",
                 source: .roadie,
                 scope: TargetScopeSnapshot(displayId: scope.displayID.rawValue, desktopId: scope.desktopID.rawValue),

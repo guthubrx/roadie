@@ -109,8 +109,8 @@ the bottom, center or top, and you can drag it.
   <img src="docs/assets/screenshots/overview.png" alt="Overview of desktops and stages" width="100%">
 </p>
 
-<sub>Screenshots drawn by Roadie's renderer with sample windows and files. The launcher, window switcher and overview
-follow the macOS language (English or French); the settings window is in French.</sub>
+<sub>Screenshots drawn by Roadie's renderer with sample windows and files. The whole interface follows the macOS
+language (English, or French on a Mac set to French), or the language chosen in Settings > General.</sub>
 
 ## What you can do with Roadie
 
@@ -434,11 +434,11 @@ Validate it with:
 roadie config validate
 ```
 
-The validation reports each problem with its full key name. The messages are in French:
+The validation reports each problem with its full key name, in the macOS language:
 
-- `error  focus.stage_follows_focus  attendu booléen, reçu texte` means a value has the wrong type;
-- `warning  tiling.gaps_inr  clé inconnue, ignorée ; vouliez-vous dire « gaps_inner » ?` means a typo, with the closest valid key;
-- `warning  desktops.count  clé sans effet` means Roadie reads the key from the file but does not use it. This applies to the whole `[desktops]` table and to `enabled` and `hide_strategy` in `[stage_manager]`.
+- `error  focus.stage_follows_focus  expected boolean, got text` means a value has the wrong type;
+- `warning  tiling.gaps_inr  unknown key, ignored; did you mean “gaps_inner”?` means a typo, with the closest valid key;
+- `warning  desktops.count  key has no effect` means Roadie reads the key from the file but does not use it. This applies to the whole `[desktops]` table and to `enabled` and `hide_strategy` in `[stage_manager]`.
 
 Shortcut examples for skhd and Karabiner-Elements are in `examples/skhd/skhdrc` and `examples/karabiner/roadie.json`. See [Shortcuts](docs/en/cli.md#shortcuts).
 
@@ -704,7 +704,7 @@ The settings window provides categories, search, and changes as soon as a typed
 value is valid. Margins trigger a new layout, including one-point changes. Lists,
 stages, rules and per-display overrides have built-in editors. Incomplete input
 stays in the field without replacing the last valid value.
-The settings window is in French. TOML comments are preserved.
+The settings window follows the macOS language. TOML comments are preserved.
 A backup precedes the first change of the session. Invalid writes are
 rejected. Font sizes are independent and apply immediately through sliders,
 steppers, or valid typed values. Open sessions retain their input when fonts change.

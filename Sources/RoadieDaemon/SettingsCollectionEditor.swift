@@ -43,7 +43,7 @@ final class SettingsCollectionEditorModel: ObservableObject {
         case .success(let value):
             guard discardDrafts || value != baseline else { return }
             guard discardDrafts || !hasDrafts else {
-                messages = ["Ces données ont changé ailleurs. Votre saisie est conservée ; rechargez les données avant de reprendre."]
+                messages = [tr("Ces données ont changé ailleurs. Votre saisie est conservée ; rechargez les données avant de reprendre.", "This data changed elsewhere. Your input is kept; reload the data before continuing.")]
                 return
             }
             baseline = value
@@ -118,7 +118,7 @@ final class SettingsCollectionEditorModel: ObservableObject {
         var raw = id.flatMap { id in rows.first(where: { $0.id == id })?.raw }
             ?? Dictionary(uniqueKeysWithValues: fields.map { ($0.path.joined(separator: "."), Self.text($0.defaultValue)) })
         raw["id"] = "profil-" + newID.uuidString.lowercased()
-        raw["name"] = id == nil ? "Nouveau profil" : (raw["name"] ?? "Profil") + " (copie)"
+        raw["name"] = id == nil ? tr("Nouveau profil", "New profile") : (raw["name"] ?? tr("Profil", "Profile")) + tr(" (copie)", " (copy)")
         raw["hotkey"] = ""
         raw["trigger_source"] = "external"
         raw["btt_forward_uuid"] = ""
@@ -209,11 +209,11 @@ final class SettingsCollectionEditorModel: ObservableObject {
     @discardableResult
     private func persist() -> Bool {
         guard baseline != nil else {
-            messages = ["Rechargez les données avant de les modifier."]
+            messages = [tr("Rechargez les données avant de les modifier.", "Reload the data before changing it.")]
             return false
         }
         guard let candidate = candidate() else {
-            messages = ["Complétez les champs requis et les valeurs en cours de saisie. La dernière configuration valide reste active."]
+            messages = [tr("Complétez les champs requis et les valeurs en cours de saisie. La dernière configuration valide reste active.", "Complete the required fields and the values being typed. The last valid configuration stays active.")]
             return false
         }
         let errors = service.validateCollection(descriptor, value: candidate)
@@ -265,7 +265,7 @@ struct SettingsCollectionEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if descriptor.id == "tiling.display_overrides" {
-                Text("Ces marges prennent priorité sur les marges générales pour l'écran identifié. Une valeur vide conserve la marge générale.")
+                Text(tr("Ces marges prennent priorité sur les marges générales pour l'écran identifié. Une valeur vide conserve la marge générale.", "These gaps take priority over the general gaps for the identified display. An empty value keeps the general gap."))
                     .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
             }
             if let shape = descriptor.collection?.shape {
@@ -280,7 +280,7 @@ struct SettingsCollectionEditor: View {
                 Text(text).font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.red)
             }
             if !editor.messages.isEmpty {
-                Button("Recharger les données") { editor.reload(discardDrafts: true) }
+                Button(tr("Recharger les données", "Reload data")) { editor.reload(discardDrafts: true) }
             }
         }
         .onAppear {
@@ -299,7 +299,7 @@ struct SettingsCollectionEditor: View {
     }
 
     private var sideToggles: some View {
-            ForEach([("top", "Haut"), ("right", "Droite"), ("bottom", "Bas"), ("left", "Gauche")], id: \.0) { side, label in
+            ForEach([("top", tr("Haut", "Top")), ("right", tr("Droite", "Right")), ("bottom", tr("Bas", "Bottom")), ("left", tr("Gauche", "Left"))], id: \.0) { side, label in
                 Toggle(label, isOn: Binding(
                     get: { editor.items.contains { $0.raw == side } },
                     set: { editor.setSide(side, enabled: $0) }
@@ -311,10 +311,10 @@ struct SettingsCollectionEditor: View {
     private var list: some View {
         VStack(alignment: .leading, spacing: 8) {
             if descriptor.id == "width_adjustment.presets" {
-                Text("Les valeurs sont enregistrées dans l'ordre croissant.")
+                Text(tr("Les valeurs sont enregistrées dans l'ordre croissant.", "Values are saved in ascending order."))
                     .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
             }
-            if editor.items.isEmpty { Text("Aucune entrée").foregroundStyle(.secondary) }
+            if editor.items.isEmpty { Text(tr("Aucune entrée", "No entries")).foregroundStyle(.secondary) }
             ForEach(editor.items) { item in
                 HStack(spacing: 8) {
                     TextField(listPlaceholder, text: Binding(
@@ -323,26 +323,26 @@ struct SettingsCollectionEditor: View {
                     ))
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel(descriptor.label)
-                    Button("Supprimer", systemImage: "minus.circle") { editor.removeItem(item.id) }
+                    Button(tr("Supprimer", "Delete"), systemImage: "minus.circle") { editor.removeItem(item.id) }
                         .labelStyle(.iconOnly).buttonStyle(.plain).frame(width: 26, height: 26)
-                        .help("Supprimer cette entrée").accessibilityLabel("Supprimer cette entrée")
+                        .help(tr("Supprimer cette entrée", "Delete this entry")).accessibilityLabel(tr("Supprimer cette entrée", "Delete this entry"))
                 }
             }
-            Button("Ajouter une entrée", systemImage: "plus") { editor.addItem() }
+            Button(tr("Ajouter une entrée", "Add an entry"), systemImage: "plus") { editor.addItem() }
         }
     }
 
     private var listPlaceholder: String {
-        guard case .list(let element, _, _, _, _) = descriptor.collection?.shape else { return "Valeur" }
+        guard case .list(let element, _, _, _, _) = descriptor.collection?.shape else { return tr("Valeur", "Value") }
         switch element {
-        case .int, .double: return "Nombre"
-        default: return descriptor.key.contains("bundle") ? "Identifiant de l'application" : "Valeur"
+        case .int, .double: return tr("Nombre", "Number")
+        default: return descriptor.key.contains("bundle") ? tr("Identifiant de l'application", "App identifier") : tr("Valeur", "Value")
         }
     }
 
     private var rowForms: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if editor.rows.isEmpty { Text("Aucune entrée").foregroundStyle(.secondary) }
+            if editor.rows.isEmpty { Text(tr("Aucune entrée", "No entries")).foregroundStyle(.secondary) }
             ForEach(Array(editor.rows.enumerated()), id: \.element.id) { index, row in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
@@ -357,27 +357,27 @@ struct SettingsCollectionEditor: View {
                                     .lineLimit(1).truncationMode(.middle)
                                 Spacer(minLength: 0)
                             }.contentShape(Rectangle())
-                        }.buttonStyle(.plain).accessibilityLabel("Déplier ou replier : " + rowTitle(row, index: index))
-                            .accessibilityValue(expandedRows.contains(row.id) ? "Déplié" : "Replié")
+                        }.buttonStyle(.plain).accessibilityLabel(tr("Déplier ou replier : ", "Expand or collapse: ") + rowTitle(row, index: index))
+                            .accessibilityValue(expandedRows.contains(row.id) ? tr("Déplié", "Expanded") : tr("Replié", "Collapsed"))
                         if descriptor.id == "rules" || descriptor.id == "stage_manager.workspaces" {
-                            Button("Monter", systemImage: "arrow.up") { editor.moveRow(row.id, by: -1) }
+                            Button(tr("Monter", "Move up"), systemImage: "arrow.up") { editor.moveRow(row.id, by: -1) }
                                 .labelStyle(.iconOnly).font(.system(size: 16)).buttonStyle(.plain).frame(width: 26, height: 26)
-                                .help("Monter cette entrée").disabled(index == 0)
-                            Button("Descendre", systemImage: "arrow.down") { editor.moveRow(row.id, by: 1) }
+                                .help(tr("Monter cette entrée", "Move this entry up")).disabled(index == 0)
+                            Button(tr("Descendre", "Move down"), systemImage: "arrow.down") { editor.moveRow(row.id, by: 1) }
                                 .labelStyle(.iconOnly).font(.system(size: 16)).buttonStyle(.plain).frame(width: 26, height: 26)
-                                .help("Descendre cette entrée").disabled(index == editor.rows.count - 1)
+                                .help(tr("Descendre cette entrée", "Move this entry down")).disabled(index == editor.rows.count - 1)
                         }
-                        Button("Supprimer", systemImage: "minus.circle") { editor.removeRow(row.id) }
+                        Button(tr("Supprimer", "Delete"), systemImage: "minus.circle") { editor.removeRow(row.id) }
                             .labelStyle(.iconOnly).font(.system(size: 16)).buttonStyle(.plain).frame(width: 26, height: 26)
-                            .help("Supprimer cette entrée").accessibilityLabel("Supprimer l'entrée \(index + 1)")
+                            .help(tr("Supprimer cette entrée", "Delete this entry")).accessibilityLabel(tr("Supprimer l'entrée \(index + 1)", "Delete entry \(index + 1)"))
                     }
                     if expandedRows.contains(row.id) {
                         if descriptor.id == "rules" {
                             fieldForms(row, fields: editor.fields.filter { $0.path.count == 1 })
-                            SettingsDisclosureSection("Critères de correspondance") {
+                            SettingsDisclosureSection(tr("Critères de correspondance", "Match criteria")) {
                                 fieldForms(row, fields: editor.fields.filter { $0.path.first == "match" })
                             }
-                            SettingsDisclosureSection("Actions à appliquer") {
+                            SettingsDisclosureSection(tr("Actions à appliquer", "Actions to apply")) {
                                 fieldForms(row, fields: editor.fields.filter { $0.path.first == "action" })
                             }
                         } else {
@@ -388,7 +388,7 @@ struct SettingsCollectionEditor: View {
                 .padding(.vertical, 10)
                 .overlay(alignment: .bottom) { Divider() }
             }
-            Button(descriptor.id == "rules" ? "Ajouter une règle" : "Ajouter une entrée", systemImage: "plus") {
+            Button(descriptor.id == "rules" ? tr("Ajouter une règle", "Add a rule") : tr("Ajouter une entrée", "Add an entry"), systemImage: "plus") {
                 editor.addRow()
                 if let row = editor.rows.last { expandedRows.insert(row.id) }
             }
@@ -398,7 +398,7 @@ struct SettingsCollectionEditor: View {
     private func rowTitle(_ row: SettingsCollectionEditorModel.Row, index: Int) -> String {
         let value = ["display_name", "name", "id", "stage_id", "display_id"]
             .compactMap { row.raw[$0] }.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        return value ?? "Entrée \(index + 1)"
+        return value ?? tr("Entrée \(index + 1)", "Entry \(index + 1)")
     }
 
     private func fieldForms(_ row: SettingsCollectionEditorModel.Row, fields: [CollectionFieldSpec]) -> some View {
@@ -426,7 +426,7 @@ struct SettingsCollectionEditor: View {
         case .bool:
             if field.defaultValue == .unset {
                 SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: field.label,
-                                               options: [("", "Non défini"), ("true", "Oui"), ("false", "Non")], selection: selection)
+                                               options: [("", tr("Non défini", "Not set")), ("true", tr("Oui", "Yes")), ("false", tr("Non", "No"))], selection: selection)
             } else {
                 Toggle(field.label, isOn: Binding(
                     get: { selection.wrappedValue == "true" },
@@ -434,7 +434,7 @@ struct SettingsCollectionEditor: View {
                 )).labelsHidden().toggleStyle(.switch)
             }
         case .choice(let choices):
-            let options = (field.required ? [] : [("", "Non défini")]) + choices.map { ($0, field.choiceLabels[$0] ?? $0) }
+            let options = (field.required ? [] : [("", tr("Non défini", "Not set"))]) + choices.map { ($0, field.choiceLabels[$0] ?? $0) }
             SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: field.label,
                                            options: options, selection: selection)
         case .color:
@@ -443,14 +443,14 @@ struct SettingsCollectionEditor: View {
                     get: { NSColor(hex: selection.wrappedValue).map { Color(nsColor: $0) } ?? .clear },
                     set: { selection.wrappedValue = $0.settingsHexString }
                 ), supportsOpacity: true).labelsHidden()
-                TextField("Non défini", text: selection).textFieldStyle(.roundedBorder)
+                TextField(tr("Non défini", "Not set"), text: selection).textFieldStyle(.roundedBorder)
             }
         case .int, .double:
-            TextField(field.required ? "Valeur requise" : "Non défini", text: selection)
+            TextField(field.required ? tr("Valeur requise", "Value required") : tr("Non défini", "Not set"), text: selection)
                 .textFieldStyle(.roundedBorder).frame(maxWidth: max(110, fonts.settingsTextFontSize * 6))
                 .accessibilityLabel(field.label)
         default:
-            TextField(field.required ? "Valeur requise" : "Non défini", text: selection)
+            TextField(field.required ? tr("Valeur requise", "Value required") : tr("Non défini", "Not set"), text: selection)
                 .textFieldStyle(.roundedBorder).accessibilityLabel(field.label)
         }
     }
@@ -476,7 +476,7 @@ struct SettingsCollectionChoicePicker: NSViewRepresentable {
         context.coordinator.selection = $selection
         var values = options
         let missing = !values.contains { $0.raw == selection }
-        if missing { values.append((selection, selection.isEmpty ? "Valeur vide (actuelle)" : "\(selection) (valeur actuelle)")) }
+        if missing { values.append((selection, selection.isEmpty ? tr("Valeur vide (actuelle)", "Empty value (current)") : tr("\(selection) (valeur actuelle)", "\(selection) (current value)"))) }
         if button.itemArray.compactMap({ $0.representedObject as? String }) != values.map(\.raw) {
             button.removeAllItems()
             for value in values {

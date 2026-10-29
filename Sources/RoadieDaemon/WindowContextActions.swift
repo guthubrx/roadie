@@ -186,7 +186,7 @@ public struct WindowContextActions {
         snapshot: DaemonSnapshot
     ) -> WindowContextActionResult {
         guard let display = snapshot.displays.first(where: { $0.id == scope.displayID }) else {
-            return WindowContextActionResult(message: "affinite non creee: ecran introuvable", changed: false, outcome: .noOp)
+            return WindowContextActionResult(message: tr("affinite non creee: ecran introuvable", "affinity not created: display not found"), changed: false, outcome: .noOp)
         }
         let result = affinityService.saveAffinity(kind: kind, window: window, scope: scope, display: display)
         return WindowContextActionResult(message: result.message, changed: result.changed)
@@ -217,9 +217,9 @@ public struct WindowContextActions {
 
         let scopeLabel: String
         switch pinScope {
-        case .stage: scopeLabel = "cette stage (flottante)"
-        case .desktop: scopeLabel = "ce desktop"
-        case .allDesktops: scopeLabel = "tous les desktops"
+        case .stage: scopeLabel = tr("cette stage (flottante)", "this stage (floating)")
+        case .desktop: scopeLabel = tr("ce desktop", "this desktop")
+        case .allDesktops: scopeLabel = tr("tous les desktops", "all desktops")
         }
         return WindowContextActionResult(message: "pin \(scopeLabel): window=\(window.id.rawValue)", changed: true)
     }
@@ -276,7 +276,7 @@ public struct WindowContextActions {
             destinations.append(WindowDestination(
                 kind: .stage,
                 id: nextEmpty.rawValue,
-                label: "Prochaine stage vide",
+                label: tr("Prochaine stage vide", "Next empty stage"),
                 isCurrent: false
             ))
         }
@@ -289,7 +289,7 @@ public struct WindowContextActions {
         let defaults = Set((1...6).map { DesktopID(rawValue: $0) })
         return Array(configured.union(defaults)).sorted().map { desktopID in
             let label = state.label(displayID: scope.displayID, desktopID: desktopID)
-                ?? "Desktop \(desktopID.rawValue)"
+                ?? tr("Bureau \(desktopID.rawValue)", "Desktop \(desktopID.rawValue)")
             return WindowDestination(
                 kind: .desktop,
                 id: String(desktopID.rawValue),
@@ -303,7 +303,7 @@ public struct WindowContextActions {
         let state = stageStore.state()
         return desktopIDs(in: state, displayID: scope.displayID).flatMap { desktopID -> [WindowDestination] in
             let desktopLabel = state.label(displayID: scope.displayID, desktopID: desktopID)
-                ?? "Desktop \(desktopID.rawValue)"
+                ?? tr("Bureau \(desktopID.rawValue)", "Desktop \(desktopID.rawValue)")
             let stageList = stages(in: state, snapshot: snapshot, displayID: scope.displayID, desktopID: desktopID)
             let represented: [PersistentStage]
             if desktopID == state.currentDesktopID(for: scope.displayID) {
@@ -331,7 +331,7 @@ public struct WindowContextActions {
                 destinations.append(WindowDestination(
                     kind: .desktopStage,
                     id: desktopStageID(desktopID: desktopID, stageID: nextEmpty),
-                    label: "Prochaine stage vide",
+                    label: tr("Prochaine stage vide", "Next empty stage"),
                     isCurrent: false,
                     parentID: String(desktopID.rawValue),
                     parentLabel: desktopLabel
@@ -346,7 +346,7 @@ public struct WindowContextActions {
             WindowDestination(
                 kind: .display,
                 id: display.id.rawValue,
-                label: "Ecran \(display.index) - \(display.name)",
+                label: tr("Ecran \(display.index) - \(display.name)", "Display \(display.index) - \(display.name)"),
                 isCurrent: display.id == scope.displayID
             )
         }

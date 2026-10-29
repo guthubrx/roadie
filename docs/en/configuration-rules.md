@@ -47,13 +47,13 @@ cp examples/roadies.toml ~/.config/roadies/roadies.toml
 roadie config validate
 ```
 
-`config validate` reports each problem as one line: level, full key name, message. The messages are in French.
+`config validate` reports each problem as one line: level, full key name, message. Messages follow the macOS language.
 
 | Level | Example | Meaning |
 |---|---|---|
-| `error` | `focus.stage_follows_focus  attendu booléen, reçu texte` | The value has the wrong type, or a required key is missing. Roadie keeps the previous valid configuration. |
-| `warning` | `tiling.gaps_inr  clé inconnue, ignorée ; vouliez-vous dire « gaps_inner » ?` | Unknown key or table. Roadie ignores it. The suggestion is the closest valid name. |
-| `warning` | `desktops.count  clé sans effet` | Roadie reads the key but does not use it. |
+| `error` | `focus.stage_follows_focus  expected boolean, got text` | The value has the wrong type, or a required key is missing. Roadie keeps the previous valid configuration. |
+| `warning` | `tiling.gaps_inr  unknown key, ignored; did you mean “gaps_inner”?` | Unknown key or table. Roadie ignores it. The suggestion is the closest valid name. |
+| `warning` | `desktops.count  key has no effect` | Roadie reads the key but does not use it. |
 
 Keys without effect today: the whole `[desktops]` table, and `enabled` and `hide_strategy` in `[stage_manager]`. Remove them from your file. Roadie desktops are always available, and you create them with `roadie desktop` commands.
 
@@ -154,6 +154,7 @@ Changes apply to interfaces that are already open.
 settings_text_font_size = 16
 settings_help_font_size = 14
 settings_title_font_size = 22
+language = "auto"              # "auto" (macOS language), "fr" or "en"; Roadie restarts to apply it
 
 [experimental.target_mode]
 search_text_font_size = 15

@@ -83,7 +83,7 @@ final class WorkflowTextPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
         scroll.documentView = textView
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
-        input.placeholderString = "Saisie"
+        input.placeholderString = tr("Saisie", "Input")
         input.font = .systemFont(ofSize: 14)
         input.target = self
         input.action = #selector(inputReturned)

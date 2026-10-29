@@ -16,23 +16,23 @@ struct SettingsAdvancedEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(descriptor?.label ?? "Éditeur avancé intégré")
+            Text(descriptor?.label ?? tr("Éditeur avancé intégré", "Built-in advanced editor"))
                 .font(.system(size: fonts.settingsTitleFontSize, weight: .bold))
             Text(descriptor == nil
-                 ? "Corrigez la configuration ici. Enregistrer valide l'ensemble avant de remplacer le fichier ; une erreur conserve la version actuelle."
-                 : "Les hooks sont une structure complexe reconnue par la configuration. Roadie ne les exécute pas actuellement. Enregistrer valide le bloc avant de l'appliquer.")
+                 ? tr("Corrigez la configuration ici. Enregistrer valide l'ensemble avant de remplacer le fichier ; une erreur conserve la version actuelle.", "Fix the configuration here. Save checks everything before replacing the file; an error keeps the current version.")
+                 : tr("Les hooks sont une structure complexe reconnue par la configuration. Roadie ne les exécute pas actuellement. Enregistrer valide le bloc avant de l'appliquer.", "Hooks are a complex structure recognized by the configuration. Roadie does not run them yet. Save checks the block before applying it."))
                 .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
             TextEditor(text: $text)
                 .font(.system(size: fonts.settingsTextFontSize, design: .monospaced))
                 .overlay(Rectangle().stroke(Color(nsColor: .separatorColor)))
-                .accessibilityLabel(descriptor?.label ?? "Configuration TOML complète")
+                .accessibilityLabel(descriptor?.label ?? tr("Configuration TOML complète", "Full TOML configuration"))
             if let error { Text(error).foregroundStyle(.red).font(.system(size: fonts.settingsHelpFontSize)) }
             if let notice { Text(notice).foregroundStyle(.secondary).font(.system(size: fonts.settingsHelpFontSize)) }
             HStack {
-                Button("Recharger") { load() }
+                Button(tr("Recharger", "Reload")) { load() }
                 Spacer()
-                Button("Fermer") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Enregistrer") { save() }.keyboardShortcut(.defaultAction)
+                Button(tr("Fermer", "Close")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(tr("Enregistrer", "Save")) { save() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
@@ -71,7 +71,7 @@ struct SettingsAdvancedEditor: View {
         case .rejected(let reason): error = reason; notice = nil
         case .applied:
             error = nil
-            notice = "Configuration enregistrée et appliquée."
+            notice = tr("Configuration enregistrée et appliquée.", "Configuration saved and applied.")
             original = text
             // Le writer peut développer un fragment compact. Le prochain enregistrement
             // doit comparer le contenu réellement écrit, sans remplacer la saisie en cours.

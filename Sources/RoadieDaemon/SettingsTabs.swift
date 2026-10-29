@@ -1,4 +1,5 @@
 import AppKit
+import RoadieCore
 import SwiftUI
 
 /// Segments égaux, sans couper les mots. Repli en deux rangées puis une colonne.
@@ -69,7 +70,7 @@ struct SettingsTabs: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selection == value ? .isSelected : [])
-                .help("Afficher les réglages : " + value)
+                .help(tr("Afficher les réglages : ", "Show settings: ") + value)
             }
         }
         .padding(3)

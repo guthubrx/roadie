@@ -180,7 +180,7 @@ enum LauncherPlacement {
                 for member in stage.members where member.confirmedClosedAt == nil && runningBundleIDs.contains(member.bundleID) {
                     let shown = current && scope.activeStageID == stage.id
                     if let known = locations[member.bundleID], known.shown || !shown { continue }
-                    locations[member.bundleID] = (shown, "\(name) · bureau \(scope.desktopID.rawValue)")
+                    locations[member.bundleID] = (shown, tr("\(name) · bureau \(scope.desktopID.rawValue)", "\(name) · desktop \(scope.desktopID.rawValue)"))
                 }
             }
         }

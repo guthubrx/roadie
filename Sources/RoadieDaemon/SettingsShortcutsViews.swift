@@ -75,7 +75,7 @@ struct CommandShortcutRow: Identifiable, Equatable {
         }
         for entry in entries where !used.contains(entry.rowID) {
             result.append(CommandShortcutRow(command: entry.command, keys: entry.keys, manager: entry.enabled ? .roadie : .off,
-                                             group: "Ajoutés dans Roadie", trigger: nil, entry: entry))
+                                             group: tr("Ajoutés dans Roadie", "Added in Roadie"), trigger: nil, entry: entry))
         }
         return result
     }
@@ -126,7 +126,7 @@ private func managerLabel(_ manager: CommandShortcutRow.Manager) -> String {
     switch manager {
     case .btt: "BetterTouchTool"
     case .roadie: "Roadie"
-    case .off: "Personne (désactivé)"
+    case .off: tr("Personne (désactivé)", "Nobody (off)")
     }
 }
 
@@ -161,25 +161,25 @@ struct SettingsShortcutConflictsView: View {
         VStack(alignment: .leading, spacing: 10) {
             switch catalog.state {
             case .notInstalled:
-                Text("BetterTouchTool n'est pas installé : aucun conflit possible avec lui.").foregroundStyle(.secondary)
+                Text(tr("BetterTouchTool n'est pas installé : aucun conflit possible avec lui.", "BetterTouchTool is not installed: no conflict with it is possible.")).foregroundStyle(.secondary)
             case .notRunning:
-                Text("Ouvrez BetterTouchTool pour vérifier les conflits avec ses raccourcis.").foregroundStyle(.secondary)
+                Text(tr("Ouvrez BetterTouchTool pour vérifier les conflits avec ses raccourcis.", "Open BetterTouchTool to check for conflicts with its shortcuts.")).foregroundStyle(.secondary)
             case .loading:
-                ProgressView("Lecture des raccourcis BetterTouchTool…").controlSize(.small)
+                ProgressView(tr("Lecture des raccourcis BetterTouchTool…", "Reading BetterTouchTool shortcuts…")).controlSize(.small)
             case .failed(let message):
                 Text(message).foregroundStyle(.red)
             case .loaded:
                 let conflicts = ShortcutConflicts.find(roadieKeys, triggers: catalog.triggers, layout: TargetSearchHotkey.currentLayoutTable())
-                if conflicts.isEmpty { Text("Aucune touche de Roadie n'est prise par BetterTouchTool.").foregroundStyle(.secondary) }
+                if conflicts.isEmpty { Text(tr("Aucune touche de Roadie n'est prise par BetterTouchTool.", "No Roadie key is taken by BetterTouchTool.")).foregroundStyle(.secondary) }
                 ForEach(conflicts) { conflict in conflictRow(conflict) }
             }
             let stale = paused.items.filter { item in !roadieKeys.contains { $0.isBar && $0.keys == item.raw } }
             if !stale.isEmpty {
-                Text("Touches en pause qui ne sont plus utilisées par la barre :").font(.system(size: fonts.settingsHelpFontSize))
+                Text(tr("Touches en pause qui ne sont plus utilisées par la barre :", "Paused keys no longer used by the bar:")).font(.system(size: fonts.settingsHelpFontSize))
                 ForEach(stale) { item in
                     HStack {
                         Text(ShortcutCapture.label(item.raw))
-                        Button("Retirer") { paused.removeItem(item.id) }
+                        Button(tr("Retirer", "Remove")) { paused.removeItem(item.id) }
                     }
                 }
             }
@@ -196,18 +196,18 @@ struct SettingsShortcutConflictsView: View {
                 Image(systemName: conflict.isBar && isPaused(conflict.keys) ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .foregroundStyle(conflict.isBar && isPaused(conflict.keys) ? .green : .orange)
                 Text(ShortcutCapture.label(conflict.keys)).fontWeight(.semibold)
-                Text(conflict.label + (conflict.isBar ? " (barre)" : ""))
+                Text(conflict.label + (conflict.isBar ? tr(" (barre)", " (bar)") : ""))
             }
-            Text("BetterTouchTool : " + (conflict.trigger.command.isEmpty ? "autre action" : "roadie " + conflict.trigger.command)
+            Text(tr("BetterTouchTool : ", "BetterTouchTool: ") + (conflict.trigger.command.isEmpty ? tr("autre action", "other action") : "roadie " + conflict.trigger.command)
                  + (conflict.trigger.group.isEmpty ? "" : " · " + conflict.trigger.group))
                 .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
             if conflict.isBar {
-                Toggle("BetterTouchTool en pause tant que la barre est ouverte", isOn: Binding(
+                Toggle(tr("BetterTouchTool en pause tant que la barre est ouverte", "BetterTouchTool paused while the bar is open"), isOn: Binding(
                     get: { isPaused(conflict.keys) },
                     set: { paused.setSide(conflict.keys, enabled: $0) }))
                 .toggleStyle(.switch)
             }
-            Text(conflict.isBar ? "Ou changez la touche de la barre plus haut." : "Changez la touche de Roadie plus haut, ou celle de BetterTouchTool plus bas.")
+            Text(conflict.isBar ? tr("Ou changez la touche de la barre plus haut.", "Or change the bar key above.") : tr("Changez la touche de Roadie plus haut, ou celle de BetterTouchTool plus bas.", "Change the Roadie key above, or the BetterTouchTool one below."))
                 .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
         }
         .padding(10)
@@ -266,35 +266,35 @@ struct SettingsCommandShortcutsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let switcher = SettingsCatalog.find(id: "switcher.shortcuts") {
-                Text("Sélecteur de fenêtres").fontWeight(.semibold)
+                Text(tr("Sélecteur de fenêtres", "Window switcher")).fontWeight(.semibold)
                 SettingsSwitcherProfilesView(model: model, descriptor: switcher, shortcutsOnly: true)
                 Divider()
             }
             switch catalog.state {
-            case .notRunning: Text("Ouvrez BetterTouchTool pour voir et régler ses raccourcis ici.").foregroundStyle(.orange)
+            case .notRunning: Text(tr("Ouvrez BetterTouchTool pour voir et régler ses raccourcis ici.", "Open BetterTouchTool to see and set its shortcuts here.")).foregroundStyle(.orange)
             case .failed(let text): Text(text).foregroundStyle(.red)
-            case .loading: ProgressView("Lecture des raccourcis BetterTouchTool…").controlSize(.small)
+            case .loading: ProgressView(tr("Lecture des raccourcis BetterTouchTool…", "Reading BetterTouchTool shortcuts…")).controlSize(.small)
             case .notInstalled, .loaded: EmptyView()
             }
-            TextField("Filtrer les commandes (focus, stage, ⌘L…)", text: $filter).textFieldStyle(.roundedBorder)
-            Text("Chaque ligne lance « roadie » suivi de la commande. Roadie : il enregistre la combinaison lui-même et le raccourci BTT est désactivé.")
+            TextField(tr("Filtrer les commandes (focus, stage, ⌘L…)", "Filter commands (focus, stage, ⌘L…)"), text: $filter).textFieldStyle(.roundedBorder)
+            Text(tr("Chaque ligne lance « roadie » suivi de la commande. Roadie : il enregistre la combinaison lui-même et le raccourci BTT est désactivé.", "Each row runs “roadie” followed by the command. Roadie: it registers the key combination itself and the BTT shortcut is turned off."))
                 .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
             let rows = visibleRows
             let groups = Dictionary(grouping: rows, by: \.group)
             // Dossiers BTT dans leur ordre (« 1 - Fenêtres » d'abord), ajouts de Roadie à la fin.
-            let order = groups.keys.sorted { ($0 == "Ajoutés dans Roadie" ? 1 : 0, $0) < ($1 == "Ajoutés dans Roadie" ? 1 : 0, $1) }
+            let order = groups.keys.sorted { ($0 == tr("Ajoutés dans Roadie", "Added in Roadie") ? 1 : 0, $0) < ($1 == tr("Ajoutés dans Roadie", "Added in Roadie") ? 1 : 0, $1) }
             ForEach(order, id: \.self) { group in
                 Text(group).font(.system(size: fonts.settingsHelpFontSize, weight: .semibold)).foregroundStyle(.secondary)
                 ForEach((groups[group] ?? []).sorted { $0.command.localizedStandardCompare($1.command) == .orderedAscending }) { row in commandRow(row) }
             }
-            if rows.isEmpty { Text(filter.isEmpty ? "Aucune commande pour l'instant." : "Aucune commande ne correspond.").foregroundStyle(.secondary) }
+            if rows.isEmpty { Text(filter.isEmpty ? tr("Aucune commande pour l'instant.", "No commands yet.") : tr("Aucune commande ne correspond.", "No matching command.")).foregroundStyle(.secondary) }
             Divider()
-            Text("Nouveau raccourci géré par Roadie").fontWeight(.semibold)
+            Text(tr("Nouveau raccourci géré par Roadie", "New shortcut handled by Roadie")).fontWeight(.semibold)
             HStack(spacing: 8) {
                 Text("roadie").font(.system(size: fonts.settingsTextFontSize, design: .monospaced))
                 TextField("focus right", text: $newCommand).textFieldStyle(.roundedBorder)
                 ShortcutRecorderControl(value: newKeys, fontSize: fonts.settingsTextFontSize) { newKeys = $0 }
-                Button("Ajouter") { add() }.disabled(newCommand.trimmingCharacters(in: .whitespaces).isEmpty || newKeys.isEmpty)
+                Button(tr("Ajouter", "Add")) { add() }.disabled(newCommand.trimmingCharacters(in: .whitespaces).isEmpty || newKeys.isEmpty)
             }
             if busy { ProgressView().controlSize(.small) }
             if !message.isEmpty { Text(message).foregroundStyle(.orange).font(.system(size: fonts.settingsHelpFontSize)) }
@@ -315,13 +315,13 @@ struct SettingsCommandShortcutsView: View {
                 .help("roadie " + row.command)
             ShortcutRecorderControl(value: row.keys, fontSize: fonts.settingsTextFontSize) { setKeys(row, $0) }
                 .frame(width: max(200, fonts.settingsTextFontSize * 13))
-            SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: "Pris en charge par",
+            SettingsCollectionChoicePicker(fontSize: fonts.settingsTextFontSize, label: tr("Pris en charge par", "Handled by"),
                 options: CommandShortcutRow.Manager.allCases.filter { $0 != .btt || BTTRoadieTriggers.isInstalled }.map { ($0.rawValue, managerLabel($0)) },
                 selection: Binding(get: { row.manager.rawValue }, set: { setManager(row, CommandShortcutRow.Manager(rawValue: $0) ?? row.manager) }))
                 .frame(width: max(190, fonts.settingsTextFontSize * 12))
             Group {
                 if row.trigger == nil, let entry = row.entry {
-                    Button("Supprimer", systemImage: "trash") { editor.removeRow(entry.rowID) }.labelStyle(.iconOnly)
+                    Button(tr("Supprimer", "Delete"), systemImage: "trash") { editor.removeRow(entry.rowID) }.labelStyle(.iconOnly)
                 } else { Color.clear }
             }
             .frame(width: 28)
@@ -342,12 +342,12 @@ struct SettingsCommandShortcutsView: View {
 
     private func setKeys(_ row: CommandShortcutRow, _ keys: String) {
         let layout = TargetSearchHotkey.currentLayoutTable()
-        run("Combinaison enregistrée. Essayez-la au clavier.") {
+        run(tr("Combinaison enregistrée. Essayez-la au clavier.", "Key combination saved. Try it on the keyboard.")) {
             if let entry = row.entry, row.manager == .roadie || row.trigger == nil {
-                guard editor.updateRow(entry.rowID, values: ["keys": keys]) else { throw BTTBindingError.message("La combinaison n'a pas été enregistrée.") }
+                guard editor.updateRow(entry.rowID, values: ["keys": keys]) else { throw BTTBindingError.message(tr("La combinaison n'a pas été enregistrée.", "The key combination was not saved.")) }
             } else if let trigger = row.trigger {
                 guard let fields = BTTRoadieTriggers.fields(keys: keys, layout: layout) else {
-                    throw BTTBindingError.message("BetterTouchTool a besoin d'une combinaison avec ⌘, ⌃ ou ⌥.")
+                    throw BTTBindingError.message(tr("BetterTouchTool a besoin d'une combinaison avec ⌘, ⌃ ou ⌥.", "BetterTouchTool needs a combination with ⌘, ⌃ or ⌥."))
                 }
                 try await catalog.write(trigger.id, fields)
             }
@@ -357,15 +357,15 @@ struct SettingsCommandShortcutsView: View {
     private func setManager(_ row: CommandShortcutRow, _ manager: CommandShortcutRow.Manager) {
         guard manager != row.manager else { return }
         let layout = TargetSearchHotkey.currentLayoutTable()
-        run(manager == .btt ? "BetterTouchTool prend ce raccourci." : manager == .roadie ? "Roadie prend ce raccourci." : "Raccourci désactivé.") {
+        run(manager == .btt ? tr("BetterTouchTool prend ce raccourci.", "BetterTouchTool takes this shortcut.") : manager == .roadie ? tr("Roadie prend ce raccourci.", "Roadie takes this shortcut.") : tr("Raccourci désactivé.", "Shortcut off.")) {
             switch manager {
             case .roadie:
                 // Roadie d'abord, puis BTT désactivé : la combinaison ne reste jamais sans gestionnaire.
                 if let entry = row.entry {
-                    guard editor.updateRow(entry.rowID, values: ["enabled": "true", "keys": row.keys]) else { throw BTTBindingError.message("Roadie n'a pas pu enregistrer ce raccourci.") }
+                    guard editor.updateRow(entry.rowID, values: ["enabled": "true", "keys": row.keys]) else { throw BTTBindingError.message(tr("Roadie n'a pas pu enregistrer ce raccourci.", "Roadie could not register this shortcut.")) }
                 } else {
                     guard editor.addRow(values: ["keys": row.keys, "command": row.command, "enabled": "true", "btt_uuid": row.trigger?.id ?? ""]) != nil else {
-                        throw BTTBindingError.message("Roadie n'a pas pu enregistrer ce raccourci.")
+                        throw BTTBindingError.message(tr("Roadie n'a pas pu enregistrer ce raccourci.", "Roadie could not register this shortcut."))
                     }
                 }
                 if let trigger = row.trigger, trigger.enabled { try await catalog.write(trigger.id, BTTRoadieTriggers.enabledFields(false)) }
@@ -376,7 +376,7 @@ struct SettingsCommandShortcutsView: View {
                     try await catalog.write(trigger.id, fields)
                 } else {
                     guard let fields = BTTRoadieTriggers.newTrigger(command: row.command, keys: row.keys, layout: layout) else {
-                        throw BTTBindingError.message("Enregistrez d'abord une combinaison avec ⌘, ⌃ ou ⌥.")
+                        throw BTTBindingError.message(tr("Enregistrez d'abord une combinaison avec ⌘, ⌃ ou ⌥.", "First record a combination with ⌘, ⌃ or ⌥."))
                     }
                     try await catalog.create(fields)
                 }
@@ -395,6 +395,6 @@ struct SettingsCommandShortcutsView: View {
         guard editor.addRow(values: ["keys": newKeys, "command": command, "enabled": "true", "btt_uuid": ""]) != nil else { return }
         newCommand = ""
         newKeys = ""
-        message = "Raccourci ajouté. Roadie l'enregistre tout de suite."
+        message = tr("Raccourci ajouté. Roadie l'enregistre tout de suite.", "Shortcut added. Roadie registers it right away.")
     }
 }

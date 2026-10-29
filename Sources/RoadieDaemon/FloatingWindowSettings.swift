@@ -38,22 +38,22 @@ struct FloatingWindowSettings {
         var rows = rows()
         if floating {
             guard let title = FloatingWindowTitles.text(fromTitle: window.title) else {
-                return WindowRuleAffinityResult(message: "titre vide : aucune ligne ajoutee", changed: false, path: settings.configPath)
+                return WindowRuleAffinityResult(message: tr("titre vide : aucune ligne ajoutee", "empty title: no row added"), changed: false, path: settings.configPath)
             }
             guard !rows.contains(where: { Self.matches($0, window: window) }) else {
-                return WindowRuleAffinityResult(message: "deja dans la liste", changed: false, path: settings.configPath)
+                return WindowRuleAffinityResult(message: tr("deja dans la liste", "already in the list"), changed: false, path: settings.configPath)
             }
             rows.append(CollectionRow(fields: ["app": .string(window.appName), "title": .string(title)]))
         } else {
             let kept = rows.filter { !Self.matches($0, window: window) }
             guard kept.count != rows.count else {
-                return WindowRuleAffinityResult(message: "aucune ligne pour cette fenetre", changed: false, path: settings.configPath)
+                return WindowRuleAffinityResult(message: tr("aucune ligne pour cette fenetre", "no row for this window"), changed: false, path: settings.configPath)
             }
             rows = kept
         }
         switch settings.setCollection(Self.id, .rows(rows)) {
         case .applied:
-            return WindowRuleAffinityResult(message: floating ? "fenetres flottantes: \(window.appName)" : "ligne retiree: \(window.appName)",
+            return WindowRuleAffinityResult(message: floating ? tr("fenetres flottantes: \(window.appName)", "floating windows: \(window.appName)") : tr("ligne retiree: \(window.appName)", "row removed: \(window.appName)"),
                                             changed: true, path: settings.configPath)
         case .rejected(let reason):
             return WindowRuleAffinityResult(message: reason, changed: false, path: settings.configPath)

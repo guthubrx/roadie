@@ -181,8 +181,8 @@ struct TitlebarContextMenuTests {
 
         #expect(destinations.contains { $0.kind == .stage && $0.id == "1" && $0.isCurrent })
         #expect(destinations.contains { $0.kind == .stage && $0.id == "2" && !$0.isCurrent })
-        #expect(destinations.contains(WindowDestination(kind: .desktop, id: "1", label: "Desktop 1", isCurrent: true)))
-        #expect(destinations.contains(WindowDestination(kind: .desktop, id: "2", label: "Desktop 2", isCurrent: false)))
+        #expect(destinations.contains(WindowDestination(kind: .desktop, id: "1", label: "Bureau 1", isCurrent: true)))
+        #expect(destinations.contains(WindowDestination(kind: .desktop, id: "2", label: "Bureau 2", isCurrent: false)))
         #expect(destinations.contains {
             $0.kind == .desktopStage
                 && $0.id == "1:2"

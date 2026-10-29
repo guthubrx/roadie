@@ -394,7 +394,8 @@ final class StageCardView: NSControl {
         paragraph.alignment = .center
         paragraph.lineBreakMode = .byTruncatingTail
         let name = (displayLabel.isEmpty ? stage.name : displayLabel).trimmingCharacters(in: .whitespacesAndNewlines)
-        let text = name.isEmpty ? "Vide" : "\(name)\nVide"
+        let empty = tr("Vide", "Empty")
+        let text = name.isEmpty ? empty : "\(name)\n\(empty)"
         let height = min(frame.height, ceil(font.ascender - font.descender + font.leading) * (name.isEmpty ? 1 : 2))
         (text as NSString).draw(in: CGRect(x: frame.minX + 6, y: frame.midY - height / 2,
                                          width: max(0, frame.width - 12), height: height), withAttributes: [

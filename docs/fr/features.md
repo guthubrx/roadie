@@ -914,7 +914,7 @@ la saisie. Les clés TOML se trouvent dans `[experimental.target_mode]`.
 - Le mode commande et la fenêtre de réglages sont dessinés par le daemon : ils
   exigent que `roadied` tourne.
 - Les clés sans effet (par exemple `desktops.*`, `stage_manager.enabled`) ne sont
-  pas montrées. L'interface de la fenêtre est en français uniquement.
+  pas montrées. La fenêtre suit la langue de macOS (français ou anglais).
 
 Les briques du Mode Cibles sont configurables separement. Le socle CLI et le picker
 restent actifs par défaut. Les overlays graphiques existent ; leur activation

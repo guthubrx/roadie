@@ -699,7 +699,7 @@ final class RailWindowDropPreviewView: NSView {
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor.labelColor
             ]
-            let title = "Nouvelle stage"
+            let title = tr("Nouvelle stage", "New stage")
             let size = title.size(withAttributes: attributes)
             title.draw(at: CGPoint(x: max(4, (bounds.width - size.width) / 2), y: (bounds.height - size.height) / 2),
                        withAttributes: attributes)
@@ -769,7 +769,7 @@ final class RecordingIndicatorView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         widthAnchor.constraint(equalToConstant: indicatorSize.width).isActive = true
         heightAnchor.constraint(equalToConstant: indicatorSize.height).isActive = true
-        toolTip = "Recording \(status.name)"
+        toolTip = tr("Enregistrement \(status.name)", "Recording \(status.name)")
     }
 
     required init?(coder: NSCoder) {

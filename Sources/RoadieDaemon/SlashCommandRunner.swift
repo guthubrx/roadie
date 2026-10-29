@@ -347,6 +347,6 @@ public final class SlashCommandRunner {
     static func truncated(_ lines: [String]) -> [String] {
         guard lines.count > maxInfoLines else { return lines }
         let hidden = lines.count - (maxInfoLines - 1)
-        return Array(lines.prefix(maxInfoLines - 1)) + ["… \(hidden) lignes cachées"]
+        return Array(lines.prefix(maxInfoLines - 1)) + [tr("… \(hidden) lignes cachées", "… \(hidden) hidden lines")]
     }
 }

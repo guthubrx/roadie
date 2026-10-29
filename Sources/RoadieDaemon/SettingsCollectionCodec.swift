@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 import TOMLKit
 
 /// Lecture sémantique avec TOMLKit ; l'écriture conserve séparément le texte source.
@@ -20,27 +21,27 @@ enum SettingsCollectionCodec {
     }
 
     static func read(_ descriptor: SettingDescriptor, text: String) throws -> CollectionValue {
-        guard let spec = descriptor.collection else { throw SettingsFileError(message: "Ce réglage n'est pas une collection.") }
+        guard let spec = descriptor.collection else { throw SettingsFileError(message: tr("Ce réglage n'est pas une collection.", "This setting is not a collection.")) }
         let root = try TOMLTable(string: text)
         let path = (descriptor.tablePath.isEmpty ? [] : descriptor.tablePath.components(separatedBy: ".")) + [descriptor.key]
         guard let value = node(root, path: path) else { return spec.defaultValue }
         switch spec.shape {
         case .list(let kind, _, _, _, _):
-            guard let array = value.array else { throw SettingsFileError(message: "Liste attendue pour \(descriptor.id).") }
+            guard let array = value.array else { throw SettingsFileError(message: tr("Liste attendue pour \(descriptor.id).", "List expected for \(descriptor.id).")) }
             let values = try array.map { item in
-                guard let result = scalar(item, kind: kind) else { throw SettingsFileError(message: "Type invalide dans \(descriptor.id).") }
+                guard let result = scalar(item, kind: kind) else { throw SettingsFileError(message: tr("Type invalide dans \(descriptor.id).", "Invalid type in \(descriptor.id).")) }
                 return result
             }
             return .list(values)
         case .rows(_, let fields, _, _):
-            guard let array = value.array else { throw SettingsFileError(message: "Tableau de lignes attendu pour \(descriptor.id).") }
+            guard let array = value.array else { throw SettingsFileError(message: tr("Tableau de lignes attendu pour \(descriptor.id).", "Table of rows expected for \(descriptor.id).")) }
             return .rows(try array.enumerated().map { index, item in
-                guard let table = item.table else { throw SettingsFileError(message: "Ligne invalide dans \(descriptor.id).") }
+                guard let table = item.table else { throw SettingsFileError(message: tr("Ligne invalide dans \(descriptor.id).", "Invalid row in \(descriptor.id).")) }
                 var values: [String: SettingValue] = [:]
                 for field in fields {
                     let key = field.path.joined(separator: ".")
                     if let raw = node(table, path: field.path) {
-                        guard let result = scalar(raw, kind: field.kind) else { throw SettingsFileError(message: "Type invalide : \(key).") }
+                        guard let result = scalar(raw, kind: field.kind) else { throw SettingsFileError(message: tr("Type invalide : \(key).", "Invalid type: \(key).")) }
                         values[key] = result
                     } else if descriptor.id == "switcher.shortcuts", key == "trigger_source" {
                         let keyText = table["hotkey"]?.string ?? ""
@@ -56,13 +57,13 @@ enum SettingsCollectionCodec {
     static func summary(_ value: CollectionValue) -> String {
         switch value {
         case .list(let values): return values.map(SettingsService.display).joined(separator: ", ")
-        case .rows(let rows): return "\(rows.count) entrée(s)"
-        case .advanced(let text): return text.isEmpty ? "Aucune entrée" : "Structure avancée"
+        case .rows(let rows): return tr("\(rows.count) entrée(s)", "\(rows.count) entry(ies)")
+        case .advanced(let text): return text.isEmpty ? tr("Aucune entrée", "No entries") : tr("Structure avancée", "Advanced structure")
         }
     }
 
     static func literal(_ value: SettingValue, kind: SettingKind) throws -> String {
-        guard value != .unset else { throw SettingsFileError(message: "Valeur manquante.") }
+        guard value != .unset else { throw SettingsFileError(message: tr("Valeur manquante.", "Missing value.")) }
         // Conversion stricte : évite de transformer une chaîne en nombre ou inversement.
         let validType: Bool
         switch (kind, value) {
@@ -70,7 +71,7 @@ enum SettingsCollectionCodec {
              (.text, .string), (.color, .string), (.choice, .string): validType = true
         default: validType = false
         }
-        guard validType else { throw SettingsFileError(message: "Type de valeur incorrect.") }
+        guard validType else { throw SettingsFileError(message: tr("Type de valeur incorrect.", "Wrong value type.")) }
         switch SettingsService.convert(SettingsService.display(value), kind: kind) {
         case .success(let converted): return converted.0
         case .failure(let error): throw SettingsFileError(message: error.message)
@@ -81,13 +82,13 @@ enum SettingsCollectionCodec {
         var errors: [String: String] = [:]
         switch (spec.shape, value) {
         case (.list(let kind, _, let minCount, let unique, let sorted), .list(let values)):
-            if values.count < minCount { errors["collection"] = "Au moins \(minCount) élément(s) sont nécessaires." }
+            if values.count < minCount { errors["collection"] = tr("Au moins \(minCount) élément(s) sont nécessaires.", "At least \(minCount) item(s) are required.") }
             for (index, item) in values.enumerated() {
                 do { _ = try literal(item, kind: kind) } catch { errors[String(index)] = (error as? SettingsFileError)?.message ?? error.localizedDescription }
-                if unique, values[..<index].contains(item) { errors[String(index)] = "Valeur déjà présente." }
+                if unique, values[..<index].contains(item) { errors[String(index)] = tr("Valeur déjà présente.", "Value already present.") }
                 if sorted, index > 0, case .double(let current) = item,
                    case .double(let previous) = values[index - 1], previous > current {
-                    errors[String(index)] = "Les valeurs doivent être dans l'ordre croissant."
+                    errors[String(index)] = tr("Les valeurs doivent être dans l'ordre croissant.", "Values must be in ascending order.")
                 }
             }
         case (.rows(_, let fields, let uniqueKey, let oneOf), .rows(let rows)):
@@ -95,22 +96,22 @@ enum SettingsCollectionCodec {
             var indices: Set<Int> = []
             for (index, row) in rows.enumerated() {
                 if let source = row.sourceIndex, source < 0 || !indices.insert(source).inserted {
-                    errors["\(index)"] = "Identifiant de ligne source invalide ou utilisé deux fois."
+                    errors["\(index)"] = tr("Identifiant de ligne source invalide ou utilisé deux fois.", "Source row identifier invalid or used twice.")
                 }
                 for field in fields {
                     let key = field.path.joined(separator: ".")
                     let item = row.fields[key] ?? .unset
                     if item == .unset || (field.required && item == .string("")) {
-                        if field.required { errors["\(index).\(key)"] = "Ce champ est obligatoire." }
+                        if field.required { errors["\(index).\(key)"] = tr("Ce champ est obligatoire.", "This field is required.") }
                     } else {
                         do { _ = try literal(item, kind: field.kind) } catch { errors["\(index).\(key)"] = (error as? SettingsFileError)?.message ?? error.localizedDescription }
                     }
                 }
                 for group in oneOf where !group.contains(where: { row.fields[$0] != nil && row.fields[$0] != .unset && row.fields[$0] != .string("") }) {
-                    errors["\(index).\(group[0])"] = "Renseigne au moins un de ces champs : " + group.joined(separator: ", ")
+                    errors["\(index).\(group[0])"] = tr("Renseigne au moins un de ces champs : ", "Fill in at least one of these fields: ") + group.joined(separator: ", ")
                 }
                 if let key = uniqueKey, let value = row.fields[key], value != .unset {
-                    if keys.contains(value) { errors["\(index).\(key)"] = "Identifiant déjà utilisé." }
+                    if keys.contains(value) { errors["\(index).\(key)"] = tr("Identifiant déjà utilisé.", "Identifier already in use.") }
                     keys.append(value)
                 }
             }
@@ -123,13 +124,13 @@ enum SettingsCollectionCodec {
                 for part in path.dropLast() {
                     guard Set(current.keys).isSubset(of: [part]), let child = current[part]?.table else {
                         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return [:] }
-                        errors["collection"] = "Ce fragment doit contenir uniquement \(table)."; return errors
+                        errors["collection"] = tr("Ce fragment doit contenir uniquement \(table).", "This fragment must contain only \(table)."); return errors
                     }
                     current = child
                 }
-                if !Set(current.keys).isSubset(of: [path.last!]) { errors["collection"] = "Ce fragment doit contenir uniquement \(table)." }
-            } catch { errors["collection"] = "Le fragment TOML est invalide." }
-        default: errors["collection"] = "Format de collection incorrect."
+                if !Set(current.keys).isSubset(of: [path.last!]) { errors["collection"] = tr("Ce fragment doit contenir uniquement \(table).", "This fragment must contain only \(table).") }
+            } catch { errors["collection"] = tr("Le fragment TOML est invalide.", "The TOML fragment is invalid.") }
+        default: errors["collection"] = tr("Format de collection incorrect.", "Wrong collection format.")
         }
         return errors
     }

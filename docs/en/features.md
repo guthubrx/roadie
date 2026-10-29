@@ -774,8 +774,8 @@ Commands that need an active window are refused when there is none. A refusal is
 written to the event log (`command.rejected`) with the command name and a reason
 code, never the raw input.
 
-The command names, the category names and the `défaut` and `fenêtre` keywords are
-French. The settings window itself is in French only.
+The `default`/`défaut` and `window`/`fenêtre` keywords work in both languages; category names are the
+identifiers shown by `/settings`. The settings window follows the macOS language.
 
 #### Settings window (`/settings`)
 

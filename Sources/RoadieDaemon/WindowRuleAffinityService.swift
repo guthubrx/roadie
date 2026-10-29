@@ -70,9 +70,9 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
                     "path": path
                 ]
             ))
-            return WindowRuleAffinityResult(message: "affinite creee: \(rule.id)", changed: true, path: path)
+            return WindowRuleAffinityResult(message: tr("affinite creee: \(rule.id)", "affinity created: \(rule.id)"), changed: true, path: path)
         } catch {
-            return WindowRuleAffinityResult(message: "affinite non creee: \(error)", changed: false, path: path)
+            return WindowRuleAffinityResult(message: tr("affinite non creee: \(error)", "affinity not created: \(error)"), changed: false, path: path)
         }
     }
 
@@ -92,7 +92,7 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
                 return kept
             }
             guard filtered != rules else {
-                return WindowRuleAffinityResult(message: "aucune affinite pour \(window.appName)", changed: false, path: path)
+                return WindowRuleAffinityResult(message: tr("aucune affinite pour \(window.appName)", "no affinity for \(window.appName)"), changed: false, path: path)
             }
             try saveRules(filtered)
             eventLog.append(RoadieEvent(
@@ -104,9 +104,9 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
                     "path": path
                 ]
             ))
-            return WindowRuleAffinityResult(message: "affinite retiree: \(window.appName)", changed: true, path: path)
+            return WindowRuleAffinityResult(message: tr("affinite retiree: \(window.appName)", "affinity removed: \(window.appName)"), changed: true, path: path)
         } catch {
-            return WindowRuleAffinityResult(message: "affinite non retiree: \(error)", changed: false, path: path)
+            return WindowRuleAffinityResult(message: tr("affinite non retiree: \(error)", "affinity not removed: \(error)"), changed: false, path: path)
         }
     }
 
@@ -142,7 +142,7 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
             ]))
             return WindowRuleAffinityResult(message: "tuilage \(choice?.rawValue ?? "retire"): \(window.appName)", changed: true, path: path)
         } catch {
-            return WindowRuleAffinityResult(message: "tuilage non enregistre: \(error)", changed: false, path: path)
+            return WindowRuleAffinityResult(message: tr("tuilage non enregistre: \(error)", "tiling not saved: \(error)"), changed: false, path: path)
         }
     }
 

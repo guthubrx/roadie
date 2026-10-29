@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Tâche d'automatisation officielle d'Alfred (SPEC-089 FR-007, research R5) : script, langage,
 /// réglages et leurs défauts, réglage qui remplace l'entrée.
@@ -97,7 +98,7 @@ enum AlfredAutomationTasks {
             defer {
                 if !keepStaging {
                     do { try manager.removeItem(at: staging) }
-                    catch { fputs("roadie: impossible de supprimer \(staging.path): \(error)\n", stderr) }
+                    catch { fputs(tr("roadie: impossible de supprimer \(staging.path): \(error)\n", "roadie: cannot delete \(staging.path): \(error)\n"), stderr) }
                 }
             }
             for name in ["Tasks", "LICENSE"] {
@@ -123,7 +124,7 @@ enum AlfredAutomationTasks {
                         else { try manager.moveItem(at: target, to: prepared) }
                     } catch {
                         keepStaging = true
-                        fputs("roadie: retour arrière incomplet ; fichiers conservés dans \(staging.path): \(error)\n", stderr)
+                        fputs(tr("roadie: retour arrière incomplet ; fichiers conservés dans \(staging.path): \(error)\n", "roadie: incomplete rollback; files kept in \(staging.path): \(error)\n"), stderr)
                     }
                 }
                 throw original

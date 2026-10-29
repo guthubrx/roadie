@@ -157,6 +157,7 @@ indépendantes. Elles s'appliquent aux interfaces déjà ouvertes.
 settings_text_font_size = 16
 settings_help_font_size = 14
 settings_title_font_size = 22
+language = "auto"              # "auto" (langue de macOS), "fr" ou "en" ; Roadie redémarre pour l'appliquer
 
 [experimental.target_mode]
 search_text_font_size = 15

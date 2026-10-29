@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Réglages du sélecteur de fenêtres (`[switcher]`, Spec056). Les bornes et les listes fermées
 /// sont appliquées au décodage et à l'initialisation : une valeur hors contrat devient la valeur sûre.
@@ -134,7 +135,7 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
 
     public init(
         id: String = "all",
-        name: String = "Toutes les fenêtres",
+        name: String = tr("Toutes les fenêtres", "All windows"),
         hotkey: String = "",
         scope: String = "all",
         releaseAction: String = "focus",

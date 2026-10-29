@@ -118,8 +118,8 @@ struct SettingsResetButton: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .frame(width: 26, height: 26)
-            .help("Rétablir la valeur par défaut")
-            .accessibilityLabel("Rétablir la valeur par défaut")
+            .help(tr("Rétablir la valeur par défaut", "Restore the default value"))
+            .accessibilityLabel(tr("Rétablir la valeur par défaut", "Restore the default value"))
     }
 }
 
@@ -144,7 +144,7 @@ struct SettingsDisclosureSection<Content: View>: View {
                 }.contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityValue(expanded ? "Déplié" : "Replié")
+            .accessibilityValue(expanded ? tr("Déplié", "Expanded") : tr("Replié", "Collapsed"))
             if expanded { content }
         }.padding(.vertical, 6)
     }
@@ -200,7 +200,7 @@ struct SettingsHelpButton: View {
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Aide : " + title)
+        .accessibilityLabel(tr("Aide : ", "Help: ") + title)
         .popover(isPresented: $opened) { SettingsHelpContent(title: title, text: text, fontSize: fontSize) }
     }
 }

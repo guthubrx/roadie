@@ -1,4 +1,5 @@
 import AppKit
+import RoadieCore
 import SwiftUI
 
 /// Le Picker SwiftUI macOS impose 13 points : ce contrôle natif garde une police lisible.
@@ -29,7 +30,7 @@ struct SettingsChoicePicker: NSViewRepresentable {
                 button.addItem(withTitle: descriptor.choiceLabel(value))
                 button.lastItem?.representedObject = value
                 if !selectable.contains(value) {
-                    button.lastItem?.title = "\(value) (valeur actuelle non proposée)"
+                    button.lastItem?.title = tr("\(value) (valeur actuelle non proposée)", "\(value) (current value, not offered)")
                     button.lastItem?.isEnabled = false
                 }
             }

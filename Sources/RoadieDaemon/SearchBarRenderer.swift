@@ -614,8 +614,8 @@ enum SearchBarRenderer {
     static func warmUp(style: TargetOverlayStyle) {
         let bounds = CGRect(x: 0, y: 0, width: 900, height: 500)
         let rows = [SlashSuggestion(text: "Applications", detail: "", kind: .header),
-                    SlashSuggestion(text: "Roadie", detail: "Préparation", kind: .result, icon: .symbol("app")),
-                    SlashSuggestion(text: "Réglages", detail: "Préparation", kind: .result, icon: .symbol("gearshape"))]
+                    SlashSuggestion(text: "Roadie", detail: tr("Préparation", "Warming up"), kind: .result, icon: .symbol("app")),
+                    SlashSuggestion(text: tr("Réglages", "Settings"), detail: tr("Préparation", "Warming up"), kind: .result, icon: .symbol("gearshape"))]
         let bar = TargetSearchBar(query: "r", matchCount: 2, properties: nil, isLoading: false, suggestions: rows,
                                   selectedSuggestion: 1, richRows: true)
         let image = NSImage(size: bounds.size)

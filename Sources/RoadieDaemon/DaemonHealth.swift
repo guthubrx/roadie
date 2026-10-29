@@ -80,22 +80,22 @@ public struct MacOSWindowSetting: Equatable, Sendable {
         MacOSWindowSetting(
             domain: "com.apple.WindowManager", key: "GloballyEnabled", enabledByDefaultSince: nil,
             label: "Stage Manager",
-            location: "Réglages Système > Bureau et Dock > Stage Manager"
+            location: tr("Réglages Système > Bureau et Dock > Stage Manager", "System Settings > Desktop & Dock > Stage Manager")
         ),
         MacOSWindowSetting(
             domain: "com.apple.WindowManager", key: "EnableTilingByEdgeDrag", enabledByDefaultSince: 15,
-            label: "juxtaposition en glissant une fenêtre vers un bord de l'écran",
-            location: "Réglages Système > Bureau et Dock > Fenêtres"
+            label: tr("juxtaposition en glissant une fenêtre vers un bord de l'écran", "tiling by dragging a window to a screen edge"),
+            location: tr("Réglages Système > Bureau et Dock > Fenêtres", "System Settings > Desktop & Dock > Windows")
         ),
         MacOSWindowSetting(
             domain: "com.apple.WindowManager", key: "EnableTopTilingByEdgeDrag", enabledByDefaultSince: 15,
-            label: "remplissage de l'écran en glissant une fenêtre vers la barre des menus",
-            location: "Réglages Système > Bureau et Dock > Fenêtres"
+            label: tr("remplissage de l'écran en glissant une fenêtre vers la barre des menus", "filling the screen by dragging a window to the menu bar"),
+            location: tr("Réglages Système > Bureau et Dock > Fenêtres", "System Settings > Desktop & Dock > Windows")
         ),
         MacOSWindowSetting(
             domain: "com.apple.WindowManager", key: "EnableStandardClickToShowDesktop", enabledByDefaultSince: 14,
-            label: "clic sur le fond d'écran pour afficher le bureau (« Toujours »)",
-            location: "Réglages Système > Bureau et Dock > Cliquer sur le fond d'écran pour afficher le bureau"
+            label: tr("clic sur le fond d'écran pour afficher le bureau (« Toujours »)", "click wallpaper to reveal desktop (“Always”)"),
+            location: tr("Réglages Système > Bureau et Dock > Cliquer sur le fond d'écran pour afficher le bureau", "System Settings > Desktop & Dock > Click wallpaper to reveal desktop")
         ),
     ]
 
@@ -195,18 +195,18 @@ public struct DaemonHealthService {
         if roadieDoubleClickMaximize, MacOSWindowSetting.doubleClickAction(read: read) != .none {
             active.append(MacOSWindowSetting(
                 domain: MacOSWindowSetting.globalDomain, key: "AppleActionOnDoubleClick", enabledByDefaultSince: nil,
-                label: "action de macOS au double-clic sur la barre de titre, à régler sur « Ne rien faire »",
-                location: "Réglages Système > Bureau et Dock > Double-cliquer sur la barre de titre d'une fenêtre pour"
+                label: tr("action de macOS au double-clic sur la barre de titre, à régler sur « Ne rien faire »", "macOS action on title bar double-click, to set to “Do Nothing”"),
+                location: tr("Réglages Système > Bureau et Dock > Double-cliquer sur la barre de titre d'une fenêtre pour", "System Settings > Desktop & Dock > Double-click a window's title bar to")
             ))
         }
         guard !active.isEmpty else {
-            return DaemonHealthCheck(level: .ok, name: "macos-window-settings", message: "aucun réglage macOS en conflit")
+            return DaemonHealthCheck(level: .ok, name: "macos-window-settings", message: tr("aucun réglage macOS en conflit", "no conflicting macOS setting"))
         }
         let details = active.map { "\($0.label) (\($0.location))" }.joined(separator: " ; ")
         return DaemonHealthCheck(
             level: .warn,
             name: "macos-window-settings",
-            message: "réglages macOS qui déplacent les fenêtres à la place de Roadie, à désactiver : \(details)"
+            message: tr("réglages macOS qui déplacent les fenêtres à la place de Roadie, à désactiver : \(details)", "macOS settings that move windows instead of Roadie, to turn off: \(details)")
         )
     }
 

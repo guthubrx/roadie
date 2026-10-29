@@ -112,8 +112,8 @@ place en bas, au centre ou en haut, et se déplace à la souris.
 </p>
 
 <sub>Captures dessinées par le moteur de rendu de Roadie avec des fenêtres et des fichiers d'exemple.
-La barre, le sélecteur et la vue d'ensemble suivent la langue de macOS (français ou anglais) ; la fenêtre des paramètres
-est en français.</sub>
+Toute l'interface suit la langue de macOS (en français sur un Mac réglé en français, en anglais sinon), ou celle choisie
+dans Paramètres > Général.</sub>
 
 ## Ce que tu peux faire avec Roadie
 
@@ -705,7 +705,7 @@ appliqués dès la saisie d'une valeur valide. Les marges déclenchent une nouve
 disposition, même pour un changement d'un point. Les listes, les stages, les règles
 et les surcharges par écran ont leurs éditeurs intégrés. Un brouillon incomplet
 reste dans le champ sans remplacer la dernière valeur valide.
-La fenêtre des paramètres est en français. Les commentaires du fichier TOML sont conservés.
+La fenêtre des paramètres suit la langue de macOS. Les commentaires du fichier TOML sont conservés.
 Une sauvegarde précède la première modification de la session. Une écriture invalide
 est refusée. Les tailles de police sont indépendantes. Les curseurs, le pas à pas
 et la saisie d'une taille valide les appliquent immédiatement. Les sessions ouvertes

@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 public struct RailSettings: Equatable, Sendable {
     public var renderer: String
@@ -370,7 +371,7 @@ public struct RailSettings: Equatable, Sendable {
         ),
         layout: Layout(headerPosition: "top", stagesPosition: "center", spacing: 13, topPadding: 50, bottomPadding: 16),
         displayLabel: Label(enabled: true, template: "{display}", color: "#FFFFFFDB", fontSize: 13, fontFamily: "system", weight: "bold", alignment: "center", opacity: 1, offsetX: 0, offsetY: 0),
-        desktopLabel: Label(enabled: true, template: "Desktop {desktop}", color: "#FFFFFF6B", fontSize: 10, fontFamily: "system", weight: "medium", alignment: "center", opacity: 1, offsetX: 0, offsetY: 0),
+        desktopLabel: Label(enabled: true, template: tr("Bureau {desktop}", "Desktop {desktop}"), color: "#FFFFFF6B", fontSize: 10, fontFamily: "system", weight: "medium", alignment: "center", opacity: 1, offsetX: 0, offsetY: 0),
         stageLabel: StageLabel(enabled: true, color: "stage", fontSize: 11, fontFamily: "system", weight: "semibold", alignment: "center", opacity: 0.72, offsetX: 0, offsetY: 0, placement: "below", zOrder: "below", visibilitySeconds: 0, fadeSeconds: 0.35),
         stages: Stages(position: "center", alignment: "center", gap: 13),
         stageAccents: [:]
@@ -483,7 +484,7 @@ public struct RailSettings: Equatable, Sendable {
             titleWeight: normalizedChoice(header["title_weight"], allowed: ["regular", "medium", "semibold", "bold"], default: "bold"),
             subtitleWeight: normalizedChoice(header["subtitle_weight"], allowed: ["regular", "medium", "semibold", "bold"], default: "medium"),
             titleTemplate: header["title_template"] ?? "{display}",
-            subtitleTemplate: header["subtitle_template"] ?? "Desktop {desktop}"
+            subtitleTemplate: header["subtitle_template"] ?? tr("Bureau {desktop}", "Desktop {desktop}")
         )
     }
 

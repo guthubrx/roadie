@@ -429,7 +429,7 @@ struct ConfigTests {
         #expect(report.items.contains(ConfigValidationItem(
             level: .warning,
             path: "mouse",
-            message: "known but not fully supported yet"
+            message: "connue mais pas encore entièrement prise en charge"
         )))
     }
 
@@ -518,22 +518,22 @@ struct ConfigTests {
         #expect(report.items.contains(ConfigValidationItem(
             level: .error,
             path: "experimental.titlebar_context_menu.height",
-            message: "must be between 12 and 96"
+            message: "doit être entre 12 et 96"
         )))
         #expect(report.items.contains(ConfigValidationItem(
             level: .error,
             path: "experimental.titlebar_context_menu.leading_exclusion",
-            message: "must be between 0 and 240"
+            message: "doit être entre 0 et 240"
         )))
         #expect(report.items.contains(ConfigValidationItem(
             level: .error,
             path: "experimental.titlebar_context_menu.trailing_exclusion",
-            message: "must be between 0 and 240"
+            message: "doit être entre 0 et 240"
         )))
         #expect(report.items.contains(ConfigValidationItem(
             level: .warning,
             path: "experimental.titlebar_context_menu",
-            message: "all destination families are disabled; menu will not be shown"
+            message: "toutes les familles de destinations sont désactivées ; le menu ne s'affichera pas"
         )))
     }
 
@@ -707,12 +707,12 @@ struct ConfigTests {
         #expect(report.items.contains(ConfigValidationItem(
             level: .error,
             path: "experimental.target_mode.overlay_duration_seconds",
-            message: "must be between 0.2 and 30"
+            message: "doit être entre 0,2 et 30"
         )))
         #expect(report.items.contains(ConfigValidationItem(
             level: .warning,
             path: "experimental.target_mode",
-            message: "target mode is disabled; sub-features will be ignored"
+            message: "le mode cible est désactivé ; ses fonctions seront ignorées"
         )))
     }
 
@@ -863,7 +863,7 @@ struct ConfigTests {
         active_color = "#6BE675"
         """)
 
-        #expect(report.items == [ConfigValidationItem(level: .ok, path: report.items.first?.path ?? "", message: "config is valid")])
+        #expect(report.items == [ConfigValidationItem(level: .ok, path: report.items.first?.path ?? "", message: "configuration valide")])
     }
 
     @Test

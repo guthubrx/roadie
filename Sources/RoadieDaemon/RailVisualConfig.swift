@@ -204,7 +204,7 @@ struct RailLabelConfig {
 
     static let desktopDefault = RailLabelConfig(
         enabled: true,
-        template: "Desktop {desktop}",
+        template: tr("Bureau {desktop}", "Desktop {desktop}"),
         color: .white.withAlphaComponent(0.42),
         fontSize: 10,
         fontFamily: "system",

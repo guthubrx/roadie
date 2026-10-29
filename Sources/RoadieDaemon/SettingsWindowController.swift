@@ -1,4 +1,5 @@
 import AppKit
+import RoadieCore
 import SwiftUI
 
 /// Fenêtre unique « Réglages Roadie » (SPEC-023, research R7). Le daemon reste `.accessory` et ne s'active jamais :
@@ -83,7 +84,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Réglages Roadie"
+        window.title = tr("Réglages Roadie", "Roadie Settings")
         window.contentViewController = hosting
         window.setContentSize(NSSize(width: 1040, height: 760))
         window.contentMinSize = NSSize(width: 760, height: 520)

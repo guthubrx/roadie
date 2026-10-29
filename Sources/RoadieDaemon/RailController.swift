@@ -505,19 +505,19 @@ public final class RailController {
         let renameTarget = RailMenuActionTarget { [weak self] in
             self?.promptRenameStage(stageID: stageID, displayID: displayID, currentName: currentName)
         }
-        let renameItem = NSMenuItem(title: "Renommer \"\(currentName)\"...", action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
+        let renameItem = NSMenuItem(title: tr("Renommer \"\(currentName)\"...", "Rename \"\(currentName)\"..."), action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
         renameItem.target = renameTarget
         stageMenuTargets.append(renameTarget)
         menu.addItem(renameItem)
 
-        let moveMenu = NSMenu(title: "Envoyer la stage vers ecran")
+        let moveMenu = NSMenu(title: tr("Envoyer la stage vers ecran", "Send stage to display"))
         if targets.isEmpty {
-            let item = NSMenuItem(title: "Aucun autre ecran", action: nil, keyEquivalent: "")
+            let item = NSMenuItem(title: tr("Aucun autre ecran", "No other display"), action: nil, keyEquivalent: "")
             item.isEnabled = false
             moveMenu.addItem(item)
         } else {
             for targetDisplay in targets {
-                let title = "Ecran \(targetDisplay.index) - \(targetDisplay.name)"
+                let title = tr("Ecran \(targetDisplay.index) - \(targetDisplay.name)", "Display \(targetDisplay.index) - \(targetDisplay.name)")
                 let item = NSMenuItem(title: title, action: #selector(RailStageMoveMenuTarget.choose(_:)), keyEquivalent: "")
                 item.representedObject = targetDisplay.id.rawValue
                 let target = RailStageMoveMenuTarget { [weak self] selectedDisplayID in
@@ -530,14 +530,14 @@ public final class RailController {
                 moveMenu.addItem(item)
             }
         }
-        let moveItem = NSMenuItem(title: "Envoyer la stage vers ecran", action: nil, keyEquivalent: "")
+        let moveItem = NSMenuItem(title: tr("Envoyer la stage vers ecran", "Send stage to display"), action: nil, keyEquivalent: "")
         moveItem.submenu = moveMenu
         menu.addItem(moveItem)
 
         menu.addItem(.separator())
         let refusal = Self.deleteStageRefusal(stageID: stageID, displayID: displayID, store: store,
                                               liveWindowIDs: snapshotService.railWindowIDs(in: snapshot))
-        let deleteItem = NSMenuItem(title: "Supprimer la stage" + (refusal.map { " (\($0))" } ?? ""), action: nil, keyEquivalent: "")
+        let deleteItem = NSMenuItem(title: tr("Supprimer la stage", "Delete stage") + (refusal.map { " (\($0))" } ?? ""), action: nil, keyEquivalent: "")
         if refusal == nil {
             let deleteTarget = RailMenuActionTarget { [weak self] in
                 self?.perform(.deleteStage(stageID), displayID: displayID)
@@ -561,11 +561,11 @@ public final class RailController {
         var state = store.state()
         let scope = state.scope(displayID: displayID, desktopID: state.currentDesktopID(for: displayID))
         guard let stage = scope.stages.first(where: { $0.id == stageID }) else { return "introuvable" }
-        if stage.id == scope.activeStageID { return "stage active" }
+        if stage.id == scope.activeStageID { return tr("stage active", "active stage") }
         if StageCommandService.isDeletable(stage, activeStageID: scope.activeStageID, liveWindowIDs: liveWindowIDs, now: now) {
             return nil
         }
-        return stage.parkingState == .parked ? "écran absent" : "contient des fenêtres"
+        return stage.parkingState == .parked ? tr("écran absent", "display missing") : tr("contient des fenêtres", "has windows")
     }
 
     private var currentStageTextConfig: RailStageLabelConfig {
@@ -586,11 +586,11 @@ public final class RailController {
         displayID: DisplayID,
         snapshot: DaemonSnapshot
     ) {
-        let header = NSMenuItem(title: "Fenetre", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: tr("Fenetre", "Window"), action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
 
-        let stageMenu = NSMenu(title: "Envoyer la fenetre vers stage")
+        let stageMenu = NSMenu(title: tr("Envoyer la fenetre vers stage", "Send window to stage"))
         for target in windowStageTargets(displayID: displayID, excluding: stageID, snapshot: snapshot) {
             let item = NSMenuItem(title: target.title, action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
             let action = RailMenuActionTarget { [weak self] in
@@ -602,11 +602,11 @@ public final class RailController {
             stageMenuTargets.append(action)
             stageMenu.addItem(item)
         }
-        let stageItem = NSMenuItem(title: "Envoyer la fenetre vers stage", action: nil, keyEquivalent: "")
+        let stageItem = NSMenuItem(title: tr("Envoyer la fenetre vers stage", "Send window to stage"), action: nil, keyEquivalent: "")
         stageItem.submenu = stageMenu
         menu.addItem(stageItem)
 
-        let desktopMenu = NSMenu(title: "Envoyer la fenetre vers desktop")
+        let desktopMenu = NSMenu(title: tr("Envoyer la fenetre vers desktop", "Send window to desktop"))
         for target in windowDesktopTargets(displayID: displayID) {
             let item = NSMenuItem(title: target.title, action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
             let action = RailMenuActionTarget { [weak self] in
@@ -618,19 +618,19 @@ public final class RailController {
             stageMenuTargets.append(action)
             desktopMenu.addItem(item)
         }
-        let desktopItem = NSMenuItem(title: "Envoyer la fenetre vers desktop", action: nil, keyEquivalent: "")
+        let desktopItem = NSMenuItem(title: tr("Envoyer la fenetre vers desktop", "Send window to desktop"), action: nil, keyEquivalent: "")
         desktopItem.submenu = desktopMenu
         menu.addItem(desktopItem)
 
-        let displayMenu = NSMenu(title: "Envoyer la fenetre vers ecran")
+        let displayMenu = NSMenu(title: tr("Envoyer la fenetre vers ecran", "Send window to display"))
         let displayTargets = Self.stageDisplayMoveTargets(sourceDisplayID: displayID, in: snapshot)
         if displayTargets.isEmpty {
-            let item = NSMenuItem(title: "Aucun autre ecran", action: nil, keyEquivalent: "")
+            let item = NSMenuItem(title: tr("Aucun autre ecran", "No other display"), action: nil, keyEquivalent: "")
             item.isEnabled = false
             displayMenu.addItem(item)
         } else {
             for targetDisplay in displayTargets {
-                let item = NSMenuItem(title: "Ecran \(targetDisplay.index) - \(targetDisplay.name)", action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
+                let item = NSMenuItem(title: tr("Ecran \(targetDisplay.index) - \(targetDisplay.name)", "Display \(targetDisplay.index) - \(targetDisplay.name)"), action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
                 let action = RailMenuActionTarget { [weak self] in
                     guard let self else { return }
                     self.perform(.moveWindowToDisplay(windowID, targetDisplay.id), displayID: displayID)
@@ -641,7 +641,7 @@ public final class RailController {
                 displayMenu.addItem(item)
             }
         }
-        let displayItem = NSMenuItem(title: "Envoyer la fenetre vers ecran", action: nil, keyEquivalent: "")
+        let displayItem = NSMenuItem(title: tr("Envoyer la fenetre vers ecran", "Send window to display"), action: nil, keyEquivalent: "")
         displayItem.submenu = displayMenu
         menu.addItem(displayItem)
     }
@@ -658,7 +658,7 @@ public final class RailController {
         }
         let emptyID = order.emptyStageIDs.first ?? nextGeneratedStageID(in: scope)
         if emptyID != sourceStageID {
-            targets.append(("Prochaine stage vide", emptyID))
+            targets.append((tr("Prochaine stage vide", "Next empty stage"), emptyID))
         }
         return targets
     }
@@ -670,7 +670,7 @@ public final class RailController {
             let desktopID = DesktopID(rawValue: raw)
             guard desktopID != current else { return nil }
             let label = state.label(displayID: displayID, desktopID: desktopID)
-            let title = label.map { "Desktop \(raw) - \($0)" } ?? "Desktop \(raw)"
+            let title = label.map { tr("Bureau \(raw) - \($0)", "Desktop \(raw) - \($0)") } ?? tr("Bureau \(raw)", "Desktop \(raw)")
             return (title, desktopID)
         }
     }
@@ -685,11 +685,11 @@ public final class RailController {
         input.selectText(nil)
 
         let alert = NSAlert()
-        alert.messageText = "Renommer la stage"
-        alert.informativeText = "Nouveau nom pour \(currentName)"
+        alert.messageText = tr("Renommer la stage", "Rename stage")
+        alert.informativeText = tr("Nouveau nom pour \(currentName)", "New name for \(currentName)")
         alert.accessoryView = input
-        alert.addButton(withTitle: "Renommer")
-        alert.addButton(withTitle: "Annuler")
+        alert.addButton(withTitle: tr("Renommer", "Rename"))
+        alert.addButton(withTitle: tr("Annuler", "Cancel"))
         alert.buttons.forEach { $0.font = textConfig.font }
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }

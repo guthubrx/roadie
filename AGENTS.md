@@ -306,6 +306,9 @@ Thunderbird confirmés par l'utilisateur. 2 272 tests / 331 suites. Reçu : spec
 Session 126 installée : barre, sélecteur et vue d'ensemble en anglais ou en français selon macOS (`tr(fr, en)`,
 `UILanguage`, `ROADIE_LANGUAGE`, français fixé par `scripts/test`), verbes et bureaux trouvés dans les deux langues.
 Captures EN par défaut, FR dans `docs/assets/screenshots/fr/`. 2 276 tests / 332 suites. Reçu : specs/126-interface-anglaise/.
+Session 127 installée : interface entièrement traduite (`tr(fr, en)`, ~1 300 textes), réglage `[interface] language`
+(`auto` par défaut, `fr`, `en`, relance de Roadie). Poste de l'utilisateur en `en-US` : Roadie s'y affiche en anglais,
+choix confirmé. 2 278 tests / 333 suites. Reçu : specs/127-traduction-complete/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

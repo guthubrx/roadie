@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Interface entièrement traduite en anglais et en français : paramètres, rail, menus, sélecteur, vue d'ensemble,
+  messages de validation et de santé. Langue réglable dans Paramètres > Général (`[interface] language` : `auto` par
+  défaut, `fr`, `en`) ; un changement relance Roadie.
 - La barre, le sélecteur de fenêtres et la vue d'ensemble suivent la langue de macOS (anglais ou français) ; les verbes,
   commandes système et bureaux se trouvent dans les deux langues (`close` ou `fermer`). Captures de la documentation en
   anglais par défaut, en français dans `docs/assets/screenshots/fr/`.

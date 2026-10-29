@@ -642,7 +642,7 @@ public final class CLICommandRouter {
                     let rows = projects.map { ["name": $0.name, "windows": String($0.windows.count), "savedAt": ISO8601DateFormatter().string(from: $0.savedAt)] }
                     out(String(data: try JSONSerialization.data(withJSONObject: rows, options: [.sortedKeys, .prettyPrinted]), encoding: .utf8) ?? "[]")
                 } else {
-                    out(projects.isEmpty ? "aucun projet" : projects.map { "\($0.name)\t\($0.windows.count) fenêtre(s)" }.joined(separator: "\n"))
+                    out(projects.isEmpty ? tr("aucun projet", "no projects") : projects.map { "\($0.name)\t\($0.windows.count) " + tr("fenêtre(s)", "window(s)") }.joined(separator: "\n"))
                 }
                 return 0
             case "save":
@@ -662,7 +662,7 @@ public final class CLICommandRouter {
             if args.count >= 2, args[1] == "reset" {
                 let url = LauncherRankingStore().url
                 if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
-                out("classement appris effacé")
+                out(tr("classement appris effacé", "learned ranking erased"))
                 return 0
             }
             // SPEC-090 : historique des saisies de la barre, gardé sur ce Mac.
@@ -670,7 +670,7 @@ public final class CLICommandRouter {
             let store = launcherHistoryPath.map { LauncherHistoryStore(path: $0) } ?? LauncherHistoryStore()
             if args.contains("--clear") {
                 try store.clear()
-                out("historique effacé")
+                out(tr("historique effacé", "history erased"))
                 return 0
             }
             let entries = store.load().entries.reversed()
@@ -954,33 +954,37 @@ public final class CLICommandRouter {
                 out(String(data: try JSONSerialization.data(withJSONObject: rows, options: [.sortedKeys, .prettyPrinted]), encoding: .utf8) ?? "[]")
                 return
             }
-            let state = ["complete": "complet", "partial": "partiel", "unusable": "inutilisable"]
+            let state = ["complete": tr("complet", "complete"), "partial": tr("partiel", "partial"), "unusable": tr("inutilisable", "unusable")]
             for report in reports {
                 let keywords = report.keywords.isEmpty ? "" : " [\(report.keywords.joined(separator: ", "))]"
-                let missing = report.missing.isEmpty ? "" : " · manque : \(report.missing.joined(separator: ", "))"
+                let missing = report.missing.isEmpty ? "" : tr(" · manque : ", " · missing: ") + report.missing.joined(separator: ", ")
                 // Ordres à Alfred (SPEC-093 FR-006) : traduits par Roadie, puis ceux qui ne le sont pas.
-                let alfred = (report.orders.isEmpty ? "" : " · ordres à Alfred : \(report.orders.joined(separator: ", "))")
-                    + (report.untranslated.isEmpty ? "" : " · non traduits : \(report.untranslated.joined(separator: ", "))")
+                let alfred = (report.orders.isEmpty ? "" : tr(" · ordres à Alfred : ", " · orders to Alfred: ") + report.orders.joined(separator: ", "))
+                    + (report.untranslated.isEmpty ? "" : tr(" · non traduits : ", " · not translated: ") + report.untranslated.joined(separator: ", "))
                 out("\(state[report.state.rawValue] ?? report.state.rawValue)\t\(report.name)\(keywords) (\(report.source.rawValue))\(missing)\(alfred)")
             }
             if totals {
                 let total = max(1, reports.count)
                 let complete = reports.filter { $0.state == .complete }.count, partial = reports.filter { $0.state == .partial }.count
-                out("total \(reports.count) · complets \(complete) (\(100 * complete / total) %) · avec une entrée complète \(complete + partial) (\(100 * (complete + partial) / total) %) · complets sans ordre non traduit \(reports.filter { $0.state == .complete && $0.untranslated.isEmpty }.count) · avec ordres à Alfred \(reports.filter(\.mentionsAlfred).count)")
+                let clean = reports.filter { $0.state == .complete && $0.untranslated.isEmpty }.count
+                let alfred = reports.filter(\.mentionsAlfred).count
+                out(tr("total \(reports.count) · complets \(complete) (\(100 * complete / total) %) · avec une entrée complète \(complete + partial) (\(100 * (complete + partial) / total) %) · complets sans ordre non traduit \(clean) · avec ordres à Alfred \(alfred)",
+                       "total \(reports.count) · complete \(complete) (\(100 * complete / total)%) · with a complete entry \(complete + partial) (\(100 * (complete + partial) / total)%) · complete without untranslated orders \(clean) · with orders to Alfred \(alfred)"))
             }
-            if reports.isEmpty { out("aucun workflow") }
+            if reports.isEmpty { out(tr("aucun workflow", "no workflows")) }
         }
         switch args.first ?? "" {
         case "list" where args.contains("--hotkeys"):
             // Raccourcis déclarés (SPEC-089 FR-002) : Roadie ne les capture pas ; la commande se lie dans BetterTouchTool.
             let config = configReload.currentConfig().experimental.targetMode
             let workflows = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
-            let arguments = [0: "sélection", 1: "presse-papiers", 2: "presse-papiers de recherche", 3: "texte"]
+            let arguments = [0: tr("sélection", "selection"), 1: tr("presse-papiers", "clipboard"), 2: tr("presse-papiers de recherche", "find pasteboard"), 3: tr("texte", "text")]
             let hotkeys = AlfredWorkflowIndex.triggers(workflows).filter { $0.kind == .hotkey }
             for entry in hotkeys {
                 let id = workflows.first { $0.id == entry.workflowID }.map { $0.bundleID.isEmpty ? $0.id : $0.bundleID } ?? entry.workflowID
-                let argument = entry.hotkeyArgument == 3 ? "texte « \(entry.hotkeyText) »" : arguments[entry.hotkeyArgument] ?? "aucun"
-                out("\(entry.workflowName)\t\(entry.keys.isEmpty ? "touches non attribuées" : entry.keys)\targument : \(argument)\troadie workflow run \(id) \(entry.objectUID)")
+                let argument = entry.hotkeyArgument == 3 ? tr("texte « \(entry.hotkeyText) »", "text “\(entry.hotkeyText)”") : arguments[entry.hotkeyArgument] ?? tr("aucun", "none")
+                let keys = entry.keys.isEmpty ? tr("touches non attribuées", "no keys assigned") : entry.keys
+                out("\(entry.workflowName)\t\(keys)\t" + tr("argument : ", "argument: ") + "\(argument)\troadie workflow run \(id) \(entry.objectUID)")
             }
             // Boutons d'Alfred Remote (session 120) : la même commande les appelle depuis BetterTouchTool.
             var remotes = 0
@@ -988,11 +992,12 @@ public final class CLICommandRouter {
                 let id = workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID
                 for object in workflow.objects.values.sorted(by: { $0.uid < $1.uid }) where object.type == "trigger.remote" {
                     let trigger = object.string("triggerid") ?? ""
-                    out("\(workflow.name)\tbouton Remote « \(object.string("triggername") ?? trigger) »\troadie workflow trigger \(id) \(trigger)")
+                    let name = object.string("triggername") ?? trigger
+                    out("\(workflow.name)\t" + tr("bouton Remote « \(name) »", "Remote button “\(name)”") + "\troadie workflow trigger \(id) \(trigger)")
                     remotes += 1
                 }
             }
-            if hotkeys.isEmpty && remotes == 0 { out("aucun raccourci") }
+            if hotkeys.isEmpty && remotes == 0 { out(tr("aucun raccourci", "no shortcuts")) }
             return 0
         case "run", "trigger":
             guard args.count >= 3 else { return usageError() }
@@ -1015,7 +1020,8 @@ public final class CLICommandRouter {
         case "tasks":
             guard args.count >= 2, args[1] == "update" else { return usageError() }
             let count = try AlfredAutomationTasks.update()
-            out("tâches d'automatisation : \(count) dans \(AlfredAutomationTasks.root.path) (dépôt public alfredapp/automation-tasks, licence BSD-3 gardée à côté)")
+            out(tr("tâches d'automatisation : \(count) dans \(AlfredAutomationTasks.root.path) (dépôt public alfredapp/automation-tasks, licence BSD-3 gardée à côté)",
+                    "automation tasks: \(count) in \(AlfredAutomationTasks.root.path) (public repository alfredapp/automation-tasks, BSD-3 license kept alongside)"))
             return 0
         case "list":
             let config = configReload.currentConfig().experimental.targetMode
@@ -1030,7 +1036,7 @@ public final class CLICommandRouter {
         case "install":
             guard args.count >= 2, !args[1].hasPrefix("--") else { return usageError() }
             let file = URL(fileURLWithPath: NSString(string: args[1]).expandingTildeInPath)
-            guard FileManager.default.fileExists(atPath: file.path) else { err("workflow: introuvable : \(args[1])"); return 2 }
+            guard FileManager.default.fileExists(atPath: file.path) else { err(tr("workflow: introuvable : \(args[1])", "workflow: not found: \(args[1])")); return 2 }
             return try StagedFileReplacement.withDirectoryLock(workflowInstallationFolder) {
                 // Décompression dans un dossier temporaire, puis rangement sous le nom de son identifiant.
                 let staging = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-workflow-\(UUID().uuidString)")
@@ -1043,37 +1049,37 @@ public final class CLICommandRouter {
                 let root = FileManager.default.fileExists(atPath: staging.appendingPathComponent("info.plist").path) ? staging
                     : AlfredWorkflowIndex.children(of: staging).first
                 guard unzip.terminationStatus == 0, let root, let workflow = AlfredWorkflow.load(folder: root, source: .roadie) else {
-                    err("workflow: archive illisible (info.plist absent)")
+                    err(tr("workflow: archive illisible (info.plist absent)", "workflow: unreadable archive (info.plist missing)"))
                     return 1
                 }
                 let identifier = workflow.bundleID.isEmpty ? file.deletingPathExtension().lastPathComponent : workflow.bundleID
                 guard let name = Self.workflowDirectoryName(identifier) else {
-                    err("workflow: identifiant de dossier invalide")
+                    err(tr("workflow: identifiant de dossier invalide", "workflow: invalid folder identifier"))
                     return 2
                 }
                 let target = workflowInstallationFolder.appendingPathComponent(name)
                 if FileManager.default.fileExists(atPath: target.path) {
-                    guard args.contains("--replace") else { err("workflow: déjà installé : \(name) (--replace pour remplacer)"); return 1 }
+                    guard args.contains("--replace") else { err(tr("workflow: déjà installé : \(name) (--replace pour remplacer)", "workflow: already installed: \(name) (--replace to replace)")); return 1 }
                 }
                 try StagedFileReplacement.install(from: root, to: target, replace: args.contains("--replace"))
                 let report = AlfredCompatibility.report(AlfredWorkflow.load(folder: target, source: .roadie) ?? workflow)
-                out("installé : \(workflow.name) → \(target.path) (\(report.state.rawValue))")
+                out(tr("installé : ", "installed: ") + "\(workflow.name) → \(target.path) (\(report.state.rawValue))")
                 return 0
             }
         case "remove":
             guard args.count >= 2 else { return usageError() }
             guard let name = Self.workflowDirectoryName(args[1]) else {
-                err("workflow: identifiant de dossier invalide")
+                err(tr("workflow: identifiant de dossier invalide", "workflow: invalid folder identifier"))
                 return 2
             }
             return try StagedFileReplacement.withDirectoryLock(workflowInstallationFolder) {
                 let target = workflowInstallationFolder.appendingPathComponent(name)
                 guard FileManager.default.fileExists(atPath: target.appendingPathComponent("info.plist").path) else {
-                    err("workflow: absent du dossier de Roadie : \(args[1]) (les workflows d'Alfred se retirent dans Alfred)")
+                    err(tr("workflow: absent du dossier de Roadie : \(args[1]) (les workflows d'Alfred se retirent dans Alfred)", "workflow: not in Roadie's folder: \(args[1]) (remove Alfred workflows in Alfred)"))
                     return 2
                 }
                 try FileManager.default.removeItem(at: target)
-                out("retiré : \(args[1])")
+                out(tr("retiré : ", "removed: ") + args[1])
                 return 0
             }
         default:
@@ -1251,26 +1257,34 @@ public final class CLICommandRouter {
             err("roadie: window explain: no such window\(rawID.map { " " + $0 } ?? "")")
             return 1
         }
-        func size(_ rect: Rect) -> String { "\(Int(rect.width)) × \(Int(rect.height)) à \(Int(rect.x)),\(Int(rect.y))" }
+        func size(_ rect: Rect) -> String {
+            tr("\(Int(rect.width)) × \(Int(rect.height)) à \(Int(rect.x)),\(Int(rect.y))", "\(Int(rect.width)) × \(Int(rect.height)) at \(Int(rect.x)),\(Int(rect.y))")
+        }
         let decision = service.tilingDecision(for: window)
+        let role = window.role ?? "?", subrole = window.subrole ?? "?"
+        let first = service.initialFrame(of: window.id).map(size) ?? tr("inconnu", "unknown")
         var lines = [
-            "Fenêtre \(window.id.rawValue) · \(window.appName) (\(window.bundleID))",
-            "Titre : \(window.title)",
-            "Rôle : \(window.role ?? "?") · sous-rôle : \(window.subrole ?? "?")",
-            "Cadre : \(size(window.frame))",
-            "Premier cadre : \(service.initialFrame(of: window.id).map(size) ?? "inconnu")",
+            tr("Fenêtre", "Window") + " \(window.id.rawValue) · \(window.appName) (\(window.bundleID))",
+            tr("Titre : ", "Title: ") + window.title,
+            tr("Rôle : \(role) · sous-rôle : \(subrole)", "Role: \(role) · subrole: \(subrole)"),
+            tr("Cadre : ", "Frame: ") + size(window.frame),
+            tr("Premier cadre : ", "First frame: ") + first,
         ]
         if let f = window.furniture {
-            func yes(_ value: Bool) -> String { value ? "oui" : "non" }
-            lines.append("Boutons : fermer \(yes(f.hasCloseButton)) · réduire \(yes(f.hasMinimizeButton)) · zoom \(yes(f.hasZoomButton))"
-                + " · plein écran \(f.hasFullscreenButton ? (f.fullscreenButtonEnabled ? "actif" : "désactivé") : "absent")")
-            lines.append("Redimensionnable : \(yes(f.isResizable)) · modale : \(yes(f.isModal)) · principale : \(yes(f.isMain))")
+            func yes(_ value: Bool) -> String { value ? tr("oui", "yes") : tr("non", "no") }
+            let fullscreen = f.hasFullscreenButton ? (f.fullscreenButtonEnabled ? tr("actif", "on") : tr("désactivé", "off")) : tr("absent", "missing")
+            lines.append(tr("Boutons : fermer \(yes(f.hasCloseButton)) · réduire \(yes(f.hasMinimizeButton)) · zoom \(yes(f.hasZoomButton)) · plein écran \(fullscreen)",
+                            "Buttons: close \(yes(f.hasCloseButton)) · minimize \(yes(f.hasMinimizeButton)) · zoom \(yes(f.hasZoomButton)) · full screen \(fullscreen)"))
+            lines.append(tr("Redimensionnable : \(yes(f.isResizable)) · modale : \(yes(f.isModal)) · principale : \(yes(f.isMain))",
+                            "Resizable: \(yes(f.isResizable)) · modal: \(yes(f.isModal)) · main: \(yes(f.isMain))"))
         } else {
-            lines.append("Boutons : accessibilité illisible")
+            lines.append(tr("Boutons : accessibilité illisible", "Buttons: accessibility unreadable"))
         }
-        lines.append("Décision : \(decision.tile ? "tuilée" : "flottante") · \(decision.reason)")
+        func state(_ tiled: Bool) -> String { tiled ? tr("tuilée", "tiled") : tr("flottante", "floating") }
+        lines.append(tr("Décision : ", "Decision: ") + "\(state(decision.tile)) · \(decision.reason)")
         if window.isTileCandidate != decision.tile {
-            lines.append("Relevé courant : \(window.isTileCandidate ? "tuilée" : "flottante") (dernière lecture lisible gardée)")
+            lines.append(tr("Relevé courant : \(state(window.isTileCandidate)) (dernière lecture lisible gardée)",
+                            "Current reading: \(state(window.isTileCandidate)) (last readable reading kept)"))
         }
         out(lines.joined(separator: "\n"))
         return 0

@@ -1037,10 +1037,11 @@ public struct SnapshotService: Sendable {
         if let rule = WindowRuleMatcher.firstMatch(sortedRules: context.sortedRules, window: window, context: matchContext) {
             if rule.action.manage == true {
                 // Force le tuilage mais respecte les criteres CG (taille mini, layer).
-                decision = TilingDecision(tile: window.isTileCandidate, reason: "règle \(rule.id) : manage")
+                decision = TilingDecision(tile: window.isTileCandidate, reason: tr("règle \(rule.id) : manage", "rule \(rule.id): manage"))
             }
             if rule.action.exclude == true || rule.action.floating == true {
-                decision = TilingDecision(tile: false, reason: "règle \(rule.id) : \(rule.action.exclude == true ? "exclude" : "floating")")
+                let kind = rule.action.exclude == true ? "exclude" : "floating"
+                decision = TilingDecision(tile: false, reason: tr("règle \(rule.id) : \(kind)", "rule \(rule.id): \(kind)"))
             }
         }
         return decision
@@ -1060,18 +1061,18 @@ public struct SnapshotService: Sendable {
         context: TilingPolicyContext
     ) -> TilingDecision {
         func float(_ reason: String) -> TilingDecision { TilingDecision(tile: false, reason: reason) }
-        guard window.isTileCandidate else { return float("CoreGraphics : calque, opacité ou taille sous 80 × 60") }
+        guard window.isTileCandidate else { return float(tr("CoreGraphics : calque, opacité ou taille sous 80 × 60", "CoreGraphics: layer, opacity or size under 80 × 60")) }
         let popups = config.tiling.popupFilter
-        if popups, window.role == "AXSheet" { return float("feuille (AXSheet)") }
-        if context.floatingBundles.contains(window.bundleID) { return float("application dans floating_bundles") }
+        if popups, window.role == "AXSheet" { return float(tr("feuille (AXSheet)", "sheet (AXSheet)")) }
+        if context.floatingBundles.contains(window.bundleID) { return float(tr("application dans floating_bundles", "app in floating_bundles")) }
         // Popup gate (aerospace-like) : une fenetre modale bloque son app, hors tuilage.
-        if popups, let furniture = window.furniture, furniture.isModal { return float("fenêtre modale") }
-        if popups, isLikelyTransientSettingsWindow(window) { return float("petite fenêtre de réglages sans plein écran") }
-        if popups, isShortNonFullscreenUtilityWindow(window) { return float("panneau de 180 points de haut au plus, sans plein écran") }
-        if popups, isNonResizableStandardWindow(window) { return float("taille non modifiable") }
-        if popups, isUnidentifiedTransientWindow(window) { return float("fenêtre sans accessibilité ni titre utile") }
+        if popups, let furniture = window.furniture, furniture.isModal { return float(tr("fenêtre modale", "modal window")) }
+        if popups, isLikelyTransientSettingsWindow(window) { return float(tr("petite fenêtre de réglages sans plein écran", "small settings window without full screen")) }
+        if popups, isShortNonFullscreenUtilityWindow(window) { return float(tr("panneau de 180 points de haut au plus, sans plein écran", "panel at most 180 points high, without full screen")) }
+        if popups, isNonResizableStandardWindow(window) { return float(tr("taille non modifiable", "size cannot change")) }
+        if popups, isUnidentifiedTransientWindow(window) { return float(tr("fenêtre sans accessibilité ni titre utile", "window without accessibility or useful title")) }
         if popups, let furniture = window.furniture, !furniture.isLikelyRealWindow, window.subrole != "AXStandardWindow" {
-            return float("aucun bouton ni focus : popup")
+            return float(tr("aucun bouton ni focus : popup", "no buttons or focus: popup"))
         }
         // Heuristique aerospace fine : fullscreenButton present mais desactive ->
         // probablement un dialog (Settings, About, IntelliJ Rebase, Calculator...).
@@ -1079,13 +1080,13 @@ public struct SnapshotService: Sendable {
         // (terminals, IDEs) : pour celles-la, l'utilisateur peut whitelister leur subrole
         // ou ajouter une regle action.manage.
         if popups, let furniture = window.furniture, furniture.fullscreenButtonDisabled, window.subrole != "AXStandardWindow" {
-            return float("bouton plein écran désactivé")
+            return float(tr("bouton plein écran désactivé", "full-screen button disabled"))
         }
         if let subrole = window.subrole, !context.allowedSubroles.contains(subrole) {
-            return float("sous-rôle \(subrole) hors allowed_subroles")
+            return float(tr("sous-rôle \(subrole) hors allowed_subroles", "subrole \(subrole) not in allowed_subroles"))
         }
         // AX absent -> on laisse passer (non-regression apps non-AX)
-        return TilingDecision(tile: true, reason: window.subrole == nil ? "accessibilité illisible : tuilée par défaut" : "fenêtre standard")
+        return TilingDecision(tile: true, reason: window.subrole == nil ? tr("accessibilité illisible : tuilée par défaut", "accessibility unreadable: tiled by default") : tr("fenêtre standard", "standard window"))
     }
 
     private static func isLikelyTransientSettingsWindow(_ window: WindowSnapshot) -> Bool {

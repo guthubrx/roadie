@@ -10,8 +10,8 @@ d'Alfred (fichiers `.alfredworkflow`), sans Alfred et sans Powerpack.
 > Disponible dans `main` ; la version publiée 0.10.0 ne contient pas encore le lanceur. Il sera dans la prochaine
 > version. En attendant, [compilez depuis les sources](../../README.fr.md#build-et-lancement-de-développement).
 
-La barre suit la langue de macOS : en français sur un Mac réglé en français, en anglais sinon. Ce qui se tape
-fonctionne dans les deux langues. Les captures de ce guide sont dessinées par le moteur de rendu de Roadie, avec des
+La barre suit la langue de macOS (en français sur un Mac réglé en français, en anglais sinon), ou celle choisie
+dans Paramètres > Général > Langue de l'interface. Ce qui se tape fonctionne dans les deux langues. Les captures de ce guide sont dessinées par le moteur de rendu de Roadie, avec des
 fenêtres et des fichiers d'exemple.
 
 ## Ouvrir la barre

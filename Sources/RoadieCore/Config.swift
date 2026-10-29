@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 import TOMLKit
 
 public struct RoadieConfig: Equatable, Codable, Sendable {
@@ -122,17 +123,22 @@ public struct InterfaceConfig: Equatable, Codable, Sendable {
     public var settingsTextFontSize: Double
     public var settingsHelpFontSize: Double
     public var settingsTitleFontSize: Double
+    /// Langue de l'interface (session 127) : `auto` (langue de macOS), `fr` ou `en`. Lue au lancement.
+    public var language: String
 
-    public init(settingsTextFontSize: Double = 16, settingsHelpFontSize: Double = 14, settingsTitleFontSize: Double = 22) {
+    public init(settingsTextFontSize: Double = 16, settingsHelpFontSize: Double = 14, settingsTitleFontSize: Double = 22,
+                language: String = "auto") {
         self.settingsTextFontSize = min(32, max(8, settingsTextFontSize))
         self.settingsHelpFontSize = min(32, max(8, settingsHelpFontSize))
         self.settingsTitleFontSize = min(48, max(10, settingsTitleFontSize))
+        self.language = ["auto", "fr", "en"].contains(language) ? language : "auto"
     }
 
     enum CodingKeys: String, CodingKey {
         case settingsTextFontSize = "settings_text_font_size"
         case settingsHelpFontSize = "settings_help_font_size"
         case settingsTitleFontSize = "settings_title_font_size"
+        case language
     }
 
     public init(from decoder: Decoder) throws {
@@ -140,7 +146,8 @@ public struct InterfaceConfig: Equatable, Codable, Sendable {
         self.init(
             settingsTextFontSize: try c.decodeFlexibleDouble(forKey: .settingsTextFontSize) ?? 16,
             settingsHelpFontSize: try c.decodeFlexibleDouble(forKey: .settingsHelpFontSize) ?? 14,
-            settingsTitleFontSize: try c.decodeFlexibleDouble(forKey: .settingsTitleFontSize) ?? 22
+            settingsTitleFontSize: try c.decodeFlexibleDouble(forKey: .settingsTitleFontSize) ?? 22,
+            language: try c.decodeIfPresent(String.self, forKey: .language) ?? "auto"
         )
     }
 }
@@ -229,7 +236,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
             throw DecodingError.dataCorruptedError(
                 forKey: .defaultStrategy,
                 in: c,
-                debugDescription: "default_strategy inconnu : \"\(rawStrategy)\" (attendu : bsp, mutableBsp, masterStack, float, spatialBsp ou un alias)"
+                debugDescription: tr("default_strategy inconnu : \"\(rawStrategy)\" (attendu : bsp, mutableBsp, masterStack, float, spatialBsp ou un alias)", "unknown default_strategy: \"\(rawStrategy)\" (expected: bsp, mutableBsp, masterStack, float, spatialBsp or an alias)")
             )
         }
         self.defaultStrategy = strategy
@@ -654,14 +661,14 @@ public struct WebSearch: Equatable, Codable, Sendable {
     public static let defaults = [
         WebSearch(keyword: "g", title: "Google", url: "https://www.google.com/search?q={query}"),
         WebSearch(keyword: "yt", title: "YouTube", url: "https://www.youtube.com/results?search_query={query}"),
-        WebSearch(keyword: "wp", title: "Wikipédia", url: "https://fr.wikipedia.org/w/index.php?search={query}"),
+        WebSearch(keyword: "wp", title: tr("Wikipédia", "Wikipedia"), url: "https://fr.wikipedia.org/w/index.php?search={query}"),
         WebSearch(keyword: "ddg", title: "DuckDuckGo", url: "https://duckduckgo.com/?q={query}"),
-        WebSearch(keyword: "maps", title: "Plans", url: "maps://?q={query}"),
+        WebSearch(keyword: "maps", title: tr("Plans", "Maps"), url: "maps://?q={query}"),
         // Session 119 : d'autres recherches intégrées d'Alfred.
         WebSearch(keyword: "gi", title: "Google Images", url: "https://www.google.com/search?tbm=isch&q={query}"),
         WebSearch(keyword: "gmaps", title: "Google Maps", url: "https://www.google.com/maps/search/{query}"),
-        WebSearch(keyword: "tr", title: "Google Traduction", url: "https://translate.google.com/?sl=auto&text={query}"),
-        WebSearch(keyword: "wpen", title: "Wikipedia (anglais)", url: "https://en.wikipedia.org/w/index.php?search={query}"),
+        WebSearch(keyword: "tr", title: tr("Google Traduction", "Google Translate"), url: "https://translate.google.com/?sl=auto&text={query}"),
+        WebSearch(keyword: "wpen", title: tr("Wikipedia (anglais)", "Wikipedia (English)"), url: "https://en.wikipedia.org/w/index.php?search={query}"),
         WebSearch(keyword: "amazon", title: "Amazon", url: "https://www.amazon.fr/s?k={query}"),
         WebSearch(keyword: "imdb", title: "IMDb", url: "https://www.imdb.com/find?q={query}"),
         WebSearch(keyword: "ebay", title: "eBay", url: "https://www.ebay.fr/sch/i.html?_nkw={query}"),
@@ -684,19 +691,19 @@ public enum LauncherBarKeys {
     }
 
     public static let actions: [Action] = [
-        Action(id: "large_type", label: "Grand texte", help: "Montre la ligne choisie en très grands caractères, comme ⌘L dans Alfred.", defaultKey: "command+l"),
-        Action(id: "copy", label: "Copier la ligne", help: "Copie le chemin, l'adresse ou le titre de la ligne choisie, quand aucun texte n'est sélectionné dans la saisie.", defaultKey: "command+c"),
-        Action(id: "preview", label: "Aperçu", help: "Ouvre l'aperçu (Quick Look) du fichier choisi.", defaultKey: "command+y"),
-        Action(id: "save_action", label: "Garder l'action", help: "Enregistre l'action choisie sous une abréviation.", defaultKey: "command+s"),
-        Action(id: "show_rules", label: "Règle proposée", help: "Montre la règle proposée pour la fenêtre choisie.", defaultKey: "command+r"),
-        Action(id: "close", label: "Fermer la barre", help: "Ferme la barre.", defaultKey: "command+w"),
-        Action(id: "close_all", label: "Tout fermer", help: "Ferme la barre d'un coup, même dans un dossier ou un verbe.", defaultKey: "command+escape"),
-        Action(id: "settings", label: "Paramètres de Roadie", help: "Ferme la barre et ouvre les Paramètres de Roadie, comme ⌘, dans Alfred.", defaultKey: "command+,"),
-        Action(id: "select_toggle", label: "Ajouter ou retirer de la sélection", help: "Sélection multiple : ajoute la ligne choisie, ou la retire.", defaultKey: "alt+up"),
-        Action(id: "select_add_next", label: "Ajouter et passer à la suivante", help: "Sélection multiple : ajoute la ligne choisie, puis descend d'une ligne.", defaultKey: "alt+down"),
-        Action(id: "select_remove_last", label: "Retirer la dernière", help: "Sélection multiple : retire le dernier élément ajouté.", defaultKey: "alt+left"),
-        Action(id: "selection_verbs", label: "Actions de la sélection", help: "Sélection multiple : montre les actions qui s'appliquent à toute la sélection.", defaultKey: "alt+right"),
-        Action(id: "select_clear", label: "Vider la sélection", help: "Sélection multiple : retire tous les éléments.", defaultKey: "alt+backspace"),
+        Action(id: "large_type", label: tr("Grand texte", "Large type"), help: tr("Montre la ligne choisie en très grands caractères, comme ⌘L dans Alfred.", "Shows the chosen row in very large type, like ⌘L in Alfred."), defaultKey: "command+l"),
+        Action(id: "copy", label: tr("Copier la ligne", "Copy row"), help: tr("Copie le chemin, l'adresse ou le titre de la ligne choisie, quand aucun texte n'est sélectionné dans la saisie.", "Copies the path, address or title of the chosen row, when no text is selected in the field."), defaultKey: "command+c"),
+        Action(id: "preview", label: tr("Aperçu", "Quick Look"), help: tr("Ouvre l'aperçu (Quick Look) du fichier choisi.", "Opens Quick Look for the chosen file."), defaultKey: "command+y"),
+        Action(id: "save_action", label: tr("Garder l'action", "Save action"), help: tr("Enregistre l'action choisie sous une abréviation.", "Saves the chosen action under an abbreviation."), defaultKey: "command+s"),
+        Action(id: "show_rules", label: tr("Règle proposée", "Suggested rule"), help: tr("Montre la règle proposée pour la fenêtre choisie.", "Shows the suggested rule for the chosen window."), defaultKey: "command+r"),
+        Action(id: "close", label: tr("Fermer la barre", "Close bar"), help: tr("Ferme la barre.", "Closes the bar."), defaultKey: "command+w"),
+        Action(id: "close_all", label: tr("Tout fermer", "Close all"), help: tr("Ferme la barre d'un coup, même dans un dossier ou un verbe.", "Closes the bar at once, even inside a folder or a verb."), defaultKey: "command+escape"),
+        Action(id: "settings", label: tr("Paramètres de Roadie", "Roadie Settings"), help: tr("Ferme la barre et ouvre les Paramètres de Roadie, comme ⌘, dans Alfred.", "Closes the bar and opens Roadie Settings, like ⌘, in Alfred."), defaultKey: "command+,"),
+        Action(id: "select_toggle", label: tr("Ajouter ou retirer de la sélection", "Add to or remove from selection"), help: tr("Sélection multiple : ajoute la ligne choisie, ou la retire.", "Multiple selection: adds the chosen row, or removes it."), defaultKey: "alt+up"),
+        Action(id: "select_add_next", label: tr("Ajouter et passer à la suivante", "Add and go to next"), help: tr("Sélection multiple : ajoute la ligne choisie, puis descend d'une ligne.", "Multiple selection: adds the chosen row, then moves down one row."), defaultKey: "alt+down"),
+        Action(id: "select_remove_last", label: tr("Retirer la dernière", "Remove last"), help: tr("Sélection multiple : retire le dernier élément ajouté.", "Multiple selection: removes the last item added."), defaultKey: "alt+left"),
+        Action(id: "selection_verbs", label: tr("Actions de la sélection", "Selection actions"), help: tr("Sélection multiple : montre les actions qui s'appliquent à toute la sélection.", "Multiple selection: shows the actions that apply to the whole selection."), defaultKey: "alt+right"),
+        Action(id: "select_clear", label: tr("Vider la sélection", "Clear selection"), help: tr("Sélection multiple : retire tous les éléments.", "Multiple selection: removes all items."), defaultKey: "alt+backspace"),
     ]
 
     /// Défauts, puis valeurs données, normalisées ; une action inconnue est ignorée. O(a).
@@ -1621,11 +1628,11 @@ public enum RoadieConfigLoader {
         var items: [ConfigValidationItem] = []
         guard FileManager.default.fileExists(atPath: resolved) else {
             items.append(
-                ConfigValidationItem(level: .warning, path: resolved, message: "config file not found; defaults will be used")
+                ConfigValidationItem(level: .warning, path: resolved, message: tr("fichier de configuration introuvable ; les valeurs par défaut s'appliquent", "config file not found; defaults will be used"))
             )
             items.append(contentsOf: validateGeneratedRules(path: generatedPath))
             if items.isEmpty {
-                items.append(ConfigValidationItem(level: .ok, path: resolved, message: "config is valid"))
+                items.append(ConfigValidationItem(level: .ok, path: resolved, message: tr("configuration valide", "config is valid")))
             }
             return ConfigValidationReport(items: items)
         }
@@ -1637,7 +1644,7 @@ public enum RoadieConfigLoader {
             items.append(contentsOf: ConfigValidationRules.validate(rawToml: raw))
             items.append(contentsOf: validateGeneratedRules(path: generatedPath))
             if items.isEmpty {
-                items.append(ConfigValidationItem(level: .ok, path: resolved, message: "config is valid"))
+                items.append(ConfigValidationItem(level: .ok, path: resolved, message: tr("configuration valide", "config is valid")))
             }
             return ConfigValidationReport(items: items)
         } catch {
@@ -1766,7 +1773,7 @@ private enum ConfigValidationRules {
         return [
             "": [],
             "fx": [],
-            "interface": ["settings_text_font_size", "settings_help_font_size", "settings_title_font_size"],
+            "interface": ["settings_text_font_size", "settings_help_font_size", "settings_title_font_size", "language"],
             "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter"]),
             "tiling.display_overrides": gapKeys.union(["display_id", "display_name"]),
             "desktops": ["enabled", "count", "back_and_forth", "mode"],
@@ -1826,13 +1833,13 @@ private enum ConfigValidationRules {
                 items.append(ConfigValidationItem(
                     level: .warning,
                     path: table,
-                    message: "known but not fully supported yet"
+                    message: tr("connue mais pas encore entièrement prise en charge", "known but not fully supported yet")
                 ))
             } else {
                 items.append(ConfigValidationItem(
                     level: .warning,
                     path: table,
-                    message: "table inconnue, ignorée" + suggestionSuffix(for: table, among: supportedTables.union(knownUnsupportedTables))
+                    message: tr("table inconnue, ignorée", "unknown table, ignored") + suggestionSuffix(for: table, among: supportedTables.union(knownUnsupportedTables))
                 ))
             }
         }
@@ -1841,15 +1848,15 @@ private enum ConfigValidationRules {
         }
         if let config = try? TOMLDecoder().decode(RoadieConfig.self, from: rawToml) {
             if config.widthAdjustment.presets.isEmpty {
-                items.append(ConfigValidationItem(level: .error, path: "width_adjustment.presets", message: "must contain at least one ratio"))
+                items.append(ConfigValidationItem(level: .error, path: "width_adjustment.presets", message: tr("doit contenir au moins une proportion", "must contain at least one ratio")))
             }
             if config.widthAdjustment.minimumRatio > config.widthAdjustment.maximumRatio {
-                items.append(ConfigValidationItem(level: .error, path: "width_adjustment.minimum_ratio", message: "must be lower than or equal to maximum_ratio"))
+                items.append(ConfigValidationItem(level: .error, path: "width_adjustment.minimum_ratio", message: tr("doit être inférieur ou égal à maximum_ratio", "must be lower than or equal to maximum_ratio")))
             }
             items.append(contentsOf: validateTitlebarContextMenu(config.experimental.titlebarContextMenu))
             items.append(contentsOf: validateTargetMode(config.experimental.targetMode))
             if !config.overview.hotkey.isEmpty, TargetModeConfig.hotkeyParts(config.overview.hotkey) == nil {
-                items.append(ConfigValidationItem(level: .error, path: "overview.hotkey", message: "expected modifiers and one key; empty disables"))
+                items.append(ConfigValidationItem(level: .error, path: "overview.hotkey", message: tr("modificateurs et une touche attendus ; vide : désactivé", "expected modifiers and one key; empty disables")))
             }
             items.append(contentsOf: validateAppTargets(config.experimental.appTargets))
             items.append(contentsOf: validateTargetGrid(config.experimental.targetGrid))
@@ -1864,7 +1871,7 @@ private enum ConfigValidationRules {
                 return ConfigValidationItem(
                     level: .warning,
                     path: "\(path):\(table)",
-                    message: "generated rules file should only contain [[rules]] tables"
+                    message: tr("le fichier des règles générées ne doit contenir que des tables [[rules]]", "generated rules file should only contain [[rules]] tables")
                 )
             }
             return nil
@@ -1892,13 +1899,13 @@ private enum ConfigValidationRules {
                     items.append(ConfigValidationItem(
                         level: .warning,
                         path: childPath,
-                        message: "clé sans effet : roadie ne la lit pas"
+                        message: tr("clé sans effet : roadie ne la lit pas", "key has no effect: roadie does not read it")
                     ))
                 } else if !known.contains(key) {
                     items.append(ConfigValidationItem(
                         level: .warning,
                         path: childPath,
-                        message: "clé inconnue, ignorée" + suggestionSuffix(for: key, among: known)
+                        message: tr("clé inconnue, ignorée", "unknown key, ignored") + suggestionSuffix(for: key, among: known)
                     ))
                 }
             }
@@ -1908,7 +1915,7 @@ private enum ConfigValidationRules {
 
     private static func suggestionSuffix(for name: String, among candidates: Set<String>) -> String {
         guard let best = closest(to: name, among: candidates) else { return "" }
-        return " ; vouliez-vous dire « \(best) » ?"
+        return tr(" ; vouliez-vous dire « \(best) » ?", "; did you mean “\(best)”?")
     }
 
     /// Candidat le plus proche par distance d'édition, à 2 modifications au plus (1 pour un nom court).
@@ -1943,7 +1950,7 @@ private enum ConfigValidationRules {
     static func describe(decodeError error: Error, rawToml: String) -> String {
         if let parseError = error as? TOMLParseError {
             let begin = parseError.source.begin
-            return "syntaxe TOML invalide (ligne \(begin.line), colonne \(begin.column)) : \(parseError.description)"
+            return tr("syntaxe TOML invalide (ligne \(begin.line), colonne \(begin.column)) : \(parseError.description)", "invalid TOML syntax (line \(begin.line), column \(begin.column)): \(parseError.description)")
         }
         guard let decodingError = error as? DecodingError else { return "\(error)" }
         let context: DecodingError.Context
@@ -1964,12 +1971,12 @@ private enum ConfigValidationRules {
         }
         let path = displayPath(context.codingPath)
         let received = (try? TOMLTable(string: rawToml)).flatMap { rawValue(at: context.codingPath, in: $0) }
-        var message = path.isEmpty ? "" : "\(path) : "
+        var message = path.isEmpty ? "" : tr("\(path) : ", "\(path): ")
         switch (expected, received) {
         case (let expected?, let received?):
-            message += "attendu \(expected), reçu \(receivedName(received.type))"
+            message += tr("attendu \(expected), reçu \(receivedName(received.type))", "expected \(expected), got \(receivedName(received.type))")
         case (let expected?, nil):
-            message += "clé obligatoire absente (attendu \(expected))"
+            message += tr("clé obligatoire absente (attendu \(expected))", "required key missing (expected \(expected))")
         default:
             message += context.debugDescription
         }
@@ -2002,22 +2009,22 @@ private enum ConfigValidationRules {
 
     private static func expectedName(_ swiftType: String) -> String {
         switch swiftType {
-        case "String": return "texte"
-        case "Bool": return "booléen"
-        case "Double": return "nombre"
-        case "Int": return "entier"
+        case "String": return tr("texte", "text")
+        case "Bool": return tr("booléen", "boolean")
+        case "Double": return tr("nombre", "number")
+        case "Int": return tr("entier", "integer")
         default: return swiftType
         }
     }
 
     private static func receivedName(_ type: TOMLType) -> String {
         switch type {
-        case .string: return "texte"
-        case .bool: return "booléen"
-        case .double: return "nombre"
-        case .int: return "entier"
+        case .string: return tr("texte", "text")
+        case .bool: return tr("booléen", "boolean")
+        case .double: return tr("nombre", "number")
+        case .int: return tr("entier", "integer")
         case .table: return "table"
-        case .array: return "tableau"
+        case .array: return tr("tableau", "array")
         case .date, .time, .dateTime: return "date"
         }
     }
@@ -2042,21 +2049,21 @@ private enum ConfigValidationRules {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.titlebar_context_menu.height",
-                message: "must be between 12 and 96"
+                message: tr("doit être entre 12 et 96", "must be between 12 and 96")
             ))
         }
         if config.leadingExclusion < 0 || config.leadingExclusion > 240 {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.titlebar_context_menu.leading_exclusion",
-                message: "must be between 0 and 240"
+                message: tr("doit être entre 0 et 240", "must be between 0 and 240")
             ))
         }
         if config.trailingExclusion < 0 || config.trailingExclusion > 240 {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.titlebar_context_menu.trailing_exclusion",
-                message: "must be between 0 and 240"
+                message: tr("doit être entre 0 et 240", "must be between 0 and 240")
             ))
         }
         if config.enabled &&
@@ -2066,7 +2073,7 @@ private enum ConfigValidationRules {
             items.append(ConfigValidationItem(
                 level: .warning,
                 path: "experimental.titlebar_context_menu",
-                message: "all destination families are disabled; menu will not be shown"
+                message: tr("toutes les familles de destinations sont désactivées ; le menu ne s'affichera pas", "all destination families are disabled; menu will not be shown")
             ))
         }
         return items
@@ -2078,7 +2085,7 @@ private enum ConfigValidationRules {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.target_mode.overlay_duration_seconds",
-                message: "must be between 0.2 and 30"
+                message: tr("doit être entre 0,2 et 30", "must be between 0.2 and 30")
             ))
         }
         if !config.enabled &&
@@ -2086,28 +2093,28 @@ private enum ConfigValidationRules {
             items.append(ConfigValidationItem(
                 level: .warning,
                 path: "experimental.target_mode",
-                message: "target mode is disabled; sub-features will be ignored"
+                message: tr("le mode cible est désactivé ; ses fonctions seront ignorées", "target mode is disabled; sub-features will be ignored")
             ))
         }
         if !config.searchHotkey.isEmpty, TargetModeConfig.hotkeyParts(config.searchHotkey) == nil {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.target_mode.search_hotkey",
-                message: "expected modifiers and one key, e.g. \"cmd+alt+ctrl+f\" or \"hyper+f\"; empty disables"
+                message: tr("modificateurs et une touche attendus, par exemple \"cmd+alt+ctrl+f\" ou \"hyper+f\" ; vide : désactivé", "expected modifiers and one key, e.g. \"cmd+alt+ctrl+f\" or \"hyper+f\"; empty disables")
             ))
         }
         if !config.actionsHotkey.isEmpty, TargetModeConfig.hotkeyParts(config.actionsHotkey) == nil {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.target_mode.actions_hotkey",
-                message: "expected modifiers and one key, e.g. \"hyper+shift+f\"; empty disables"
+                message: tr("modificateurs et une touche attendus, par exemple \"hyper+shift+f\" ; vide : désactivé", "expected modifiers and one key, e.g. \"hyper+shift+f\"; empty disables")
             ))
         }
         if !config.webSearchURL.contains("{query}") || URL(string: config.webSearchURL.replacingOccurrences(of: "{query}", with: "q")) == nil {
             items.append(ConfigValidationItem(
                 level: .warning,
                 path: "experimental.target_mode.web_search_url",
-                message: "expected an address containing {query}"
+                message: tr("adresse attendue contenant {query}", "expected an address containing {query}")
             ))
         }
         return items
@@ -2119,21 +2126,21 @@ private enum ConfigValidationRules {
             items.append(ConfigValidationItem(
                 level: .warning,
                 path: "experimental.app_targets.scope",
-                message: "supported scopes: frontmost_window, visible_windows"
+                message: tr("étendues possibles : frontmost_window, visible_windows", "supported scopes: frontmost_window, visible_windows")
             ))
         }
         if config.hintCharacters.count < 2 {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.app_targets.hint_characters",
-                message: "must contain at least two characters"
+                message: tr("doit contenir au moins deux caractères", "must contain at least two characters")
             ))
         }
         if config.includeRoles.isEmpty {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.app_targets.include_roles",
-                message: "must contain at least one AX role"
+                message: tr("doit contenir au moins un rôle AX", "must contain at least one AX role")
             ))
         }
         return items
@@ -2145,7 +2152,7 @@ private enum ConfigValidationRules {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.target_grid.hint_characters",
-                message: "must contain at least rows*columns characters"
+                message: tr("doit contenir au moins rows*columns caractères", "must contain at least rows*columns characters")
             ))
         }
         return items
@@ -2157,14 +2164,14 @@ private enum ConfigValidationRules {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.target_record.default_duration_seconds",
-                message: "must be lower than or equal to max_duration_seconds"
+                message: tr("doit être inférieur ou égal à max_duration_seconds", "must be lower than or equal to max_duration_seconds")
             ))
         }
         if config.replayEnabled && !config.enabled {
             items.append(ConfigValidationItem(
                 level: .warning,
                 path: "experimental.target_record.replay_enabled",
-                message: "replay is enabled but recording capability is disabled"
+                message: tr("la relecture est activée mais l'enregistrement est désactivé", "replay is enabled but recording capability is disabled")
             ))
         }
         return items

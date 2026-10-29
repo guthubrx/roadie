@@ -159,7 +159,7 @@ public struct TargetInspectionService {
         case .appElement:
             return TargetInspection(
                 target: target,
-                summary: "Zone applicative \(target.title)",
+                summary: tr("Zone applicative \(target.title)", "App area \(target.title)"),
                 identity: TargetInspectionIdentity(title: target.title),
                 state: TargetInspectionState(tileable: nil, floating: nil, pinned: nil, focused: nil, activeStage: nil, source: target.source.rawValue),
                 reasons: target.diagnostics
@@ -167,7 +167,7 @@ public struct TargetInspectionService {
         case .gridCell:
             return TargetInspection(
                 target: target,
-                summary: "Cellule grille \(target.title)",
+                summary: tr("Cellule grille \(target.title)", "Grid cell \(target.title)"),
                 identity: TargetInspectionIdentity(displayId: target.scope.displayId),
                 state: TargetInspectionState(tileable: nil, floating: nil, pinned: nil, focused: nil, activeStage: nil, source: target.source.rawValue),
                 reasons: target.diagnostics
@@ -181,7 +181,7 @@ public struct TargetInspectionService {
         else {
             return TargetInspection(
                 target: target,
-                summary: "Fenêtre disparue \(target.id)",
+                summary: tr("Fenêtre disparue \(target.id)", "Window gone \(target.id)"),
                 identity: TargetInspectionIdentity(windowId: target.scope.windowId),
                 state: TargetInspectionState(tileable: nil, floating: nil, pinned: nil, focused: false, activeStage: false, source: target.source.rawValue),
                 reasons: target.diagnostics + ["stale_target"]
@@ -234,7 +234,7 @@ public struct TargetInspectionService {
         else {
             return TargetInspection(
                 target: target,
-                summary: "Stage disparue \(target.id)",
+                summary: tr("Stage disparue \(target.id)", "Stage gone \(target.id)"),
                 identity: TargetInspectionIdentity(displayId: target.scope.displayId, desktopId: target.scope.desktopId, stageId: target.scope.stageId),
                 state: TargetInspectionState(tileable: nil, floating: nil, pinned: nil, focused: nil, activeStage: false, source: target.source.rawValue),
                 reasons: target.diagnostics + ["stale_target"]
@@ -244,7 +244,7 @@ public struct TargetInspectionService {
         let liveCount = stage.members.filter { liveIDs.contains($0.windowID) }.count
         return TargetInspection(
             target: target,
-            summary: "\(stage.name) - \(liveCount) fenêtre(s) live",
+            summary: tr("\(stage.name) - \(liveCount) fenêtre(s) live", "\(stage.name) - \(liveCount) live window(s)"),
             identity: TargetInspectionIdentity(displayId: displayID.rawValue, desktopId: desktopID.rawValue, stageId: stageID.rawValue),
             state: TargetInspectionState(tileable: nil, floating: nil, pinned: nil, focused: nil, activeStage: scope.activeStageID == stageID, source: target.source.rawValue),
             reasons: target.diagnostics + ["windows=\(stage.members.count)", "live_windows=\(liveCount)", "mode=\(stage.mode.rawValue)"]

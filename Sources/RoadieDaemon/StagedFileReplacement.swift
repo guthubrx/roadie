@@ -1,4 +1,5 @@
 import Darwin
+import RoadieCore
 import Foundation
 
 /// Prépare une copie sur le volume cible, puis échange atomiquement les deux éléments.
@@ -29,7 +30,7 @@ enum StagedFileReplacement {
             catch {
                 let failure = error as NSError
                 if failure.domain != NSCocoaErrorDomain || failure.code != NSFileNoSuchFileError {
-                    fputs("roadie: impossible de supprimer le dossier de remplacement \(workspace.path): \(error)\n", stderr)
+                    fputs(tr("roadie: impossible de supprimer le dossier de remplacement \(workspace.path): \(error)\n", "roadie: cannot delete the replacement folder \(workspace.path): \(error)\n"), stderr)
                 }
             }
         }

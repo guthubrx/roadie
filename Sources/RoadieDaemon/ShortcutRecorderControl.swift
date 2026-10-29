@@ -1,4 +1,5 @@
 import AppKit
+import RoadieCore
 import Carbon
 import SwiftUI
 
@@ -20,9 +21,9 @@ enum ShortcutCapture {
     }
 
     static func label(_ raw: String) -> String {
-        guard !raw.isEmpty else { return "Enregistrer…" }
+        guard !raw.isEmpty else { return tr("Enregistrer…", "Record…") }
         let symbols = ["command": "⌘", "cmd": "⌘", "control": "⌃", "ctrl": "⌃",
-                       "alt": "⌥", "option": "⌥", "shift": "⇧", "tab": "⇥", "space": "Espace",
+                       "alt": "⌥", "option": "⌥", "shift": "⇧", "tab": "⇥", "space": tr("Espace", "Space"),
                        "return": "↩", "escape": "⎋", "backspace": "⌫", "left": "←", "right": "→", "up": "↑", "down": "↓"]
         return raw.split(separator: "+").map { symbols[String($0)] ?? $0.uppercased() }.joined(separator: " ")
     }
@@ -39,8 +40,8 @@ struct ShortcutRecorderControl: View {
             RecorderButton(value: value, fontSize: fontSize, allowsPlainKeys: allowsPlainKeys, onChange: onChange)
                 .frame(minWidth: 120, idealWidth: 230, maxWidth: .infinity, minHeight: 34)
             if !value.isEmpty {
-                Button("Effacer", systemImage: "xmark.circle") { onChange("") }
-                    .labelStyle(.iconOnly).accessibilityLabel("Effacer le raccourci")
+                Button(tr("Effacer", "Clear"), systemImage: "xmark.circle") { onChange("") }
+                    .labelStyle(.iconOnly).accessibilityLabel(tr("Effacer le raccourci", "Clear the shortcut"))
             }
         }
     }
@@ -61,7 +62,7 @@ private struct RecorderButton: NSViewRepresentable {
         view.font = .systemFont(ofSize: fontSize)
         view.isEnabled = enabled
         if !view.recording { view.title = ShortcutCapture.label(value) }
-        view.setAccessibilityLabel("Enregistrer le raccourci : " + ShortcutCapture.label(value))
+        view.setAccessibilityLabel(tr("Enregistrer le raccourci : ", "Record the shortcut: ") + ShortcutCapture.label(value))
     }
     static func dismantleNSView(_ view: ShortcutRecorderButton, coordinator: ()) { view.finish() }
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: ShortcutRecorderButton, context: Context) -> CGSize? {
@@ -117,7 +118,7 @@ private final class ShortcutRecorderButton: NSButton {
                     let change = recorder.onChange
                     recorder.finish()
                     change?(value)
-                } else { recorder.title = "Ajoutez ⌘, ⌃ ou ⌥" }
+                } else { recorder.title = tr("Ajoutez ⌘, ⌃ ou ⌥", "Add ⌘, ⌃ or ⌥") }
                 return true
             }
             return consumed ? nil : Unmanaged.passUnretained(event)
@@ -125,7 +126,7 @@ private final class ShortcutRecorderButton: NSButton {
         guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
             options: .defaultTap, eventsOfInterest: 1 << CGEventType.keyDown.rawValue,
             callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()) else {
-            title = "Capture indisponible : vérifiez l’accès de Roadie"
+            title = tr("Capture indisponible : vérifiez l’accès de Roadie", "Capture unavailable: check Roadie's access")
             return
         }
         self.tap = tap
@@ -133,8 +134,8 @@ private final class ShortcutRecorderButton: NSButton {
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
         recording = true
-        title = "Vos touches…"
-        toolTip = "Appuyez sur la combinaison. Échap annule."
+        title = tr("Vos touches…", "Your keys…")
+        toolTip = tr("Appuyez sur la combinaison. Échap annule.", "Press the key combination. Esc cancels.")
         timeout = Timer.scheduledTimer(withTimeInterval: 20, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.finish() }
         }

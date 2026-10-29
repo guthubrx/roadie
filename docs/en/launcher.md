@@ -9,8 +9,8 @@ the screen. It runs Alfred workflows (`.alfredworkflow` files) without Alfred an
 > Available in `main`; the published 0.10.0 release does not include the launcher yet. It will ship in the next
 > release. Until then, [build from source](../../README.md#build-and-development-run).
 
-The bar follows the macOS language: English, or French on a Mac set to French. What you type works in both
-languages. The screenshots in this guide are drawn by Roadie's renderer with sample windows and files.
+The bar follows the macOS language (English, or French on a Mac set to French), or the language chosen in
+Settings > General > Interface language. What you type works in both languages. The screenshots in this guide are drawn by Roadie's renderer with sample windows and files.
 
 ## Open the bar
 

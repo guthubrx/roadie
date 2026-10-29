@@ -1,4 +1,5 @@
 import AppKit
+import RoadieCore
 import SwiftUI
 
 /// Le menu natif respecte la taille des paramètres et garde la valeur brute d'une famille absente.
@@ -6,7 +7,7 @@ struct SettingsFontFamilyPicker: NSViewRepresentable {
     let fontSize: Double
     @Binding var selection: String
     var inheritedLabel: String? = nil
-    var label: String = "Famille de police"
+    var label: String = tr("Famille de police", "Font family")
     @Environment(\.isEnabled) private var isEnabled
 
     // Énumération AppKit une fois au démarrage de ce menu ; tri O(f log f), f = familles installées.
@@ -31,12 +32,12 @@ struct SettingsFontFamilyPicker: NSViewRepresentable {
         if button.itemArray.compactMap({ $0.representedObject as? String }) != values {
             button.removeAllItems()
             for value in values {
-                let title = value.isEmpty ? (inheritedLabel ?? value) : (value == "system" ? "Police système" : value)
+                let title = value.isEmpty ? (inheritedLabel ?? value) : (value == "system" ? tr("Police système", "System font") : value)
                 button.addItem(withTitle: title)
                 button.lastItem?.representedObject = value
             }
             if isMissing {
-                button.lastItem?.title = "\(selection.isEmpty ? "Famille vide" : selection) — absente, secours système"
+                button.lastItem?.title = (selection.isEmpty ? tr("Famille vide", "Empty family") : selection) + tr(" — absente, secours système", " — missing, system fallback")
                 button.lastItem?.isEnabled = false
             }
         }

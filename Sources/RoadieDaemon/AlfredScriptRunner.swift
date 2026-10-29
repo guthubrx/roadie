@@ -113,7 +113,7 @@ enum AlfredScriptRunner {
             case .missingInterpreter(let name): tr("interpréteur absent : \(name)", "interpreter missing: \(name)")
             case .missingFile(let file): tr("script introuvable ou non exécutable : \(file)", "script missing or not executable: \(file)")
             case .unknownLanguage(let type): tr("langage inconnu : \(type)", "unknown language: \(type)")
-            case .spawn(let code): "lancement impossible (\(code))"
+            case .spawn(let code): tr("lancement impossible (\(code))", "cannot launch (\(code))")
             }
         }
     }
