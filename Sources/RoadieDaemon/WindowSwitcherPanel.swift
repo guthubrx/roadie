@@ -334,7 +334,8 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     private var renderedEntries: [WindowSwitcherEntry] = []
     private var renderedImages: [WindowID: NSImage] = [:]
     private var iconOnlyIDs: Set<WindowID> = []
-    private var appIcons: [Int32: NSImage] = [:]
+    /// Icônes par processus, lues à l'affichage ; réglables pour les rendus hors écran de la documentation.
+    var appIcons: [Int32: NSImage] = [:]
     private var groups = WindowSwitcherGroups(entries: [])
     private var browsing = SwitcherBrowsingState()
     private var selectedWindowID: WindowID?

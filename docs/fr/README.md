@@ -7,6 +7,7 @@ Guides français pour les sources actuelles de `main`. Le [README principal](../
 - [Vue d’ensemble des fonctionnalités](features.md)
 - [Commandes CLI](cli.md)
 - [Vue d’ensemble des bureaux et stages](overview.md)
+- [Lanceur et workflows d'Alfred](launcher.md)
 - [Sélecteur de fenêtres](window-switcher.md)
 - [Configuration et règles](configuration-rules.md)
 - [Événements et API de requêtes](events-query.md)
@@ -28,6 +29,7 @@ Roadie combine tiling automatique, stages nommés et bureaux virtuels Roadie. Ch
 - **Glisser-déposer :** un dépôt au centre échange les fenêtres du même stage. Un dépôt sur un bord insère la fenêtre. L’aperçu entre écrans suit le pointeur, y compris vers un stage tilé vide. Les tailles minimales des applications peuvent limiter les proportions finales.
 - **Retour d’écran :** les stages sont mis en attente au débranchement. Le retour conserve les positions visibles utiles. Les anciennes références absentes ne créent plus de cartes visibles dans le rail.
 - **Nav rail :** ordre choisi conservé, aperçu de réorganisation et aimantation réglable. Dépôt sur une carte pour la rejoindre, dans un interstice pour créer une stage à cet endroit. Liste défilable et cartes nommées vides identifiables.
+- **Lanceur :** applications, fenêtres, documents et onglets ouverts, fichiers, signets, réglages, calcul et web dans une seule barre ; verbes, destinations et phrases (`safari perso gauche`) ; workflows d'Alfred sans Powerpack, thèmes d'Alfred. [Guide](launcher.md).
 - **Sélecteur de fenêtres :** retrouve une fenêtre dans son bureau, sa stage et son écran. Recherche, flèches, souris et profils configurables ; raccourcis gérés par Roadie, BetterTouchTool ou un outil externe.
 - **Outils de fenêtre :** bordure de focus, focus à la souris, actions de barre de titre, épinglages, signets et groupes persistants.
 - **Exécution fiable :** socket local, écritures atomiques, cache partagé, rechargement validé de la configuration, récupération des fenêtres masquées et requêtes de santé.

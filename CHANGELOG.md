@@ -7,6 +7,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Documentation : README FR/EN refait autour du gestionnaire de fenêtres et du lanceur, guides « Lanceur et workflows
+  d'Alfred », captures dessinées avec des données d'exemple (`Spec124DocScreenshotsTests`).
 - Barre plus rapide sous forte charge : recherche préparée, icônes réduites en fond, Spotlight hors du fil principal ;
   documents déjà ouverts affichés tout de suite et gardés devant les fichiers jamais ouverts ; mesure `launcher.timing`.
 - Sélecteur : seulement les fenêtres, sans titre, résumé ni aide des touches ; recherche, Actions et refus d'action restent quand ils sont montrés.

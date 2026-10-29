@@ -3,32 +3,116 @@
 
 # Roadie
 
-**Un gestionnaire de fenêtres macOS qui combine disposition automatique, stages nommés et bureaux virtuels.**
+**Un gestionnaire de fenêtres et un lanceur pour macOS : tuilage automatique, stages nommées, bureaux virtuels, et une barre qui fait tourner tes workflows d'Alfred. Gratuit.**
 
 [English](README.md) | Français
 
 </div>
 
-Roadie organise tes fenêtres autour de tes activités. Regroupe les applications
-d'un projet, retrouve-les dans le rail latéral et passe d'un espace de travail à
-l'autre sur chaque écran.
+Roadie range tes fenêtres par activité et te laisse tout piloter depuis une seule barre. Regroupe
+les applications d'un projet dans une stage, retrouve-les dans le rail et passe d'un bureau à
+l'autre sur chaque écran. Tape quelques lettres pour ouvrir une application, une fenêtre, un fichier
+ou une page web, et choisis où elle s'ouvre. Tes workflows d'Alfred y tournent aussi, sans Powerpack.
 
 **[Télécharger Roadie 0.10.0](https://github.com/guthubrx/roadie/releases/tag/v0.10.0)** ·
 [Découvrir les nouveautés](docs/releases/v0.10.0.md) · [Guide d'installation](#installation-manuelle)
+
+> Le lanceur et les workflows sont dans `main` et arriveront avec la prochaine version : la 0.10.0
+> ne les contient pas encore. Pour les essayer dès maintenant,
+> [compile depuis les sources](#build-et-lancement-de-développement).
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">
 </p>
 
-## Un espace pour chaque activité
+## Deux outils, un seul processus
 
-Un éditeur, un terminal et un navigateur pour développer. Des documents pour
-écrire. Une fenêtre de réunion à garder sous la main. Roadie permet de réunir
-ces fenêtres dans des **stages**, des groupes nommés que tu retrouves dans le rail.
+| | |
+|---|---|
+| **Gestionnaire de fenêtres** | Tuilage automatique, stages nommées, bureaux virtuels par écran, rail latéral, sélecteur de fenêtres (Cmd+Tab), vue d'ensemble |
+| **Lanceur** | Applications, fenêtres, documents et onglets ouverts, fichiers, signets et historique des navigateurs, réglages, calcul, web, workflows d'Alfred |
 
-Le projet réunit le tuilage inspiré de [yabai](https://github.com/koekeishiya/yabai),
-les bureaux virtuels inspirés d'[AeroSpace](https://github.com/nikitabobko/AeroSpace)
-et les groupes de fenêtres de Stage Manager.
+Les deux se parlent. Le lanceur sait où placer ce qu'il ouvre : dans la stage Perso, sur l'autre
+écran, à gauche. Il retrouve une fenêtre cachée dans une stage inactive ou sur un autre bureau. Et le
+classement qu'il apprend tient compte de la stage où tu travailles.
+
+## Un lanceur qui fait tourner tes workflows d'Alfred
+
+<p align="center">
+  <img src="docs/assets/screenshots/launcher-search.png" alt="La barre de Roadie cherche « note » : application, fenêtre, document ouvert et fichiers" width="70%">
+</p>
+
+Une seule saisie cherche partout : applications installées, fenêtres de tous les bureaux, documents
+et onglets ouverts (Chrome, Brave, Edge, Safari), fichiers, signets et historique de Firefox, Safari
+et Chrome, réglages de Roadie et de macOS, commandes système. Les initiales suffisent (`vsc` pour
+Visual Studio Code) et Roadie apprend tes choix. Un calcul donne son résultat, `> commande` la lance
+dans ton terminal, `~/Doc` parcourt un dossier.
+
+La barre reste rapide quand le Mac est chargé : les documents que tu as déjà ouverts s'affichent en
+50 ms environ, Spotlight complète ensuite sans bousculer la liste.
+
+### Ouvrir, et choisir où
+
+<table>
+  <tr>
+    <td><img src="docs/assets/screenshots/launcher-verbs.png" alt="Verbes de Safari après Tab"></td>
+    <td><img src="docs/assets/screenshots/launcher-phrase.png" alt="Phrase « safari perso gauche »"></td>
+  </tr>
+</table>
+
+Tab sur une ligne ouvre ses verbes : ouvrir dans une stage, amener ici, envoyer vers un bureau ou un
+écran, réunir les fenêtres d'une application, faire flotter, quitter… Pendant le choix, les vraies
+fenêtres prennent leur future place ; Échap remet tout. Une phrase fait tout d'un coup :
+`safari perso gauche` ouvre Safari dans la stage Perso, à gauche, et ⌘S la garde en abréviation.
+
+### Les workflows d'Alfred, gratuitement
+
+<table>
+  <tr>
+    <td><img src="docs/assets/screenshots/launcher-workflow.png" alt="Résultats d'un workflow"></td>
+    <td><img src="docs/assets/screenshots/launcher-grid.png" alt="Grille d'un workflow"></td>
+  </tr>
+</table>
+
+Chez Alfred, les workflows demandent le [Powerpack](https://www.alfredapp.com/powerpack/), payant.
+Roadie lit les mêmes fichiers `.alfredworkflow` et les fait tourner gratuitement : ceux déjà installés
+dans Alfred, lus sans les modifier, ou ceux que tu installes avec `roadie workflow install`, sans
+Alfred.
+
+| | Alfred | Roadie |
+|---|---|---|
+| Lanceur, fichiers, calcul, recherche web | Gratuit | Gratuit |
+| Workflows | Powerpack : 34 £, ou 59 £ avec les mises à jour à vie | Gratuit, mêmes fichiers `.alfredworkflow` |
+| Gestion des fenêtres | Non incluse | Tuilage, stages, bureaux, sélecteur |
+
+Script Filters et leur cache, schéma complet des objets, touches ⌘ ⌥ ⌃ par ligne, déclencheurs
+externes, raccourcis, grilles, vues Texte, Image et PDF, boutons d'Alfred Remote : sur un corpus de
+102 workflows réels, 92 tournent entièrement. `roadie workflow list` dit pour chacun ce qui manque.
+Pas repris : snippets, historique du presse-papiers d'Alfred, AppleScript compilé.
+
+### Les thèmes d'Alfred aussi
+
+<p align="center">
+  <img src="docs/assets/screenshots/launcher-themes.png" alt="La même barre avec quatre thèmes d'Alfred" width="85%">
+</p>
+
+Les neuf thèmes d'Alfred sont fournis, et un thème exporté d'Alfred s'ajoute tel quel. La barre se
+place en bas, au centre ou en haut, et se déplace à la souris.
+
+[Guide du lanceur et des workflows](docs/fr/launcher.md)
+
+## Sélecteur de fenêtres et vue d'ensemble
+
+<p align="center">
+  <img src="docs/assets/screenshots/window-switcher.png" alt="Sélecteur de fenêtres de Roadie" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/overview.png" alt="Vue d'ensemble des bureaux et des stages" width="100%">
+</p>
+
+<sub>Captures dessinées par le moteur de rendu de Roadie avec des fenêtres et des fichiers d'exemple.
+L'interface est en français.</sub>
 
 ## Ce que tu peux faire avec Roadie
 
@@ -38,7 +122,8 @@ et les groupes de fenêtres de Stage Manager.
 | Passer d'un projet à l'autre | Stages nommés, aperçus et changement d'espace depuis le rail |
 | Travailler sur plusieurs écrans | Bureaux indépendants, nouvelles fenêtres sur l'écran actif par défaut, transfert des fenêtres et des stages |
 | Garder une fenêtre accessible | Épinglages, signets et groupes de fenêtres |
-| Agir au clavier | Étiquettes, grilles et barre de recherche et de commandes |
+| Tout trouver et tout lancer | Lanceur, verbes et destinations, phrases, workflows d'Alfred |
+| Agir au clavier | Étiquettes, grilles et commandes `/` dans la barre |
 | Adapter l'interface | Réglages immédiats, tailles indépendantes et choix de polices |
 | Automatiser les habitudes | Règles de placement, macros courtes, commandes et API JSON |
 
@@ -73,11 +158,10 @@ explicitement vers un autre écran y reste. Les stages nommés restent accessibl
 même lorsqu'ils sont vides, avec un contour et leur nom ; les menus de destination
 suivent l'ordre du rail.
 
-### Une barre pour chercher et agir
+### Les commandes de Roadie dans la barre
 
-Ouvre la **barre de recherche et de commandes** avec le raccourci de ton choix.
-Tape quelques lettres pour trouver une fenêtre, un stage ou un élément visible. Tab complète la sélection ;
-un `/` initial donne accès aux commandes de Roadie.
+La barre ouvre le lanceur (⌘⌃⌥F par défaut, ou le raccourci de ton choix). Un `/` initial donne
+accès aux commandes de Roadie ; Tab complète la saisie.
 
 Par exemple, `/stage dev` change d'activité et `/settings` ouvre les paramètres.
 Les suggestions et l'historique accompagnent la saisie. Le raccourci se règle
@@ -128,6 +212,7 @@ La documentation complète existe en français et en anglais :
 Guides principaux :
 
 - [Vue d'ensemble des fonctionnalités](docs/fr/features.md)
+- [Lanceur et workflows d'Alfred](docs/fr/launcher.md)
 - [Commandes CLI](docs/fr/cli.md)
 - [Configuration et rules](docs/fr/configuration-rules.md)
 - [Événements et API de requêtes](docs/fr/events-query.md)

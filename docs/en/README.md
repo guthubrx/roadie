@@ -7,6 +7,7 @@ English guides for the current `main` sources. The [root README](../../README.md
 - [Feature overview](features.md)
 - [CLI commands](cli.md)
 - [Desktop and stage overview](overview.md)
+- [Launcher and Alfred workflows](launcher.md)
 - [Window switcher](window-switcher.md)
 - [Configuration and rules](configuration-rules.md)
 - [Events and Query API](events-query.md)
@@ -28,6 +29,7 @@ Roadie combines automatic tiling, named stages, and Roadie virtual desktops. Eac
 - **Drag and drop:** same-stage center drops swap windows; edge drops insert them. Cross-display previews follow the pointer, including empty tiled stages. Application minimum sizes can limit the final proportions.
 - **Display recovery:** stages are parked when a screen disconnects. Reconnecting preserves useful visible positions and excludes stale window references from visible rail cards.
 - **Nav rail:** your chosen order, a reorder preview and adjustable magnetism. Drop onto a card to join it or between cards to create a stage there. The list scrolls and named empty stages remain identifiable.
+- **Launcher:** apps, windows, open documents and tabs, files, bookmarks, settings, calculator and web in one bar; verbs, destinations and phrases (`safari perso left`); Alfred workflows without the Powerpack, Alfred themes. [Guide](launcher.md).
 - **Window switcher:** returns to a window in its desktop, stage and display. Search, arrow keys, mouse navigation and configurable profiles; shortcuts managed by Roadie, BetterTouchTool or an external tool.
 - **Window tools:** focus border, focus follows mouse, optional title-bar actions, pins, bookmarks, and persistent groups.
 - **Reliable runtime:** local command socket, atomic state writes, shared snapshots, validated configuration reload, hidden-window recovery, and daemon health queries.

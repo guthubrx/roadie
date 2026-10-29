@@ -298,6 +298,8 @@ Reçu : specs/122-selecteur-epure/validation.md.
 Session 123 installée : barre rapide sous charge (fil principal bloqué 1,2 s → 0,26 s au plus, historique 1 à 9 ms par
 touche, fichiers ouverts en 50 ms et gardés devant ceux de Spotlight, ADR 021). 2 264 tests / 329 suites.
 Reçu : specs/123-barre-rapide/validation.md.
+Session 124 : README FR/EN, guides docs/*/launcher.md et About GitHub mis à jour ; captures sans donnée privée générées par
+`ROADIE_DOC_SHOTS_DIR=… scripts/test --filter Spec124` dans docs/assets/screenshots/. Reçu : specs/124-doc-lanceur/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

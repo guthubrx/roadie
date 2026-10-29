@@ -3,31 +3,113 @@
 
 # Roadie
 
-**A macOS window manager combining automatic tiling, named stages, and virtual desktops.**
+**A window manager and launcher for macOS: automatic tiling, named stages, virtual desktops, and a search bar that runs your Alfred workflows. Free.**
 
 English | [Français](README.fr.md)
 
 </div>
 
-Roadie organizes your windows around your activities. Bring a project's apps
-together, find them in the side rail and switch workspaces on each display.
+Roadie organizes your windows around your activities and lets you drive everything from one bar.
+Group a project's apps in a stage, find them in the side rail and switch desktops on each display.
+Type a few letters to open an app, a window, a file or a web page, and choose where it opens. Your
+Alfred workflows run there too, without the Powerpack.
 
 **[Download Roadie 0.10.0](https://github.com/guthubrx/roadie/releases/tag/v0.10.0)** ·
 [What's new](docs/releases/v0.10.0.en.md) · [Installation guide](#manual-installation)
+
+> The launcher and workflows are in `main` and will ship with the next release: 0.10.0 does not
+> include them yet. To try them now, [build from source](#build-and-development-run).
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie workspaces across multiple displays" width="100%">
 </p>
 
-## A workspace for every activity
+## Two tools, one process
 
-An editor, a terminal and a browser for development. Documents for writing.
-A meeting window to keep close at hand. Roadie brings these windows into
-**stages**: named groups you can reach from the rail.
+| | |
+|---|---|
+| **Window manager** | Automatic tiling, named stages, per-display virtual desktops, side rail, window switcher (Cmd+Tab), overview |
+| **Launcher** | Apps, windows, open documents and tabs, files, browser bookmarks and history, settings, calculator, web, Alfred workflows |
 
-The project combines tiling inspired by [yabai](https://github.com/koekeishiya/yabai),
-virtual desktops inspired by [AeroSpace](https://github.com/nikitabobko/AeroSpace)
-and Stage Manager's window groups.
+They work together. The launcher knows where to put what it opens: in the Perso stage, on the other
+display, on the left. It finds a window hidden in an inactive stage or on another desktop. And the
+ranking it learns takes the stage you are working in into account.
+
+## A launcher that runs your Alfred workflows
+
+<p align="center">
+  <img src="docs/assets/screenshots/launcher-search.png" alt="Roadie's bar searching &quot;note&quot;: app, window, open document and files" width="70%">
+</p>
+
+One query searches everywhere: installed apps, windows on every desktop, open documents and tabs
+(Chrome, Brave, Edge, Safari), files, Firefox, Safari and Chrome bookmarks and history, Roadie and
+macOS settings, system commands. Initials are enough (`vsc` for Visual Studio Code) and Roadie learns
+your choices. A calculation shows its result, `> command` runs it in your terminal, `~/Doc` browses a
+folder.
+
+The bar stays fast when the Mac is under load: files you already opened show up in about 50 ms, and
+Spotlight results are added afterwards without reshuffling the list.
+
+### Open it, and choose where
+
+<table>
+  <tr>
+    <td><img src="docs/assets/screenshots/launcher-verbs.png" alt="Safari's verbs after Tab"></td>
+    <td><img src="docs/assets/screenshots/launcher-phrase.png" alt="The phrase &quot;safari perso gauche&quot;"></td>
+  </tr>
+</table>
+
+Tab on a row opens its verbs: open in a stage, bring here, send to a desktop or display, gather an
+app's windows, float, quit… While you choose, the real windows move to their future place; Escape
+puts everything back. A phrase does it all at once: `safari perso left` opens Safari in the Perso
+stage, on the left, and ⌘S saves it as an abbreviation.
+
+### Alfred workflows, for free
+
+<table>
+  <tr>
+    <td><img src="docs/assets/screenshots/launcher-workflow.png" alt="Workflow results"></td>
+    <td><img src="docs/assets/screenshots/launcher-grid.png" alt="A workflow grid"></td>
+  </tr>
+</table>
+
+In Alfred, workflows require the paid [Powerpack](https://www.alfredapp.com/powerpack/). Roadie reads
+the same `.alfredworkflow` files and runs them for free: the ones already installed in Alfred, read
+without changing them, or the ones you install with `roadie workflow install`, no Alfred needed.
+
+| | Alfred | Roadie |
+|---|---|---|
+| Launcher, files, calculator, web search | Free | Free |
+| Workflows | Powerpack: £34, or £59 with lifetime upgrades | Free, same `.alfredworkflow` files |
+| Window management | Not included | Tiling, stages, desktops, switcher |
+
+Script Filters and their cache, the full object graph, per-row ⌘ ⌥ ⌃ modifiers, external triggers,
+hotkeys, grids, Text, Image and PDF views, Alfred Remote buttons: out of a corpus of 102 real
+workflows, 92 run completely. `roadie workflow list` tells you what is missing for each one. Not
+supported: snippets, Alfred's clipboard history, compiled AppleScript.
+
+### Alfred's themes, too
+
+<p align="center">
+  <img src="docs/assets/screenshots/launcher-themes.png" alt="The same bar with four Alfred themes" width="85%">
+</p>
+
+Alfred's nine themes are included, and a theme exported from Alfred is added as is. The bar sits at
+the bottom, center or top, and you can drag it.
+
+[Launcher and workflows guide](docs/en/launcher.md)
+
+## Window switcher and overview
+
+<p align="center">
+  <img src="docs/assets/screenshots/window-switcher.png" alt="Roadie's window switcher" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/overview.png" alt="Overview of desktops and stages" width="100%">
+</p>
+
+<sub>Screenshots drawn by Roadie's renderer with sample windows and files. The interface is in French.</sub>
 
 ## What you can do with Roadie
 
@@ -37,7 +119,8 @@ and Stage Manager's window groups.
 | Switch projects | Named stages, previews and workspace switching from the rail |
 | Use multiple displays | Independent desktops, new windows on the active display by default, window and stage transfers |
 | Keep a window within reach | Pins, bookmarks and window groups |
-| Work from the keyboard | Labels, grids and the search and command bar |
+| Find and launch anything | Launcher, verbs and destinations, phrases, Alfred workflows |
+| Work from the keyboard | Labels, grids and `/` commands in the bar |
 | Personalize the interface | Live settings, independent sizes and font choices |
 | Automate routine actions | Placement rules, short macros, commands and a JSON API |
 
@@ -68,11 +151,10 @@ When a display reconnects, its stages return to their places. A stage explicitly
 moved to another display stays there. Named empty stages keep an outline and name;
 destination menus follow the rail order.
 
-### One bar to search and act
+### Roadie's commands in the bar
 
-Open the **search and command bar** with your chosen shortcut. Type a few letters
-to find a visible window, stage or element. Tab completes the selection; a leading `/` opens
-Roadie's commands.
+The bar opens the launcher (⌘⌃⌥F by default, or your own shortcut). A leading `/` opens
+Roadie's commands; Tab completes the input.
 
 For example, `/stage dev` switches activities and `/settings` opens settings.
 Suggestions and history help you enter commands. Set the shortcut in the
@@ -121,6 +203,7 @@ Full documentation is available in English and French:
 Main guides:
 
 - [Feature overview](docs/en/features.md)
+- [Launcher and Alfred workflows](docs/en/launcher.md)
 - [CLI commands](docs/en/cli.md)
 - [Configuration and rules](docs/en/configuration-rules.md)
 - [Events and Query API](docs/en/events-query.md)
