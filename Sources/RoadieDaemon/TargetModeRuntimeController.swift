@@ -487,10 +487,12 @@ public final class TargetModeRuntimeController: NSObject {
             // Fenêtre active réelle (session 098) : celle du snapshot sans suivi du focus est la fenêtre
             // retenue pour la stage du premier écran, pas forcément celle de l'application au premier plan.
             let focused = service.focusedWindowID() ?? WindowSwitcherFocusHistory.shared.recentIDs.first
-            initialSubject = focused.flatMap { id in roadieTargets.first { $0.id == "window:\(id.rawValue)" } }.map(LauncherSubject.target)
+            let window = focused.flatMap { id in roadieTargets.first { $0.id == "window:\(id.rawValue)" } }.map(LauncherSubject.target)
+            // Session 131 : un texte sélectionné passe avant la fenêtre (actions universelles d'Alfred).
+            initialSubject = LauncherText.initialSubject(selection: Self.axSelectedText(), window: window)
+            let kind: String = switch initialSubject { case .text?: "text"; case nil: "none"; default: "window" }
             events.append(RoadieEvent(type: "target_mode.actions_started", details: [
-                "focusedWindowID": focused.map { String($0.rawValue) } ?? "none",
-                "subject": initialSubject == nil ? "none" : "window"]))
+                "focusedWindowID": focused.map { String($0.rawValue) } ?? "none", "subject": kind]))
         }
         currentSession = presenter.startSearch(
             targets: roadieTargets,
@@ -899,6 +901,21 @@ public final class TargetModeRuntimeController: NSObject {
         }
     }
 
+    /// Texte sélectionné de l'élément actif, par l'accessibilité seule et en 0,3 s au plus : l'ouverture de la barre
+    /// n'attend pas un ⌘C simulé (session 131). O(1) appels AX.
+    private static func axSelectedText() -> String? {
+        let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 0.3)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
+        let element = focused as! AXUIElement
+        AXUIElementSetMessagingTimeout(element, 0.3)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &value) == .success else { return nil }
+        return value as? String
+    }
+
     /// Texte choisi dans l'application au premier plan : attribut AX, sinon ⌘C simulé avec le
     /// presse-papiers remis comme avant.
     private static func selectedText() async -> String? {
@@ -1040,6 +1057,15 @@ public final class TargetModeRuntimeController: NSObject {
                 guard case .document(let path)? = action.destination?.kind else { return refused(label, "destination") }
                 NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: URL(fileURLWithPath: app.path),
                                         configuration: NSWorkspace.OpenConfiguration())
+            case .relaunch:
+                relaunch(app)
+            case .quitOthers:
+                // Session 131 : comme « Tout quitter » (session 105), sauf l'application choisie.
+                let keep = Set(NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).map(\.processIdentifier))
+                let apps = NSWorkspace.shared.runningApplications
+                let pids = Set(LauncherSystemCommand.quitAllTargets(apps.map { ($0.bundleIdentifier, $0.activationPolicy == .regular, $0.processIdentifier) },
+                                                                    ownPID: ProcessInfo.processInfo.processIdentifier)).subtracting(keep)
+                apps.filter { pids.contains($0.processIdentifier) }.forEach { $0.terminate() }
             default:
                 return refused(label, "verb")
             }
@@ -1048,6 +1074,10 @@ public final class TargetModeRuntimeController: NSObject {
             return performFile(action, file: file, label: label)
         case .url(let url):
             return performURL(action, url: url, label: label)
+        case .text(let text):
+            return performText(action.verb, text: text, label: label)
+        case .openItem(let item):
+            return performOpenItem(action.verb, item: item, label: label)
         case .project(let name):
             switch action.verb {
             case .reopenProject: return openProject(named: name)
@@ -1087,6 +1117,11 @@ public final class TargetModeRuntimeController: NSObject {
         case .copyPath:
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        case .emailText:
+            guard let mail = LauncherText.mailURL(body: url.absoluteString) else { return refused(label, "email") }
+            NSWorkspace.shared.open(mail)
+        case .largeType:
+            LargeTypePanel.show(url.absoluteString)
         default:
             return refused(label, "verb")
         }
@@ -1223,7 +1258,7 @@ public final class TargetModeRuntimeController: NSObject {
             case .display(let display):
                 message = WindowCommandService(service: service, stageStore: store, events: events)
                     .send(windowID: window, toDisplayID: display, focusMovedWindow: false).message
-            case .document:
+            case .document, .folder, .application, .tag:
                 return refused(label, "destination")
             }
             return TargetActionResult(changed: true, message: message)
@@ -1310,7 +1345,7 @@ public final class TargetModeRuntimeController: NSObject {
                 .createStage(named: name, displayID: display, desktopID: desktop)
             events.append(RoadieEvent(type: "launcher.stage_created", details: ["message": result.message]))
             return scope
-        case .desktop, .display, .document:
+        case .desktop, .display, .document, .folder, .application, .tag:
             return nil
         }
     }
@@ -1652,6 +1687,9 @@ public final class TargetModeRuntimeController: NSObject {
         case .reveal:
             NSWorkspace.shared.activateFileViewerSelecting(files.map { URL(fileURLWithPath: $0) })
             return TargetActionResult(changed: true, message: "launcher batch: \(files.count) " + tr("dans le Finder", "in Finder"))
+        case .copyFile, .copyTo, .moveFileTo, .copyReplace, .moveReplace, .openWith, .email, .trash, .makeAlias, .addTag:
+            // Session 131 : un seul presse-papiers, un seul message, une seule notification pour tout le lot.
+            return performFileAction(first.verb, paths: files, destination: first.destination, label: "launcher batch")
         default:
             break
         }
@@ -1696,7 +1734,7 @@ public final class TargetModeRuntimeController: NSObject {
         case .url(let url):
             let bundle = NSWorkspace.shared.urlForApplication(toOpen: url).flatMap { Bundle(url: $0)?.bundleIdentifier }
             expected = { $0.window.bundleID == bundle && inTarget($0) }
-        case .project:
+        case .project, .text, .openItem:
             return
         }
         let service = service
@@ -1885,10 +1923,154 @@ public final class TargetModeRuntimeController: NSObject {
             }
             if action.verb == .openIn, explicit == nil { return refused(label, "destination") }
             openFile(file, verb: action.verb, into: explicit)
+        case .copyFile, .copyTo, .moveFileTo, .copyReplace, .moveReplace, .openWith, .email, .trash, .makeAlias, .info, .addTag,
+             .browse, .terminalHere, .packageContents:
+            return performFileAction(action.verb, paths: [file.path], destination: action.destination, label: label)
         default:
             return refused(label, "verb")
         }
         return TargetActionResult(changed: true, message: "\(label): file")
+    }
+
+    // MARK: - Actions d'Alfred sur fichiers, textes, onglets (session 131)
+
+    /// Verbes de fichier d'Alfred, sur un ou plusieurs chemins (sélection multiple). Un échec est notifié avec sa
+    /// raison ; le journal ne garde que le verbe et les nombres. O(s).
+    func performFileAction(_ verb: LauncherVerb, paths: [String], destination: LauncherDestination?, label: String) -> TargetActionResult {
+        let urls = paths.map { URL(fileURLWithPath: $0) }
+        var report = LauncherFileOperations.Report(done: paths)
+        switch verb {
+        case .copyFile:
+            LauncherFileOperations.copyToPasteboard(paths)
+        case .copyTo, .moveFileTo, .copyReplace, .moveReplace:
+            guard case .folder(let folder)? = destination?.kind else { return refused(label, "destination") }
+            report = LauncherFileOperations.transfer(paths, to: folder, move: [.moveFileTo, .moveReplace].contains(verb),
+                                                     replace: [.copyReplace, .moveReplace].contains(verb))
+        case .openWith:
+            guard case .application(let app)? = destination?.kind else { return refused(label, "destination") }
+            NSWorkspace.shared.open(urls, withApplicationAt: URL(fileURLWithPath: app), configuration: NSWorkspace.OpenConfiguration())
+        case .email:
+            guard let service = NSSharingService(named: .composeEmail), service.canPerform(withItems: urls) else { return refused(label, "email") }
+            service.perform(withItems: urls)
+        case .trash:
+            report = LauncherFileOperations.trashItems(paths)
+        case .makeAlias:
+            report = LauncherFileOperations.Report()
+            for path in paths {
+                do { report.done.append(try LauncherFileOperations.makeAlias(path)) } catch { report.failures[path] = error.localizedDescription }
+            }
+        case .info:
+            guard let path = paths.first else { return refused(label, "file") }
+            showInfo(path)
+        case .addTag:
+            guard case .tag(let tag)? = destination?.kind else { return refused(label, "destination") }
+            report = LauncherFileOperations.toggleTag(tag, on: paths)
+        case .browse:
+            guard let path = paths.first else { return refused(label, "file") }
+            let folder = (path as NSString).abbreviatingWithTildeInPath
+            reopenSearch(folder.hasSuffix("/") ? folder : folder + "/")
+        case .terminalHere:
+            guard let path = paths.first else { return refused(label, "file") }
+            let effects = Self.liveEffects(self, events: events, webSearchURL: "")
+            Task { await effects.terminal(folder: path) }
+        case .packageContents:
+            guard let path = paths.first else { return refused(label, "file") }
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
+        default:
+            return refused(label, "verb")
+        }
+        events.append(RoadieEvent(type: "launcher.file_action", details: [
+            "verb": verb.rawValue, "count": String(paths.count), "done": String(report.done.count), "failed": String(report.failures.count)]))
+        guard report.failures.isEmpty else {
+            let reasons = Set(report.failures.values).sorted().joined(separator: ", ")
+            notifyFailure(verb.title + tr(" : échec (", ": failed (") + reasons + ")")
+            return TargetActionResult(changed: !report.done.isEmpty, message: "\(label): \(report.failures.count) failed", error: "file_action_failed")
+        }
+        return TargetActionResult(changed: true, message: "\(label): \(report.done.count)")
+    }
+
+    /// Fiche d'un élément dans la vue Texte : un tableau Markdown, chaque valeur sélectionnable. O(octets) pour l'empreinte.
+    private func showInfo(_ path: String) {
+        let name = (path as NSString).lastPathComponent
+        Task.detached(priority: .userInitiated) {
+            let markdown: String
+            if let info = try? LauncherFileOperations.info(path) {
+                let rows = info.lines.map { "| \($0.label) | `\($0.value)` |" }.joined(separator: "\n")
+                markdown = "# \(name)\n\n| | |\n|---|---|\n\(rows)\n"
+            } else {
+                markdown = "# \(name)\n\n" + tr("Informations illisibles.", "Information unavailable.")
+            }
+            await MainActor.run {
+                var view = AlfredTextView(workflowID: "roadie.info", objectUID: "info", title: name,
+                                          folder: (path as NSString).deletingLastPathComponent)
+                view.behaviour = .markdown
+                view.chunks = [markdown]
+                WorkflowTextPanel.show(view, plainContinues: false, runScript: nil) { _, _, _ in }
+            }
+        }
+    }
+
+    /// Verbes d'un texte (tapé ou sélectionné). « Extraire les adresses » est traité par la barre, qui reste ouverte.
+    private func performText(_ verb: LauncherVerb, text: String, label: String) -> TargetActionResult {
+        switch verb {
+        case .copyText:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        case .webSearch:
+            let template = service.effectiveConfig.experimental.targetMode.webSearchURL
+            guard let url = LauncherWeb.searchURL(template, query: text) else { return refused(label, "web") }
+            NSWorkspace.shared.open(url)
+            followBrowser(url)
+        case .emailText:
+            guard let url = LauncherText.mailURL(body: text) else { return refused(label, "email") }
+            NSWorkspace.shared.open(url)
+        case .largeType:
+            LargeTypePanel.show(text)
+        default:
+            return refused(label, "verb")
+        }
+        events.append(RoadieEvent(type: "launcher.text", details: ["verb": verb.rawValue, "length": String(text.count)]))
+        return TargetActionResult(changed: true, message: "\(label): text")
+    }
+
+    /// Verbes d'un onglet ouvert : y aller, le fermer, copier son adresse, l'ouvrir dans une nouvelle fenêtre.
+    private func performOpenItem(_ verb: LauncherVerb, item: LauncherOpenItem, label: String) -> TargetActionResult {
+        switch verb {
+        case .open:
+            return activate(item)
+        case .copyURL:
+            guard let url = item.url else { return refused(label, "url") }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(url, forType: .string)
+        case .closeTab, .newWindowTab:
+            guard item.kind == .tab else { return refused(label, "tab") }
+            let close = verb == .closeTab
+            Task { @MainActor in
+                let done = await LauncherTabActions.perform(close ? .close : .newWindow, on: item)
+                if !done { self.notifyFailure(verb.title + tr(" : échec", ": failed")) }
+            }
+        default:
+            return refused(label, "verb")
+        }
+        events.append(RoadieEvent(type: "launcher.tab", details: ["verb": verb.rawValue, "bundleID": item.bundleID]))
+        return TargetActionResult(changed: true, message: "\(label): \(item.bundleID)")
+    }
+
+    /// Relance : quitter, puis rouvrir une fois le processus terminé (5 s au plus). O(1).
+    private func relaunch(_ app: LauncherApp) {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID)
+        running.forEach { $0.terminate() }
+        Task { @MainActor in
+            for _ in 0..<50 where running.contains(where: { !$0.isTerminated }) { try? await Task.sleep(for: .milliseconds(100)) }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            _ = try? await NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: app.path), configuration: configuration)
+        }
+    }
+
+    /// Échec d'un verbe signalé par une notification (comme les commandes système, session 129).
+    private func notifyFailure(_ text: String) {
+        Task { _ = await LauncherBrowsers.run("display notification \"\(text.applescriptEscaped)\" with title \"Roadie\"", timeout: 3) }
     }
 
     /// Fenêtre qui affiche déjà le fichier : Roadie y va (et l'amène dans `explicit` si donnée). Sinon,

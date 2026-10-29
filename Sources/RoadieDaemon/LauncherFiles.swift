@@ -230,6 +230,18 @@ final class LauncherRecentFiles: @unchecked Sendable {
         }
     }
 
+    /// Dossiers des fichiers ouverts récemment, les plus récents d'abord, sans doublon (session 131). O(n).
+    func recentFolders(limit: Int = 12) -> [String] {
+        let entries = lock.withLock { cached?.entries ?? [] }
+        var seen = Set<String>()
+        var folders: [String] = []
+        for entry in entries where folders.count < limit {
+            let folder = entry.file.isFolder ? entry.file.path : (entry.file.path as NSString).deletingLastPathComponent
+            if seen.insert(folder).inserted { folders.append(folder) }
+        }
+        return folders
+    }
+
     /// Fichiers récents dont le nom contient la saisie, les plus récents d'abord. O(n).
     func matches(_ needle: String, limit: Int = LauncherFileRules.limit) -> [LauncherFile] {
         let folded = LauncherMatch.fold(needle)

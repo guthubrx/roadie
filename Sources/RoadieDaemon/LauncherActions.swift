@@ -13,6 +13,10 @@ enum LauncherSubject: Equatable, Sendable {
     case project(String)
     /// Adresse tapée (SPEC-090).
     case url(URL)
+    /// Texte tapé ou sélectionné dans l'application active (session 131).
+    case text(String)
+    /// Document ou onglet ouvert (SPEC-082), pour ses verbes (session 131).
+    case openItem(LauncherOpenItem)
 
     var title: String {
         switch self {
@@ -21,6 +25,8 @@ enum LauncherSubject: Equatable, Sendable {
         case .file(let file): file.name
         case .project(let name): name
         case .url(let url): url.absoluteString
+        case .text(let text): LauncherText.preview(text)
+        case .openItem(let item): item.title
         }
     }
 
@@ -31,6 +37,8 @@ enum LauncherSubject: Equatable, Sendable {
         case .file(let file): file.rankingKey
         case .project(let name): "project:\(LauncherMatch.fold(name))"
         case .url(let url): "url:\(url.host ?? url.absoluteString)"
+        case .text: "text"
+        case .openItem(let item): "open:\(item.kind.rawValue):\(item.bundleID)"
         }
     }
 
@@ -41,6 +49,8 @@ enum LauncherSubject: Equatable, Sendable {
         case .file: "file"
         case .project: "project"
         case .url: "url"
+        case .text: "text"
+        case .openItem(let item): item.kind == .tab ? "tab" : "document"
         case .target(let target): target.kind.rawValue
         }
     }
@@ -53,6 +63,8 @@ enum LauncherSubject: Equatable, Sendable {
         case .file(let file): file.name
         case .project(let name): name
         case .url(let url): url.host ?? url.absoluteString
+        case .text(let text): LauncherText.preview(text)
+        case .openItem(let item): item.appName
         }
     }
 }
@@ -83,6 +95,17 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     case tileWindow, floatAlways, tileAlways, clearTilingRule
     // Fichier (SPEC-077).
     case reveal, quickLook, copyPath
+    // Fichier, actions d'Alfred (session 131) : presse-papiers, copie et déplacement vers un dossier (en
+    // remplaçant : l'homonyme part à la corbeille), ouvrir avec, e-mail, corbeille, alias, informations,
+    // étiquette, parcourir dans la barre, terminal dans le dossier, contenu d'un paquet.
+    case copyFile, copyTo, moveFileTo, copyReplace, moveReplace, openWith, email, trash, makeAlias, info, addTag
+    case browse, terminalHere, packageContents
+    // Texte et adresse (session 131).
+    case copyText, webSearch, extractURLs, emailText, largeType
+    // Onglet ouvert (session 131).
+    case closeTab, copyURL, newWindowTab
+    // Application (session 131) : relancer, quitter toutes les autres.
+    case relaunch, quitOthers
     // Projets (SPEC-080) : stage gardée, rouverte, supprimée.
     case saveProject, reopenProject, deleteProject
     // Stage, bureau
@@ -124,6 +147,30 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .doubleClick: ("Double-clic", "Double-click")
         case .rightClick: ("Clic droit", "Right-click")
         case .commandClick: ("Cmd-clic (nouvel onglet)", "Cmd-click (new tab)")
+        case .copyFile: ("Copier le fichier", "Copy file")
+        case .copyTo: ("Copier vers…", "Copy to…")
+        case .moveFileTo: ("Déplacer le fichier vers…", "Move file to…")
+        case .copyReplace: ("Copier vers… en remplaçant", "Copy to… replacing")
+        case .moveReplace: ("Déplacer vers… en remplaçant", "Move to… replacing")
+        case .openWith: ("Ouvrir avec…", "Open with…")
+        case .email: ("Envoyer par e-mail", "Send by email")
+        case .trash: ("Mettre à la corbeille", "Move to Trash")
+        case .makeAlias: ("Créer un alias", "Make alias")
+        case .info: ("Informations", "Get info")
+        case .addTag: ("Étiquette…", "Tag…")
+        case .browse: ("Parcourir dans la barre", "Browse in the bar")
+        case .terminalHere: ("Ouvrir un terminal ici", "Open Terminal here")
+        case .packageContents: ("Afficher le contenu du paquet", "Show package contents")
+        case .copyText: ("Copier", "Copy")
+        case .webSearch: ("Chercher sur le web", "Search the web")
+        case .extractURLs: ("Extraire les adresses", "Extract addresses")
+        case .emailText: ("Envoyer par e-mail", "Send by email")
+        case .largeType: ("Afficher en grand", "Show large type")
+        case .closeTab: ("Fermer l'onglet", "Close tab")
+        case .copyURL: ("Copier l'adresse", "Copy address")
+        case .newWindowTab: ("Ouvrir dans une nouvelle fenêtre", "Open in a new window")
+        case .relaunch: ("Relancer l'application", "Relaunch app")
+        case .quitOthers: ("Quitter les autres applications", "Quit other apps")
         }
     }
 
@@ -137,6 +184,12 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .sendTo: tr("Envoyer vers", "Send to")
         case .moveTo: tr("Déplacer vers", "Move to")
         case .recentDocuments: tr("Ouvrir", "Open")
+        case .copyTo: tr("Copier vers", "Copy to")
+        case .moveFileTo: tr("Déplacer vers", "Move to")
+        case .copyReplace: tr("Copier en remplaçant vers", "Copy replacing to")
+        case .moveReplace: tr("Déplacer en remplaçant vers", "Move replacing to")
+        case .openWith: tr("Ouvrir avec", "Open with")
+        case .addTag: tr("Étiqueter", "Tag")
         default: title
         }
     }
@@ -167,7 +220,10 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         return LauncherMatch.score(query, in: pair.fr) != nil || LauncherMatch.score(query, in: pair.en) != nil
     }
 
-    var needsDestination: Bool { [.openIn, .gatherIn, .sendTo, .moveTo, .recentDocuments].contains(self) }
+    var needsDestination: Bool {
+        [.openIn, .gatherIn, .sendTo, .moveTo, .recentDocuments, .copyTo, .moveFileTo, .copyReplace, .moveReplace, .openWith, .addTag]
+            .contains(self)
+    }
 
     /// Clé du classement appris pour ce verbe sur ce type d'objet (session 111) : `verb:app:quit`.
     func rankingKey(for subject: LauncherSubject) -> String { "verb:\(subject.verbKind):\(rawValue)" }
@@ -186,10 +242,19 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     /// dépendent de `tiling` ; sans état connu, « Faire flotter » seul (bascule SPEC-047). O(1).
     static func verbs(for subject: LauncherSubject, tiling: LauncherTilingState? = nil) -> [LauncherVerb] {
         switch subject {
-        case .app: return [.open, .openIn, .bringHere, .newWindow, .recentDocuments, .gatherIn, .hide, .quit, .forceQuit]
-        case .file: return [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath]
+        case .app: return [.open, .openIn, .bringHere, .newWindow, .recentDocuments, .gatherIn, .hide, .quit, .forceQuit, .relaunch, .quitOthers]
+        case .file(let file):
+            // Session 131 : actions d'Alfred sur un fichier ; un dossier se parcourt ou ouvre un terminal, un
+            // paquet (application, bibliothèque) montre son contenu.
+            var verbs: [LauncherVerb] = [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath, .copyFile, .copyTo, .moveFileTo,
+                                         .copyReplace, .moveReplace, .openWith, .email, .trash, .makeAlias, .info, .addTag]
+            if file.isFolder { verbs += [.browse, .terminalHere] }
+            if LauncherFileOperations.isPackage(file.path) { verbs.append(.packageContents) }
+            return verbs
         case .project: return [.reopenProject, .deleteProject]
-        case .url: return [.open, .openIn, .bringHere, .copyPath]
+        case .url: return [.open, .openIn, .bringHere, .copyPath, .emailText, .largeType]
+        case .text: return [.copyText, .webSearch, .extractURLs, .emailText, .largeType]
+        case .openItem(let item): return item.kind == .tab ? [.open, .closeTab, .copyURL, .newWindowTab] : [.open]
         case .target(let target):
             switch target.kind {
             case .window: return [.focus, .sendTo, .bringHere] + tilingVerbs(tiling) + [.fullscreen, .minimize, .close]
@@ -229,6 +294,15 @@ struct LauncherDestination: Equatable, Sendable {
         case newStage(name: String?, DisplayID, DesktopID)
         /// Document récent d'une application (session 116), par son chemin.
         case document(String)
+        /// Dossier où copier ou déplacer un fichier (session 131).
+        case folder(String)
+        /// Application qui ouvre un fichier (session 131), par son chemin.
+        case application(String)
+        /// Étiquette du Finder à ajouter ou retirer (session 131).
+        case tag(String)
+
+        /// Document récent : la ligne montre son seul nom, sans le verbe devant.
+        var isDocument: Bool { if case .document = self { true } else { false } }
     }
 
     let kind: Kind
@@ -244,6 +318,9 @@ struct LauncherDestination: Equatable, Sendable {
         case .display(let display): "display:\(display.rawValue)"
         case .newStage(let name, let display, let desktop): "new:\(display.rawValue)/\(desktop.rawValue)/\(name ?? "")"
         case .document(let path): "document:\(path)"
+        case .folder(let path): "folder:\(path)"
+        case .application(let path): "application:\(path)"
+        case .tag(let name): "tag:\(name)"
         }
     }
 
@@ -254,16 +331,22 @@ struct LauncherDestination: Equatable, Sendable {
         case .display: .display
         case .newStage: .newStage
         case .document: .document
+        case .folder: .folder
+        case .application: .application
+        case .tag: .tag
         }
     }
 
-    fileprivate enum Category { case stage, desktop, display, newStage, document }
+    fileprivate enum Category { case stage, desktop, display, newStage, document, folder, application, tag }
 
     /// Destinations acceptées par un verbe pour un objet. O(1).
     fileprivate static func accepts(_ category: Category, verb: LauncherVerb, subject: LauncherSubject) -> Bool {
         switch verb {
         case .openIn, .gatherIn: return category == .stage || category == .newStage
-        case .sendTo: return category != .document
+        case .sendTo: return [.stage, .desktop, .display, .newStage].contains(category)
+        case .copyTo, .moveFileTo, .copyReplace, .moveReplace: return category == .folder
+        case .openWith: return category == .application
+        case .addTag: return category == .tag
         case .recentDocuments: return category == .document
         case .moveTo:
             if case .target(let target) = subject, target.kind == .desktop { return category == .display }
@@ -334,7 +417,7 @@ struct LauncherVariant: Equatable, Sendable {
         // Un fichier se comporte comme une application : il s'ouvre, dans une stage ou ici.
         let isApp = switch subject {
         case .app, .file, .url: true
-        case .target, .project: false
+        case .target, .project, .text, .openItem: false
         }
         switch modifier {
         case .control:

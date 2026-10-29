@@ -15,7 +15,7 @@ struct LauncherSelection: Equatable, Sendable {
         case .app(let app): "app:\(app.bundleID)"
         case .file(let file): "file:\(file.path)"
         case .target(let target) where target.kind == .window: "window:\(target.id)"
-        case .target, .project, .url: nil
+        case .target, .project, .url, .text, .openItem: nil
         }
     }
 
@@ -47,8 +47,13 @@ struct LauncherSelection: Equatable, Sendable {
 
     var hasWindows: Bool { subjects.contains { if case .target = $0 { true } else { false } } }
 
+    /// Chemins des fichiers du lot. O(s).
+    var filePaths: [String] { subjects.compactMap { if case .file(let file) = $0 { file.path } else { nil } } }
+
     /// Verbes du lot proposés s'ils valent pour au moins un objet, dans cet ordre (FR-004).
-    static let verbs: [LauncherVerb] = [.sendTo, .bringHere, .close, .minimize, .quit, .hide, .copyPath, .reveal]
+    static let verbs: [LauncherVerb] = [.sendTo, .bringHere, .close, .minimize, .quit, .hide, .copyPath, .reveal,
+                                        .copyFile, .copyTo, .moveFileTo, .copyReplace, .moveReplace, .openWith, .email, .trash,
+                                        .makeAlias, .addTag]
 
     /// Objets concernés par un verbe du lot. Envoyer et Amener ici valent pour tous ; Fermer et Réduire
     /// pour les fenêtres ; Quitter et Masquer pour les applications ; Copier et Montrer pour les
@@ -60,6 +65,9 @@ struct LauncherSelection: Equatable, Sendable {
             case (.close, .target), (.minimize, .target): true
             case (.quit, .app), (.hide, .app): true
             case (.copyPath, .file), (.reveal, .file): true
+            // Session 131 : actions d'Alfred sur des fichiers, en une seule fois.
+            case (.copyFile, .file), (.copyTo, .file), (.moveFileTo, .file), (.copyReplace, .file), (.moveReplace, .file),
+                 (.openWith, .file), (.email, .file), (.trash, .file), (.makeAlias, .file), (.addTag, .file): true
             default: false
             }
         }
@@ -116,6 +124,9 @@ extension LauncherActionList {
         return list
     }
 
-    /// Verbe de destination du lot : `sendTo` (toutes destinations) avec une fenêtre, sinon `openIn`.
-    static func batchDestinationVerb(_ selection: LauncherSelection) -> LauncherVerb { selection.hasWindows ? .sendTo : .openIn }
+    /// Verbe de destination du lot : `sendTo` (toutes destinations) avec une fenêtre, sinon `openIn` ; un verbe de
+    /// fichier (session 131) garde le sien. O(1).
+    static func batchDestinationVerb(_ selection: LauncherSelection, chosen: LauncherVerb = .sendTo) -> LauncherVerb {
+        chosen != .sendTo ? chosen : selection.hasWindows ? .sendTo : .openIn
+    }
 }

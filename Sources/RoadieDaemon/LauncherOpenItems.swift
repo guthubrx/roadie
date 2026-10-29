@@ -1,6 +1,8 @@
+import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
+import RoadieAX
 import RoadieCore
 
 /// Document ou onglet ouvert, même dans une stage cachée (SPEC-082). Gardé en mémoire le temps de la
@@ -177,5 +179,68 @@ enum FirefoxTabSelector {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
         return value as? String
+    }
+}
+
+/// Verbes d'un onglet ouvert (session 131), comme les tâches navigateur d'Alfred : fermer l'onglet, l'ouvrir dans une
+/// nouvelle fenêtre. Safari et Chromium par AppleScript ; Firefox, sans dictionnaire, par l'accessibilité (onglet
+/// pressé puis ⌘W) et par sa ligne de commande (`--new-window`).
+enum LauncherTabActions {
+    enum Action: Equatable, Sendable { case close, newWindow }
+
+    /// Script d'un navigateur scriptable ; nil pour un autre navigateur ou sans rang connu. O(1).
+    static func script(_ action: Action, bundleID: String, window: Int?, tab: Int?, url: String?) -> String? {
+        let isSafari = bundleID == LauncherBrowsers.safari
+        guard isSafari || LauncherBrowsers.chromium.contains(bundleID) else { return nil }
+        switch action {
+        case .close:
+            guard let window, let tab else { return nil }
+            return "tell application id \"\(bundleID)\" to close tab \(tab) of window \(window)"
+        case .newWindow:
+            guard let url, !url.isEmpty else { return nil }
+            let address = url.applescriptEscaped
+            if isSafari {
+                return "tell application id \"\(bundleID)\"\nmake new document with properties {URL:\"\(address)\"}\nactivate\nend tell"
+            }
+            return "tell application id \"\(bundleID)\"\nset w to make new window\nset URL of active tab of w to \"\(address)\"\nactivate\nend tell"
+        }
+    }
+
+    /// Arguments de `open` pour une nouvelle fenêtre de Firefox sur l'adresse. O(1).
+    static func firefoxNewWindowArguments(url: String) -> [String] { ["-na", "Firefox", "--args", "--new-window", url] }
+
+    /// Exécute le verbe ; vrai si le navigateur l'a accepté. O(1) appels.
+    @MainActor static func perform(_ action: Action, on item: LauncherOpenItem) async -> Bool {
+        if let script = script(action, bundleID: item.bundleID, window: item.browserWindow, tab: item.tabIndex, url: item.url) {
+            return await LauncherBrowsers.run(script, timeout: 5) != nil
+        }
+        guard LauncherBookmarkBrowsers.bundleIDs("firefox").contains(item.bundleID),
+              let app = NSRunningApplication.runningApplications(withBundleIdentifier: item.bundleID).first else { return false }
+        switch action {
+        case .newWindow:
+            guard let url = item.url else { return false }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = firefoxNewWindowArguments(url: url)
+            return (try? process.run()) != nil
+        case .close:
+            let pid = app.processIdentifier, windowID = item.windowID, title = item.title
+            let pressed = await Task.detached(priority: .userInitiated) { () -> Bool in
+                let elements = axWindowElements(pid: pid)
+                let known = windowID.flatMap { elements[CGWindowID($0.rawValue)] }
+                return FirefoxTabSelector.select(title: title, in: known.map { [$0] } ?? Array(elements.values))
+            }.value
+            guard pressed else { return false }
+            app.activate()
+            try? await Task.sleep(for: .milliseconds(150))
+            // ⌘W (code 13) envoyé à Firefox seul, une fois son onglet choisi.
+            let source = CGEventSource(stateID: .hidSystemState)
+            for down in [true, false] {
+                let event = CGEvent(keyboardEventSource: source, virtualKey: 13, keyDown: down)
+                event?.flags = .maskCommand
+                event?.postToPid(pid)
+            }
+            return true
+        }
     }
 }

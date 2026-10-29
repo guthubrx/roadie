@@ -933,6 +933,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
     /// Sélection multiple (SPEC-091), gardée quand la saisie change.
     private var selection = LauncherSelection()
+    /// Verbe du lot qui attend sa destination : « Envoyer vers… », ou un verbe de fichier (session 131).
+    private var batchVerb = LauncherVerb.sendTo
+    /// « Extraire les adresses » (session 131) : la barre ne montre plus que ces adresses, chacune avec ses verbes.
+    private var extractedAddresses: [LauncherText.Address]?
     private var step = LauncherStep.objects
     private var actionList = LauncherActionList()
     private var actionSelection: String?
@@ -1415,10 +1419,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .phrase(let action, _), .alias(_, let action, _): enterVerbs(action.subject)
             case .project(let project): enterVerbs(.project(project.name))
             case .action(_, let action, _, _): enterVerbs(action.subject)
-            case .rule, .openItem, .calc, .terminal, .system: break
+            // Session 131 : onglet ou document ouvert, résultat d'un calcul, texte de la recherche web.
+            case .openItem(let item): enterVerbs(.openItem(item))
+            case .calc(let calc): enterVerbs(.text(calc.text))
+            case .rule, .terminal, .system: break
             case .workflowKeyword(let entry): completeWorkflow(entry, nil)
             case .web(let row):
-                if let url = row.url { enterVerbs(.url(url)) } else if case .hint(let search) = row.kind { model.replaceQuery(search.keyword + " ") }
+                if case .search = row.kind, !LauncherWeb.searchText(model.query).isEmpty {
+                    enterVerbs(.text(LauncherWeb.searchText(model.query)))
+                } else if let url = row.url { enterVerbs(.url(url)) } else if case .hint(let search) = row.kind { model.replaceQuery(search.keyword + " ") }
             case .history(let query): model.replaceQuery(query)
             case .workflowItem(let entry, let item, _):
                 // Fichier rendu par un workflow (filtre de fichiers, grille de fichiers) : ses verbes de Roadie.
@@ -1506,6 +1515,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func refreshLauncherRows() {
         if let grid = launcher.workflowGrid {
             refreshGrid(grid)
+            return
+        }
+        if let addresses = extractedAddresses {
+            let folded = LauncherMatch.fold(model.query)
+            let rows = addresses.filter { folded.isEmpty || LauncherMatch.fold($0.text).contains(folded) }
+                .map { LauncherList.Row.web(LauncherWebRow(kind: .address($0.url), title: $0.text)) }
+            launcherQuery = model.query
+            launcherList = .idle([.header(tr("Adresses", "Addresses"))] + rows)
+            if launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
+            syncHighlight()
             return
         }
         // `>` : la commande pour le terminal, seule (session 103), comme le préfixe d'Alfred.
@@ -2165,6 +2184,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     // MARK: - Sélection multiple (SPEC-091)
 
     private func enterBatch() {
+        batchVerb = .sendTo
         step = .batchVerbs
         stepQuery = ""
         refreshActions()
@@ -2194,8 +2214,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .verbs(let subject):
             actionList = .verbs(for: subject, query: stepQuery, destinations: launcher.destinations, newStageHome: launcher.newStageHome,
                                 tiling: stepTiling, ranking: launcher.learnsVerbOrder ? launcher.ranking : nil)
-            if case .file(let file) = subject {
+            switch subject {
+            case .file(let file):
                 actionList.appendWorkflows(launcher.workflowTriggers.filter { AlfredWorkflowIndex.accepts($0, path: file.path) }, query: stepQuery)
+            // Session 131 : actions universelles des workflows sur un texte ou une adresse.
+            case .text:
+                actionList.appendWorkflows(launcher.workflowTriggers.filter(AlfredWorkflowIndex.acceptsText), query: stepQuery)
+            case .url:
+                actionList.appendWorkflows(launcher.workflowTriggers.filter(AlfredWorkflowIndex.acceptsURL), query: stepQuery)
+            default: break
             }
         case .destinations(let subject, let verb):
             actionList = .destinations(for: subject, verb: verb, query: stepQuery, destinations: destinations(for: subject, verb: verb),
@@ -2204,21 +2231,48 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             return
         case .batchVerbs:
             actionList = .batch(selection, query: stepQuery)
+            let paths = selection.filePaths
+            if !paths.isEmpty, paths.count == selection.count {
+                actionList.appendWorkflows(launcher.workflowTriggers.filter { entry in paths.allSatisfy { AlfredWorkflowIndex.accepts(entry, path: $0) } },
+                                           query: stepQuery)
+            }
         case .batchDestinations:
             let title = tr("\(selection.count) choisi\(selection.count > 1 ? "s" : "")", "\(selection.count) selected")
-            actionList = .destinations(for: .project(title), verb: LauncherActionList.batchDestinationVerb(selection), query: stepQuery,
-                                       destinations: launcher.destinations, newStageHome: launcher.newStageHome)
+            let verb = LauncherActionList.batchDestinationVerb(selection, chosen: batchVerb)
+            actionList = .destinations(for: .project(title), verb: verb, query: stepQuery,
+                                       destinations: fileDestinations(verb: verb, paths: selection.filePaths) ?? launcher.destinations,
+                                       newStageHome: launcher.newStageHome)
         }
         actionSelection = actionList.best
     }
 
     /// Destinations d'un verbe ; documents récents (session 116) lus une fois par application ouverte dans l'étape.
     private func destinations(for subject: LauncherSubject, verb: LauncherVerb) -> [LauncherDestination] {
+        if let files = fileDestinations(verb: verb, paths: { if case .file(let file) = subject { [file.path] } else { [] } }()) { return files }
         guard verb == .recentDocuments, case .app(let app) = subject else { return launcher.destinations }
         if let recent, recent.bundleID == app.bundleID { return recent.destinations }
         let found = LauncherRecentDocuments.destinations(LauncherRecentDocuments.documents(bundleID: app.bundleID))
         recent = (app.bundleID, found)
         return found
+    }
+
+    /// Destinations des verbes de fichier (session 131) : dossiers (chemin tapé, habituels, récents), applications,
+    /// étiquettes ; nil pour un autre verbe. O(r).
+    private func fileDestinations(verb: LauncherVerb, paths: [String]) -> [LauncherDestination]? {
+        switch verb {
+        case .copyTo, .moveFileTo, .copyReplace, .moveReplace:
+            return LauncherFileOperations.folderDestinations(typed: stepQuery, recent: LauncherRecentFiles.shared.recentFolders(),
+                                                             excluding: [.moveFileTo, .moveReplace].contains(verb) ? paths : [])
+        case .openWith: return LauncherFileOperations.applicationDestinations(for: paths)
+        case .addTag:
+            var tags = LauncherFileOperations.tagDestinations(for: paths)
+            let typed = stepQuery.trimmingCharacters(in: .whitespaces)
+            if !typed.isEmpty, !tags.contains(where: { $0.title.caseInsensitiveCompare(typed) == .orderedSame }) {
+                tags.insert(LauncherDestination(kind: .tag(typed), title: typed, detail: tr("nouvelle étiquette", "new tag")), at: 0)
+            }
+            return tags
+        default: return nil
+        }
     }
 
     private func handleStep(_ input: SearchKeyInput) {
@@ -2254,7 +2308,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             // Tab ou → sur un verbe qui demande une destination : la troisième étape.
             if case .verb(let verb)? = actionList.row(for: actionSelection), verb.needsDestination, case .verbs(let subject) = step {
                 enterDestinations(subject, verb)
-            } else if case .verb(.sendTo)? = actionList.row(for: actionSelection), step == .batchVerbs {
+            } else if case .verb(let verb)? = actionList.row(for: actionSelection), verb.needsDestination, step == .batchVerbs {
+                batchVerb = verb
                 step = .batchDestinations
                 stepQuery = ""
                 refreshActions()
@@ -2388,14 +2443,17 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func confirmStep() {
         if step == .batchVerbs || step == .batchDestinations {
             switch actionList.row(for: actionSelection) {
-            case .verb(.sendTo):
+            case .verb(let verb) where verb.needsDestination && step == .batchVerbs:
+                batchVerb = verb
                 step = .batchDestinations
                 stepQuery = ""
                 refreshActions()
                 render()
             case .verb(let verb): finishBatch(verb, nil)
-            case .destination(_, let destination): finishBatch(.sendTo, destination)
-            case .workflow, .header, nil: break
+            case .destination(_, let destination): finishBatch(batchVerb, destination)
+            // Action universelle d'un workflow sur plusieurs fichiers (session 131) : tous les chemins en argument.
+            case .workflow(let entry): finishWorkflow(entry, arg: selection.filePaths, variables: [:], modifiers: 0, rankingKey: nil)
+            case .header, nil: break
             }
             return
         }
@@ -2416,8 +2474,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .destination(let verb, let destination):
             finishAction(LauncherAction(subject: subject, verb: verb, destination: destination))
         case .workflow(let entry):
-            // Action sur fichier d'un workflow (SPEC-089 FR-003) : le chemin en argument.
-            if case .file(let file) = subject { finishWorkflow(entry, arg: [file.path], variables: [:], modifiers: 0, rankingKey: nil) }
+            // Action sur fichier d'un workflow (SPEC-089 FR-003) : le chemin en argument ; texte ou adresse (session 131).
+            switch subject {
+            case .file(let file): finishWorkflow(entry, arg: [file.path], variables: [:], modifiers: 0, rankingKey: nil)
+            case .text(let text): finishWorkflow(entry, arg: [text], variables: [:], modifiers: 0, rankingKey: nil)
+            case .url(let url): finishWorkflow(entry, arg: [url.absoluteString], variables: [:], modifiers: 0, rankingKey: nil)
+            default: break
+            }
         case .header, nil:
             break
         }
@@ -2433,6 +2496,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         if action.position == nil, case .target(let target) = action.subject, let verb = Self.searchVerb(action.verb, for: target) {
             finishActivating(target, verb)
+            return
+        }
+        // Session 131 : les adresses d'un texte s'affichent dans la barre, qui reste ouverte.
+        if action.verb == .extractURLs, case .text(let text) = action.subject {
+            extractedAddresses = LauncherText.addresses(in: text)
+            step = .objects
+            stepQuery = ""
+            launcherQuery = nil
+            model.replaceQuery("")
+            render()
             return
         }
         guard !finished else { return }
@@ -2664,9 +2737,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             case .display: "display"
             case .newStage: "plus.square.on.square"
             case .document: "doc"
+            case .folder: "folder"
+            case .application: "app"
+            case .tag: "tag"
             }
-            if case .document(let path) = destination.kind {
-                return SlashSuggestion(text: destination.title, detail: destination.detail, kind: .result, icon: .file(path))
+            switch destination.kind {
+            case .document(let path), .folder(let path), .application(let path):
+                return SlashSuggestion(text: destination.kind.isDocument ? destination.title : "\(verb.destinationPrefix) \(destination.title)",
+                                       detail: destination.detail, kind: .result, icon: .file(path))
+            default: break
             }
             return SlashSuggestion(text: "\(verb.destinationPrefix) \(destination.title)", detail: destination.detail,
                                    kind: .result, icon: .symbol(symbol))
@@ -2765,6 +2844,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         case .target(let target): appPaths[target.title].map(SlashSuggestion.Icon.file) ?? .symbol("macwindow")
         case .project: .symbol("square.stack.3d.down.right")
         case .url: .symbol("globe")
+        case .text: .symbol("text.quote")
+        case .openItem(let item): item.kind == .tab ? .symbol("globe") : .symbol("doc")
         }
     }
 

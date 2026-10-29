@@ -229,6 +229,12 @@ final class AlfredWorkflowIndex: @unchecked Sendable {
         return symbols.joined() + key.uppercased()
     }
 
+    /// Action universelle sur un texte (session 131). O(1).
+    static func acceptsText(_ entry: AlfredEntry) -> Bool { entry.kind == .universalAction && entry.acceptsText }
+
+    /// Action universelle sur une adresse ; une action sur texte la reçoit aussi, comme dans Alfred (session 131). O(1).
+    static func acceptsURL(_ entry: AlfredEntry) -> Bool { entry.kind == .universalAction && (entry.acceptsURLs || entry.acceptsText) }
+
     /// Un fichier convient-il à une action ? Types vides : tous ; sinon le type du fichier doit
     /// se conformer à l'un d'eux (UTI). O(t).
     static func accepts(_ entry: AlfredEntry, path: String) -> Bool {

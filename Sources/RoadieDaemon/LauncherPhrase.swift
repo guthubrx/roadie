@@ -115,6 +115,8 @@ struct LauncherPhrase: Equatable, Sendable {
             return action
         }
         switch subject {
+        case .text, .openItem:
+            return nil
         case .app, .file, .url:
             switch place {
             case .none: return make(.open, nil)
@@ -122,7 +124,7 @@ struct LauncherPhrase: Equatable, Sendable {
             case .destination(let destination):
                 switch destination.kind {
                 case .stage, .newStage: return make(.openIn, destination)
-                case .desktop, .display, .document: return nil
+                case .desktop, .display, .document, .folder, .application, .tag: return nil
                 }
             }
         case .target(let target):

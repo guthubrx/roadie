@@ -246,7 +246,7 @@ struct LauncherPreviewRequest: Equatable, Sendable {
             return LauncherPreviewRequest(stage: stage, incoming: WindowID(rawValue: id), appPath: nil)
         case .url(let url):
             return LauncherPreviewRequest(stage: stage, incoming: nil, appPath: NSWorkspace.shared.urlForApplication(toOpen: url)?.path)
-        case .project:
+        case .project, .text, .openItem:
             return nil
         }
     }
