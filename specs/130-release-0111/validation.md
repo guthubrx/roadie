@@ -23,5 +23,20 @@ démonté. Roadie.app et lien Applications présents. Bundle 0.11.1, minimum mac
 Non réalisée : `bridget_auto_delegate` absent du catalogue Bridget depuis le chargement de Bridget211 (incident
 remis à bridge1016, sans réponse).
 
+## Publication et vérification GitHub
+https://github.com/guthubrx/roadie/releases/tag/v0.11.1 - Latest, hors brouillon et hors préversion, publiée le
+29 octobre 2026 à 18:59:03Z. Tag annoté v0.11.1 sur 592ae0e4, poussé. `main` avancé sans commit de fusion et poussé
+(3c9d66d9..592ae0e4). Notes EN puis FR relues par l'API : identiques au texte préparé, à une ligne vide finale
+près. Liens des notes servis (HTTP 200 : notes 0.11.0, audit, validation, comparaison). Roadie.dmg et
+Roadie.dmg.sha256 retéléchargés : identiques au paquet local, `shasum -a 256 -c` OK.
+
+## Installation locale
+Roadie 0.11.1 installé, UUID identique au paquet, PID 30417, santé 5/5, certificat roadied-cert conservé,
+configuration identique avant et après (empreinte 166624a713447bc4).
+
+## Nettoyage
+Branches `130-release-0111` et précédentes supprimées après fusion ; `dist/` et compilation de release supprimés.
+Worktree de conversation conservé, détaché sur `main`.
+
 ## Limites
 Distribution arm64, macOS 14 et ultérieur, signée ad hoc, non notarisée.
