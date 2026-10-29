@@ -69,7 +69,7 @@ stage, on the left, and ⌘S saves it as an abbreviation.
 <table>
   <tr>
     <td><img src="docs/assets/screenshots/launcher-workflow.png" alt="Workflow results"></td>
-    <td><img src="docs/assets/screenshots/launcher-grid.png" alt="A workflow grid"></td>
+    <td><img src="docs/assets/screenshots/launcher-emoji-grid.png" alt="An emoji workflow shown as a grid"></td>
   </tr>
 </table>
 

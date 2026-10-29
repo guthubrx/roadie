@@ -59,9 +59,32 @@ struct Spec124DocScreenshots {
         }
     }
 
-    private func bar(_ query: String, _ rows: [SlashSuggestion], selected: Int?, properties: String? = nil) -> TargetSearchBar {
-        TargetSearchBar(query: query, matchCount: rows.filter { $0.kind != .header }.count, properties: properties, isLoading: false,
-                        suggestions: numbered(rows), selectedSuggestion: selected, richRows: true)
+    /// `view` : chip de la présentation (« ☰ Liste »), là où la vraie barre l'affiche (session 099).
+    private func bar(_ query: String, _ rows: [SlashSuggestion], selected: Int?, properties: String? = nil,
+                     view: LauncherViewMode? = nil) -> TargetSearchBar {
+        var state = TargetSearchBar(query: query, matchCount: rows.filter { $0.kind != .header }.count, properties: properties,
+                                    isLoading: false, suggestions: numbered(rows), selectedSuggestion: selected, richRows: true)
+        state.viewChip = view.map { "\($0.symbol) \($0.title)" }
+        return state
+    }
+
+    /// Image d'exemple d'un émoji, dessinée par la police du système, comme les icônes d'un workflow d'émojis.
+    private func emojiImage(_ emoji: String) -> String {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-doc-shots-emoji")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(emoji.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: "-")).png")
+        let size = 128
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8, samplesPerPixel: 4,
+                                         hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        else { return url.path }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        let text = NSAttributedString(string: emoji, attributes: [.font: NSFont.systemFont(ofSize: 100)])
+        let bounds = text.size()
+        text.draw(at: CGPoint(x: (CGFloat(size) - bounds.width) / 2, y: (CGFloat(size) - bounds.height) / 2))
+        NSGraphicsContext.restoreGraphicsState()
+        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        return url.path
     }
 
     private func searchScene() -> TargetSearchBar {
@@ -76,7 +99,35 @@ struct Spec124DocScreenshots {
             row("Notes de réunion.md", "~/Documents/Projets", .file(sampleFile("Notes de réunion.md"))),
             row("Notes partagées", "~/Documents", .file(sampleFile("Notes partagées", folder: true))),
             row("notes-atelier.txt", "~/Bureau", .file(sampleFile("notes-atelier.txt"))),
-        ], selected: 1)
+        ], selected: 1, view: .list)
+    }
+
+    /// Même recherche après ⌘G : les fichiers seuls, en grille, nom sous chaque tuile (session 099 FR-002).
+    private func filesGridScene() -> TargetSearchBar {
+        let files = ["Notes de réunion.md", "Notes de version 2.4.pdf", "notes-atelier.txt", "Notes partagées",
+                     "Notes de cours.docx", "Notes de frais.xlsx", "Notes de lecture.rtf", "Notes de présentation.key",
+                     "Notes de projet.numbers", "Notes du jardin.pages", "Notes archivées.zip", "Notes du séminaire.mov", "Notes vocales.m4a",
+                     "Notes de voyage"]
+        var state = bar("note", files.map { name in
+            row(name, "", .file(sampleFile(name, folder: !name.contains("."))))
+        }, selected: 0, view: .grid)
+        state.grid = SearchGrid(columns: LauncherViewMode.grid.columns ?? 7, showTitles: true)
+        return state
+    }
+
+    /// Workflow d'émojis en grille : le nom de l'émoji choisi en pied (session 099 FR-003).
+    private func emojiGridScene() -> TargetSearchBar {
+        let emojis: [(String, String)] = [
+            ("❤️", "Cœur rouge"), ("🧡", "Cœur orange"), ("💛", "Cœur jaune"), ("💚", "Cœur vert"), ("💙", "Cœur bleu"),
+            ("💜", "Cœur violet"), ("🖤", "Cœur noir"), ("🤍", "Cœur blanc"), ("💔", "Cœur brisé"), ("💖", "Cœur étincelant"),
+            ("💕", "Deux cœurs"), ("💘", "Cœur avec flèche"), ("💓", "Cœur battant"), ("💗", "Cœur qui grandit"),
+        ]
+        let selected = 9
+        var state = bar("emoji coeur", emojis.map { row($0.1, "Retour copie \($0.0)", .image(emojiImage($0.0))) },
+                        selected: selected, view: .grid)
+        state.grid = SearchGrid(columns: LauncherViewMode.grid.columns ?? 7, showTitles: false,
+                                footer: "\(emojis[selected].1) · Retour copie \(emojis[selected].0)")
+        return state
     }
 
     private func verbsScene() -> TargetSearchBar {
@@ -108,19 +159,6 @@ struct Spec124DocScreenshots {
             header("Workflows"),
             row("Fuseaux horaires", "heure · workflow d'Alfred", .symbol("puzzlepiece.extension")),
         ], selected: 1)
-    }
-
-    private func gridScene() -> TargetSearchBar {
-        let tiles: [(String, String)] = [
-            ("Wi-Fi", "wifi"), ("Bluetooth", "dot.radiowaves.left.and.right"), ("Réseau", "network"),
-            ("Notifications", "bell.badge"), ("Son", "speaker.wave.2"), ("Concentration", "moon"),
-            ("Écrans", "display"), ("Fond d'écran", "photo"), ("Batterie", "battery.100"),
-            ("Clavier", "keyboard"), ("Confidentialité", "hand.raised"), ("Touch ID", "touchid"),
-        ]
-        var state = bar("", tiles.map { row($0.0, "", .symbol($0.1)) }, selected: 4,
-                        properties: "Filtrer : Réglages Système")
-        state.grid = SearchGrid(columns: 6, showTitles: true)
-        return state
     }
 
     private func calcScene() -> TargetSearchBar {
@@ -225,7 +263,8 @@ struct Spec124DocScreenshots {
         guard output != nil else { return }
         let main = theme("alfred-modern-dark")
         for (name, state) in [("launcher-search", searchScene()), ("launcher-verbs", verbsScene()), ("launcher-phrase", phraseScene()),
-                              ("launcher-workflow", workflowScene()), ("launcher-grid", gridScene()), ("launcher-calc", calcScene())] {
+                              ("launcher-workflow", workflowScene()), ("launcher-calc", calcScene()),
+                              ("launcher-files-grid", filesGridScene()), ("launcher-emoji-grid", emojiGridScene())] {
             try save(try await renderBar(state, theme: main), name)
         }
     }

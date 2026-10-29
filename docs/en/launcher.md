@@ -100,7 +100,7 @@ fallback searches, file actions as verbs, external triggers, hotkeys (bound in B
 and PDF views, Alfred Remote buttons and the official automation tasks. When a script talks to Alfred (`tell
 application id "com.runningwithcrayons.Alfred"`), Roadie does the job itself, without opening Alfred.
 
-![A workflow grid](../assets/screenshots/launcher-grid.png)
+![An emoji workflow shown as a grid](../assets/screenshots/launcher-emoji-grid.png)
 
 Out of a corpus of 102 real workflows, 92 are "complete" according to `roadie workflow list`. That command shows
 each workflow's status (complete, partial, unusable) and what is missing. Not supported: snippets, Alfred's
@@ -119,7 +119,11 @@ Alfred's nine themes are included, with their colors, fonts, corners and blur; a
 (`.alfredappearance`) in `~/.config/roadies/themes` joins the list. Dark mode can use another theme
 (`theme_dark`). The bar sits at the bottom, center or top, on the display of the mouse or of the active window;
 drag it to move it and it remembers its place. Results of a workflow, a folder or a file search can be shown as a
-list, a grid or large tiles (⌘G).
+list, a grid or large tiles. The pill on the right of the field shows the current view ("☰ Liste", "▦ Grille",
+"▣ Grandes tuiles") and the number of results; click it, or press ⌘G, to switch to the next view. Roadie remembers
+the choice for each workflow, each folder and for file results.
+
+![The same search as a grid: files only](../assets/screenshots/launcher-files-grid.png)
 
 ## Speed
 

@@ -105,7 +105,7 @@ raccourcis (à lier dans BetterTouchTool), grilles, vues Texte, Image et PDF, bo
 d'automatisation officielles. Quand un script s'adresse à Alfred (`tell application id
 "com.runningwithcrayons.Alfred"`), Roadie fait lui-même ce qui est demandé, sans ouvrir Alfred.
 
-![Grille d'un workflow](../assets/screenshots/launcher-grid.png)
+![Workflow d'émojis en grille](../assets/screenshots/launcher-emoji-grid.png)
 
 Sur un corpus de 102 workflows réels, 92 sont « complets » selon `roadie workflow list`. Cette commande donne
 l'état de chaque workflow (complet, partiel, inutilisable) et ce qui manque. Non repris : snippets, historique du
@@ -124,7 +124,12 @@ Les neuf thèmes d'Alfred sont fournis, avec leurs couleurs, polices, arrondis e
 d'Alfred (`.alfredappearance`) dans `~/.config/roadies/themes` s'ajoute à la liste. Un thème différent peut
 servir en mode sombre (`theme_dark`). La barre se place en bas, au centre ou en haut, sur l'écran de la souris
 ou de la fenêtre active ; elle se déplace à la souris et retient sa place. Les résultats d'un workflow, d'un
-dossier ou d'une recherche de fichiers se montrent en liste, en grille ou en grandes tuiles (⌘G).
+dossier ou d'une recherche de fichiers se montrent en liste, en grille ou en grandes tuiles. La pastille à
+droite de la saisie indique la présentation (« ☰ Liste », « ▦ Grille », « ▣ Grandes tuiles ») et le nombre de
+résultats ; un clic sur elle, ou ⌘G, passe à la suivante. Roadie retient le choix pour chaque workflow, chaque
+dossier et pour les fichiers de la recherche.
+
+![La même recherche en grille : les fichiers seuls](../assets/screenshots/launcher-files-grid.png)
 
 ## Rapidité
 

@@ -70,7 +70,7 @@ fenêtres prennent leur future place ; Échap remet tout. Une phrase fait tout d
 <table>
   <tr>
     <td><img src="docs/assets/screenshots/launcher-workflow.png" alt="Résultats d'un workflow"></td>
-    <td><img src="docs/assets/screenshots/launcher-grid.png" alt="Grille d'un workflow"></td>
+    <td><img src="docs/assets/screenshots/launcher-emoji-grid.png" alt="Workflow d'émojis en grille"></td>
   </tr>
 </table>
 
