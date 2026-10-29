@@ -23,6 +23,8 @@ public struct WindowContextActions {
     private let stageStore: StageStore
     private let eventLog: EventLog
     private let affinityService: WindowRuleAffinityService
+    /// Liste « Fenêtres toujours flottantes » (session 125) ; un autre fichier de config pour les tests.
+    var floatingWindows = FloatingWindowSettings()
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
@@ -87,6 +89,9 @@ public struct WindowContextActions {
         case .floatAlways, .tileAlways, .clearTiling:
             let choice: WindowTilingChoice? = action.kind == .floatAlways ? .float : action.kind == .tileAlways ? .tile : nil
             let result = affinityService.saveTiling(choice, window: entry.window)
+            return WindowContextActionResult(message: result.message, changed: result.changed)
+        case .floatTitleAlways, .clearTitleFloat:
+            let result = floatingWindows.setFloating(action.kind == .floatTitleAlways, window: entry.window)
             return WindowContextActionResult(message: result.message, changed: result.changed)
         case .floatStage:
             return setPin(window: entry.window, sourceScope: scope, pinScope: .stage, snapshot: snapshot)

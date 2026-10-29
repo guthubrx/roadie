@@ -686,6 +686,11 @@ extension SettingsCatalog {
     static let ruleDescriptors: [SettingDescriptor] = [
         readOnlyEntry(.regles, "exclusions", "floating_bundles", "Applications toujours flottantes",
                       "Liste d'identifiants d'applications gardées hors du tuilage."),
+        readOnlyEntry(.regles, "exclusions", "floating_windows", "Fenêtres toujours flottantes",
+                      "Fenêtres d'une application gardées hors du tuilage selon leur titre : rappels, boîtes de dialogue, "
+                      + "palettes. Dans le titre, # remplace un nombre et * n'importe quel texte ; les majuscules ne comptent "
+                      + "pas. « # Reminder » couvre « 1 Reminder » et « 3 Reminders ». Le menu Fenêtre de la barre de titre "
+                      + "ajoute ou retire la fenêtre choisie. `roadie window explain` dit pourquoi une fenêtre est tuilée."),
         readOnlyEntry(.regles, "", "rules", "Règles de fenêtres",
                       "Tableau de règles qui placent ou excluent des fenêtres selon l'application ou le titre."),
         readOnlyEntry(.regles, "signals", "hooks", "Commandes déclenchées par événement",

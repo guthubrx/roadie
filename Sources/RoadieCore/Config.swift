@@ -396,18 +396,23 @@ public struct StageDefinition: Equatable, Codable, Sendable {
 
 public struct ExclusionsConfig: Equatable, Codable, Sendable {
     public var floatingBundles: [String]
+    /// Fenêtres toujours flottantes, par application et titre (session 125).
+    public var floatingWindows: [FloatingWindowConfig]
 
-    public init(floatingBundles: [String] = []) {
+    public init(floatingBundles: [String] = [], floatingWindows: [FloatingWindowConfig] = []) {
         self.floatingBundles = floatingBundles
+        self.floatingWindows = floatingWindows
     }
 
     enum CodingKeys: String, CodingKey {
         case floatingBundles = "floating_bundles"
+        case floatingWindows = "floating_windows"
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.floatingBundles = try c.decodeIfPresent([String].self, forKey: .floatingBundles) ?? []
+        self.floatingWindows = try c.decodeIfPresent([FloatingWindowConfig].self, forKey: .floatingWindows) ?? []
     }
 }
 
@@ -1550,7 +1555,7 @@ public enum RoadieConfigLoader {
     private static let nonScalarKeys: [String: Set<String>] = [
         "tiling": ["display_overrides", "smart_gaps_solo_sides", "allowed_subroles"],
         "stage_manager": ["workspaces"],
-        "exclusions": ["floating_bundles"],
+        "exclusions": ["floating_bundles", "floating_windows"],
         "fx.borders": ["stage_overrides"],
         "width_adjustment": ["presets"],
         "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"],
@@ -1561,7 +1566,7 @@ public enum RoadieConfigLoader {
 
     /// Tables qui sont elles-mêmes des tableaux de tables ou leurs sous-tables.
     private static let nonScalarTables: Set<String> = [
-        "tiling.display_overrides", "stage_manager.workspaces", "fx.borders.stage_overrides",
+        "tiling.display_overrides", "stage_manager.workspaces", "fx.borders.stage_overrides", "exclusions.floating_windows",
         "fx.rail.preview.stage_overrides", "switcher.shortcuts", "experimental.target_mode.web_searches", "rules", "rules.match", "rules.action",
         "shortcuts"
     ]
@@ -1606,6 +1611,7 @@ public enum RoadieConfigLoader {
             config = try TOMLDecoder().decode(RoadieConfig.self, from: raw)
         }
         config.rules.append(contentsOf: try generatedRules(from: generatedRulesPath(for: resolved)))
+        config.rules.append(contentsOf: FloatingWindowTitles.rules(config.exclusions.floatingWindows))
         return config
     }
 
@@ -1705,6 +1711,7 @@ private enum ConfigValidationRules {
         "stage_manager.workspaces",
         "tiling.display_overrides",
         "exclusions",
+        "exclusions.floating_windows",
         "fx",
         "fx.borders",
         "fx.borders.stage_overrides",
@@ -1765,7 +1772,8 @@ private enum ConfigValidationRules {
             "desktops": ["enabled", "count", "back_and_forth", "mode"],
             "stage_manager": ["enabled", "hide_strategy", "default_stage", "workspaces"],
             "stage_manager.workspaces": ["id", "display_name"],
-            "exclusions": ["floating_bundles"],
+            "exclusions": ["floating_bundles", "floating_windows"],
+            "exclusions.floating_windows": ["app", "title"],
             "fx.borders": ["enabled", "thickness", "corner_radius", "active_color", "inactive_color", "pulse_on_focus", "stage_overrides"],
             "fx.borders.stage_overrides": ["stage_id", "active_color"],
             "fx.rail": ["renderer", "width", "background_color", "background_opacity", "auto_hide", "edge_hit_width", "edge_magnetism_width", "animation_ms", "hide_delay_ms", "layout_mode", "dynamic_left_gap", "empty_click_hide_active", "empty_click_safety_margin", "hide_on_maximized"],

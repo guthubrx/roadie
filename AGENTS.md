@@ -300,6 +300,9 @@ touche, fichiers ouverts en 50 ms et gardés devant ceux de Spotlight, ADR 021).
 Reçu : specs/123-barre-rapide/validation.md.
 Session 124 : README FR/EN, guides docs/*/launcher.md et About GitHub mis à jour ; captures sans donnée privée générées par
 `ROADIE_DOC_SHOTS_DIR=… scripts/test --filter Spec124` dans docs/assets/screenshots/. Reçu : specs/124-doc-lanceur/validation.md.
+Session 125 installée : fenêtres toujours flottantes par application et titre (`[[exclusions.floating_windows]]`, `#` nombre,
+`*` texte, priorité 9 100), menu Fenêtre et Paramètres > Règles, `roadie window explain`, premier cadre. Rappels de
+Thunderbird confirmés par l'utilisateur. 2 272 tests / 331 suites. Reçu : specs/125-fenetres-appoint/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

@@ -241,6 +241,18 @@ scratchpad = "terminals"
 emit_event = true
 ```
 
+## Always-floating windows
+
+To keep only some of an app's windows out of tiling (reminders, dialogs) without writing a full rule:
+
+```toml
+[[exclusions.floating_windows]]
+app = "Thunderbird"        # displayed name or bundle ID (org.mozilla.thunderbird)
+title = "# Reminder"       # #: a number; *: any text; case-insensitive
+```
+
+The list can also be edited in Settings > Règles and from the title bar Window menu.
+
 ## Match Fields
 
 - `app`: exact app name.

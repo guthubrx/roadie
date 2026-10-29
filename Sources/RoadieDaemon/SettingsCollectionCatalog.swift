@@ -111,6 +111,9 @@ extension SettingsCatalog {
             return rows(id, [field("display_id", "Identifiant de l'écran"), field("display_name", "Nom de l'écran")]
                         + ["gaps_outer", "gaps_outer_top", "gaps_outer_right", "gaps_outer_bottom", "gaps_outer_left"].map { field($0, labels[$0] ?? $0, .double(nil)) },
                         oneOf: [["display_id", "display_name"]])
+        case "exclusions.floating_windows":
+            return rows(id, [field("app", "Application", required: true, help: "Nom affiché (Thunderbird) ou identifiant (org.mozilla.thunderbird)."),
+                             field("title", "Titre", required: true, help: "# : un nombre ; * : n'importe quel texte. Exemple : # Reminder.")])
         case "stage_manager.workspaces":
             return rows(id, [field("id", "Identifiant", required: true), field("display_name", "Nom du stage", required: true)], key: "id")
         case "borders.stage_overrides", "rail.preview.stage_overrides":

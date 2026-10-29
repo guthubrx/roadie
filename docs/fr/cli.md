@@ -43,6 +43,7 @@ roadie resize left|right|up|down
 roadie window display 2
 roadie window desktop 2 --follow
 roadie window reset
+roadie window explain [ID]   # pourquoi cette fenêtre est tuilée ou flottante
 roadie toggle maximize
 roadie toggle fullscreen
 roadie toggle native-fullscreen

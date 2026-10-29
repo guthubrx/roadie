@@ -600,6 +600,17 @@ or `roadie targets actions` opens the bar on the verbs of the frontmost window.
 choice is written to `roadies.generated.toml`, on the same rule as "Always open this app
 here", and applies to every window of the app, present and future.
 
+**Auxiliary windows**: a reminder, a dialog or a palette often looks like an ordinary window to macOS
+(Thunderbird's reminder has the same buttons as its inbox); only its title tells it apart. The "Fenêtres
+toujours flottantes" list (Settings > Règles, `[[exclusions.floating_windows]]`) keeps an app's windows out
+of tiling by title: `app` (name or bundle ID) and `title`, where `#` stands for a number and `*` for any
+text, case-insensitive ("# Reminder" covers "1 Reminder" and "3 Reminders"). Add, edit or remove your own
+rows. The title bar Window menu offers "Toujours faire flotter les fenêtres « # Reminder »" for the chosen
+window, or "Ne plus faire flotter…" when it is already listed. A row wins over the app rule (priority
+9,100). Size criteria (short panel, small settings window) judge the window as it was born, not after
+tiling. `roadie window explain [ID]` shows what Accessibility reports about a window (subrole, buttons,
+first frame) and why it is tiled or floating.
+
 | Key | Effect |
 |-----|--------|
 | letters, digits, space | filter |

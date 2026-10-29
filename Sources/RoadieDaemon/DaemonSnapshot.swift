@@ -339,6 +339,18 @@ public struct SnapshotService: Sendable {
 
     /// Destruction confirmée d'une fenêtre (`kAXUIElementDestroyedNotification`, SPEC-017 A9) : sa
     /// feuille est retirée de l'arbre au prochain snapshot écrivain, sans attendre la purge du membre.
+    /// Premier cadre connu d'une fenêtre (session 125), pour `roadie window explain`. O(1).
+    func initialFrame(of windowID: WindowID) -> Rect? {
+        processState.initialFrame(of: windowID)
+    }
+
+    /// Décision de tuilage d'une fenêtre relevée, avec sa raison (session 125). O(r).
+    func tilingDecision(for window: WindowSnapshot) -> TilingDecision {
+        let config = self.config
+        return Self.tilingDecision(for: window, config: config, context: TilingPolicyContext(config: config),
+                                   initialFrame: processState.initialFrame(of: window.id))
+    }
+
     public func noteWindowDestroyed(_ windowID: WindowID) {
         processState.noteDestroyed(windowID, at: clock())
     }
@@ -381,8 +393,10 @@ public struct SnapshotService: Sendable {
         // Pre-calcule les structures lourdes (Set subroles, regles triees) une seule fois
         // par snapshot pour eviter O(n_windows) recompactations dans applyTilingPolicy.
         let policyContext = TilingPolicyContext(config: config)
+        let initialFrames = processState.initialFrames(rawWindows)
         let windows = processState.stabilizedClassification(rawWindows.map { window in
-            (raw: window, classified: Self.applyTilingPolicy(to: window, config: config, context: policyContext))
+            (raw: window, classified: Self.applyTilingPolicy(to: window, config: config, context: policyContext,
+                                                             initialFrame: initialFrames[window.id]))
         })
         let stageManagedWindowIDs = Set(windows.compactMap { window in
             window.isTileCandidate ? window.id : nil
@@ -983,18 +997,8 @@ public struct SnapshotService: Sendable {
         }
     }
 
-    /// Applique la policy de tiling sur une fenetre brute.
-    /// Ordre de decision :
-    ///   1. baseCandidate (criteres CG bruts) doit etre vrai sinon -> non tile-able
-    ///   2. floating_bundles -> non tile-able
-    ///   3. popup gate (heuristique aerospace) : si AX present et aucun bouton/flag d'etat,
-    ///      c'est un popup/menu/tooltip -> non tile-able
-    ///   4. AX subrole doit etre dans config.tiling.allowed_subroles (defaut ["AXStandardWindow"])
-    ///      Si subrole inconnu (AX absent) -> on laisse passer (non-regression)
-    ///   5. Premiere regle matchant peut overrider :
-    ///        action.manage = true   -> force tile-able
-    ///        action.exclude = true  -> force non tile-able
-    ///        action.floating = true -> force non tile-able
+    /// Applique la policy de tiling sur une fenetre brute ; la premiere regle matchant peut
+    /// overrider : manage force le tuilage, exclude et floating le retirent.
     public static func applyTilingPolicy(to window: WindowSnapshot, config: RoadieConfig) -> WindowSnapshot {
         applyTilingPolicy(to: window, config: config, context: TilingPolicyContext(config: config))
     }
@@ -1002,88 +1006,86 @@ public struct SnapshotService: Sendable {
     static func applyTilingPolicy(
         to window: WindowSnapshot,
         config: RoadieConfig,
-        context: TilingPolicyContext
+        context: TilingPolicyContext,
+        initialFrame: Rect? = nil
     ) -> WindowSnapshot {
-        var tile = window.isTileCandidate
+        var result = window
+        result.isTileCandidate = tilingDecision(for: window, config: config, context: context, initialFrame: initialFrame).tile
+        return result
+    }
 
-        if tile && config.tiling.popupFilter && window.role == "AXSheet" {
-            tile = false
+    /// Décision de tuilage et sa raison, lue par `roadie window explain` (session 125).
+    struct TilingDecision: Equatable, Sendable {
+        let tile: Bool
+        let reason: String
+    }
+
+    /// Les critères de taille jugent la fenêtre à sa naissance (`initialFrame`, session 125) : une
+    /// fois tuilée, une petite fenêtre d'appoint a la taille de sa place et ne paraît plus petite.
+    /// O(r), r règles.
+    static func tilingDecision(
+        for window: WindowSnapshot,
+        config: RoadieConfig,
+        context: TilingPolicyContext,
+        initialFrame: Rect? = nil
+    ) -> TilingDecision {
+        var born = window
+        if let initialFrame { born.frame = initialFrame }
+        var decision = baseTilingDecision(for: born, config: config, context: context)
+        // Override par les regles user. Premiere regle matchant gagne (regles deja triees).
+        let matchContext = WindowRuleMatchContext(role: window.role, subrole: window.subrole)
+        if let rule = WindowRuleMatcher.firstMatch(sortedRules: context.sortedRules, window: window, context: matchContext) {
+            if rule.action.manage == true {
+                // Force le tuilage mais respecte les criteres CG (taille mini, layer).
+                decision = TilingDecision(tile: window.isTileCandidate, reason: "règle \(rule.id) : manage")
+            }
+            if rule.action.exclude == true || rule.action.floating == true {
+                decision = TilingDecision(tile: false, reason: "règle \(rule.id) : \(rule.action.exclude == true ? "exclude" : "floating")")
+            }
         }
+        return decision
+    }
 
-        if tile && context.floatingBundles.contains(window.bundleID) {
-            tile = false
+    /// Ordre de decision :
+    ///   1. baseCandidate (criteres CG bruts) doit etre vrai sinon -> non tile-able
+    ///   2. floating_bundles -> non tile-able
+    ///   3. popup gate (heuristique aerospace) : si AX present et aucun bouton/flag d'etat,
+    ///      c'est un popup/menu/tooltip -> non tile-able
+    ///   4. AX subrole doit etre dans config.tiling.allowed_subroles (defaut ["AXStandardWindow"])
+    ///      Si subrole inconnu (AX absent) -> on laisse passer (non-regression)
+    /// Les regles user (etape 5) sont appliquees par `tilingDecision`.
+    private static func baseTilingDecision(
+        for window: WindowSnapshot,
+        config: RoadieConfig,
+        context: TilingPolicyContext
+    ) -> TilingDecision {
+        func float(_ reason: String) -> TilingDecision { TilingDecision(tile: false, reason: reason) }
+        guard window.isTileCandidate else { return float("CoreGraphics : calque, opacité ou taille sous 80 × 60") }
+        let popups = config.tiling.popupFilter
+        if popups, window.role == "AXSheet" { return float("feuille (AXSheet)") }
+        if context.floatingBundles.contains(window.bundleID) { return float("application dans floating_bundles") }
+        // Popup gate (aerospace-like) : une fenetre modale bloque son app, hors tuilage.
+        if popups, let furniture = window.furniture, furniture.isModal { return float("fenêtre modale") }
+        if popups, isLikelyTransientSettingsWindow(window) { return float("petite fenêtre de réglages sans plein écran") }
+        if popups, isShortNonFullscreenUtilityWindow(window) { return float("panneau de 180 points de haut au plus, sans plein écran") }
+        if popups, isNonResizableStandardWindow(window) { return float("taille non modifiable") }
+        if popups, isUnidentifiedTransientWindow(window) { return float("fenêtre sans accessibilité ni titre utile") }
+        if popups, let furniture = window.furniture, !furniture.isLikelyRealWindow, window.subrole != "AXStandardWindow" {
+            return float("aucun bouton ni focus : popup")
         }
-
-        // Popup gate (aerospace-like) : si AX nous a donne le mobilier mais qu'aucun signal
-        // de "vraie fenetre" n'est present (boutons + isFocused + isMain), c'est un popup.
-        if tile && config.tiling.popupFilter,
-           let furniture = window.furniture,
-           furniture.isModal {
-            tile = false
-        }
-
-        if tile && config.tiling.popupFilter,
-           isLikelyTransientSettingsWindow(window) {
-            tile = false
-        }
-
-        if tile && config.tiling.popupFilter,
-           isShortNonFullscreenUtilityWindow(window) {
-            tile = false
-        }
-
-        if tile && config.tiling.popupFilter,
-           isNonResizableStandardWindow(window) {
-            tile = false
-        }
-
-        if tile && config.tiling.popupFilter,
-           isUnidentifiedTransientWindow(window) {
-            tile = false
-        }
-
-        if tile && config.tiling.popupFilter,
-           let furniture = window.furniture,
-           !furniture.isLikelyRealWindow,
-           window.subrole != "AXStandardWindow" {
-            tile = false
-        }
-
         // Heuristique aerospace fine : fullscreenButton present mais desactive ->
         // probablement un dialog (Settings, About, IntelliJ Rebase, Calculator...).
         // Ne s'applique pas aux apps qui cachent legitimement le bouton fullscreen
         // (terminals, IDEs) : pour celles-la, l'utilisateur peut whitelister leur subrole
         // ou ajouter une regle action.manage.
-        if tile && config.tiling.popupFilter,
-           let furniture = window.furniture,
-           furniture.fullscreenButtonDisabled,
-           window.subrole != "AXStandardWindow" {
-            tile = false
+        if popups, let furniture = window.furniture, furniture.fullscreenButtonDisabled, window.subrole != "AXStandardWindow" {
+            return float("bouton plein écran désactivé")
         }
-
-        if tile {
-            switch window.subrole {
-            case .some(let value):
-                if !context.allowedSubroles.contains(value) { tile = false }
-            case .none:
-                break // AX absent -> on laisse passer (non-regression apps non-AX)
-            }
+        if let subrole = window.subrole, !context.allowedSubroles.contains(subrole) {
+            return float("sous-rôle \(subrole) hors allowed_subroles")
         }
-
-        // Override par les regles user. Premiere regle matchant gagne (regles deja triees).
-        let matchContext = WindowRuleMatchContext(role: window.role, subrole: window.subrole)
-        if let rule = WindowRuleMatcher.firstMatch(sortedRules: context.sortedRules, window: window, context: matchContext) {
-            if rule.action.manage == true {
-                tile = window.isTileCandidate // force tile mais respect criteres CG (taille mini, layer)
-            }
-            if rule.action.exclude == true || rule.action.floating == true {
-                tile = false
-            }
-        }
-
-        var result = window
-        result.isTileCandidate = tile
-        return result
+        // AX absent -> on laisse passer (non-regression apps non-AX)
+        return TilingDecision(tile: true, reason: window.subrole == nil ? "accessibilité illisible : tuilée par défaut" : "fenêtre standard")
     }
 
     private static func isLikelyTransientSettingsWindow(_ window: WindowSnapshot) -> Bool {
@@ -2551,6 +2553,8 @@ final class SnapshotProcessState: @unchecked Sendable {
     private var recentWindowObservations: [WindowID: Date] = [:]
     private var lastDisappearanceAt: Date?
     private var tileClassification: [WindowID: Bool] = [:]
+    /// Cadre de chaque fenêtre au premier relevé lisible par l'accessibilité (session 125).
+    private var firstFrames: [WindowID: Rect] = [:]
     /// Masquages réellement observés, indépendants du cache publié. Une nouvelle topologie
     /// peut rendre leur ancienne position visible avant que le maintainer les remasque.
     private var hiddenWindows: [WindowID: (window: WindowSnapshot, missingSince: Date?)] = [:]
@@ -2799,6 +2803,26 @@ final class SnapshotProcessState: @unchecked Sendable {
     /// illisibles (application lente) garde son dernier classement obtenu avec des attributs lisibles.
     /// Les critères CoreGraphics bruts (taille, layer) restent prioritaires.
     // O(n)
+    /// Premier cadre de chaque fenêtre vivante, retenu au premier relevé où l'accessibilité répond :
+    /// avant qu'elle ne réponde, le cadre peut encore être celui d'une fenêtre en cours de création.
+    /// Les fenêtres disparues sont oubliées. O(n).
+    func initialFrames(_ windows: [WindowSnapshot]) -> [WindowID: Rect] {
+        lock.withLock {
+            var next: [WindowID: Rect] = [:]
+            for window in windows {
+                if let known = firstFrames[window.id] { next[window.id] = known }
+                else if window.furniture != nil { next[window.id] = window.frame }
+            }
+            firstFrames = next
+            return next
+        }
+    }
+
+    /// Premier cadre retenu d'une fenêtre, nil si inconnu. O(1).
+    func initialFrame(of id: WindowID) -> Rect? {
+        lock.withLock { firstFrames[id] }
+    }
+
     func stabilizedClassification(_ windows: [(raw: WindowSnapshot, classified: WindowSnapshot)]) -> [WindowSnapshot] {
         lock.withLock {
             var next: [WindowID: Bool] = [:]

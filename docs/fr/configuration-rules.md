@@ -244,6 +244,19 @@ scratchpad = "terminals"
 emit_event = true
 ```
 
+## Fenêtres toujours flottantes
+
+Pour garder hors du tuilage certaines fenêtres d'une application seulement (rappels, boîtes de dialogue),
+sans écrire de règle complète :
+
+```toml
+[[exclusions.floating_windows]]
+app = "Thunderbird"        # nom affiché ou identifiant (org.mozilla.thunderbird)
+title = "# Reminder"       # # : un nombre ; * : n'importe quel texte ; sans casse
+```
+
+La liste se modifie aussi dans Paramètres > Règles et depuis le menu Fenêtre de la barre de titre.
+
 ## Champs de match
 
 - `app` : nom exact de l'app.

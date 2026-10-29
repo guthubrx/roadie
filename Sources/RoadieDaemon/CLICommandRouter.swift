@@ -263,6 +263,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "window swap left|right|up|down"),
         CLICommandSpec(usage: "window bookmark set|focus|jump|clear|list NAME"),
         CLICommandSpec(usage: "window reset"),
+        CLICommandSpec(usage: "window explain [WINDOW_ID]"),
         CLICommandSpec(usage: "window close", implemented: false),
         CLICommandSpec(usage: "desktop list|current"),
         CLICommandSpec(usage: "desktop focus N|prev|next|last|back|back-and-forth"),
@@ -1241,6 +1242,40 @@ public final class CLICommandRouter {
         return finish(result)
     }
 
+    /// `roadie window explain [ID]` (session 125) : ce que l'accessibilité dit d'une fenêtre (la
+    /// fenêtre active par défaut) et pourquoi Roadie la tuile ou la laisse flotter. O(n).
+    private func explainWindow(_ rawID: String?) -> Int32 {
+        let snapshot = service.snapshot()
+        let id = rawID.flatMap(UInt32.init).map(WindowID.init(rawValue:)) ?? snapshot.focusedWindowID
+        guard let id, let window = snapshot.windows.first(where: { $0.window.id == id })?.window else {
+            err("roadie: window explain: no such window\(rawID.map { " " + $0 } ?? "")")
+            return 1
+        }
+        func size(_ rect: Rect) -> String { "\(Int(rect.width)) × \(Int(rect.height)) à \(Int(rect.x)),\(Int(rect.y))" }
+        let decision = service.tilingDecision(for: window)
+        var lines = [
+            "Fenêtre \(window.id.rawValue) · \(window.appName) (\(window.bundleID))",
+            "Titre : \(window.title)",
+            "Rôle : \(window.role ?? "?") · sous-rôle : \(window.subrole ?? "?")",
+            "Cadre : \(size(window.frame))",
+            "Premier cadre : \(service.initialFrame(of: window.id).map(size) ?? "inconnu")",
+        ]
+        if let f = window.furniture {
+            func yes(_ value: Bool) -> String { value ? "oui" : "non" }
+            lines.append("Boutons : fermer \(yes(f.hasCloseButton)) · réduire \(yes(f.hasMinimizeButton)) · zoom \(yes(f.hasZoomButton))"
+                + " · plein écran \(f.hasFullscreenButton ? (f.fullscreenButtonEnabled ? "actif" : "désactivé") : "absent")")
+            lines.append("Redimensionnable : \(yes(f.isResizable)) · modale : \(yes(f.isModal)) · principale : \(yes(f.isMain))")
+        } else {
+            lines.append("Boutons : accessibilité illisible")
+        }
+        lines.append("Décision : \(decision.tile ? "tuilée" : "flottante") · \(decision.reason)")
+        if window.isTileCandidate != decision.tile {
+            lines.append("Relevé courant : \(window.isTileCandidate ? "tuilée" : "flottante") (dernière lecture lisible gardée)")
+        }
+        out(lines.joined(separator: "\n"))
+        return 0
+    }
+
     private func runWindowCommand(_ args: [String]) throws -> Int32 {
         switch args.first {
         case "bookmark":
@@ -1269,6 +1304,8 @@ public final class CLICommandRouter {
             return runDirectionalCommand(args.dropFirst().first, verb: "window swap") {
                 WindowCommandService(service: service).move($0)
             }
+        case "explain":
+            return explainWindow(args.dropFirst().first)
         case "close":
             out("roadie: window close is not implemented in this build")
             return 1

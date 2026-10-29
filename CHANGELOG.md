@@ -7,6 +7,9 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ### Nouveautés
 
+- Fenêtres toujours flottantes par leur titre (`[[exclusions.floating_windows]]`, Paramètres > Règles, menu Fenêtre) :
+  `# Reminder` fait flotter les rappels de Thunderbird sans faire flotter Thunderbird. `roadie window explain` dit
+  pourquoi une fenêtre est tuilée. Critères de taille jugés sur le premier cadre de la fenêtre.
 - Documentation : README FR/EN refait autour du gestionnaire de fenêtres et du lanceur, guides « Lanceur et workflows
   d'Alfred », captures dessinées avec des données d'exemple (`Spec124DocScreenshotsTests`).
 - Barre plus rapide sous forte charge : recherche préparée, icônes réduites en fond, Spotlight hors du fil principal ;

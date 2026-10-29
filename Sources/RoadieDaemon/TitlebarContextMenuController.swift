@@ -105,6 +105,9 @@ public enum WindowContextActionKind: String, Equatable, Codable, Sendable {
     case floatAlways = "float_always"
     case tileAlways = "tile_always"
     case clearTiling = "clear_tiling"
+    /// Les fenêtres de ce titre dans l'application flottent toujours, ou plus (session 125).
+    case floatTitleAlways = "float_title_always"
+    case clearTitleFloat = "clear_title_float"
 }
 
 public struct WindowContextAction: Equatable, Sendable {
@@ -502,6 +505,15 @@ public final class TitlebarContextMenuController {
         }
         if rule != nil {
             addActionItem(title: "Retirer la règle de flottement de \(window.appName)", kind: .clearTiling, windowID: windowID, sourceScope: sourceScope, to: submenu)
+        }
+        // Fenêtres de ce titre seulement (session 125) : un rappel, une boîte de dialogue, une palette.
+        // Liste « Fenêtres toujours flottantes », aussi modifiable dans Paramètres > Règles.
+        if let listed = FloatingWindowSettings().listedTitle(for: window) {
+            addActionItem(title: "Ne plus faire flotter les fenêtres « \(listed) »", kind: .clearTitleFloat, windowID: windowID,
+                          sourceScope: sourceScope, to: submenu)
+        } else if rule != .float, let title = FloatingWindowTitles.text(fromTitle: window.title) {
+            addActionItem(title: "Toujours faire flotter les fenêtres « \(title) »", kind: .floatTitleAlways, windowID: windowID,
+                          sourceScope: sourceScope, to: submenu)
         }
         parent.submenu = submenu
         menu.addItem(parent)

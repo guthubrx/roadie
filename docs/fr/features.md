@@ -628,6 +628,19 @@ dans le menu Fenêtre de la barre de titre ; le choix est écrit dans
 `roadies.generated.toml`, sur la même règle que « Toujours ouvrir cette app ici », et
 vaut pour toutes les fenêtres de l'application, présentes et futures.
 
+**Fenêtres d'appoint** : un rappel, une boîte de dialogue ou une palette ressemble souvent, pour macOS,
+à une fenêtre ordinaire (le rappel de Thunderbird a les mêmes boutons que sa boîte de réception) ; seul
+son titre la distingue. La liste « Fenêtres toujours flottantes » (Paramètres > Règles,
+`[[exclusions.floating_windows]]`) garde hors du tuilage les fenêtres d'une application selon leur titre :
+`app` (nom ou identifiant) et `title`, où `#` remplace un nombre et `*` n'importe quel texte, sans tenir
+compte des majuscules (« # Reminder » couvre « 1 Reminder » et « 3 Reminders »). Chacun y ajoute, modifie
+ou retire ses propres lignes. Le menu Fenêtre de la barre de titre propose « Toujours faire flotter les
+fenêtres « # Reminder » » pour la fenêtre choisie, ou « Ne plus faire flotter… » si elle est déjà dans la
+liste. Une ligne passe avant la règle de l'application (priorité 9 100). Les critères de taille (panneau
+court, petite fenêtre de réglages) jugent la fenêtre à sa naissance, et non après son tuilage.
+`roadie window explain [ID]` montre ce que l'accessibilité dit d'une fenêtre (sous-rôle, boutons, premier
+cadre) et la raison de la décision.
+
 | Touche | Effet |
 |--------|-------|
 | lettres, chiffres, espace | filtrer |

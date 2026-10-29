@@ -76,7 +76,7 @@ struct SettingsCatalogTests {
     func collectionsAreEditableListsAndTableArrays() {
         let readOnly = Set(SettingsCatalog.all.filter { $0.collection != nil }.map(\.id))
         #expect(readOnly == [
-            "tiling.smart_gaps_solo_sides", "tiling.allowed_subroles", "exclusions.floating_bundles",
+            "tiling.smart_gaps_solo_sides", "tiling.allowed_subroles", "exclusions.floating_bundles", "exclusions.floating_windows",
             "width_adjustment.presets", "app_targets.include_roles", "app_targets.additional_boost_bundle_ids",
             "tiling.display_overrides", "stage_manager.workspaces", "borders.stage_overrides",
             "rail.preview.stage_overrides", "rules", "signals.hooks",
