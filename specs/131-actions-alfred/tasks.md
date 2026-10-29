@@ -79,7 +79,7 @@ Format : `- [ ] Tnnn [Pn] [USn] description (fichiers) - vérification`. Tests a
   config et catalogue) - test du réglage et rendu hors écran vérifié.
 - [x] T021 [P3] [US7] Apps : catégories, filtre, épinglage, grille dans la barre par le mot-clé `apps`
   (`Sources/RoadieDaemon/LauncherAppsGrid.swift`, `TargetOverlayPresenter.swift`, `Tests/RoadieDaemonTests/Spec131AppsGridTests.swift`).
-- [ ] T022 [P3] [US7] SF Symbols : données CoreGlyphs (noms, catégories, mots-clés, versions), recherche, panneau
+- [x] T022 [P3] [US7] SF Symbols : données CoreGlyphs (noms, catégories, mots-clés, versions), recherche, panneau
   conforme au modèle et au style `workflow_view_style`, mot-clé `symbols`, Retour copie le nom (`Sources/RoadieDaemon/LauncherSymbols.swift`,
   `Tests/RoadieDaemonTests/Spec131SymbolsTests.swift`) - test des données et de la recherche, rendu hors écran vérifié.
 

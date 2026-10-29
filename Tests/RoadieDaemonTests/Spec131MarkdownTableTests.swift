@@ -22,7 +22,7 @@ struct Spec131MarkdownTableTests {
         #expect(AlfredMarkdown.blocks("```\n| a |\n|---|\n```") == [.code("| a |\n|---|")])
     }
 
-    @MainActor @Test func tableIsRenderedAsATextTable() {
+    @MainActor @Test func tableIsRenderedAsATextTable() throws {
         let rendered = WorkflowMarkdownRenderer.render("| A | B |\n|---|--:|\n| 1 | 2 |", folder: "/", font: .systemFont(ofSize: 13), width: 400)
         var blocks = 0
         var rightAligned = false
@@ -33,5 +33,17 @@ struct Spec131MarkdownTableTests {
         }
         #expect(blocks >= 4 && rightAligned)
         #expect(rendered.string.contains("A") && rendered.string.contains("2"))
+        // Mise en page réelle (TextKit 1, comme la vue Texte) : les cellules d'une ligne sont côte à côte.
+        let view = NSTextView(usingTextLayoutManager: false)
+        view.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
+        view.textStorage?.setAttributedString(rendered)
+        let layout = try #require(view.layoutManager), container = try #require(view.textContainer)
+        layout.ensureLayout(for: container)
+        func frame(_ text: String) -> NSRect {
+            let range = (rendered.string as NSString).range(of: text)
+            return layout.boundingRect(forGlyphRange: layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: container)
+        }
+        #expect(abs(frame("A").midY - frame("B").midY) < 2 && frame("B").minX > frame("A").maxX)
+        #expect(frame("1").minY > frame("A").maxY - 1)
     }
 }

@@ -1547,6 +1547,18 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             syncHighlight()
             return
         }
+        // `symbols …` (session 131) : navigateur SF Symbols, ouvert par Retour avec cette recherche.
+        if let symbolsQuery = LauncherSymbols.query(model.query) {
+            pruneWorkflows(keeping: [])
+            launcherQuery = model.query
+            let row = LauncherSystemCommand(id: "sf-symbols:" + symbolsQuery, title: tr("Navigateur SF Symbols", "SF Symbols browser"), keywords: [],
+                                            symbol: "square.grid.3x3", confirms: false,
+                                            detail: symbolsQuery.isEmpty ? tr("Tous les symboles", "All symbols") : "« \(symbolsQuery) »")
+            launcherList = .idle([.header("SF Symbols"), .system(row)])
+            launcherSelection = launcherList.best
+            syncHighlight()
+            return
+        }
         // `menu …` (session 131) : éléments des menus de l'application au premier plan.
         if let menuQuery = LauncherMenuSearch.query(model.query), let front = launcher.frontApplication {
             let menus = LauncherMenuSearch.shared

@@ -20,7 +20,8 @@ final class WorkflowTextPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
     /// Une flèche sans touche part de la brique : Retour seul l'emprunte, même dans un texte modifiable.
     private let plainContinues: Bool
     private let panel: NSPanel
-    private let textView = NSTextView()
+    /// TextKit 1 : seul à mettre en page les tableaux Markdown (`NSTextTable`) ; TextKit 2 les met en escalier (session 131).
+    private let textView = NSTextView(usingTextLayoutManager: false)
     private let scroll = NSScrollView()
     private let input = NSTextField()
     private let footer = NSTextField(labelWithString: "")

@@ -61,6 +61,9 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
                   symbol: "rectangle.dashed", confirms: false),
             .init(id: "screenshot-window", fr: "Capture d'une fenêtre", en: "Screenshot of a window", keywords: ["capture", "screenshot", "fenêtre", "window"],
                   symbol: "macwindow", confirms: false),
+            // Navigateur SF Symbols d'Alfred 6.
+            .init(id: "sf-symbols:", fr: "Navigateur SF Symbols", en: "SF Symbols browser", keywords: ["symbols", "symboles", "icônes", "icons", "sf"],
+                  symbol: "square.grid.3x3", confirms: false),
         ]
     }
 
@@ -125,6 +128,11 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
                 process("/usr/sbin/screencapture", arguments)
             }
         default:
+            // Navigateur SF Symbols (session 131), avec la recherche tapée après `symbols`.
+            if id.hasPrefix("sf-symbols:") {
+                LauncherSymbolsPanel.show(query: String(id.dropFirst("sf-symbols:".count)))
+                return
+            }
             // Raccourci de l'app Raccourcis (session 131).
             if id.hasPrefix(LauncherAppleShortcuts.prefix) {
                 process("/usr/bin/shortcuts", ["run", String(id.dropFirst(LauncherAppleShortcuts.prefix.count))])
