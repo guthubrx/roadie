@@ -321,10 +321,6 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     private let effect = NSVisualEffectView()
     private let field = NSSearchField()
     private let previewPane = WindowSwitcherDetailView()
-    private let titleLabel = NSTextField(labelWithString: "Roadie")
-    private let summaryLabel = NSTextField(labelWithString: "")
-    private let releaseLabel = NSTextField(labelWithString: "")
-    private let headerLine = NSBox()
     private let footerLine = NSBox()
     private let detailLine = NSBox()
     private let scrollView = NSScrollView()
@@ -350,9 +346,11 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     private var previewShown = false
     private let pad: CGFloat = 16
     private var searchHeight: CGFloat { max(28, switcherAppearance.fontSize * 1.4 + 8) }
-    private var titleHeight: CGFloat { max(32, switcherAppearance.fontSize * 1.5 + 8) }
-    private var headerHeight: CGFloat { titleHeight + (field.isHidden ? pad : searchHeight + 2 * pad) }
-    private var footerHeight: CGFloat { max(44, switcherAppearance.fontSize * 1.4 + 18) }
+    /// Session 122 : ni titre ni résumé en haut, ni aide en bas ; seulement les fenêtres. La recherche, le menu
+    /// Actions et un refus d'action ont encore leur place quand ils sont montrés.
+    private var headerHeight: CGFloat { field.isHidden ? pad : searchHeight + 2 * pad }
+    private var showsFooter: Bool { !actionsButton.isHidden || !selectionLabel.stringValue.isEmpty }
+    private var footerHeight: CGFloat { showsFooter ? max(44, switcherAppearance.fontSize * 1.4 + 18) : pad }
 
     var renderedWindowIDs: [WindowID] { cards.map(\.entryID) }
     /// La résolution suit la taille réellement affichée, sans augmenter le nombre de captures.
@@ -454,15 +452,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         groupScroll.documentView = groupContainer
 
         previewPane.onOpen = { [weak self] in self?.onConfirm?() }
-        for label in [summaryLabel, releaseLabel, titleLabel] {
-            label.maximumNumberOfLines = 1
-            label.lineBreakMode = .byTruncatingTail
-        }
-        summaryLabel.alignment = .right
-        summaryLabel.textColor = .secondaryLabelColor
-        releaseLabel.alignment = .right
-        releaseLabel.textColor = .secondaryLabelColor
-        for line in [headerLine, footerLine, detailLine] { line.boxType = .separator; effect.addSubview(line) }
+        for line in [footerLine, detailLine] { line.boxType = .separator; effect.addSubview(line) }
 
         statusLabel.alignment = .center
         statusLabel.textColor = .secondaryLabelColor
@@ -479,9 +469,6 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
 
         effect.addSubview(field)
         effect.addSubview(previewPane)
-        effect.addSubview(titleLabel)
-        effect.addSubview(summaryLabel)
-        effect.addSubview(releaseLabel)
         effect.addSubview(scrollView)
         effect.addSubview(groupScroll)
         effect.addSubview(statusLabel)
@@ -536,8 +523,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         if (usesDesktopTabs && oldDesktop != browsing.desktop) || (switcherAppearance.presentation == .hierarchy && oldStage != browsing.stage) {
             rebuildContent()
         }
-        selectionLabel.stringValue = "Flèches : naviguer   Entrée : ouvrir   Échap : annuler"
-        selectionLabel.textColor = .secondaryLabelColor
+        selectionLabel.stringValue = ""
         for card in cards { card.isSelected = card.entryID == id }
         let entry = renderedEntries.first { $0.id == id }
         previewPane.update(entry: entry, image: previewImage, icon: entry.flatMap { appIcons[$0.window.pid] }, appearance: switcherAppearance)
@@ -549,6 +535,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     func showActionError() {
         selectionLabel.stringValue = "Action refusée par l’application. Réessayez ou choisissez une autre fenêtre."
         selectionLabel.textColor = .systemOrange
+        relayout()
     }
 
     func present(on screen: NSScreen) {
@@ -821,15 +808,8 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         field.font = switcherAppearance.font(size: switcherAppearance.fontSize, weight: .regular)
         statusLabel.font = switcherAppearance.font(size: switcherAppearance.fontSize, weight: .regular)
         actionsButton.font = switcherAppearance.font(size: max(12, switcherAppearance.fontSize - 2), weight: .regular)
-        titleLabel.font = switcherAppearance.font(size: switcherAppearance.fontSize, weight: .semibold)
-        let titleWidth = max(100, switcherAppearance.fontSize * 4.5)
-        titleLabel.frame = CGRect(x: pad + 4, y: height - titleHeight, width: titleWidth, height: titleHeight - 6)
-        summaryLabel.font = switcherAppearance.font(size: max(11, switcherAppearance.fontSize - 2), weight: .regular)
-        summaryLabel.stringValue = "\(switcherAppearance.presentation.label) · \(renderedEntries.count) fenêtres"
-        summaryLabel.toolTip = summaryLabel.stringValue
-        summaryLabel.frame = CGRect(x: pad + titleWidth + 10, y: height - titleHeight, width: max(0, innerWidth - titleWidth - 10), height: titleHeight - 6)
-        field.frame = CGRect(x: pad, y: height - titleHeight - pad - searchHeight, width: innerWidth, height: searchHeight)
-        headerLine.frame = CGRect(x: 0, y: height - headerHeight + 4, width: width, height: 1)
+        field.frame = CGRect(x: pad, y: height - pad - searchHeight, width: innerWidth, height: searchHeight)
+        footerLine.isHidden = !showsFooter
         footerLine.frame = CGRect(x: 0, y: footerHeight - 2, width: width, height: 1)
         let mainX = pad + (sideHierarchy ? sidebarWidth + pad : 0)
         let contentY = footerHeight + (bottomPreview ? previewBlock : 0)
@@ -850,14 +830,9 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         let actionWidth = min(150, innerWidth * 0.35)
         actionsButton.frame = CGRect(x: pad, y: 8, width: actionWidth, height: footerHeight - 16)
         selectionLabel.font = switcherAppearance.font(size: max(12, switcherAppearance.fontSize - 2), weight: .regular)
-        let releaseWidth = min(250, innerWidth * 0.40)
         let hintsX = pad + (actionsButton.isHidden ? 0 : actionWidth + 12)
-        selectionLabel.frame = CGRect(x: hintsX, y: 12, width: max(0, width - pad - releaseWidth - 12 - hintsX), height: footerHeight - 20)
+        selectionLabel.frame = CGRect(x: hintsX, y: 12, width: max(0, width - pad - hintsX), height: max(0, footerHeight - 20))
         selectionLabel.toolTip = selectionLabel.stringValue
-        releaseLabel.font = selectionLabel.font
-        releaseLabel.stringValue = "Au relâchement : " + (profile.releaseAction == "focus" ? "ouvrir" : profile.releaseAction == "search" ? "rechercher" : "rester ouvert")
-        releaseLabel.toolTip = releaseLabel.stringValue
-        releaseLabel.frame = CGRect(x: width - pad - releaseWidth, y: 12, width: releaseWidth, height: footerHeight - 20)
 
         gridContainer.frame = CGRect(
             x: 0, y: 0, width: scrollWidth, height: max(groupedLayout.size.height, bodyHeight)

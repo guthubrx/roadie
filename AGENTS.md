@@ -293,6 +293,8 @@ Reçus : specs/111-ordre-verbes/ à specs/120-remote-cache/.
 Session 121 installée : icône de l'application à gauche du titre dans le sélecteur (`switcher.app_icon`, activée
 par défaut), taille automatique selon le texte ou 12 à 64 points (`switcher.app_icon_size`). 2 257 tests / 325 suites.
 Reçu : specs/121-icone-selecteur/validation.md.
+Session 122 installée : sélecteur réduit aux fenêtres (ni « Roadie », ni résumé, ni aide des touches ou du relâchement). 2 259 tests / 326 suites.
+Reçu : specs/122-selecteur-epure/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
