@@ -1252,7 +1252,7 @@ public final class CLICommandRouter {
     /// fenêtre active par défaut) et pourquoi Roadie la tuile ou la laisse flotter. O(n).
     private func explainWindow(_ rawID: String?) -> Int32 {
         let snapshot = service.snapshot()
-        let id = rawID.flatMap(UInt32.init).map(WindowID.init(rawValue:)) ?? snapshot.focusedWindowID
+        let id = rawID.map(Self.windowID) ?? snapshot.focusedWindowID
         guard let id, let window = snapshot.windows.first(where: { $0.window.id == id })?.window else {
             err("roadie: window explain: no such window\(rawID.map { " " + $0 } ?? "")")
             return 1
