@@ -586,8 +586,12 @@ public final class WindowSwitcherController {
         return thumbnails.cachedImage(for: id)
     }
 
-    private static func profile(id: String?, in shortcuts: [WindowSwitcherShortcutConfig]) -> WindowSwitcherShortcutConfig? {
-        guard let id else { return shortcuts.first(where: \.enabled) }
+    /// Sans identifiant (⌘Tab de BTT : `roadie switcher cycle` sans profil), le premier profil actif de fenêtres : un
+    /// profil de zones placé avant ne doit pas prendre ⌘Tab (essai du 30 octobre 2026). O(p).
+    nonisolated static func profile(id: String?, in shortcuts: [WindowSwitcherShortcutConfig]) -> WindowSwitcherShortcutConfig? {
+        guard let id else {
+            return shortcuts.first { $0.enabled && $0.source == "windows" } ?? shortcuts.first(where: \.enabled)
+        }
         return shortcuts.first { $0.id == id }
     }
 

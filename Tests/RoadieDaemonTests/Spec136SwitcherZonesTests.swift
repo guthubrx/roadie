@@ -105,4 +105,13 @@ struct Spec136SwitcherZonesTests {
         }
         #expect([choose(), choose(), choose()] == ["B", "A", "B"])
     }
+
+    /// Essai du 30 octobre 2026 : ⌘Tab (BTT, sans profil) montrait les zones, le profil « Zones » étant en tête.
+    @Test func commandTabWithoutProfileKeepsWindows() {
+        let zones = WindowSwitcherShortcutConfig(id: "zones", hotkey: "alt+tab", source: "zones")
+        let all = WindowSwitcherShortcutConfig(id: "all")
+        #expect(WindowSwitcherController.profile(id: nil, in: [zones, all])?.id == "all")
+        #expect(WindowSwitcherController.profile(id: "zones", in: [zones, all])?.id == "zones")
+        #expect(WindowSwitcherController.profile(id: nil, in: [zones])?.id == "zones")
+    }
 }

@@ -22,3 +22,6 @@ de l'historique inchangé ; toutes les zones étant dans la même fenêtre de T3
 la même deuxième zone. Une zone où l'on revient remonte désormais en tête (`ZoneHistory.touch`), comme une fenêtre
 activée par ⌘Tab. Test `repeatedSwitchesGoBackAndForth` (B, A, B). Zones des clics ordinaires observées
 (08:27:26 et 08:28:07).
+- **⌘Tab montrait les zones** : BTT lance `roadie switcher cycle --hold cmd` sans profil ; le sélecteur prenait le
+  premier profil actif, devenu « Zones » après son ajout en tête de la configuration. Sans profil précisé, il prend
+  désormais le premier profil actif de fenêtres (test `commandTabWithoutProfileKeepsWindows`).
