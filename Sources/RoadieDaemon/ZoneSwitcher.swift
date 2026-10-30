@@ -127,9 +127,13 @@ final class ZoneSwitcherPanel {
         let drawn = CGSize(width: crop.width * scale, height: crop.height * scale)
         let inset = CGPoint(x: (thumb.width - drawn.width) / 2, y: (thumb.height - drawn.height) / 2)
         let local = zone.offsetBy(dx: -crop.minX, dy: -crop.minY)
-        // Accessibilité : y vers le bas ; vue AppKit : y vers le haut.
-        return CGRect(x: inset.x + local.minX * scale, y: inset.y + (crop.height - local.maxY) * scale,
-                      width: local.width * scale, height: local.height * scale).insetBy(dx: -3, dy: -3)
+        // Accessibilité : y vers le bas ; vue AppKit : y vers le haut. Gardé dans l'image affichée : une zone aussi
+        // large que la vignette ne laissait voir que deux traits (essai du 30 octobre 2026).
+        let ring = CGRect(x: inset.x + local.minX * scale, y: inset.y + (crop.height - local.maxY) * scale,
+                          width: local.width * scale, height: local.height * scale).insetBy(dx: -3, dy: -3)
+        let shown = CGRect(origin: inset, size: drawn).insetBy(dx: 1, dy: 1)
+        let kept = ring.intersection(shown)
+        return kept.isNull || kept.isEmpty ? nil : kept
     }
 
     private static func card(_ record: ZoneRecord, frame: NSRect) -> NSView {

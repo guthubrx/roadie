@@ -28,3 +28,9 @@
 - Suite complète : 2 342 tests dans 348 suites. PID 28261, santé 5/5, signature roadied-cert.
 - Non vérifié : capture réelle et rendu des cartes (frappes simulées refusées) ; les vignettes contiennent le contenu
   des fenêtres de l'utilisateur, gardé en local seulement.
+- **Vignette dans un quart de carte** (écran 4K de l'utilisateur à 1 pixel par point) : quarts mesurés sur les PNG
+  enregistrés, 0,35 / 0 / 0 / 0. Capture rejouée sur la fenêtre réelle : sans `scalesToFit`, 1,00 / 0,01 / 0 / 0 ;
+  avec, 1,00 / 1,00 / 1,00 / 1,00. `scalesToFit` et `preservesAspectRatio` ajoutés, comme pour le rail ; les deux
+  vignettes fausses supprimées.
+- **Deux traits jaunes** : zone de 439 points de large dans une vignette de 440 ; l'entourage débordait à gauche et à
+  droite. Il est désormais gardé dans l'image affichée (test sur ces valeurs).

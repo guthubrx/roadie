@@ -56,6 +56,10 @@ final class ZoneThumbnails {
         configuration.sourceRect = crop
         configuration.width = Int(crop.width * 2)
         configuration.height = Int(crop.height * 2)
+        // Écran à 1 pixel par point (4K externe de l'utilisateur) : la capture remplit le tampon au lieu d'en occuper
+        // le quart en haut à gauche (essai du 30 octobre 2026), comme les vignettes du rail.
+        configuration.scalesToFit = true
+        configuration.preservesAspectRatio = true
         configuration.showsCursor = false
         configuration.ignoreShadowsSingleWindow = true
         let filter = SCContentFilter(desktopIndependentWindow: window)

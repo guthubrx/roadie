@@ -89,6 +89,11 @@ struct Spec135ZoneHistoryTests {
                                                crop: CGRect(x: 380, y: 270, width: 440, height: 260), in: CGSize(width: 440, height: 260))
         #expect(ring == CGRect(x: 197, y: 117, width: 46, height: 26))
         #expect(ZoneThumbnails.fileName("299224|12|-3") == "299224-12--3.png")
+        // Ligne de T3 Code presque aussi large que la vignette (439 points sur 440) : entourage gardé dans l'image.
+        let wide = ZoneSwitcherPanel.highlight(zone: CGRect(x: 10, y: 646, width: 439, height: 80),
+                                               crop: CGRect(x: 9.5, y: 556, width: 440, height: 260), in: CGSize(width: 228, height: 136))
+        let shown = CGRect(x: 0, y: 0, width: 228, height: 136)
+        #expect(wide.map { shown.contains($0) } == true && (wide?.width ?? 0) > 220)
     }
 
     @MainActor @Test func droppedZonesAndThumbnailsAreReported() {
