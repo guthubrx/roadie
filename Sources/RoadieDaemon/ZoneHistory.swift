@@ -18,9 +18,24 @@ struct ZoneRecord: Codable, Equatable, Sendable {
     var windowWidth: Double
     var windowHeight: Double
     var date: Date
+    /// Rectangle de la vignette par rapport à la fenêtre (`ZoneThumbnails`), nil sans capture.
+    var thumbnailCrop: Rect?
 
-    /// Une zone par fenêtre et par texte : la recliquer la remonte en tête.
-    var key: String { "\(windowID)|\(title)" }
+    /// Une zone par fenêtre et par place (8 points près) : deux éléments distincts au même texte restent deux zones
+    /// (lignes « AXButton » de T3 Code, essai du 30 octobre 2026) ; recliquer la même zone la remonte en tête.
+    var key: String { "\(windowID)|\(Int((relative.x / 8).rounded()))|\(Int((relative.y / 8).rounded()))" }
+
+    /// Texte montré pour une zone : son titre, sauf s'il n'est qu'un nom de rôle (« AXButton ») ; alors le premier
+    /// texte visible de l'élément, puis son sous-titre. O(t).
+    static func label(title: String, searchText: String?, subtitle: String) -> String {
+        let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !named.isEmpty, !(named.hasPrefix("AX") && !named.contains(" ")) { return named }
+        let visible = (searchText ?? "").split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty }
+        let text = visible ?? subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return named }
+        return text.count > 80 ? String(text.prefix(79)) + "…" : text
+    }
 }
 
 /// Décisions de ⌥Tab, sans écran. O(1).
@@ -80,11 +95,22 @@ final class ZoneHistory {
         Array(([record] + records.filter { $0.key != record.key }).prefix(limit))
     }
 
-    func record(_ record: ZoneRecord, element: AXUIElement?) {
+    /// `dropped` : zones sorties de l'historique (vignettes à effacer). O(n).
+    @discardableResult
+    func record(_ record: ZoneRecord, element: AXUIElement?) -> [String] {
+        let before = Set(records.map(\.key))
         records = Self.inserting(record, into: records)
         let kept = Set(records.map(\.key))
         elements = elements.filter { kept.contains($0.key) }
         elements[record.key] = element
+        save()
+        return before.subtracting(kept).sorted()
+    }
+
+    /// Vignette capturée pour cette zone. O(n).
+    func setThumbnail(_ crop: CGRect, for key: String) {
+        guard let index = records.firstIndex(where: { $0.key == key }) else { return }
+        records[index].thumbnailCrop = Rect(crop)
         save()
     }
 

@@ -451,7 +451,8 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
   lecture des fenêtres visibles.
 - **Zones récentes** (session 135) : chaque zone cliquée par la recherche à l'écran entre dans un historique
   (20 au plus, `~/.roadies/zone-history.json`). `zone_history_hotkey` (par exemple `alt+tab` ; vide par
-  défaut) se tient comme ⌘Tab : chaque appui avance dans la liste, Maj en plus recule, relâcher ⌥ ramène la
+  défaut) se tient comme ⌘Tab : des cartes montrent une vignette de la fenêtre autour de chaque zone (zone
+  entourée, capturée au clic dans `~/.roadies/zone-thumbs/`) ; chaque appui avance, Maj en plus recule, relâcher ⌥ ramène la
   fenêtre de la zone avec sa stage et son bureau, puis clique la zone. Roadie retrouve la zone par son élément
   s'il existe encore, sinon par sa place dans la fenêtre si celle-ci a gardé sa taille ; sinon la fenêtre
   revient sans clic. Si la fenêtre est déjà au premier plan, ⌥Tab propose d'abord la zone d'avant.

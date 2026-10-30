@@ -7,9 +7,22 @@ import TOMLKit
 
 /// Session 135 : historique des zones de la recherche à l'écran, parcouru par ⌥Tab.
 struct Spec135ZoneHistoryTests {
-    private func zone(_ title: String, window: UInt32 = 169648, width: Double = 1200, height: Double = 800) -> ZoneRecord {
+    private func zone(_ title: String, window: UInt32 = 169648, y: Double = 40, width: Double = 1200, height: Double = 800) -> ZoneRecord {
         ZoneRecord(appName: "Microsoft Excel", bundleID: "com.microsoft.Excel", pid: 7965, windowID: window, windowTitle: "Classeur",
-                   title: title, relative: Rect(x: 100, y: 40, width: 80, height: 20), windowWidth: width, windowHeight: height, date: Date())
+                   title: title, relative: Rect(x: 100, y: y, width: 80, height: 20), windowWidth: width, windowHeight: height, date: Date())
+    }
+
+    /// Essai du 30 octobre 2026 : trois lignes « AXButton » de T3 Code ne laissaient qu'une zone.
+    @MainActor @Test func distinctPlacesWithTheSameTextAreDistinctZones() {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("spec135-\(UUID().uuidString).json").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let history = ZoneHistory(path: path)
+        for y in [40.0, 120, 200] { history.record(zone("AXButton", y: y), element: nil) }
+        history.record(zone("AXButton", y: 122), element: nil)
+        #expect(history.records.map(\.relative.y) == [122, 200, 40])
+        #expect(ZoneRecord.label(title: "AXButton", searchText: "Recherche à l'écran\nil y a 2 h", subtitle: "") == "Recherche à l'écran")
+        #expect(ZoneRecord.label(title: "Développeur", searchText: "x", subtitle: "") == "Développeur")
+        #expect(ZoneRecord.label(title: "AXCell", searchText: nil, subtitle: "B12") == "B12")
     }
 
     @Test func firstChoiceSkipsTheZoneWeAreAlreadyIn() {
@@ -38,12 +51,12 @@ struct Spec135ZoneHistoryTests {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("spec135-\(UUID().uuidString).json").path
         defer { try? FileManager.default.removeItem(atPath: path) }
         let history = ZoneHistory(path: path)
-        for index in 0..<25 { history.record(zone("Zone \(index)"), element: nil) }
-        history.record(zone("Zone 20"), element: nil)
+        for index in 0..<25 { history.record(zone("Zone \(index)", y: Double(index * 30)), element: nil) }
+        history.record(zone("Zone 20", y: 600), element: nil)
         #expect(history.records.count == 20 && history.records.first?.title == "Zone 20")
         #expect(Set(history.records.map(\.key)).count == 20)
         // Même zone dans une autre fenêtre : distincte.
-        history.record(zone("Zone 20", window: 1), element: nil)
+        history.record(zone("Zone 20", window: 1, y: 600), element: nil)
         #expect(history.records.prefix(2).map(\.windowID) == [1, 169648])
         let reloaded = ZoneHistory(path: path)
         #expect(reloaded.records == history.records)
@@ -60,5 +73,32 @@ struct Spec135ZoneHistoryTests {
         #expect(ZoneNavigation.hotkey(hotkey, reverse: false) == hotkey)
         #expect(ZoneNavigation.hotkey("", reverse: true).isEmpty && ZoneNavigation.hotkey("shift+alt+tab", reverse: true).isEmpty)
         #expect(SettingsCatalog.find(id: "target_mode.zone_history_hotkey")?.category == .raccourcis)
+    }
+
+    /// Vignette : rectangle de 440 × 260 points centré sur la zone, gardé dans la fenêtre ; zone entourée dedans.
+    @MainActor @Test func thumbnailCropsAroundTheZoneAndRingsIt() {
+        let window = CGSize(width: 1200, height: 800)
+        #expect(ZoneThumbnails.crop(zone: CGRect(x: 580, y: 390, width: 40, height: 20), windowSize: window)
+                == CGRect(x: 380, y: 270, width: 440, height: 260))
+        // Près d'un bord : décalée pour rester dans la fenêtre ; petite fenêtre : la fenêtre entière.
+        #expect(ZoneThumbnails.crop(zone: CGRect(x: 10, y: 5, width: 40, height: 20), windowSize: window).origin == .zero)
+        #expect(ZoneThumbnails.crop(zone: CGRect(x: 1180, y: 790, width: 10, height: 5), windowSize: window).maxX == 1200)
+        #expect(ZoneThumbnails.crop(zone: .zero, windowSize: CGSize(width: 300, height: 200)) == CGRect(x: 0, y: 0, width: 300, height: 200))
+        // Entourage : même échelle que la vignette, axe vertical retourné, 3 points de marge.
+        let ring = ZoneSwitcherPanel.highlight(zone: CGRect(x: 580, y: 390, width: 40, height: 20),
+                                               crop: CGRect(x: 380, y: 270, width: 440, height: 260), in: CGSize(width: 440, height: 260))
+        #expect(ring == CGRect(x: 197, y: 117, width: 46, height: 26))
+        #expect(ZoneThumbnails.fileName("299224|12|-3") == "299224-12--3.png")
+    }
+
+    @MainActor @Test func droppedZonesAndThumbnailsAreReported() {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("spec135-\(UUID().uuidString).json").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let history = ZoneHistory(path: path)
+        var dropped: [String] = []
+        for index in 0..<21 { dropped += history.record(zone("Zone \(index)", y: Double(index * 30)), element: nil) }
+        #expect(dropped == [zone("Zone 0", y: 0).key])
+        history.setThumbnail(CGRect(x: 1, y: 2, width: 3, height: 4), for: history.records[0].key)
+        #expect(ZoneHistory(path: path).records[0].thumbnailCrop == Rect(x: 1, y: 2, width: 3, height: 4))
     }
 }

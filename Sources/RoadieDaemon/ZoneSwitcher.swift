@@ -29,7 +29,8 @@ public final class ZoneSwitcherController {
             panel?.select(index)
             return
         }
-        records = ZoneHistory.shared.records
+        // Les zones parcourues sont celles des cartes montrées.
+        records = Array(ZoneHistory.shared.records.prefix(ZoneSwitcherPanel.maxCards))
         guard !records.isEmpty else {
             events.append(RoadieEvent(type: "zone.empty"))
             return
@@ -71,6 +72,7 @@ public final class ZoneSwitcherController {
             let entries = await switcher.load().entries
             guard let entry = entries.first(where: { $0.id.rawValue == record.windowID }) else {
                 ZoneHistory.shared.forget(record)
+                ZoneThumbnails.shared.remove(record.key)
                 events.append(RoadieEvent(type: "zone.missing", details: ["app": record.appName]))
                 return
             }
@@ -84,60 +86,98 @@ public final class ZoneSwitcherController {
     }
 }
 
-/// Liste des zones récentes : application, texte de la zone, fenêtre ; la zone choisie est surlignée.
+/// Zones récentes en cartes, à la manière de ⌘Tab (session 135) : vignette de la fenêtre autour de la zone, zone
+/// entourée, icône de l'application et texte de la zone ; la carte choisie est bordée de la couleur d'accent.
 @MainActor
 final class ZoneSwitcherPanel {
     private let panel: NSPanel
-    private var rows: [NSView] = []
-    private static let width: CGFloat = 520, rowHeight: CGFloat = 46
+    private var cards: [NSView] = []
+    static let cardSize = CGSize(width: 240, height: 176), thumbHeight: CGFloat = 136, gap: CGFloat = 12, maxCards = 7
 
     init(records: [ZoneRecord]) {
-        let shown = Array(records.prefix(10))
-        let height = CGFloat(shown.count) * Self.rowHeight + 16
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: Self.width, height: height),
+        let shown = Array(records.prefix(Self.maxCards))
+        let width = CGFloat(shown.count) * (Self.cardSize.width + Self.gap) + Self.gap
+        let height = Self.cardSize.height + 2 * Self.gap
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = .popUpMenu
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.appearance = NSAppearance(named: .darkAqua)
-        let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: Self.width, height: height))
+        let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         effect.material = .hudWindow
         effect.state = .active
         effect.wantsLayer = true
-        effect.layer?.cornerRadius = 12
+        effect.layer?.cornerRadius = 16
         effect.layer?.masksToBounds = true
         for (offset, record) in shown.enumerated() {
-            let row = Self.row(record, frame: NSRect(x: 8, y: height - 8 - CGFloat(offset + 1) * Self.rowHeight, width: Self.width - 16, height: Self.rowHeight))
-            effect.addSubview(row)
-            rows.append(row)
+            let origin = NSPoint(x: Self.gap + CGFloat(offset) * (Self.cardSize.width + Self.gap), y: Self.gap)
+            let card = Self.card(record, frame: NSRect(origin: origin, size: Self.cardSize))
+            effect.addSubview(card)
+            cards.append(card)
         }
         panel.contentView = effect
     }
 
-    private static func row(_ record: ZoneRecord, frame: NSRect) -> NSView {
-        let row = NSView(frame: frame)
-        row.wantsLayer = true
-        row.layer?.cornerRadius = 8
-        let path = NSWorkspace.shared.urlForApplication(withBundleIdentifier: record.bundleID)?.path
-        let icon = NSImageView(frame: NSRect(x: 8, y: 7, width: 32, height: 32))
-        icon.image = path.map { NSWorkspace.shared.icon(forFile: $0) } ?? NSImage(systemSymbolName: "app", accessibilityDescription: nil)
-        let title = NSTextField(labelWithString: "« \(record.title) »")
-        title.font = .systemFont(ofSize: 14, weight: .semibold)
+    /// Zone dans la vignette, en points de la vignette affichée (origine en bas à gauche). nil sans recadrage. O(1).
+    static func highlight(zone: CGRect, crop: CGRect, in thumb: CGSize) -> CGRect? {
+        guard crop.width > 0, crop.height > 0 else { return nil }
+        let scale = min(thumb.width / crop.width, thumb.height / crop.height)
+        let drawn = CGSize(width: crop.width * scale, height: crop.height * scale)
+        let inset = CGPoint(x: (thumb.width - drawn.width) / 2, y: (thumb.height - drawn.height) / 2)
+        let local = zone.offsetBy(dx: -crop.minX, dy: -crop.minY)
+        // Accessibilité : y vers le bas ; vue AppKit : y vers le haut.
+        return CGRect(x: inset.x + local.minX * scale, y: inset.y + (crop.height - local.maxY) * scale,
+                      width: local.width * scale, height: local.height * scale).insetBy(dx: -3, dy: -3)
+    }
+
+    private static func card(_ record: ZoneRecord, frame: NSRect) -> NSView {
+        let card = NSView(frame: frame)
+        card.wantsLayer = true
+        card.layer?.cornerRadius = 10
+        card.layer?.borderWidth = 3
+        card.layer?.borderColor = NSColor.clear.cgColor
+        let thumbFrame = NSRect(x: 6, y: frame.height - 6 - thumbHeight, width: frame.width - 12, height: thumbHeight)
+        let thumb = NSImageView(frame: thumbFrame)
+        thumb.imageScaling = .scaleProportionallyUpOrDown
+        thumb.wantsLayer = true
+        thumb.layer?.cornerRadius = 6
+        thumb.layer?.masksToBounds = true
+        thumb.layer?.backgroundColor = NSColor(white: 0.12, alpha: 1).cgColor
+        let appPath = NSWorkspace.shared.urlForApplication(withBundleIdentifier: record.bundleID)?.path
+        let appIcon = appPath.map { NSWorkspace.shared.icon(forFile: $0) }
+        if let image = ZoneThumbnails.shared.image(for: record.key), let crop = record.thumbnailCrop?.cgRect {
+            thumb.image = image
+            if let ring = highlight(zone: record.relative.cgRect, crop: crop, in: thumbFrame.size) {
+                let marker = NSView(frame: ring)
+                marker.wantsLayer = true
+                marker.layer?.borderWidth = 2
+                marker.layer?.cornerRadius = 4
+                marker.layer?.borderColor = NSColor.systemYellow.cgColor
+                thumb.addSubview(marker)
+            }
+        } else {
+            // Pas de vignette (autorisation, fenêtre non capturable) : l'icône de l'application.
+            thumb.imageScaling = .scaleProportionallyDown
+            thumb.image = appIcon
+        }
+        let icon = NSImageView(frame: NSRect(x: 8, y: 8, width: 22, height: 22))
+        icon.image = appIcon ?? NSImage(systemSymbolName: "app", accessibilityDescription: nil)
+        let title = NSTextField(labelWithString: record.title)
+        title.font = .systemFont(ofSize: 12, weight: .semibold)
         title.lineBreakMode = .byTruncatingTail
-        title.frame = NSRect(x: 50, y: 22, width: frame.width - 58, height: 18)
-        let detail = NSTextField(labelWithString: "\(record.appName) · \(record.windowTitle)")
-        detail.font = .systemFont(ofSize: 11)
-        detail.textColor = .secondaryLabelColor
-        detail.lineBreakMode = .byTruncatingTail
-        detail.frame = NSRect(x: 50, y: 5, width: frame.width - 58, height: 15)
-        [icon, title, detail].forEach(row.addSubview)
-        return row
+        title.frame = NSRect(x: 36, y: 9, width: frame.width - 44, height: 18)
+        title.toolTip = "\(record.appName) · \(record.windowTitle)"
+        [thumb, icon, title].forEach(card.addSubview)
+        return card
     }
 
     func select(_ index: Int) {
-        for (offset, row) in rows.enumerated() {
-            row.layer?.backgroundColor = offset == index ? NSColor.controlAccentColor.withAlphaComponent(0.55).cgColor : NSColor.clear.cgColor
+        for (offset, card) in cards.enumerated() {
+            let chosen = offset == index
+            card.layer?.borderColor = chosen ? NSColor.controlAccentColor.cgColor : NSColor.clear.cgColor
+            card.layer?.backgroundColor = chosen ? NSColor.white.withAlphaComponent(0.08).cgColor : NSColor.clear.cgColor
         }
     }
 

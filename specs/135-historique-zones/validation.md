@@ -14,3 +14,17 @@
   poste ; aucun diaporama. L'historique commence à cette installation.
 - Zone dans une page qui a défilé ou changé : l'élément mémorisé peut avoir disparu ; si la fenêtre a gardé sa taille,
   le clic suit la position relative, qui peut alors viser autre chose.
+
+## Corrections après essai (30 octobre 2026)
+
+- **Une seule zone gardée** : trois clics sur des lignes différentes de T3 Code (`…1.2.6`, `…1.2.0`, `…1.2.7`,
+  fenêtre 299224) ne laissaient qu'une zone, leur titre étant le nom de rôle « AXButton » et la clé fenêtre + texte.
+  Clé désormais fenêtre + place (8 points près) ; texte montré : le titre, ou le premier texte visible quand le titre
+  n'est qu'un rôle. Test `distinctPlacesWithTheSameTextAreDistinctZones`.
+- **Cartes visuelles** à la demande de l'utilisateur : vignette de 440 × 260 points autour de la zone, capturée par
+  ScreenCaptureKit juste après le clic (`~/.roadies/zone-thumbs/`, effacée quand la zone sort de l'historique), zone
+  entourée en jaune, icône et texte dessous, carte choisie bordée ; 7 cartes au plus. Sans capture : icône de
+  l'application. Tests `thumbnailCropsAroundTheZoneAndRingsIt`, `droppedZonesAndThumbnailsAreReported`.
+- Suite complète : 2 342 tests dans 348 suites. PID 28261, santé 5/5, signature roadied-cert.
+- Non vérifié : capture réelle et rendu des cartes (frappes simulées refusées) ; les vignettes contiennent le contenu
+  des fenêtres de l'utilisateur, gardé en local seulement.

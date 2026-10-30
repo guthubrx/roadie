@@ -436,7 +436,8 @@ letter filters the targets; Return clicks the green target.
   visible windows.
 - **Recent zones** (session 135): every zone clicked by on-screen search joins a history (20 at most,
   `~/.roadies/zone-history.json`). `zone_history_hotkey` (for example `alt+tab`; empty by default) is held
-  like ⌘Tab: each press steps through the list, adding Shift goes back, releasing ⌥ brings the zone's window
+  like ⌘Tab: cards show a thumbnail of the window around each zone (zone ringed, captured on click into
+  `~/.roadies/zone-thumbs/`); each press steps through the cards, adding Shift goes back, releasing ⌥ brings the zone's window
   back with its stage and desktop, then clicks the zone. Roadie finds the zone through its element if it still
   exists, otherwise through its place in the window if the window kept its size; otherwise the window comes
   back without a click. When the window is already in front, ⌥Tab first offers the zone before.

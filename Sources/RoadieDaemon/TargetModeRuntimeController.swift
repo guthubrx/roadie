@@ -1255,11 +1255,18 @@ public final class TargetModeRuntimeController: NSObject {
               let zone = target.clickFrame ?? target.frame else { return }
         let frame = window.frame
         let record = ZoneRecord(appName: window.appName, bundleID: window.bundleID, pid: pid, windowID: windowID,
-                                windowTitle: window.title, title: target.title.isEmpty ? target.subtitle : target.title,
+                                windowTitle: window.title,
+                                title: ZoneRecord.label(title: target.title, searchText: target.searchText, subtitle: target.subtitle),
                                 relative: Rect(x: zone.x - frame.x, y: zone.y - frame.y, width: zone.width, height: zone.height),
                                 windowWidth: frame.width, windowHeight: frame.height, date: Date())
         let entry = AppTargetElementRegistry.shared.entry(for: target.id)
-        ZoneHistory.shared.record(record, element: entry?.clickElement ?? entry?.element)
+        ZoneHistory.shared.record(record, element: entry?.clickElement ?? entry?.element).forEach(ZoneThumbnails.shared.remove)
+        // Vignette de la zone pour ⌥Tab, capturée tout de suite : l'écran montre encore la zone telle que choisie.
+        Task { @MainActor in
+            let crop = await ZoneThumbnails.shared.capture(key: record.key, windowID: windowID, zone: record.relative.cgRect,
+                                                           windowSize: CGSize(width: frame.width, height: frame.height))
+            if let crop { ZoneHistory.shared.setThumbnail(crop, for: record.key) }
+        }
         events.append(RoadieEvent(type: "zone.recorded", details: ["app": window.appName, "count": String(ZoneHistory.shared.records.count)]))
     }
 
