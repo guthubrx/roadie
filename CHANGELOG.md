@@ -23,6 +23,8 @@ jour et les limites connues ; les README décrivent la version courante.
   position et taille, pour les lignes ou règles où « Retenir la place » est coché (`remember_frame`).
 - Recherche à l'écran séparée du lanceur : `screen_search_hotkey` (Capslock + F) ou `roadie targets screen`
   ouvre la barre sans liste, avec les seules étiquettes des éléments visibles.
+- Fautes de frappe rattrapées (`typo_max_errors`) : à l'écran sans correspondance exacte, et dans une section
+  « Vouliez-vous dire » du lanceur, toujours après les correspondances exactes.
 
 ### Corrections
 

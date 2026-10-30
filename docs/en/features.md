@@ -432,6 +432,11 @@ letter filters the targets; Return clicks the green target.
   `command+control+alt+f`, Capslock + F; empty by default) or `roadie targets screen` opens the bar without
   the launcher list. Only the input and the labels of visible elements show: ↑/↓ change the target,
   Shift + label picks it, Return clicks. The launcher keeps its own shortcut (`search_hotkey`).
+- **Typos** (session 134): with no exact match at all, on-screen search allows a missing, extra or wrong
+  letter, or two swapped letters: one typo from 4 letters, two from 8 ("enregsitrer" finds "Enregistrer").
+  The bar shows "≈ approximate". In the launcher, a "Did you mean" section comes last, only under three exact
+  matches (apps, windows, on-screen elements; Spotlight does not forgive typos in files). An exact match
+  always comes first. Setting `typo_max_errors` (0 to 2, default 2; 0 turns it off), Settings > Search.
 
 **Launcher**: above the bar, a list groups results into sections: **Applications**
 (every installed app), **Windows**, **Stages and desktops**, then **On screen** (the

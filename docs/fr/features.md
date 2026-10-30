@@ -447,6 +447,12 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
   `command+control+alt+f`, Capslock + F ; vide par défaut) ou `roadie targets screen` ouvre la barre sans
   la liste du lanceur. Seules la saisie et les étiquettes des éléments visibles s'affichent : ↑/↓ changent de
   cible, Maj + étiquette la choisit, Retour clique. Le lanceur garde son propre raccourci (`search_hotkey`).
+- **Fautes de frappe** (session 134) : sans aucune correspondance exacte, la recherche à l'écran admet une
+  lettre oubliée, en trop, remplacée ou deux lettres inversées : une faute à partir de 4 lettres, deux à
+  partir de 8 (« enregsitrer » trouve « Enregistrer »). La barre l'indique par « ≈ approché ». Dans le
+  lanceur, une section « Vouliez-vous dire » vient en dernier, seulement sous trois correspondances exactes
+  (applications, fenêtres, éléments à l'écran ; Spotlight ne rattrape pas les fichiers). Une frappe exacte
+  passe toujours devant. Réglage `typo_max_errors` (0 à 2, défaut 2 ; 0 coupe), Paramètres > Recherche.
 
 **Lanceur** : au-dessus de la barre, une liste groupe les résultats en sections :
 **Applications** (toutes les applications installées), **Fenêtres**, **Stages et

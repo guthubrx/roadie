@@ -1020,6 +1020,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         self.pointerScreen = pointerScreen
         self.placement = launcher.barPlacement
         self.model = TargetSearchModel(targets: targets, alphabet: alphabet) { Self.rank($0, windowOrder: -1, pointerScreen: pointerScreen) }
+        // Fautes de frappe rattrapées (session 134), à l'écran comme dans le lanceur.
+        self.model.typoMaxErrors = ConfigReloadService.shared.currentConfig().experimental.targetMode.typoMaxErrors
         self.letters = LauncherList.letters(alphabet)
         self.style = style
         self.commands = commands
@@ -1653,7 +1655,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         launcherList = LauncherList(query: phrase?.objectQuery ?? model.query, apps: launcher.apps, details: launcher.details,
                                     targets: model.matches, ranking: launcher.ranking, now: Date(), context: launcher.rankingContext,
                                     files: phrase == nil ? files : [], projects: launcher.projects, openItems: openItems,
-                                    fileKeywords: launcher.fileKeywords)
+                                    fileKeywords: launcher.fileKeywords, typoMaxErrors: model.typoMaxErrors,
+                                    targetsCorrected: model.corrected)
         if let phrase, let subject = Self.subject(of: launcherList.row(for: launcherList.best)),
            let action = phrase.action(for: subject, activeStage: launcher.activeStage) {
             launcherList.prepend(.phrase(action, LauncherPhrase.title(action)), header: "Phrase")
@@ -2840,8 +2843,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                                       frame: RoadieScreenCoordinate.axRectToNS(frame), isHighlighted: target.id == highlightedID,
                                       isFramed: framesAll || target.id == highlightedID, isSearchResult: true)
         }
-        show(badges: badges, bar: TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties,
-                                                  isLoading: isLoading, suggestions: []))
+        var bar = TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties,
+                                  isLoading: isLoading, suggestions: [])
+        // Aucune correspondance exacte : la barre dit que les étiquettes viennent d'une faute rattrapée (session 134).
+        if model.corrected { bar.chip = tr("≈ approché", "≈ approximate") }
+        show(badges: badges, bar: bar)
     }
 
     /// Ligne des étapes verbe et destination.

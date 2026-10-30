@@ -83,6 +83,8 @@ struct LauncherList: Equatable, Sendable {
 
     enum Section: Int, CaseIterable, Sendable {
         case applications, projects, windows, openItems, files, places, screen
+        /// Session 134 : fautes de frappe rattrapées, toujours après les correspondances exactes.
+        case corrected
 
         var title: String {
             switch self {
@@ -93,6 +95,7 @@ struct LauncherList: Equatable, Sendable {
             case .files: tr("Fichiers", "Files")
             case .places: tr("Stages et bureaux", "Stages and desktops")
             case .screen: tr("À l'écran", "On screen")
+            case .corrected: tr("Vouliez-vous dire", "Did you mean")
             }
         }
 
@@ -101,7 +104,7 @@ struct LauncherList: Equatable, Sendable {
             switch self {
             case .applications, .windows: 4
             case .projects, .openItems, .files: 5
-            case .places, .screen: 3
+            case .places, .screen, .corrected: 3
             }
         }
 
@@ -138,7 +141,8 @@ struct LauncherList: Equatable, Sendable {
     /// Spotlight, les plus récentes d'abord (SPEC-077) ; une espace en tête ne garde qu'elles.
     init(query rawQuery: String, apps: [LauncherApp], details: [String: String], targets: [RoadieTarget],
          ranking: LauncherRanking, now: Date, context: String? = nil, files: [LauncherFile] = [], projects: [StageProject] = [],
-         openItems: [LauncherOpenItem] = [], fileKeywords: LauncherFileKeywords = LauncherFileKeywords()) {
+         openItems: [LauncherOpenItem] = [], fileKeywords: LauncherFileKeywords = LauncherFileKeywords(),
+         typoMaxErrors: Int = 0, targetsCorrected: Bool = false) {
         let fileQuery = LauncherFileQuery.parse(rawQuery, keywords: fileKeywords)
         let filesOnly = fileQuery.filesOnly
         let query = filesOnly ? fileQuery.needle : rawQuery
@@ -170,11 +174,26 @@ struct LauncherList: Equatable, Sendable {
             candidates.append(Candidate(row: .app(app, detail: details[app.bundleID] ?? Self.shortPath(app.path)), id: app.rankingKey, key: app.rankingKey,
                                         section: .applications, score: score, name: app.name))
         }
-        for target in filesOnly ? [] : targets {
+        for target in filesOnly || targetsCorrected ? [] : targets {
             // Trouvée par le texte de ses enfants seulement (lien web) : retenue, en dernier.
             let score = [target.title, target.subtitle].compactMap { LauncherMatch.score(query, in: $0) }.max() ?? 1
             candidates.append(Candidate(row: .target(target), id: "target:\(target.id)", key: Self.rankingKey(target),
                                         section: Section.of(target.kind), score: score, name: target.title))
+        }
+        // Fautes de frappe (session 134) : seulement sous trois correspondances exactes, dans une section en dernier.
+        // Applications à peu de fautes près, puis cibles rattrapées par le mode recherche ; moins de fautes d'abord.
+        if !filesOnly, candidates.count < 3, typoMaxErrors > 0 {
+            let exact = Set(candidates.map(\.id))
+            for app in apps where !exact.contains(app.rankingKey) {
+                guard let errors = ([app.name] + app.alternateNames)
+                    .compactMap({ TypoMatch.distance(query, in: $0, setting: typoMaxErrors) }).min() else { continue }
+                candidates.append(Candidate(row: .app(app, detail: details[app.bundleID] ?? Self.shortPath(app.path)), id: app.rankingKey,
+                                            key: app.rankingKey, section: .corrected, score: -errors, name: app.name))
+            }
+            for (order, target) in (targetsCorrected ? targets : []).enumerated() {
+                candidates.append(Candidate(row: .target(target), id: "target:\(target.id)", key: Self.rankingKey(target),
+                                            section: .corrected, score: -3, name: target.title, order: order))
+            }
         }
         // Ordre : choix appris pour cette requête dans cette stage, puis partout, puis pour une requête
         // plus longue, puis fichier déjà ouvert (session 123), puis l'appariement, puis la fréquence-récence dans cette stage, puis partout,
@@ -210,7 +229,9 @@ struct LauncherList: Equatable, Sendable {
             let shown = sorted.prefix(section.limit)
             rows.append(.header(section == .screen ? "\(section.title) · \(all.count)" : section.title))
             rows.append(contentsOf: shown.map(\.row))
+            // Une faute rattrapée n'est la meilleure ligne qu'en l'absence de correspondance exacte.
             if let top = section == .screen ? all.min(by: before) : shown.first,
+               section != .corrected || bestCandidate == nil,
                bestCandidate.map({ before(top, $0) }) ?? true {
                 bestCandidate = top
             }

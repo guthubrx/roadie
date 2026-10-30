@@ -17,10 +17,15 @@ public struct TargetSearchModel: Equatable, Sendable {
         let match: String
         let title: String
         let children: String
+        /// Session 134 : lettres et empreinte du texte, pour les fautes de frappe.
+        let characters: [Character]
+        let letters: UInt64
         init(_ target: RoadieTarget) {
             match = TargetSearchModel.compact(target.matchText + " " + (target.searchText ?? ""))
             title = TargetSearchModel.compact(target.title)
             children = TargetSearchModel.compact(target.searchText ?? "")
+            characters = Array(match)
+            letters = LauncherMatch.letters(characters)
         }
     }
     private let labelPool: [String]
@@ -29,6 +34,10 @@ public struct TargetSearchModel: Equatable, Sendable {
     private var labelsUsed = 0
     public private(set) var query = ""
     public private(set) var matches: [RoadieTarget]
+    /// Fautes de frappe rattrapées au plus (session 134, `typo_max_errors`) ; 0 : correspondance exacte seule.
+    public var typoMaxErrors = 0
+    /// Vrai quand `matches` vient des fautes rattrapées : aucune correspondance exacte.
+    public private(set) var corrected = false
     public private(set) var highlightedIndex: Int?
     /// Propriétés de la cible mise en avant, affichées après `?` jusqu'à la frappe suivante.
     public private(set) var properties: String?
@@ -82,7 +91,8 @@ public struct TargetSearchModel: Equatable, Sendable {
         ranks = mergedRanks
 
         let highlightedID = highlighted?.id
-        matches = shortened(Self.matches(targets, texts: searchTexts, query: query))
+        (matches, corrected) = found()
+        matches = shortened(matches)
         highlightedIndex = matches.firstIndex { $0.id == highlightedID } ?? (query.isEmpty || matches.isEmpty ? nil : 0)
     }
 
@@ -234,6 +244,21 @@ public struct TargetSearchModel: Equatable, Sendable {
         return leading + other
     }
 
+    /// Correspondances exactes ; sans aucune, celles à peu de fautes de frappe près (session 134), les moins
+    /// fautives d'abord, puis dans l'ordre des cibles. O(n) exact, O(n × q × t) approché.
+    private func found() -> (matches: [RoadieTarget], corrected: Bool) {
+        let exact = Self.matches(targets, texts: searchTexts, query: query)
+        let needle = Array(Self.compact(query))
+        let allowed = TypoMatch.allowedErrors(forLength: needle.count, max: typoMaxErrors)
+        guard exact.isEmpty, allowed > 0 else { return (exact, false) }
+        let wanted = LauncherMatch.letters(needle)
+        let close = zip(targets, searchTexts).enumerated().compactMap { index, pair -> (errors: Int, index: Int, target: RoadieTarget)? in
+            TypoMatch.distance(needle, in: pair.1.characters, maxErrors: allowed, queryLetters: wanted, textLetters: pair.1.letters)
+                .map { ($0, index, pair.0) }
+        }
+        return (close.sorted { ($0.errors, $0.index) < ($1.errors, $1.index) }.map(\.target), !close.isEmpty)
+    }
+
     /// Casse, accents et espaces ignorés (« watchlater » trouve « Watch Later »).
     static func compact(_ value: String) -> String {
         TargetHintService.normalized(value).replacingOccurrences(of: " ", with: "")
@@ -242,7 +267,8 @@ public struct TargetSearchModel: Equatable, Sendable {
     private mutating func refresh() {
         labelBuffer = ""
         pendingReturnAt = nil
-        matches = shortened(Self.matches(targets, texts: searchTexts, query: query))
+        (matches, corrected) = found()
+        matches = shortened(matches)
         // Barre vide : aucune étiquette affichée, donc rien à valider.
         highlightedIndex = query.isEmpty || matches.isEmpty ? nil : 0
     }
