@@ -78,12 +78,16 @@ struct Spec135ZoneHistoryTests {
     /// Vignette : rectangle de 440 × 260 points centré sur la zone, gardé dans la fenêtre ; zone entourée dedans.
     @MainActor @Test func thumbnailCropsAroundTheZoneAndRingsIt() {
         let window = CGSize(width: 1200, height: 800)
-        #expect(ZoneThumbnails.crop(zone: CGRect(x: 580, y: 390, width: 40, height: 20), windowSize: window)
+        #expect(ZoneThumbnails.crop(zone: CGRect(x: 580, y: 390, width: 40, height: 20), windowSize: window, area: CGSize(width: 440, height: 260))
                 == CGRect(x: 380, y: 270, width: 440, height: 260))
+        // Rectangle par défaut : 300 × 180 points, affiché à l'échelle 1 dans la carte (lisibilité).
+        #expect(ZoneThumbnails.crop(zone: CGRect(x: 580, y: 390, width: 40, height: 20), windowSize: window).size == CGSize(width: 300, height: 180))
+        #expect(ZoneSwitcherPanel.cardCount(screenWidth: 1512) == 4 && ZoneSwitcherPanel.cardCount(screenWidth: 3840) == 7)
+        #expect(ZoneSwitcherPanel.cardCount(screenWidth: 200) == 1)
         // Près d'un bord : décalée pour rester dans la fenêtre ; petite fenêtre : la fenêtre entière.
         #expect(ZoneThumbnails.crop(zone: CGRect(x: 10, y: 5, width: 40, height: 20), windowSize: window).origin == .zero)
         #expect(ZoneThumbnails.crop(zone: CGRect(x: 1180, y: 790, width: 10, height: 5), windowSize: window).maxX == 1200)
-        #expect(ZoneThumbnails.crop(zone: .zero, windowSize: CGSize(width: 300, height: 200)) == CGRect(x: 0, y: 0, width: 300, height: 200))
+        #expect(ZoneThumbnails.crop(zone: .zero, windowSize: CGSize(width: 250, height: 150)) == CGRect(x: 0, y: 0, width: 250, height: 150))
         // Entourage : même échelle que la vignette, axe vertical retourné, 3 points de marge.
         let ring = ZoneSwitcherPanel.highlight(zone: CGRect(x: 580, y: 390, width: 40, height: 20),
                                                crop: CGRect(x: 380, y: 270, width: 440, height: 260), in: CGSize(width: 440, height: 260))

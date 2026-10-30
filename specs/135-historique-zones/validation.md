@@ -34,3 +34,7 @@
   vignettes fausses supprimées.
 - **Deux traits jaunes** : zone de 439 points de large dans une vignette de 440 ; l'entourage débordait à gauche et à
   droite. Il est désormais gardé dans l'image affichée (test sur ces valeurs).
+- **Photos floues** : 440 × 260 points réduits dans une vignette de 228 × 136 (texte à moitié taille), et capture
+  agrandie deux fois sur l'écran 4K à 1 pixel par point. Désormais 300 × 180 points affichés à l'échelle 1 dans des
+  cartes de 312 points, capture à la densité réelle de l'écran de la fenêtre (`scale(forWindowFrame:)`) ; 4 cartes sur
+  l'écran du portable, 7 sur le 4K. Captures à l'ancien format supprimées. Journal `zone.thumbnail` (raison d'un échec).

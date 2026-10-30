@@ -8,8 +8,20 @@ import ScreenCaptureKit
 @MainActor
 final class ZoneThumbnails {
     static let shared = ZoneThumbnails()
-    /// Taille du rectangle découpé autour de la zone, en points.
-    static let area = CGSize(width: 440, height: 260)
+    /// Taille du rectangle découpé autour de la zone, en points : celle de la vignette des cartes, affichée à
+    /// l'échelle 1 pour que le texte reste lisible (essai du 30 octobre 2026 : réduit de moitié, il ne l'était pas).
+    static let area = CGSize(width: 300, height: 180)
+
+    /// Densité (pixels par point) de l'écran qui montre la plus grande part de la fenêtre ; 2 par défaut. O(é).
+    static func scale(forWindowFrame frame: CGRect) -> CGFloat {
+        let screens = NSScreen.screens.compactMap { screen -> (CGRect, CGFloat)? in
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID else { return nil }
+            return (CGDisplayBounds(number), screen.backingScaleFactor)
+        }
+        let best = screens.max { $0.0.intersection(frame).width * $0.0.intersection(frame).height
+            < $1.0.intersection(frame).width * $1.0.intersection(frame).height }
+        return best.flatMap { $0.0.intersects(frame) ? $0.1 : nil } ?? 2
+    }
 
     let folder: String
     private var images: [String: NSImage] = [:]
@@ -48,23 +60,41 @@ final class ZoneThumbnails {
 
     /// Capture du rectangle autour de la zone (relatif à la fenêtre) ; rend le rectangle découpé, ou nil si la fenêtre
     /// ne se capture pas (autorisation, fenêtre fermée). Une capture à la fois, hors du fil principal pour la copie.
-    func capture(key: String, windowID: UInt32, zone: CGRect, windowSize: CGSize) async -> CGRect? {
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
-              let window = content.windows.first(where: { $0.windowID == windowID }) else { return nil }
+    /// `outcome` reçoit la raison d'un échec (diagnostic, essai du 30 octobre 2026) ou « ok ».
+    func capture(key: String, windowID: UInt32, zone: CGRect, windowSize: CGSize, outcome: (String) -> Void = { _ in }) async -> CGRect? {
+        let content: SCShareableContent
+        do { content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) } catch {
+            outcome("shareable_failed: \(error.localizedDescription)")
+            return nil
+        }
+        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+            outcome("window_absent (\(content.windows.count) fenêtres)")
+            return nil
+        }
         let crop = Self.crop(zone: zone, windowSize: windowSize)
         let configuration = SCStreamConfiguration()
         configuration.sourceRect = crop
-        configuration.width = Int(crop.width * 2)
-        configuration.height = Int(crop.height * 2)
-        // Écran à 1 pixel par point (4K externe de l'utilisateur) : la capture remplit le tampon au lieu d'en occuper
-        // le quart en haut à gauche (essai du 30 octobre 2026), comme les vignettes du rail.
+        // Densité réelle de l'écran de la fenêtre : ni agrandissement flou sur un écran à 1 pixel par point, ni perte
+        // sur un écran Retina. La mise à l'échelle reste demandée : sans elle, un tampon plus grand que la capture la
+        // laissait dans un coin (essai du 30 octobre 2026).
+        let scale = Self.scale(forWindowFrame: window.frame)
+        configuration.width = Int((crop.width * scale).rounded())
+        configuration.height = Int((crop.height * scale).rounded())
         configuration.scalesToFit = true
         configuration.preservesAspectRatio = true
         configuration.showsCursor = false
         configuration.ignoreShadowsSingleWindow = true
         let filter = SCContentFilter(desktopIndependentWindow: window)
-        guard let cgImage = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration),
-              !cgImage.looksBlank else { return nil }
+        let cgImage: CGImage
+        do { cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration) } catch {
+            outcome("capture_failed: \(error.localizedDescription)")
+            return nil
+        }
+        guard !cgImage.looksBlank else {
+            outcome("blank \(cgImage.width)x\(cgImage.height)")
+            return nil
+        }
+        outcome("ok")
         let image = NSImage(cgImage: cgImage, size: crop.size)
         images[key] = image
         let target = path(for: key)

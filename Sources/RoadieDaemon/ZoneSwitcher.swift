@@ -30,7 +30,7 @@ public final class ZoneSwitcherController {
             return
         }
         // Les zones parcourues sont celles des cartes montrées.
-        records = Array(ZoneHistory.shared.records.prefix(ZoneSwitcherPanel.maxCards))
+        records = Array(ZoneHistory.shared.records.prefix(ZoneSwitcherPanel.fittingCards))
         guard !records.isEmpty else {
             events.append(RoadieEvent(type: "zone.empty"))
             return
@@ -92,10 +92,23 @@ public final class ZoneSwitcherController {
 final class ZoneSwitcherPanel {
     private let panel: NSPanel
     private var cards: [NSView] = []
-    static let cardSize = CGSize(width: 240, height: 176), thumbHeight: CGFloat = 136, gap: CGFloat = 12, maxCards = 7
+    /// Vignette à l'échelle 1 (`ZoneThumbnails.area`) plus la ligne du texte.
+    static let cardSize = CGSize(width: ZoneThumbnails.area.width + 12, height: ZoneThumbnails.area.height + 44)
+    static let thumbHeight = ZoneThumbnails.area.height, gap: CGFloat = 12, maxCards = 7
+
+    /// Cartes qui tiennent sur 90 % de la largeur de l'écran, 7 au plus. O(1).
+    static func cardCount(screenWidth: CGFloat) -> Int {
+        max(1, min(maxCards, Int((screenWidth * 0.9 - gap) / (cardSize.width + gap))))
+    }
+
+    /// Cartes de l'écran du pointeur.
+    static var fittingCards: Int {
+        let mouse = NSEvent.mouseLocation
+        return cardCount(screenWidth: (NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main)?.visibleFrame.width ?? 1440)
+    }
 
     init(records: [ZoneRecord]) {
-        let shown = Array(records.prefix(Self.maxCards))
+        let shown = Array(records.prefix(Self.fittingCards))
         let width = CGFloat(shown.count) * (Self.cardSize.width + Self.gap) + Self.gap
         let height = Self.cardSize.height + 2 * Self.gap
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
