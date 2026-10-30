@@ -87,17 +87,20 @@ enum LauncherFileOperations {
         var modified: Date?
         var sha256: String?
 
-        /// Lignes affichées, chacune copiable : libellé puis valeur. O(1).
+        /// Lignes de la fiche sous son en-tête (le type y figure déjà), chacune copiable : taille et dates d'abord,
+        /// identifiants techniques ensuite. O(1).
         var lines: [(label: String, value: String)] {
             let format = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
-            var lines = [(tr("Type", "Kind"), kind), ("UTI", typeIdentifier)]
-            if let mimeType { lines.append(("MIME", mimeType)) }
-            lines.append((tr("Taille", "Size"), "\(format) (\(size) " + tr("octets", "bytes") + ")"))
+            let bytes = NumberFormatter.localizedString(from: NSNumber(value: size), number: .decimal)
+            // Nombre exact d'octets seulement s'il diffère de l'arrondi (« 849 octets » n'est pas répété).
+            var lines = [(tr("Taille", "Size"), size < 1_000 ? format : "\(format) (\(bytes) " + tr("octets", "bytes") + ")")]
             let dates = DateFormatter()
             dates.dateStyle = .medium
             dates.timeStyle = .short
             if let created { lines.append((tr("Créé", "Created"), dates.string(from: created))) }
             if let modified { lines.append((tr("Modifié", "Modified"), dates.string(from: modified))) }
+            lines.append(("UTI", typeIdentifier))
+            if let mimeType { lines.append(("MIME", mimeType)) }
             if let sha256 { lines.append(("SHA-256", sha256)) }
             return lines
         }

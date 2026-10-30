@@ -2004,24 +2004,11 @@ public final class TargetModeRuntimeController: NSObject {
         return TargetActionResult(changed: true, message: "\(label): \(report.done.count)")
     }
 
-    /// Fiche d'un élément dans la vue Texte : un tableau Markdown, chaque valeur sélectionnable. O(octets) pour l'empreinte.
+    /// Fiche d'un élément (`FileInfoPanel`), lue hors du fil principal. O(octets) pour l'empreinte.
     private func showInfo(_ path: String) {
-        let name = (path as NSString).lastPathComponent
         Task.detached(priority: .userInitiated) {
-            let markdown: String
-            if let info = try? LauncherFileOperations.info(path) {
-                let rows = info.lines.map { "| \($0.label) | `\($0.value)` |" }.joined(separator: "\n")
-                markdown = "# \(name)\n\n| | |\n|---|---|\n\(rows)\n"
-            } else {
-                markdown = "# \(name)\n\n" + tr("Informations illisibles.", "Information unavailable.")
-            }
-            await MainActor.run {
-                var view = AlfredTextView(workflowID: "roadie.info", objectUID: "info", title: name,
-                                          folder: (path as NSString).deletingLastPathComponent)
-                view.behaviour = .markdown
-                view.chunks = [markdown]
-                WorkflowTextPanel.show(view, plainContinues: false, runScript: nil) { _, _, _ in }
-            }
+            let info = try? LauncherFileOperations.info(path)
+            await MainActor.run { FileInfoPanel.show(path: path, info: info) }
         }
     }
 

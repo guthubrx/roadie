@@ -83,6 +83,21 @@ struct Spec131FileOperationsTests {
         #expect(info.typeIdentifier == "public.plain-text")
         #expect(info.lines.contains { $0.label == "SHA-256" })
         #expect(try LauncherFileOperations.info(box.source.path).sha256 == nil)
+
+    }
+
+    /// Fiche : le type est dans l'en-tête, pas dans les lignes ; hauteur ajustée au contenu ; fermeture. O(1).
+    @MainActor @Test func infoPanelFitsItsContent() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("spec131-info-\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try "abc".write(to: file, atomically: true, encoding: .utf8)
+        let info = try LauncherFileOperations.info(file.path)
+        #expect(!info.lines.contains { $0.value == info.kind })
+        FileInfoPanel.show(path: file.path, info: info)
+        let panel = try #require(FileInfoPanel.current?.panel)
+        #expect(panel.isVisible && panel.frame.height > 200 && panel.frame.height < 480)
+        FileInfoPanel.current?.close()
+        #expect(!panel.isVisible && FileInfoPanel.current == nil)
     }
 
     @Test func tagsToggleLikeACheckbox() throws {
