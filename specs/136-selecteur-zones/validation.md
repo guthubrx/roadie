@@ -1,0 +1,16 @@
+# Validation - Session 136
+
+**Date** : 30 octobre 2026
+
+- `scripts/test --no-parallel` : 2 343 tests dans 349 suites réussis (69,5 s).
+- Roadie installé (PID 26288, santé 5/5, signature roadied-cert, configuration valide). Profil « Zones »
+  (`alt+tab`, `source = "zones"`) ajouté chez l'utilisateur, `zone_history_hotkey` retiré, configuration sauvegardée
+  (`roadies.toml.bak-136-*`). Aucun problème de raccourci signalé par le sélecteur.
+- Code partagé : les zones passent par le modèle, le panneau, la navigation et la validation du sélecteur de
+  fenêtres ; le panneau propre de la session 135 (`ZoneSwitcher.swift`) est supprimé.
+
+## Non vérifié
+
+- Parcours réel (⌥Tab, flèches, souris, retour et clic) et zones des clics ordinaires : frappes et clics simulés
+  refusés sur ce poste ; aucune zone de clic observée dans les 20 secondes suivant l'installation.
+- Les photos contiennent le contenu des fenêtres cliquées ; elles restent sur le poste, 24 heures au plus.

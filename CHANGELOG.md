@@ -26,8 +26,10 @@ jour et les limites connues ; les README décrivent la version courante.
 - Fautes de frappe rattrapées (`typo_max_errors`) : à l'écran sans correspondance exacte, et dans une section
   « Vouliez-vous dire » du lanceur, toujours après les correspondances exactes.
 - `launcher_on_screen` : le lanceur peut ne plus lire les éléments à l'écran.
-- Zones récentes (`zone_history_hotkey`, ⌥Tab) : revenir aux zones cliquées par la recherche à l'écran, même
-  dans une autre stage ou sur un autre bureau, comme ⌘Tab pour les fenêtres.
+- Zones récentes : les endroits cliqués (recherche à l'écran et clics ordinaires), avec leur photo, dans un
+  profil du sélecteur `source = "zones"` (⌥Tab chez l'auteur), avec le comportement complet de ⌘Tab ; valider
+  ramène la fenêtre, même dans une autre stage ou sur un autre bureau, et clique l'endroit. 20 zones, 24 heures,
+  3 zones de clics par fenêtre, réglables.
 
 ### Corrections
 

@@ -131,6 +131,9 @@ private final class WindowSwitcherSession {
     var timer: Timer?
     var outsideMonitor: Any?
     var localClickMonitor: Any?
+    /// Profil `zones` (session 136) : zones montrées, par identifiant d'entrée, et leur ordre.
+    var zones: [WindowID: SwitcherZone] = [:]
+    var zoneRecentIDs: [WindowID] = []
 
     init(
         id: Int,
@@ -317,12 +320,22 @@ public final class WindowSwitcherController {
         }
     }
 
+    /// Profil `zones` (session 136) : les fenêtres lues deviennent les zones récentes de leurs fenêtres ; l'ordre de
+    /// l'historique tient lieu de récence. Les autres profils gardent les fenêtres. O(z + w).
     private func makeModel(entries: [WindowSwitcherEntry], context: WindowSwitcherContext, session: WindowSwitcherSession) -> WindowSwitcherModel {
-        WindowSwitcherModel(
-            entries: entries,
+        var shown = entries, shownContext = context, recentIDs = WindowSwitcherFocusHistory.shared.recentIDs
+        if session.profile.source == "zones" {
+            ZoneHistory.shared.prune(policy: .current).forEach(ZoneThumbnails.shared.remove)
+            let built = WindowSwitcherZones.build(records: ZoneHistory.shared.records, windows: entries)
+            session.zones = built.zones
+            session.zoneRecentIDs = built.recentIDs
+            (shown, shownContext, recentIDs) = (built.entries, WindowSwitcherZones.context(context, built: built), built.recentIDs)
+        }
+        return WindowSwitcherModel(
+            entries: shown,
             profile: session.profile,
-            context: context,
-            recentIDs: WindowSwitcherFocusHistory.shared.recentIDs,
+            context: shownContext,
+            recentIDs: recentIDs,
             excludedBundles: session.config.excludedBundles
         )
     }
@@ -392,8 +405,14 @@ public final class WindowSwitcherController {
         }
         let entries = model.matches
         let members = entries.map(Self.member(for:))
-        let images: [WindowID: NSImage]
-        if session.appearance.style == .thumbnails {
+        var images: [WindowID: NSImage]
+        if !session.zones.isEmpty {
+            // Zones : leur photo entourée en vignettes, sinon l'icône de l'application.
+            images = Self.appIcons(for: entries)
+            if session.appearance.style == .thumbnails {
+                for entry in entries { if let photo = session.zones[entry.id].flatMap({ ZoneThumbnails.shared.framedImage(for: $0.record) }) { images[entry.id] = photo } }
+            }
+        } else if session.appearance.style == .thumbnails {
             images = thumbnails.images(for: members)
         } else {
             images = Self.appIcons(for: entries)
@@ -406,11 +425,14 @@ public final class WindowSwitcherController {
             query: model.query,
             images: images,
             previewImage: previewImage(for: model.selected?.id),
-            emptyMessage: tr("Aucune fenêtre dans ce contexte", "No windows here"),
-            iconOnlyIDs: session.appearance.style == .thumbnails
-                ? Set(entries.lazy.filter { !self.thumbnails.hasCapturedImage(for: $0.id) }.map(\.id)) : []
+            emptyMessage: session.profile.source == "zones"
+                ? tr("Aucune zone récente : cliquez des endroits, ou utilisez la recherche à l'écran", "No recent zones: click places, or use on-screen search")
+                : tr("Aucune fenêtre dans ce contexte", "No windows here"),
+            iconOnlyIDs: session.appearance.style != .thumbnails ? []
+                : !session.zones.isEmpty ? Set(entries.lazy.filter { session.zones[$0.id].flatMap { ZoneThumbnails.shared.framedImage(for: $0.record) } == nil }.map(\.id))
+                : Set(entries.lazy.filter { !self.thumbnails.hasCapturedImage(for: $0.id) }.map(\.id))
         )
-        if session.appearance.style == .thumbnails {
+        if session.appearance.style == .thumbnails, session.zones.isEmpty {
             thumbnails.requestCaptures(
                 for: members, protectedWindowIDs: [], liveFrames: [:],
                 displayWidth: max(session.appearance.thumbnailWidth, panel.thumbnailDisplayWidth), budget: 6
@@ -451,7 +473,9 @@ public final class WindowSwitcherController {
     }
 
     private func perform(_ action: WindowSwitcherAction) {
-        guard let session, let entry = session.model?.selected else { return }
+        guard let session, let selected = session.model?.selected else { return }
+        // Zone : l'action vise sa fenêtre.
+        let entry = session.zones[selected.id]?.window ?? selected
         session.loadTask?.cancel()
         session.loadRevision += 1
         let closesOnSuccess = action == .maximize || action == .fullscreen || action == .hideApp || action == .quitApp
@@ -504,6 +528,11 @@ public final class WindowSwitcherController {
         session.loadTask?.cancel()
         session.loadRevision += 1
         session.panel?.orderOut(nil)
+        if let zone = session.zones[entry.id] {
+            close(session)
+            go(to: zone)
+            return
+        }
         let result = switcher.activate(entry)
         events.append(RoadieEvent(
             type: "switcher.activate",
@@ -511,6 +540,23 @@ public final class WindowSwitcherController {
         ))
         if result.outcome == .failed { recoverAfterFailure(session) }
         else { close(session) }
+    }
+
+    /// Zone choisie (session 136) : sa fenêtre revient par l'activation habituelle (stage et bureau compris), puis
+    /// l'attente du premier plan et le clic tournent hors du fil principal (session 135).
+    private func go(to zone: SwitcherZone) {
+        let result = switcher.activate(zone.window)
+        let element = ZoneHistory.shared.element(for: zone.record)
+        let record = zone.record
+        let events = events
+        guard result.outcome != .failed else {
+            events.append(RoadieEvent(type: "zone.go", details: ["app": record.appName, "changed": "false", "message": result.message]))
+            return
+        }
+        Task { @MainActor in
+            let click = await Task.detached(priority: .userInitiated) { LiveAppTargetProvider().clickZone(record, element: element) }.value
+            events.append(RoadieEvent(type: "zone.go", details: ["app": record.appName, "changed": String(click.changed), "message": click.message]))
+        }
     }
 
     private func close(_ session: WindowSwitcherSession) {
@@ -527,13 +573,14 @@ public final class WindowSwitcherController {
     }
 
     private func requestSelectedPreview(_ session: WindowSwitcherSession) {
-        guard session.appearance.preview, let entry = session.model?.selected else { return }
+        guard session.appearance.preview, let entry = session.model?.selected, session.zones[entry.id] == nil else { return }
         thumbnails.requestCaptures(for: [Self.member(for: entry)], protectedWindowIDs: [], liveFrames: [:],
                                    displayWidth: max(400, session.appearance.thumbnailWidth), budget: 1)
     }
 
     private func previewImage(for id: WindowID?) -> NSImage? {
         guard let id else { return nil }
+        if let zone = session?.zones[id] { return ZoneThumbnails.shared.framedImage(for: zone.record) }
         return thumbnails.cachedImage(for: id)
     }
 

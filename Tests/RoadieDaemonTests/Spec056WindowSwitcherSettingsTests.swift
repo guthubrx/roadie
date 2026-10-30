@@ -65,6 +65,7 @@ struct Spec056WindowSwitcherSettingsTests {
             "btt_reverse_uuid": .string(""),
             "style": profile.styleOverride.map(SettingValue.string) ?? .unset,
             "presentation": profile.presentationOverride.map(SettingValue.string) ?? .unset,
+            "source": .string(profile.source),
             "preview": profile.previewOverride.map(SettingValue.bool) ?? .unset,
             "auto_size": profile.autoSizeOverride.map(SettingValue.bool) ?? .unset,
             "thumbnail_width": profile.thumbnailWidthOverride.map(SettingValue.double) ?? .unset,
@@ -134,7 +135,7 @@ struct Spec056WindowSwitcherSettingsTests {
     func switcherSettingsSitInTheSelecteurCategory() throws {
         let ids = [
             "switcher.enabled", "switcher.style", "switcher.presentation", "switcher.auto_size", "switcher.thumbnail_width",
-            "switcher.font_size", "switcher.font_family", "switcher.app_icon", "switcher.app_icon_size", "switcher.preview",
+            "switcher.font_size", "switcher.font_family", "switcher.app_icon", "switcher.app_icon_size", "switcher.preview", "switcher.zone_history_size", "switcher.zone_history_hours", "switcher.zone_clicks_per_window",
             "switcher.excluded_bundles", "switcher.shortcuts",
         ]
         for id in ids {
@@ -150,7 +151,7 @@ struct Spec056WindowSwitcherSettingsTests {
         #expect(model.sections.map(\.category) == [.selecteur])
         #expect(model.sections.first?.descriptors.map(\.id) == [
             "switcher.enabled", "switcher.style", "switcher.presentation", "switcher.auto_size", "switcher.thumbnail_width",
-            "switcher.font_size", "switcher.font_family", "switcher.app_icon", "switcher.app_icon_size", "switcher.preview",
+            "switcher.font_size", "switcher.font_family", "switcher.app_icon", "switcher.app_icon_size", "switcher.preview", "switcher.zone_history_size", "switcher.zone_history_hours", "switcher.zone_clicks_per_window",
             "switcher.excluded_bundles", "switcher.shortcuts",
         ])
     }

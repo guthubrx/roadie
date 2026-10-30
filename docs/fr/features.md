@@ -449,13 +449,14 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
   cible, Maj + étiquette clique, Retour clique. Le lanceur garde son propre raccourci (`search_hotkey`) ;
   `launcher_on_screen = false` (Paramètres > Recherche) lui retire alors la section « À l'écran » et la
   lecture des fenêtres visibles.
-- **Zones récentes** (session 135) : chaque zone cliquée par la recherche à l'écran entre dans un historique
-  (20 au plus, `~/.roadies/zone-history.json`). `zone_history_hotkey` (par exemple `alt+tab` ; vide par
-  défaut) se tient comme ⌘Tab : des cartes montrent une vignette de la fenêtre autour de chaque zone (zone
-  entourée, capturée au clic dans `~/.roadies/zone-thumbs/`) ; chaque appui avance, Maj en plus recule, relâcher ⌥ ramène la
-  fenêtre de la zone avec sa stage et son bureau, puis clique la zone. Roadie retrouve la zone par son élément
-  s'il existe encore, sinon par sa place dans la fenêtre si celle-ci a gardé sa taille ; sinon la fenêtre
-  revient sans clic. Si la fenêtre est déjà au premier plan, ⌥Tab propose d'abord la zone d'avant.
+- **Zones récentes** (sessions 135 et 136) : chaque zone cliquée par la recherche à l'écran, et chaque clic
+  ordinaire dans une fenêtre, devient une zone avec sa photo (`~/.roadies/zone-history.json`,
+  `~/.roadies/zone-thumbs/`). Un profil du sélecteur avec `source = "zones"` (par exemple `hotkey = "alt+tab"`)
+  les montre exactement comme ⌘Tab montre les fenêtres : présentations, styles, flèches, souris, Échap,
+  recherche, regroupement par bureau et stage. Valider ramène la fenêtre de la zone (stage et bureau compris) et
+  clique la zone, par son élément s'il existe encore, sinon par sa place si la fenêtre a gardé sa taille.
+  `[switcher] zone_history_size` (20), `zone_history_hours` (24) et `zone_clicks_per_window` (3 zones de clics
+  par fenêtre ; 0 : les clics ne créent pas de zone), Paramètres > Sélecteur.
 - **Fautes de frappe** (session 134) : sans aucune correspondance exacte, la recherche à l'écran admet une
   lettre oubliée, en trop, remplacée ou deux lettres inversées : une faute à partir de 4 lettres, deux à
   partir de 8 (« enregsitrer » trouve « Enregistrer »). La barre l'indique par « ≈ approché ». Dans le

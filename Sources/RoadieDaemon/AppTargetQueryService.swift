@@ -999,6 +999,9 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         // (Maj de Maj + étiquette), et un clic devenait un Maj + clic (essai du 30 octobre 2026).
         downEvent?.flags = flags
         upEvent?.flags = flags
+        // Clic de Roadie : l'enregistreur des zones des clics l'ignore (session 136).
+        downEvent?.setIntegerValueField(.eventSourceUserData, value: ZoneClickRecorder.roadieClickTag)
+        upEvent?.setIntegerValueField(.eventSourceUserData, value: ZoneClickRecorder.roadieClickTag)
         if let downEvent { postEvent(downEvent) }
         if let upEvent { postEvent(upEvent) }
     }

@@ -434,13 +434,14 @@ letter filters the targets; Return clicks the green target.
   Shift + label clicks, Return clicks. The launcher keeps its own shortcut (`search_hotkey`);
   `launcher_on_screen = false` (Settings > Search) then removes its "On screen" section and the reading of
   visible windows.
-- **Recent zones** (session 135): every zone clicked by on-screen search joins a history (20 at most,
-  `~/.roadies/zone-history.json`). `zone_history_hotkey` (for example `alt+tab`; empty by default) is held
-  like ⌘Tab: cards show a thumbnail of the window around each zone (zone ringed, captured on click into
-  `~/.roadies/zone-thumbs/`); each press steps through the cards, adding Shift goes back, releasing ⌥ brings the zone's window
-  back with its stage and desktop, then clicks the zone. Roadie finds the zone through its element if it still
-  exists, otherwise through its place in the window if the window kept its size; otherwise the window comes
-  back without a click. When the window is already in front, ⌥Tab first offers the zone before.
+- **Recent zones** (sessions 135 and 136): every zone clicked by on-screen search, and every ordinary click in
+  a window, becomes a zone with its photo (`~/.roadies/zone-history.json`, `~/.roadies/zone-thumbs/`). A switcher
+  profile with `source = "zones"` (for example `hotkey = "alt+tab"`) shows them exactly as ⌘Tab shows windows:
+  presentations, styles, arrows, mouse, Escape, search, grouping by desktop and stage. Confirming brings the
+  zone's window back (stage and desktop included) and clicks the zone, through its element if it still exists,
+  otherwise through its place if the window kept its size. `[switcher] zone_history_size` (20),
+  `zone_history_hours` (24) and `zone_clicks_per_window` (3 click zones per window; 0: clicks create no zone),
+  Settings > Switcher.
 - **Typos** (session 134): with no exact match at all, on-screen search allows a missing, extra or wrong
   letter, or two swapped letters: one typo from 4 letters, two from 8 ("enregsitrer" finds "Enregistrer").
   The bar shows "≈ approximate". In the launcher, a "Did you mean" section comes last, only under three exact

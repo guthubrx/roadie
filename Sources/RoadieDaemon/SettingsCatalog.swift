@@ -468,10 +468,6 @@ extension SettingsCatalog {
               tr("Ouvre la barre sans la liste du lanceur : les éléments visibles qui correspondent reçoivent une étiquette, Retour clique. ", "Opens the bar without the launcher list: matching visible elements get a label, Return clicks. ")
               + tr("Par exemple command+control+alt+f (Capslock + F). Vide : désactivé.", "For example command+control+alt+f (Capslock + F). Empty: off."),
               .text, .string("")),
-        entry(.raccourcis, "experimental.target_mode", "zone_history_hotkey", tr("Raccourci des zones récentes", "Recent zones shortcut"),
-              tr("Tenu comme ⌘Tab : chaque appui avance dans les zones cliquées par la recherche à l'écran, Maj en plus recule ; ", "Held like ⌘Tab: each press steps through zones clicked by on-screen search, Shift goes back; ")
-              + tr("relâcher ramène la fenêtre (stage et bureau compris) et clique la zone. Par exemple alt+tab. Vide : désactivé.", "releasing brings the window back (stage and desktop included) and clicks the zone. For example alt+tab. Empty: off."),
-              .text, .string("")),
         entry(.recherche, "experimental.target_mode", "web_search_url", tr("Recherche web (⌃ Retour)", "Web search (⌃ Return)"),
               tr("Adresse ouverte par ⌃ Retour dans la barre ; {query} reçoit le texte tapé.", "Address opened by ⌃ Return in the bar; {query} receives the typed text."),
               .text, .string("https://www.google.com/search?q={query}")),

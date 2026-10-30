@@ -24,6 +24,10 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
     public var excludedBundles: [String]
     /// Au plus neuf profils. Un identifiant déjà vu est ignoré : le premier profil gagne.
     public var shortcuts: [WindowSwitcherShortcutConfig]
+    /// Zones des profils `zones` (session 136) : nombre gardé, durée en heures, zones des clics par fenêtre (0 : aucune).
+    public var zoneHistorySize: Int
+    public var zoneHistoryHours: Int
+    public var zoneClicksPerWindow: Int
 
     public init(
         enabled: Bool = true,
@@ -37,8 +41,14 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         shortcuts: [WindowSwitcherShortcutConfig] = [WindowSwitcherShortcutConfig()],
         presentation: String = "classic",
         appIcon: Bool = true,
-        appIconSize: Double = 0
+        appIconSize: Double = 0,
+        zoneHistorySize: Int = 20,
+        zoneHistoryHours: Int = 24,
+        zoneClicksPerWindow: Int = 3
     ) {
+        self.zoneHistorySize = min(50, max(1, zoneHistorySize))
+        self.zoneHistoryHours = min(168, max(1, zoneHistoryHours))
+        self.zoneClicksPerWindow = min(10, max(0, zoneClicksPerWindow))
         self.enabled = enabled
         self.style = Self.styles.contains(style) ? style : "thumbnails"
         self.autoSize = autoSize
@@ -76,6 +86,9 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         case presentation
         case appIcon = "app_icon"
         case appIconSize = "app_icon_size"
+        case zoneHistorySize = "zone_history_size"
+        case zoneHistoryHours = "zone_history_hours"
+        case zoneClicksPerWindow = "zone_clicks_per_window"
         case excludedBundles = "excluded_bundles"
         case shortcuts
     }
@@ -95,7 +108,10 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
             shortcuts: try c.decodeIfPresent([WindowSwitcherShortcutConfig].self, forKey: .shortcuts) ?? defaults.shortcuts,
             presentation: try c.decodeIfPresent(String.self, forKey: .presentation) ?? defaults.presentation,
             appIcon: try c.decodeIfPresent(Bool.self, forKey: .appIcon) ?? defaults.appIcon,
-            appIconSize: try c.decodeFlexibleDouble(forKey: .appIconSize) ?? defaults.appIconSize
+            appIconSize: try c.decodeFlexibleDouble(forKey: .appIconSize) ?? defaults.appIconSize,
+            zoneHistorySize: try c.decodeIfPresent(Int.self, forKey: .zoneHistorySize) ?? defaults.zoneHistorySize,
+            zoneHistoryHours: try c.decodeIfPresent(Int.self, forKey: .zoneHistoryHours) ?? defaults.zoneHistoryHours,
+            zoneClicksPerWindow: try c.decodeIfPresent(Int.self, forKey: .zoneClicksPerWindow) ?? defaults.zoneClicksPerWindow
         )
     }
 }
@@ -107,6 +123,8 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
     public static let triggerSources: Set<String> = ["roadie", "btt", "external"]
     public static let visibilityChoices: Set<String> = ["auto", "always", "never"]
     public static let sortOrders: Set<String> = ["recent", "title", "stage"]
+    /// Ce que le profil fait défiler : les fenêtres, ou les zones récentes (session 136).
+    public static let sources: Set<String> = ["windows", "zones"]
 
     public var id: String
     public var name: String
@@ -132,6 +150,7 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
     public var fontSizeOverride: Double?
     public var fontFamilyOverride: String?
     public var presentationOverride: String?
+    public var source: String
 
     public init(
         id: String = "all",
@@ -156,8 +175,10 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
         thumbnailWidthOverride: Double? = nil,
         fontSizeOverride: Double? = nil,
         fontFamilyOverride: String? = nil,
-        presentationOverride: String? = nil
+        presentationOverride: String? = nil,
+        source: String = "windows"
     ) {
+        self.source = Self.sources.contains(source) ? source : "windows"
         self.id = id
         self.name = name
         self.hotkey = hotkey.lowercased().filter { !$0.isWhitespace }
@@ -209,6 +230,7 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
         case fontSizeOverride = "font_size"
         case fontFamilyOverride = "font_family"
         case presentationOverride = "presentation"
+        case source
     }
 
     public init(from decoder: Decoder) throws {
@@ -237,7 +259,8 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
             thumbnailWidthOverride: try c.decodeFlexibleDouble(forKey: .thumbnailWidthOverride),
             fontSizeOverride: try c.decodeFlexibleDouble(forKey: .fontSizeOverride),
             fontFamilyOverride: try c.decodeIfPresent(String.self, forKey: .fontFamilyOverride),
-            presentationOverride: try c.decodeIfPresent(String.self, forKey: .presentationOverride)
+            presentationOverride: try c.decodeIfPresent(String.self, forKey: .presentationOverride),
+            source: try c.decodeIfPresent(String.self, forKey: .source) ?? "windows"
         )
     }
 }
