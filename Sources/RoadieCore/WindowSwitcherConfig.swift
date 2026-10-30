@@ -28,6 +28,8 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
     public var zoneHistorySize: Int
     public var zoneHistoryHours: Int
     public var zoneClicksPerWindow: Int
+    /// Applications dont les clics ne créent pas de zone (session 137, sens interdit d'une carte de zone).
+    public var zoneClickExcludedBundles: [String]
 
     public init(
         enabled: Bool = true,
@@ -44,8 +46,10 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         appIconSize: Double = 0,
         zoneHistorySize: Int = 20,
         zoneHistoryHours: Int = 24,
-        zoneClicksPerWindow: Int = 3
+        zoneClicksPerWindow: Int = 3,
+        zoneClickExcludedBundles: [String] = []
     ) {
+        self.zoneClickExcludedBundles = zoneClickExcludedBundles
         self.zoneHistorySize = min(50, max(1, zoneHistorySize))
         self.zoneHistoryHours = min(168, max(1, zoneHistoryHours))
         self.zoneClicksPerWindow = min(10, max(0, zoneClicksPerWindow))
@@ -89,6 +93,7 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         case zoneHistorySize = "zone_history_size"
         case zoneHistoryHours = "zone_history_hours"
         case zoneClicksPerWindow = "zone_clicks_per_window"
+        case zoneClickExcludedBundles = "zone_click_excluded_bundles"
         case excludedBundles = "excluded_bundles"
         case shortcuts
     }
@@ -111,7 +116,8 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
             appIconSize: try c.decodeFlexibleDouble(forKey: .appIconSize) ?? defaults.appIconSize,
             zoneHistorySize: try c.decodeIfPresent(Int.self, forKey: .zoneHistorySize) ?? defaults.zoneHistorySize,
             zoneHistoryHours: try c.decodeIfPresent(Int.self, forKey: .zoneHistoryHours) ?? defaults.zoneHistoryHours,
-            zoneClicksPerWindow: try c.decodeIfPresent(Int.self, forKey: .zoneClicksPerWindow) ?? defaults.zoneClicksPerWindow
+            zoneClicksPerWindow: try c.decodeIfPresent(Int.self, forKey: .zoneClicksPerWindow) ?? defaults.zoneClicksPerWindow,
+            zoneClickExcludedBundles: try c.decodeIfPresent([String].self, forKey: .zoneClickExcludedBundles) ?? []
         )
     }
 }

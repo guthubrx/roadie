@@ -180,6 +180,11 @@ extension WindowSwitcherAction {
 final class WindowSwitcherCardView: NSView {
     let entryID: WindowID
     var onClick: (() -> Void)?
+    /// Icônes du coin (session 137), montrées au survol : × ferme la fenêtre ou retire la zone, sens interdit exclut
+    /// l'application du sélecteur ou de ses zones de clics.
+    var onDismiss: (() -> Void)?
+    var onBan: (() -> Void)?
+    private var cornerButtons: [CardCornerButton] = []
     var isSelected = false {
         didSet {
             guard isSelected != oldValue else { return }
@@ -245,11 +250,30 @@ final class WindowSwitcherCardView: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel(([title, entry.window.appName, entry.subtitleText] + badges).filter { !$0.isEmpty }.joined(separator: ", "))
+        let app = entry.window.appName
+        let isZone = entry.id.rawValue >= WindowSwitcherZones.firstID
+        let ban = CardCornerButton(symbol: "nosign", tip: isZone
+            ? tr("Plus de zones de clics pour \(app)", "No more click zones for \(app)")
+            : tr("Ne plus montrer \(app) dans le sélecteur", "Stop showing \(app) in the switcher"),
+            frame: CGRect(x: bounds.width - 54, y: 6, width: 22, height: 22)) { [weak self] in self?.onBan?() }
+        let close = CardCornerButton(symbol: "xmark", tip: isZone ? tr("Retirer cette zone", "Remove this zone") : tr("Fermer la fenêtre", "Close the window"),
+                                     frame: CGRect(x: bounds.width - 28, y: 6, width: 22, height: 22)) { [weak self] in self?.onDismiss?() }
+        cornerButtons = [ban, close]
+        cornerButtons.forEach { $0.isHidden = true; addSubview($0) }
     }
 
     required init?(coder: NSCoder) {
         nil
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { cornerButtons.forEach { $0.isHidden = false } }
+    override func mouseExited(with event: NSEvent) { cornerButtons.forEach { $0.isHidden = true } }
 
     private func place(_ imageView: NSImageView, _ title: NSTextField, _ subtitle: NSTextField, appearance: WindowSwitcherAppearance, imageHeight: CGFloat) {
         let width = bounds.width
@@ -307,6 +331,9 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     var onConfirm: (() -> Void)?
     var onCancel: (() -> Void)?
     var onSelect: ((WindowID) -> Void)?
+    /// Icônes du coin d'une carte (session 137).
+    var onDismiss: ((WindowID) -> Void)?
+    var onBan: ((WindowID) -> Void)?
     var onAction: ((WindowSwitcherAction) -> Void)?
     var onHighlight: ((WindowID) -> Void)?
     var onSearchMode: ((Bool) -> Void)?
@@ -721,6 +748,8 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
                                               appearance: switcherAppearance, frame: item.frame,
                                               appIcon: appIcons[item.entry.window.pid], iconOnly: iconOnlyIDs.contains(item.entry.id))
             card.onClick = { [weak self] in self?.onSelect?(item.entry.id) }
+            card.onDismiss = { [weak self] in self?.onDismiss?(item.entry.id) }
+            card.onBan = { [weak self] in self?.onBan?(item.entry.id) }
             card.isSelected = item.entry.id == selectedWindowID
             gridContainer.addSubview(card)
             cards.append(card)
@@ -879,4 +908,30 @@ private final class SwitcherGroupButton: NSButton {
         super.draw(dirtyRect)
     }
     @objc private func chosen() { state = .on; pressed() }
+}
+
+/// Petite icône ronde du coin d'une carte (session 137), sur fond sombre, avec son aide.
+final class CardCornerButton: NSButton {
+    private let handler: () -> Void
+
+    init(symbol: String, tip: String, frame: CGRect, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(frame: frame)
+        image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .bold))
+        isBordered = false
+        imagePosition = .imageOnly
+        contentTintColor = .white
+        toolTip = tip
+        setAccessibilityLabel(tip)
+        wantsLayer = true
+        layer?.cornerRadius = frame.width / 2
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
+        target = self
+        action = #selector(fire)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    @objc private func fire() { handler() }
 }

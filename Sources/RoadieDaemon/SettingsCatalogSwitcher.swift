@@ -44,6 +44,8 @@ extension SettingsCatalog {
               .int(0...10), .int(3)),
         readOnlyEntry(.selecteur, "switcher", "excluded_bundles", tr("Applications exclues", "Excluded apps"),
                       tr("Identifiants d'applications (bundle ID) que le sélecteur n'affiche jamais. Exemple : com.apple.finder.", "App identifiers (bundle ID) the switcher never shows. Example: com.apple.finder.")),
+        readOnlyEntry(.selecteur, "switcher", "zone_click_excluded_bundles", tr("Applications sans zones de clics", "Apps without click zones"),
+                      tr("Identifiants d'applications (bundle ID) dont les clics ne créent pas de zone ; la recherche à l'écran en crée toujours. Le sens interdit d'une carte de zone y ajoute son application.", "App identifiers (bundle ID) whose clicks create no zone; on-screen search still does. A zone card's no-entry sign adds its app here.")),
         readOnlyEntry(.selecteur, "switcher", "shortcuts", tr("Profils de raccourcis", "Shortcut profiles"),
                       tr("Jusqu'à neuf profils. Chaque profil a sa touche, ses fenêtres, son tri et son action au relâchement. Une touche déjà prise par AltTab ou par un autre outil peut ne pas réagir.", "Up to nine profiles. Each profile has its key, its windows, its sort order and its release action. A key already taken by AltTab or another tool may not respond.")),
     ]

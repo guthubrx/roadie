@@ -442,6 +442,10 @@ letter filters the targets; Return clicks the green target.
   otherwise through its place if the window kept its size. `[switcher] zone_history_size` (20),
   `zone_history_hours` (24) and `zone_clicks_per_window` (3 click zones per window; 0: clicks create no zone),
   Settings > Switcher.
+- **Card icons** (session 137): hovering a card shows, top right, × to close the window (⌘Tab) or remove the zone
+  and its photo (⌥Tab), and a no-entry sign that adds the app to the switcher's "Excluded apps", or, on a zone, to
+  "Apps without click zones" (`zone_click_excluded_bundles`: its clicks no longer create zones; on-screen search
+  still does). Undo in Settings > Switcher.
 - **Typos** (session 134): with no exact match at all, on-screen search allows a missing, extra or wrong
   letter, or two swapped letters: one typo from 4 letters, two from 8 ("enregsitrer" finds "Enregistrer").
   The bar shows "≈ approximate". In the launcher, a "Did you mean" section comes last, only under three exact

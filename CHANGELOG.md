@@ -30,6 +30,8 @@ jour et les limites connues ; les README décrivent la version courante.
   profil du sélecteur `source = "zones"` (⌥Tab chez l'auteur), avec le comportement complet de ⌘Tab ; valider
   ramène la fenêtre, même dans une autre stage ou sur un autre bureau, et clique l'endroit. 20 zones, 24 heures,
   3 zones de clics par fenêtre, réglables.
+- Cartes du sélecteur : au survol, × ferme la fenêtre ou retire la zone, sens interdit exclut l'application du
+  sélecteur ou de ses zones de clics (`zone_click_excluded_bundles`).
 
 ### Corrections
 

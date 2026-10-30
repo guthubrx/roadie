@@ -287,6 +287,8 @@ public final class WindowSwitcherController {
         panel.onCancel = { [weak self] in self?.cancel() }
         panel.onSelect = { [weak self] id in self?.select(id) }
         panel.onHighlight = { [weak self] id in self?.highlight(id) }
+        panel.onDismiss = { [weak self] id in self?.dismiss(id) }
+        panel.onBan = { [weak self] id in self?.ban(id) }
         panel.onSearchMode = { [weak self] editing in self?.session?.state.searchChanged(isEmpty: !editing) }
         panel.configure(profile: profile, forceSearch: !fromHotkey, navigationModifiers: required)
 
@@ -565,6 +567,37 @@ public final class WindowSwitcherController {
             events.append(RoadieEvent(type: "zone.go", details: ["app": record.appName, "changed": String(click.result.changed),
                                                                  "message": click.result.message]))
         }
+    }
+
+    /// × d'une carte (session 137) : la fenêtre est fermée, ou la zone retirée avec sa photo ; la liste est relue.
+    private func dismiss(_ id: WindowID) {
+        guard let session, let entry = session.model?.matches.first(where: { $0.id == id }) else { return }
+        if let zone = session.zones[id] {
+            ZoneHistory.shared.forget(zone.record)
+            ZoneThumbnails.shared.remove(zone.record.key)
+            events.append(RoadieEvent(type: "zone.dismissed", details: ["app": zone.record.appName]))
+        } else {
+            let result = switcher.perform(.close, on: entry)
+            events.append(RoadieEvent(type: "switcher.dismissed", details: ["window": "\(entry.window.id)", "changed": "\(result.changed)"]))
+        }
+        reload(sessionID: session.id)
+    }
+
+    /// Sens interdit d'une carte (session 137) : l'application quitte le sélecteur de fenêtres, ou ses clics ne créent
+    /// plus de zone (et ses zones de clics partent). Annulable dans Paramètres > Sélecteur ; la liste est relue.
+    private func ban(_ id: WindowID) {
+        guard let session, let entry = session.model?.matches.first(where: { $0.id == id }) else { return }
+        let bundleID = (session.zones[id]?.window ?? entry).window.bundleID
+        if session.zones[id] != nil {
+            _ = SwitcherExclusions.add(bundleID, to: SwitcherExclusions.clickZones)
+            ZoneHistory.shared.forgetClicks(bundleID: bundleID).forEach(ZoneThumbnails.shared.remove)
+        } else {
+            _ = SwitcherExclusions.add(bundleID, to: SwitcherExclusions.windows)
+            session.config.excludedBundles.append(bundleID)
+            session.model?.configure(profile: session.profile, excludedBundles: session.config.excludedBundles)
+        }
+        events.append(RoadieEvent(type: "switcher.banned", details: ["bundleID": bundleID, "kind": session.zones[id] == nil ? "windows" : "click_zones"]))
+        reload(sessionID: session.id)
     }
 
     /// Zone choisie dans ⌥Tab entourée sur la vraie application, si sa fenêtre est à l'écran (même stage) ; sinon,

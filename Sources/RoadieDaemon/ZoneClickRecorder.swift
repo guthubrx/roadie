@@ -43,6 +43,9 @@ public final class ZoneClickRecorder {
             guard let read = await Task.detached(priority: .utility, operation: { Self.read(at: point) }).value,
                   read.pid != ProcessInfo.processInfo.processIdentifier else { return }
             let app = NSRunningApplication(processIdentifier: read.pid)
+            // Application interdite par le sens interdit d'une carte de zone (session 137).
+            if let bundle = app?.bundleIdentifier,
+               ConfigReloadService.shared.currentConfig().switcher.zoneClickExcludedBundles.contains(bundle) { return }
             let zone = Self.zone(click: point, element: read.elementFrame, window: read.windowFrame)
             let record = ZoneRecord(
                 appName: app?.localizedName ?? "", bundleID: app?.bundleIdentifier ?? "", pid: read.pid, windowID: read.windowID,

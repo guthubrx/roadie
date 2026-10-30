@@ -457,6 +457,10 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
   clique la zone, par son élément s'il existe encore, sinon par sa place si la fenêtre a gardé sa taille.
   `[switcher] zone_history_size` (20), `zone_history_hours` (24) et `zone_clicks_per_window` (3 zones de clics
   par fenêtre ; 0 : les clics ne créent pas de zone), Paramètres > Sélecteur.
+- **Icônes des cartes** (session 137) : au survol d'une carte, en haut à droite, × ferme la fenêtre (⌘Tab) ou
+  retire la zone et sa photo (⌥Tab) ; le sens interdit ajoute l'application aux « Applications exclues » du
+  sélecteur, ou, sur une zone, aux « Applications sans zones de clics » (`zone_click_excluded_bundles` : ses clics
+  ne créent plus de zone, la recherche à l'écran en crée toujours). Annulable dans Paramètres > Sélecteur.
 - **Fautes de frappe** (session 134) : sans aucune correspondance exacte, la recherche à l'écran admet une
   lettre oubliée, en trop, remplacée ou deux lettres inversées : une faute à partir de 4 lettres, deux à
   partir de 8 (« enregsitrer » trouve « Enregistrer »). La barre l'indique par « ≈ approché ». Dans le

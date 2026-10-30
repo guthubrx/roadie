@@ -39,7 +39,7 @@ extension SettingsCatalog {
             return list(.text, AppTargetsConfig().includeRoles.map(SettingValue.string), suggestions: AppTargetsConfig().includeRoles, minCount: 1)
         case "app_targets.additional_boost_bundle_ids", "exclusions.floating_bundles":
             return list(.text, [])
-        case "switcher.excluded_bundles":
+        case "switcher.excluded_bundles", "switcher.zone_click_excluded_bundles":
             return list(.text, [], unique: true)
         case "target_mode.bookmark_browsers":
             return list(.choice(["firefox", "safari", "chrome", "brave", "edge"]),

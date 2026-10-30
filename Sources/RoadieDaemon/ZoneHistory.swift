@@ -151,6 +151,15 @@ final class ZoneHistory {
         save()
     }
 
+    /// Zones de clics d'une application, retirées (sens interdit, session 137) ; rend leurs clés. O(n).
+    func forgetClicks(bundleID: String) -> [String] {
+        let dropped = records.filter { $0.fromClick == true && $0.bundleID == bundleID }.map(\.key)
+        guard !dropped.isEmpty else { return [] }
+        records.removeAll { $0.fromClick == true && $0.bundleID == bundleID }
+        save()
+        return dropped
+    }
+
     /// Vignette capturée pour cette zone. O(n).
     func setThumbnail(_ crop: CGRect, for key: String) {
         guard let index = records.firstIndex(where: { $0.key == key }) else { return }
