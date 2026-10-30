@@ -1090,23 +1090,40 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
 }
 
 extension LiveAppTargetProvider {
+    /// Premier texte d'un élément (titre, valeur, description), pour le diagnostic. 0,3 s au plus.
+    static func visibleText(_ element: AXUIElement) -> String {
+        AXUIElementSetMessagingTimeout(element, 0.3)
+        for attribute in [kAXTitleAttribute, kAXValueAttribute, kAXDescriptionAttribute] {
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success, let text = value as? String,
+               !text.trimmingCharacters(in: .whitespaces).isEmpty { return text.replacingOccurrences(of: "\n", with: " ") }
+        }
+        return ""
+    }
+
     /// Clic sur une zone retrouvée par ⌥Tab (session 135) : attend que sa fenêtre soit au premier plan (changement de
     /// stage ou de bureau compris), relit l'élément et la fenêtre, puis clique sans touche. Rien n'est cliqué si la
     /// zone ne se retrouve pas (`ZoneNavigation.point`). Appelé hors du fil principal : l'attente le bloquerait.
-    func clickZone(_ record: ZoneRecord, element: AXUIElement?, timeout: TimeInterval = 1.5) -> TargetActionResult {
+    /// Rend aussi le cadre de la zone cliquée (coordonnées de l'accessibilité), pour l'entourer un instant.
+    func clickZone(_ record: ZoneRecord, element: AXUIElement?, timeout: TimeInterval = 1.5) -> (result: TargetActionResult, zone: CGRect?) {
         let windowID = CGWindowID(record.windowID)
         switch waitForFocus(windowID, record.pid, timeout) {
         case .focused: break
-        case .windowGone: return TargetActionResult(changed: false, message: "zone: window_gone", error: "stale_target")
+        case .windowGone: return (TargetActionResult(changed: false, message: "zone: window_gone", error: "stale_target"), nil)
         case .timedOut:
-            return TargetActionResult(changed: false, message: "zone: focus_failed \(Self.focusDescription(pid: record.pid))", error: "focus_failed")
+            return (TargetActionResult(changed: false, message: "zone: focus_failed \(Self.focusDescription(pid: record.pid))", error: "focus_failed"), nil)
         }
         let window = axWindowElements(pid: record.pid)[windowID].flatMap { Self.readFrame($0, timeout: 0.3) }
         let zone = element.flatMap { Self.readFrame($0, timeout: 0.3) }
         guard let point = ZoneNavigation.point(for: record, elementFrame: zone, windowFrame: window) else {
-            return TargetActionResult(changed: false, message: "zone: unlocated", error: "zone_unlocated")
+            return (TargetActionResult(changed: false, message: "zone: unlocated", error: "zone_unlocated"), nil)
         }
         postClick(at: point, button: .left, down: .leftMouseDown, up: .leftMouseUp, clickCount: 1)
-        return TargetActionResult(changed: true, message: "zone: clicked \(zone == nil ? "relative" : "element")")
+        // Diagnostic (essai du 30 octobre 2026) : texte de la zone, texte de l'élément au moment du clic, point visé.
+        let shown = element.map { Self.visibleText($0) } ?? ""
+        let size = zone?.cgRect.size ?? record.relative.cgRect.size
+        let clicked = CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height)
+        return (TargetActionResult(changed: true, message: "zone: clicked \(zone == nil ? "relative" : "element") zone=\"\(record.title.prefix(40))\""
+            + " now=\"\(shown.prefix(40))\" at=\(Int(point.x)),\(Int(point.y))"), clicked)
     }
 }

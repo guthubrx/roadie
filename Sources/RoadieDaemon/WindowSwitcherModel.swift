@@ -63,14 +63,18 @@ final class WindowSwitcherFocusHistory: @unchecked Sendable {
 
     func observe(_ id: WindowID?) {
         guard let id else { return }
-        lock.withLock {
-            if ids.first == id { return }
+        let left: WindowID? = lock.withLock {
+            if ids.first == id { return nil }
+            let previous = ids.first
             ids.removeAll { $0 == id }
             ids.insert(id, at: 0)
             if ids.count > Self.capacity {
                 ids.removeLast(ids.count - Self.capacity)
             }
+            return previous
         }
+        // Session 136 : la fenêtre quittée reprend en photo ses zones, dans l'état où on la laisse.
+        if let left { Task { @MainActor in ZoneThumbnails.shared.windowLeft(left.rawValue) } }
     }
 }
 

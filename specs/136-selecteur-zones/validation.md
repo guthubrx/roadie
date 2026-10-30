@@ -25,3 +25,10 @@ activée par ⌘Tab. Test `repeatedSwitchesGoBackAndForth` (B, A, B). Zones des 
 - **⌘Tab montrait les zones** : BTT lance `roadie switcher cycle --hold cmd` sans profil ; le sélecteur prenait le
   premier profil actif, devenu « Zones » après son ajout en tête de la configuration. Sans profil précisé, il prend
   désormais le premier profil actif de fenêtres (test `commandTabWithoutProfileKeepsWindows`).
+- **Photos périmées** (page de connexion gardée après validation) : la fenêtre quittée reprend ses zones en photo,
+  une seule capture découpée par zone, au plus toutes les 10 secondes par fenêtre, rien pour une fenêtre sans zone ;
+  déclenché par le changement de fenêtre active (`WindowSwitcherFocusHistory.observe`), sans surveillance continue.
+- **Bordure sur la vraie application** : zone choisie dans ⌥Tab entourée à l'écran si sa fenêtre est visible (centre
+  sur un écran), et zone cliquée entourée 0,9 s à l'arrivée (`ZoneHighlight`). Diagnostic des retours : texte de la
+  zone, texte de l'élément au clic, point visé (`zone.go`).
+- Suite complète : 2 346 tests dans 349 suites.

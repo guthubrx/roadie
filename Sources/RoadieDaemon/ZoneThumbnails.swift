@@ -83,9 +83,49 @@ final class ZoneThumbnails {
     }
 
     /// Capture du rectangle autour de la zone (relatif à la fenêtre) ; rend le rectangle découpé, ou nil si la fenêtre
-    /// ne se capture pas (autorisation, fenêtre fermée). Une capture à la fois, hors du fil principal pour la copie.
-    /// `outcome` reçoit la raison d'un échec (diagnostic, essai du 30 octobre 2026) ou « ok ».
+    /// ne se capture pas (autorisation, fenêtre fermée). `outcome` reçoit la raison d'un échec (diagnostic) ou « ok ».
     func capture(key: String, windowID: UInt32, zone: CGRect, windowSize: CGSize, outcome: (String) -> Void = { _ in }) async -> CGRect? {
+        let crop = Self.crop(zone: zone, windowSize: windowSize)
+        guard let image = await Self.windowImage(windowID, region: crop, outcome: outcome) else { return nil }
+        await store(image, key: key, crop: crop)
+        return crop
+    }
+
+    /// Délai minimal entre deux rafraîchissements des photos d'une même fenêtre.
+    nonisolated static let refreshInterval: TimeInterval = 10
+    private var refreshedAt: [UInt32: Date] = [:]
+
+    /// Rafraîchissement dû : jamais fait, ou plus vieux que `refreshInterval`. O(1).
+    nonisolated static func isRefreshDue(last: Date?, now: Date, interval: TimeInterval = refreshInterval) -> Bool {
+        last.map { now.timeIntervalSince($0) >= interval } ?? true
+    }
+
+    /// Fenêtre quittée (session 136) : ses zones sont reprises en photo, dans l'état où on la laisse, par une seule
+    /// capture de la fenêtre découpée pour chaque zone. Au plus une fois par `refreshInterval` par fenêtre ; rien
+    /// pour une fenêtre sans zone. Aucune surveillance continue : seulement au changement de fenêtre active.
+    func windowLeft(_ windowID: UInt32, now: Date = Date()) {
+        let zones = ZoneHistory.shared.records.filter { $0.windowID == windowID }
+        guard !zones.isEmpty, Self.isRefreshDue(last: refreshedAt[windowID], now: now) else { return }
+        refreshedAt = refreshedAt.filter { now.timeIntervalSince($0.value) < Self.refreshInterval }
+        refreshedAt[windowID] = now
+        Task { @MainActor in
+            guard let window = await Self.windowImage(windowID, region: nil, outcome: { _ in }) else { return }
+            let size = window.size
+            let pixelsPerPoint = CGFloat(window.cgImage.width) / max(1, size.width)
+            for zone in zones {
+                let crop = Self.crop(zone: zone.relative.cgRect, windowSize: size)
+                let pixels = CGRect(x: crop.minX * pixelsPerPoint, y: crop.minY * pixelsPerPoint,
+                                    width: crop.width * pixelsPerPoint, height: crop.height * pixelsPerPoint).integral
+                guard let part = window.cgImage.cropping(to: pixels) else { continue }
+                await store((part, crop.size), key: zone.key, crop: crop)
+                ZoneHistory.shared.setThumbnail(crop, for: zone.key)
+            }
+        }
+    }
+
+    /// Image d'une fenêtre à l'écran, entière (`region` nil) ou d'une région (points, relatifs à la fenêtre), à la
+    /// densité de son écran ; nil si elle ne se capture pas ou paraît vide. Rend aussi sa taille en points.
+    private static func windowImage(_ windowID: UInt32, region: CGRect?, outcome: (String) -> Void) async -> (cgImage: CGImage, size: CGSize)? {
         let content: SCShareableContent
         do { content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) } catch {
             outcome("shareable_failed: \(error.localizedDescription)")
@@ -95,39 +135,92 @@ final class ZoneThumbnails {
             outcome("window_absent (\(content.windows.count) fenêtres)")
             return nil
         }
-        let crop = Self.crop(zone: zone, windowSize: windowSize)
+        let area = region ?? CGRect(origin: .zero, size: window.frame.size)
         let configuration = SCStreamConfiguration()
-        configuration.sourceRect = crop
+        if let region { configuration.sourceRect = region }
         // Densité réelle de l'écran de la fenêtre : ni agrandissement flou sur un écran à 1 pixel par point, ni perte
         // sur un écran Retina. La mise à l'échelle reste demandée : sans elle, un tampon plus grand que la capture la
         // laissait dans un coin (essai du 30 octobre 2026).
-        let scale = Self.scale(forWindowFrame: window.frame)
-        configuration.width = Int((crop.width * scale).rounded())
-        configuration.height = Int((crop.height * scale).rounded())
+        let scale = scale(forWindowFrame: window.frame)
+        configuration.width = Int((area.width * scale).rounded())
+        configuration.height = Int((area.height * scale).rounded())
         configuration.scalesToFit = true
         configuration.preservesAspectRatio = true
         configuration.showsCursor = false
         configuration.ignoreShadowsSingleWindow = true
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        let cgImage: CGImage
-        do { cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration) } catch {
+        let image: CGImage
+        do {
+            image = try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: configuration)
+        } catch {
             outcome("capture_failed: \(error.localizedDescription)")
             return nil
         }
-        guard !cgImage.looksBlank else {
-            outcome("blank \(cgImage.width)x\(cgImage.height)")
+        guard !image.looksBlank else {
+            outcome("blank \(image.width)x\(image.height)")
             return nil
         }
         outcome("ok")
-        let image = NSImage(cgImage: cgImage, size: crop.size)
-        images[key] = image
+        return (image, area.size)
+    }
+
+    /// Photo gardée en mémoire et écrite hors du fil principal.
+    private func store(_ image: (cgImage: CGImage, size: CGSize), key: String, crop: CGRect) async {
+        images[key] = NSImage(cgImage: image.cgImage, size: crop.size)
         let target = path(for: key)
         let folder = folder
-        let data = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
+        let data = NSBitmapImageRep(cgImage: image.cgImage).representation(using: .png, properties: [:])
         await Task.detached(priority: .utility) {
             try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
             try? data?.write(to: URL(fileURLWithPath: target), options: .atomic)
         }.value
-        return crop
+    }
+}
+
+/// Bordure posée sur la vraie application (session 136) : autour de la zone choisie dans ⌥Tab si sa fenêtre est à
+/// l'écran, puis un instant autour de la zone cliquée à l'arrivée. Fenêtre transparente, sans clic ni clavier.
+@MainActor
+final class ZoneHighlight {
+    static let shared = ZoneHighlight()
+    private var panel: NSPanel?
+    private var hideTask: Task<Void, Never>?
+
+    /// Contour autour de `zone` (coordonnées de l'accessibilité), 4 points de marge ; retiré après `duration`. O(1).
+    func show(_ zone: CGRect, duration: TimeInterval? = nil) {
+        hideTask?.cancel()
+        let frame = RoadieScreenCoordinate.axRectToNS(zone.insetBy(dx: -4, dy: -4))
+        let panel = panel ?? Self.makePanel()
+        panel.setFrame(frame, display: true)
+        panel.orderFrontRegardless()
+        self.panel = panel
+        if let duration {
+            hideTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(duration))
+                guard !Task.isCancelled else { return }
+                self?.hide()
+            }
+        }
+    }
+
+    func hide() {
+        hideTask?.cancel()
+        panel?.orderOut(nil)
+    }
+
+    private static func makePanel() -> NSPanel {
+        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.level = .screenSaver
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
+        let border = NSView()
+        border.wantsLayer = true
+        border.layer?.borderWidth = 3
+        border.layer?.cornerRadius = 6
+        border.layer?.borderColor = NSColor.systemYellow.cgColor
+        border.autoresizingMask = [.width, .height]
+        panel.contentView = border
+        return panel
     }
 }

@@ -418,6 +418,7 @@ public final class WindowSwitcherController {
             images = Self.appIcons(for: entries)
         }
         requestSelectedPreview(session)
+        showZoneHighlight(session)
         session.thumbnailVersion = thumbnails.version
         panel.render(
             entries: entries,
@@ -455,6 +456,7 @@ public final class WindowSwitcherController {
         session.actionFailed = false
         session.model?.next(backwards: backwards)
         guard let model = session.model else { return }
+        showZoneHighlight(session)
         requestSelectedPreview(session)
         session.panel?.select(model.selected?.id, previewImage: previewImage(for: model.selected?.id))
     }
@@ -462,6 +464,7 @@ public final class WindowSwitcherController {
     private func highlight(_ id: WindowID) {
         guard let session else { return }
         session.model?.select(id: id)
+        showZoneHighlight(session)
         requestSelectedPreview(session)
         session.panel?.select(id, previewImage: previewImage(for: id))
     }
@@ -557,11 +560,28 @@ public final class WindowSwitcherController {
         }
         Task { @MainActor in
             let click = await Task.detached(priority: .userInitiated) { LiveAppTargetProvider().clickZone(record, element: element) }.value
-            events.append(RoadieEvent(type: "zone.go", details: ["app": record.appName, "changed": String(click.changed), "message": click.message]))
+            // À l'arrivée, la zone cliquée est entourée un instant : on voit où le clic est tombé.
+            if let zone = click.zone { ZoneHighlight.shared.show(zone, duration: 0.9) }
+            events.append(RoadieEvent(type: "zone.go", details: ["app": record.appName, "changed": String(click.result.changed),
+                                                                 "message": click.result.message]))
         }
     }
 
+    /// Zone choisie dans ⌥Tab entourée sur la vraie application, si sa fenêtre est à l'écran (même stage) ; sinon,
+    /// rien n'est montré avant l'arrivée. O(1).
+    private func showZoneHighlight(_ session: WindowSwitcherSession) {
+        // Bornes des écrans en coordonnées globales, celles de l'accessibilité.
+        let screens = NSScreen.screens.compactMap { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID).map(CGDisplayBounds) }
+        guard let selected = session.model?.selected, let zone = session.zones[selected.id],
+              let rect = ZoneNavigation.screenRect(of: zone.record, window: zone.window, screens: screens) else {
+            ZoneHighlight.shared.hide()
+            return
+        }
+        ZoneHighlight.shared.show(rect)
+    }
+
     private func close(_ session: WindowSwitcherSession) {
+        ZoneHighlight.shared.hide()
         session.loadTask?.cancel()
         session.timer?.invalidate()
         if let monitor = session.outsideMonitor { NSEvent.removeMonitor(monitor) }

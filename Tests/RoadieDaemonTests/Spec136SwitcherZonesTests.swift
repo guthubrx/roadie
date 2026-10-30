@@ -114,4 +114,22 @@ struct Spec136SwitcherZonesTests {
         #expect(WindowSwitcherController.profile(id: "zones", in: [zones, all])?.id == "zones")
         #expect(WindowSwitcherController.profile(id: nil, in: [zones])?.id == "zones")
     }
+
+    /// Photos rafraîchies en quittant une fenêtre, au plus toutes les 10 secondes ; bordure posée sur la zone à l'écran.
+    @Test func photosRefreshOnLeavingAndZoneIsRingedOnScreen() {
+        #expect(ZoneThumbnails.isRefreshDue(last: nil, now: now))
+        #expect(!ZoneThumbnails.isRefreshDue(last: now.addingTimeInterval(-9), now: now))
+        #expect(ZoneThumbnails.isRefreshDue(last: now.addingTimeInterval(-10), now: now))
+        var shown = window(10)
+        let screens = [CGRect(x: 0, y: 0, width: 1920, height: 1080)]
+        let record = zone("Valider", y: 300)
+        #expect(ZoneNavigation.screenRect(of: record, window: shown, screens: screens) == CGRect(x: 100, y: 300, width: 80, height: 20))
+        // Fenêtre poussée hors des écrans (autre stage) : pas de bordure.
+        let snapshot = WindowSnapshot(id: shown.id, pid: 7, appName: "Excel", bundleID: "com.microsoft.Excel", title: "Classeur",
+                                      frame: Rect(x: 5000, y: 3000, width: 1200, height: 800), isOnScreen: true, isTileCandidate: true)
+        shown = WindowSwitcherEntry(window: snapshot, scope: shown.scope)
+        #expect(ZoneNavigation.screenRect(of: record, window: shown, screens: screens) == nil)
+        #expect(ZoneNavigation.screenRect(of: record, window: WindowSwitcherEntry(window: snapshot, scope: nil, isMinimized: true),
+                                          screens: [CGRect(x: 0, y: 0, width: 9000, height: 9000)]) == nil)
+    }
 }

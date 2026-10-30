@@ -61,6 +61,18 @@ enum ZoneNavigation {
     }
 }
 
+extension ZoneNavigation {
+    /// Cadre de la zone à l'écran (accessibilité) d'après sa fenêtre affichée, ou nil si la fenêtre n'est pas à
+    /// l'écran (réduite, cachée) ou si le centre de la zone tombe hors des écrans (fenêtre d'une autre stage, poussée
+    /// dans un coin par Roadie). O(é).
+    static func screenRect(of record: ZoneRecord, window: WindowSwitcherEntry, screens: [CGRect]) -> CGRect? {
+        guard window.window.isOnScreen, !window.isMinimized, !window.isHidden else { return nil }
+        let frame = window.window.frame
+        let rect = record.relative.cgRect.offsetBy(dx: frame.x, dy: frame.y)
+        return screens.contains { $0.contains(CGPoint(x: rect.midX, y: rect.midY)) } ? rect : nil
+    }
+}
+
 /// Conservation des zones (session 136) : nombre, âge, zones des clics par fenêtre. Réglages de `[switcher]`.
 struct ZonePolicy: Equatable, Sendable {
     var maxCount = 20
