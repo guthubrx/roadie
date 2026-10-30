@@ -441,7 +441,8 @@ letter filters the targets; Return clicks the green target.
   zone's window back (stage and desktop included) and clicks the zone, through its element if it still exists,
   otherwise through its place if the window kept its size. `[switcher] zone_history_size` (20),
   `zone_history_hours` (24) and `zone_clicks_per_window` (3 click zones per window; 0: clicks create no zone),
-  Settings > Switcher.
+  Settings > Switcher. An app can have its own count (session 140): `[[switcher.zone_clicks_per_app]]` with `app`
+  (bundle ID or name) and `count` (0 to 10), list "Click zones per app"; other apps use the global value.
 - **Card icons** (session 137): hovering a card shows, top right, × to close the window (⌘Tab) or remove the zone
   and its photo (⌥Tab), and a no-entry sign that adds the app to the switcher's "Excluded apps", or, on a zone, to
   "Apps without click zones" (`zone_click_excluded_bundles`: its clicks no longer create zones; on-screen search

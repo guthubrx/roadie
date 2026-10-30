@@ -81,7 +81,7 @@ struct SettingsCatalogTests {
             "tiling.display_overrides", "stage_manager.workspaces", "borders.stage_overrides",
             "rail.preview.stage_overrides", "rules", "signals.hooks",
             "target_mode.bookmark_browsers", "target_mode.app_search_paths",
-            "switcher.excluded_bundles", "switcher.zone_click_excluded_bundles", "switcher.shortcuts",
+            "switcher.excluded_bundles", "switcher.zone_click_excluded_bundles", "switcher.zone_clicks_per_app", "switcher.shortcuts",
             "target_mode.btt_pause_keys", "shortcuts",
             "target_mode.file_types", "target_mode.file_excluded_folders",
         ])

@@ -36,7 +36,8 @@ public final class ZoneClickRecorder {
 
     private func clicked(_ event: NSEvent) {
         let switcher = ConfigReloadService.shared.currentConfig().switcher
-        guard switcher.zoneClicksPerWindow > 0, ZonePolicy.isUsed(switcher),
+        // Une application peut avoir ses zones de clics même si la valeur globale est à 0 (session 140).
+        guard switcher.zoneClicksPerWindow > 0 || switcher.zoneClicksPerApp.contains(where: { $0.count > 0 }), ZonePolicy.isUsed(switcher),
               let cgEvent = event.cgEvent, cgEvent.getIntegerValueField(.eventSourceUserData) != Self.roadieClickTag else { return }
         let point = cgEvent.location
         let events = events
@@ -47,6 +48,8 @@ public final class ZoneClickRecorder {
             // Application interdite par le sens interdit d'une carte de zone (session 137).
             if let bundle = app?.bundleIdentifier,
                ConfigReloadService.shared.currentConfig().switcher.zoneClickExcludedBundles.contains(bundle) { return }
+            // Nombre propre à l'application (session 140) : 0, aucune zone de clic pour elle.
+            guard ZonePolicy.current.clicksPerWindow(bundleID: app?.bundleIdentifier ?? "", appName: app?.localizedName ?? "") > 0 else { return }
             let zone = Self.zone(click: point, element: read.elementFrame, window: read.windowFrame)
             let record = ZoneRecord(
                 appName: app?.localizedName ?? "", bundleID: app?.bundleIdentifier ?? "", pid: read.pid, windowID: read.windowID,

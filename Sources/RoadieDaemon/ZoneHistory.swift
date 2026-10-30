@@ -78,6 +78,21 @@ struct ZonePolicy: Equatable, Sendable {
     var maxCount = 20
     var maxAge: TimeInterval = 24 * 3600
     var clicksPerWindow = 3
+    /// Nombre propre à une application (session 140), par identifiant ou nom en minuscules.
+    var clicksPerApp: [String: Int] = [:]
+
+    /// Zones de clics par fenêtre pour cette application : la sienne, sinon la valeur globale. O(1).
+    func clicksPerWindow(bundleID: String, appName: String) -> Int {
+        clicksPerApp[bundleID.lowercased()] ?? clicksPerApp[appName.lowercased()] ?? clicksPerWindow
+    }
+
+    /// Table par application, les lignes sans nom écartées. O(a).
+    static func perApp(_ rows: [ZoneClicksAppConfig]) -> [String: Int] {
+        Dictionary(rows.compactMap { row in
+            let app = row.app.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return app.isEmpty ? nil : (app, row.count)
+        }, uniquingKeysWith: { _, last in last })
+    }
 
     /// Zones utiles seulement avec un profil `zones` actif (session 136) : sans lui, ni zone, ni photo. O(p).
     static func isUsed(_ config: WindowSwitcherConfig) -> Bool {
@@ -87,7 +102,7 @@ struct ZonePolicy: Equatable, Sendable {
     @MainActor static var current: ZonePolicy {
         let config = ConfigReloadService.shared.currentConfig().switcher
         return ZonePolicy(maxCount: config.zoneHistorySize, maxAge: TimeInterval(config.zoneHistoryHours) * 3600,
-                          clicksPerWindow: config.zoneClicksPerWindow)
+                          clicksPerWindow: config.zoneClicksPerWindow, clicksPerApp: perApp(config.zoneClicksPerApp))
     }
 
     /// Zones gardées, dans l'ordre : assez récentes, au plus `clicksPerWindow` zones de clics par fenêtre (les plus
@@ -98,7 +113,7 @@ struct ZonePolicy: Equatable, Sendable {
             guard now.timeIntervalSince(record.date) <= maxAge else { return false }
             guard record.fromClick == true else { return true }
             clicks[record.windowID, default: 0] += 1
-            return clicks[record.windowID, default: 0] <= clicksPerWindow
+            return clicks[record.windowID, default: 0] <= clicksPerWindow(bundleID: record.bundleID, appName: record.appName)
         }
         return Array(recent.prefix(maxCount))
     }

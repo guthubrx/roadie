@@ -456,7 +456,9 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
   recherche, regroupement par bureau et stage. Valider ramène la fenêtre de la zone (stage et bureau compris) et
   clique la zone, par son élément s'il existe encore, sinon par sa place si la fenêtre a gardé sa taille.
   `[switcher] zone_history_size` (20), `zone_history_hours` (24) et `zone_clicks_per_window` (3 zones de clics
-  par fenêtre ; 0 : les clics ne créent pas de zone), Paramètres > Sélecteur.
+  par fenêtre ; 0 : les clics ne créent pas de zone), Paramètres > Sélecteur. Une application peut avoir son
+  propre nombre (session 140) : `[[switcher.zone_clicks_per_app]]` avec `app` (identifiant ou nom) et `count`
+  (0 à 10), liste « Zones de clics par application » ; les autres applications prennent la valeur globale.
 - **Icônes des cartes** (session 137) : au survol d'une carte, en haut à droite, × ferme la fenêtre (⌘Tab) ou
   retire la zone et sa photo (⌥Tab) ; le sens interdit ajoute l'application aux « Applications exclues » du
   sélecteur, ou, sur une zone, aux « Applications sans zones de clics » (`zone_click_excluded_bundles` : ses clics

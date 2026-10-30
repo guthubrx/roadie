@@ -114,6 +114,11 @@ extension SettingsCatalog {
             return rows(id, [field("display_id", tr("Identifiant de l'écran", "Display identifier")), field("display_name", tr("Nom de l'écran", "Display name"))]
                         + ["gaps_outer", "gaps_outer_top", "gaps_outer_right", "gaps_outer_bottom", "gaps_outer_left"].map { field($0, labels[$0] ?? $0, .double(nil)) },
                         oneOf: [["display_id", "display_name"]])
+        case "switcher.zone_clicks_per_app":
+            return rows(id, [field("app", tr("Application", "App"), required: true,
+                                   help: tr("Nom affiché (Excel) ou identifiant (com.microsoft.Excel).", "Display name (Excel) or identifier (com.microsoft.Excel).")),
+                             field("count", tr("Zones par fenêtre", "Zones per window"), .int(0...10), required: true, value: .int(3),
+                                   help: tr("0 : les clics de cette application ne créent pas de zone.", "0: clicks in this app create no zone."))])
         case "exclusions.floating_windows":
             return rows(id, [field("app", tr("Application", "App"), required: true, help: tr("Nom affiché (Thunderbird) ou identifiant (org.mozilla.thunderbird).", "Display name (Thunderbird) or identifier (org.mozilla.thunderbird).")),
                              field("title", tr("Titre", "Title"), required: true, help: tr("# : un nombre ; * : n'importe quel texte. Exemple : # Reminder.", "#: a number; *: any text. Example: # Reminder.")),

@@ -8,6 +8,8 @@ jour et les limites connues ; les README décrivent la version courante.
 ### Nouveautés
 
 - Maj seule recule d'une carte dans Cmd+Tab et Option+Tab, comme dans AltTab (Maj + Tab inchangé).
+- Nombre de zones de clics par fenêtre réglable pour chaque application (`[[switcher.zone_clicks_per_app]]`) ;
+  les autres gardent la valeur globale.
 
 ## 0.12.0 - 2026-10-30
 

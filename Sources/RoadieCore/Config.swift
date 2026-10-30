@@ -1618,13 +1618,13 @@ public enum RoadieConfigLoader {
         "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"],
         "experimental.target_mode": ["web_searches", "fallback_searches", "bookmark_browsers", "app_search_paths", "btt_pause_keys",
                                       "file_types", "file_excluded_folders"],
-        "switcher": ["excluded_bundles", "zone_click_excluded_bundles", "shortcuts"]
+        "switcher": ["excluded_bundles", "zone_click_excluded_bundles", "zone_clicks_per_app", "shortcuts"]
     ]
 
     /// Tables qui sont elles-mêmes des tableaux de tables ou leurs sous-tables.
     private static let nonScalarTables: Set<String> = [
         "tiling.display_overrides", "stage_manager.workspaces", "fx.borders.stage_overrides", "exclusions.floating_windows",
-        "fx.rail.preview.stage_overrides", "switcher.shortcuts", "experimental.target_mode.web_searches", "rules", "rules.match", "rules.action",
+        "fx.rail.preview.stage_overrides", "switcher.shortcuts", "switcher.zone_clicks_per_app", "experimental.target_mode.web_searches", "rules", "rules.match", "rules.action",
         "shortcuts"
     ]
 
@@ -1848,7 +1848,8 @@ private enum ConfigValidationRules {
             "window_placement": ["new_apps_target", "new_window_side"],
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
             "overview": ["enabled", "presentation", "loupe", "magnification", "hotkey", "background_blur", "selection_color", "selection_width"],
-            "switcher": ["enabled", "presentation", "style", "auto_size", "thumbnail_width", "font_size", "font_family", "preview", "app_icon", "app_icon_size", "zone_history_size", "zone_history_hours", "zone_clicks_per_window", "excluded_bundles", "zone_click_excluded_bundles", "shortcuts"],
+            "switcher": ["enabled", "presentation", "style", "auto_size", "thumbnail_width", "font_size", "font_family", "preview", "app_icon", "app_icon_size", "zone_history_size", "zone_history_hours", "zone_clicks_per_window", "excluded_bundles", "zone_click_excluded_bundles", "zone_clicks_per_app", "shortcuts"],
+            "switcher.zone_clicks_per_app": ["app", "count"],
             "experimental.target_mode.web_searches": ["keyword", "title", "url"],
             "switcher.shortcuts": ["id", "name", "hotkey", "scope", "release_action", "sort_order", "include_minimized", "include_hidden", "include_fullscreen", "one_per_app", "enabled", "trigger_source", "search_visibility", "actions_visibility", "arrow_navigation", "mouse_hover", "btt_forward_uuid", "btt_reverse_uuid", "presentation", "style", "preview", "auto_size", "thumbnail_width", "font_size", "font_family", "source"],
             "experimental": [],

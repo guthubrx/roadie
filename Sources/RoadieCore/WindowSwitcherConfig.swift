@@ -30,6 +30,9 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
     public var zoneClicksPerWindow: Int
     /// Applications dont les clics ne créent pas de zone (session 137, sens interdit d'une carte de zone).
     public var zoneClickExcludedBundles: [String]
+    /// Nombre de zones de clics par fenêtre propre à une application (session 140) ; les autres gardent
+    /// `zoneClicksPerWindow`.
+    public var zoneClicksPerApp: [ZoneClicksAppConfig]
 
     public init(
         enabled: Bool = true,
@@ -47,9 +50,11 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         zoneHistorySize: Int = 20,
         zoneHistoryHours: Int = 24,
         zoneClicksPerWindow: Int = 3,
-        zoneClickExcludedBundles: [String] = []
+        zoneClickExcludedBundles: [String] = [],
+        zoneClicksPerApp: [ZoneClicksAppConfig] = []
     ) {
         self.zoneClickExcludedBundles = zoneClickExcludedBundles
+        self.zoneClicksPerApp = zoneClicksPerApp
         self.zoneHistorySize = min(50, max(1, zoneHistorySize))
         self.zoneHistoryHours = min(168, max(1, zoneHistoryHours))
         self.zoneClicksPerWindow = min(10, max(0, zoneClicksPerWindow))
@@ -94,6 +99,7 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         case zoneHistoryHours = "zone_history_hours"
         case zoneClicksPerWindow = "zone_clicks_per_window"
         case zoneClickExcludedBundles = "zone_click_excluded_bundles"
+        case zoneClicksPerApp = "zone_clicks_per_app"
         case excludedBundles = "excluded_bundles"
         case shortcuts
     }
@@ -117,7 +123,8 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
             zoneHistorySize: try c.decodeIfPresent(Int.self, forKey: .zoneHistorySize) ?? defaults.zoneHistorySize,
             zoneHistoryHours: try c.decodeIfPresent(Int.self, forKey: .zoneHistoryHours) ?? defaults.zoneHistoryHours,
             zoneClicksPerWindow: try c.decodeIfPresent(Int.self, forKey: .zoneClicksPerWindow) ?? defaults.zoneClicksPerWindow,
-            zoneClickExcludedBundles: try c.decodeIfPresent([String].self, forKey: .zoneClickExcludedBundles) ?? []
+            zoneClickExcludedBundles: try c.decodeIfPresent([String].self, forKey: .zoneClickExcludedBundles) ?? [],
+            zoneClicksPerApp: try c.decodeIfPresent([ZoneClicksAppConfig].self, forKey: .zoneClicksPerApp) ?? []
         )
     }
 }
@@ -268,5 +275,24 @@ public struct WindowSwitcherShortcutConfig: Equatable, Codable, Sendable {
             presentationOverride: try c.decodeIfPresent(String.self, forKey: .presentationOverride),
             source: try c.decodeIfPresent(String.self, forKey: .source) ?? "windows"
         )
+    }
+}
+
+/// Nombre de zones de clics par fenêtre pour une application (session 140), de 0 à 10.
+public struct ZoneClicksAppConfig: Equatable, Codable, Sendable {
+    /// Nom affiché (« Excel ») ou identifiant (`com.microsoft.Excel`), sans casse.
+    public var app: String
+    public var count: Int
+
+    public init(app: String, count: Int) {
+        self.app = app
+        self.count = min(10, max(0, count))
+    }
+
+    enum CodingKeys: String, CodingKey { case app, count }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(app: try c.decodeIfPresent(String.self, forKey: .app) ?? "", count: try c.decodeIfPresent(Int.self, forKey: .count) ?? 3)
     }
 }
