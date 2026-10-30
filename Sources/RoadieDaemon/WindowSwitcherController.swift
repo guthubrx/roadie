@@ -545,6 +545,8 @@ public final class WindowSwitcherController {
     /// Zone choisie (session 136) : sa fenêtre revient par l'activation habituelle (stage et bureau compris), puis
     /// l'attente du premier plan et le clic tournent hors du fil principal (session 135).
     private func go(to zone: SwitcherZone) {
+        // La zone devient la plus récente, comme une fenêtre activée : le prochain ⌥Tab ramène à la précédente.
+        ZoneHistory.shared.touch(zone.record)
         let result = switcher.activate(zone.window)
         let element = ZoneHistory.shared.element(for: zone.record)
         let record = zone.record

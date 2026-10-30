@@ -14,3 +14,11 @@
 - Parcours réel (⌥Tab, flèches, souris, retour et clic) et zones des clics ordinaires : frappes et clics simulés
   refusés sur ce poste ; aucune zone de clic observée dans les 20 secondes suivant l'installation.
 - Les photos contiennent le contenu des fenêtres cliquées ; elles restent sur le poste, 24 heures au plus.
+
+## Correction après essai (30 octobre 2026)
+
+⌥Tab répété ne faisait pas l'aller-retour : quatre retours vers une zone (08:27:15 à 08:27:23) cliqués, mais l'ordre
+de l'historique inchangé ; toutes les zones étant dans la même fenêtre de T3 Code, la sélection initiale reproposait
+la même deuxième zone. Une zone où l'on revient remonte désormais en tête (`ZoneHistory.touch`), comme une fenêtre
+activée par ⌘Tab. Test `repeatedSwitchesGoBackAndForth` (B, A, B). Zones des clics ordinaires observées
+(08:27:26 et 08:28:07).

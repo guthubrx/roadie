@@ -83,4 +83,26 @@ struct Spec136SwitcherZonesTests {
         }
         #expect(SettingsCatalog.find(id: "target_mode.zone_history_hotkey") == nil)
     }
+
+    /// Essai du 30 octobre 2026 : ⌥Tab répété doit aller et revenir entre deux zones, comme ⌘Tab entre deux fenêtres
+    /// (toutes les zones de l'essai étaient dans la même fenêtre de T3 Code).
+    @MainActor @Test func repeatedSwitchesGoBackAndForth() {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("spec136-\(UUID().uuidString).json").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let history = ZoneHistory(path: path)
+        for (title, y) in [("C", 60.0), ("B", 30), ("A", 0)] {
+            history.record(zone(title, y: y), element: nil, policy: ZonePolicy(), now: now)
+        }
+        var profile = WindowSwitcherShortcutConfig(id: "zones", source: "zones")
+        profile.scope = "all"
+        func choose() -> String? {
+            let built = WindowSwitcherZones.build(records: history.records, windows: [window(10)])
+            let context = WindowSwitcherZones.context(WindowSwitcherContext(focusedWindowID: WindowID(rawValue: 10)), built: built)
+            let chosen = WindowSwitcherModel(entries: built.entries, profile: profile, context: context, recentIDs: built.recentIDs).selected
+            guard let chosen, let record = built.zones[chosen.id]?.record else { return nil }
+            history.touch(record, now: now)
+            return record.title
+        }
+        #expect([choose(), choose(), choose()] == ["B", "A", "B"])
+    }
 }

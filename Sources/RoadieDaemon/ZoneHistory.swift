@@ -128,6 +128,17 @@ final class ZoneHistory {
         return before.subtracting(keys).sorted()
     }
 
+    /// Zone où l'on revient : elle remonte en tête, datée de maintenant, avec son élément et sa photo. Comme une
+    /// fenêtre activée par ⌘Tab, elle devient la plus récente : un second appui ramène à la précédente (essai du 30
+    /// octobre 2026 : l'ordre ne bougeait pas, ⌥Tab reproposait toujours la même zone). O(n).
+    func touch(_ record: ZoneRecord, now: Date = Date()) {
+        guard let index = records.firstIndex(where: { $0.key == record.key }) else { return }
+        var moved = records.remove(at: index)
+        moved.date = now
+        records.insert(moved, at: 0)
+        save()
+    }
+
     /// Vignette capturée pour cette zone. O(n).
     func setThumbnail(_ crop: CGRect, for key: String) {
         guard let index = records.firstIndex(where: { $0.key == key }) else { return }
