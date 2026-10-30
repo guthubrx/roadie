@@ -738,6 +738,10 @@ extension SettingsCatalog {
                       + tr("palettes. Dans le titre, # remplace un nombre et * n'importe quel texte ; les majuscules ne comptent ", "palettes. In the title, # stands for a number and * for any text; case does not ")
                       + tr("pas. « # Reminder » couvre « 1 Reminder » et « 3 Reminders ». Le menu Fenêtre de la barre de titre ", "matter. “# Reminder” covers “1 Reminder” and “3 Reminders”. The title bar's Window menu ")
                       + tr("ajoute ou retire la fenêtre choisie. `roadie window explain` dit pourquoi une fenêtre est tuilée.", "adds or removes the chosen window. `roadie window explain` tells why a window is tiled.")),
+        entry(.regles, "exclusions", "floating_avoid_rail", tr("Fenêtres flottantes hors du rail", "Floating windows clear of the rail"),
+              tr("Une fenêtre flottante qui s'ouvre sur le rail est décalée juste à sa droite, sans changer de taille. ", "A floating window that opens over the rail is moved just to its right, without resizing. ")
+              + tr("Pour qu'une fenêtre revienne là où vous l'avez laissée, cochez « Retenir la place » sur sa ligne ou sa règle.", "To have a window come back where you left it, tick “Remember its place” on its row or rule."),
+              .bool, .bool(true)),
         readOnlyEntry(.regles, "", "rules", tr("Règles de fenêtres", "Window rules"),
                       tr("Tableau de règles qui placent ou excluent des fenêtres selon l'application ou le titre.", "Table of rules that place or exclude windows by app or title.")),
         readOnlyEntry(.regles, "signals", "hooks", tr("Commandes déclenchées par événement", "Event-triggered commands"),

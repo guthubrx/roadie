@@ -39,7 +39,10 @@ struct TargetSearchDismissalTests {
             #expect((mask & (1 << type.rawValue) != 0) == searchMode)
             #expect(!TargetSearchDismissal.isMouseDown(type))
         }
-        for type in [CGEventType.rightMouseUp, .mouseMoved, .scrollWheel] {
+        // Défilement au trackpad sur la liste et la grille (session 131), en recherche seulement.
+        #expect((mask & (1 << CGEventType.scrollWheel.rawValue) != 0) == searchMode)
+        #expect(!TargetSearchDismissal.isMouseDown(.scrollWheel))
+        for type in [CGEventType.rightMouseUp, .mouseMoved] {
             #expect(mask & (1 << type.rawValue) == 0)
             #expect(!TargetSearchDismissal.isMouseDown(type))
         }

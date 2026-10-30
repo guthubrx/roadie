@@ -250,9 +250,13 @@ To keep only some of an app's windows out of tiling (reminders, dialogs) without
 [[exclusions.floating_windows]]
 app = "Thunderbird"        # displayed name or bundle ID (org.mozilla.thunderbird)
 title = "# Reminder"       # #: a number; *: any text; case-insensitive
+remember_frame = true      # optional: reopens where you left it (position and size)
 ```
 
 The list can also be edited in Settings > Règles and from the title bar Window menu.
+`remember_frame = true` also works in a rule's `action` (`action = { exclude = true, remember_frame = true }`).
+A floating window that opens over the rail is moved to its right, unless
+`[exclusions] floating_avoid_rail = false`.
 
 ## Match Fields
 

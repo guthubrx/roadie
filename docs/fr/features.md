@@ -642,6 +642,16 @@ court, petite fenêtre de réglages) jugent la fenêtre à sa naissance, et non 
 `roadie window explain [ID]` montre ce que l'accessibilité dit d'une fenêtre (sous-rôle, boutons, premier
 cadre) et la raison de la décision.
 
+**Place des fenêtres flottantes** : une fenêtre non tuilée qui s'ouvre sur le rail (les informations du
+Finder s'ouvrent en haut à gauche) est décalée juste à sa droite, sans changer de taille ; Paramètres >
+Règles > « Fenêtres flottantes hors du rail » (`[exclusions] floating_avoid_rail`, activé par défaut). Pour
+qu'une fenêtre revienne là où vous l'avez laissée, position et taille, cochez « Retenir la place » sur sa
+ligne de la liste ci-dessus ou sur sa règle (`remember_frame = true`). La place est retenue par ligne ou par
+règle, et non par titre : toutes les fenêtres d'informations du Finder partagent la même. Seule l'ouverture
+d'une fenêtre est traitée : ensuite, Roadie ne fait que noter vos déplacements ; au démarrage, les fenêtres
+déjà ouvertes ne bougent pas. Une application peut imposer sa taille (le Finder fixe la largeur de ses
+fenêtres d'informations).
+
 | Touche | Effet |
 |--------|-------|
 | lettres, chiffres, espace | filtrer |

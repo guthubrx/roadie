@@ -8,10 +8,18 @@ public struct FloatingWindowConfig: Equatable, Codable, Sendable {
     public var app: String
     /// Titre, sans casse : `#` remplace un nombre, `*` n'importe quel texte (« # Reminder »).
     public var title: String
+    /// Session 132 : la fenêtre revient à sa dernière place (position et taille).
+    public var rememberFrame: Bool?
 
-    public init(app: String, title: String) {
+    public init(app: String, title: String, rememberFrame: Bool? = nil) {
         self.app = app
         self.title = title
+        self.rememberFrame = rememberFrame
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case app, title
+        case rememberFrame = "remember_frame"
     }
 }
 
@@ -90,7 +98,7 @@ public enum FloatingWindowTitles {
             var match = RuleMatch(appRegex: "(?i)^\(NSRegularExpression.escapedPattern(for: app))$")
             match.titleRegex = regex(title)
             return WindowRule(id: id, enabled: true, priority: priority, stopProcessing: true, match: match,
-                              action: RuleAction(floating: true))
+                              action: RuleAction(floating: true, rememberFrame: entry.rememberFrame == true ? true : nil))
         }
     }
 

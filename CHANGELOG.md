@@ -19,6 +19,14 @@ jour et les limites connues ; les README décrivent la version courante.
   ouvertes ; tâches d'automatisation téléchargées à leur première utilisation.
 - Nouveautés annoncées d'Alfred 6 : grille `apps` par catégorie, navigateur SF Symbols (`symbols`), thèmes de
   barre Glassy Dark et Glassy Light, styles des fenêtres de workflow, tableaux Markdown dans la vue Texte.
+- Fenêtres flottantes : décalées hors du rail à leur ouverture (`floating_avoid_rail`), et place retenue,
+  position et taille, pour les lignes ou règles où « Retenir la place » est coché (`remember_frame`).
+
+### Corrections
+
+- Une vue Texte de workflow sans champ de saisie faisait planter Roadie (exception de mise en page).
+- `roadie window explain 0` arrêtait le daemon : un numéro de fenêtre invalide est refusé.
+- Le verbe choisi à l'étape des verbes n'est plus compté après la fermeture de la barre.
 
 ## 0.11.1 - 2026-10-29
 

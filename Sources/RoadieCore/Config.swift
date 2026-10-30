@@ -405,21 +405,26 @@ public struct ExclusionsConfig: Equatable, Codable, Sendable {
     public var floatingBundles: [String]
     /// Fenêtres toujours flottantes, par application et titre (session 125).
     public var floatingWindows: [FloatingWindowConfig]
+    /// Session 132 : une fenêtre flottante qui apparaît sur le rail est décalée à sa droite.
+    public var floatingAvoidRail: Bool
 
-    public init(floatingBundles: [String] = [], floatingWindows: [FloatingWindowConfig] = []) {
+    public init(floatingBundles: [String] = [], floatingWindows: [FloatingWindowConfig] = [], floatingAvoidRail: Bool = true) {
         self.floatingBundles = floatingBundles
         self.floatingWindows = floatingWindows
+        self.floatingAvoidRail = floatingAvoidRail
     }
 
     enum CodingKeys: String, CodingKey {
         case floatingBundles = "floating_bundles"
         case floatingWindows = "floating_windows"
+        case floatingAvoidRail = "floating_avoid_rail"
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.floatingBundles = try c.decodeIfPresent([String].self, forKey: .floatingBundles) ?? []
         self.floatingWindows = try c.decodeIfPresent([FloatingWindowConfig].self, forKey: .floatingWindows) ?? []
+        self.floatingAvoidRail = try c.decodeIfPresent(Bool.self, forKey: .floatingAvoidRail) ?? true
     }
 }
 
@@ -1805,8 +1810,8 @@ private enum ConfigValidationRules {
             "desktops": ["enabled", "count", "back_and_forth", "mode"],
             "stage_manager": ["enabled", "hide_strategy", "default_stage", "workspaces"],
             "stage_manager.workspaces": ["id", "display_name"],
-            "exclusions": ["floating_bundles", "floating_windows"],
-            "exclusions.floating_windows": ["app", "title"],
+            "exclusions": ["floating_bundles", "floating_windows", "floating_avoid_rail"],
+            "exclusions.floating_windows": ["app", "title", "remember_frame"],
             "fx.borders": ["enabled", "thickness", "corner_radius", "active_color", "inactive_color", "pulse_on_focus", "stage_overrides"],
             "fx.borders.stage_overrides": ["stage_id", "active_color"],
             "fx.rail": ["renderer", "width", "background_color", "background_opacity", "auto_hide", "edge_hit_width", "edge_magnetism_width", "animation_ms", "hide_delay_ms", "layout_mode", "dynamic_left_gap", "empty_click_hide_active", "empty_click_safety_margin", "hide_on_maximized"],
@@ -1836,7 +1841,7 @@ private enum ConfigValidationRules {
             "rules": ["id", "enabled", "priority", "stop_processing", "match", "action"],
             "shortcuts": ["keys", "command", "enabled", "btt_uuid"],
             "rules.match": ["app", "app_regex", "title", "title_regex", "role", "subrole", "display", "desktop", "stage", "is_floating"],
-            "rules.action": ["manage", "exclude", "assign_desktop", "assign_display", "assign_stage", "follow", "floating", "layout", "gap_override", "scratchpad", "emit_event"]
+            "rules.action": ["manage", "exclude", "assign_desktop", "assign_display", "assign_stage", "follow", "floating", "layout", "gap_override", "scratchpad", "emit_event", "remember_frame"]
         ]
     }()
 

@@ -135,6 +135,7 @@ extension RuleAction {
         if gapOverride != nil { result.append("gap_override") }
         if scratchpad != nil { result.append("scratchpad") }
         if emitEvent != nil { result.append("emit_event") }
+        if rememberFrame != nil { result.append("remember_frame") }
         return result
     }
 }

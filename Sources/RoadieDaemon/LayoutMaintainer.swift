@@ -40,6 +40,8 @@ public final class LayoutMaintainer {
     private let staticRuleEngine: WindowRuleEngine?
     /// Configuration active du processus, rechargée par `roadie config reload` (REL-014).
     private let configService: ConfigReloadService
+    /// Session 132 : place des fenêtres flottantes.
+    private let floatingPlacement = FloatingPlacement()
     private let store: StageStore
     private let dragActivity: WindowDragActivity
     private let commandActivity: LayoutCommandActivity
@@ -231,6 +233,24 @@ public final class LayoutMaintainer {
         tick(cause: "safety")
     }
 
+    /// Fenêtres flottantes apparues (session 132) : place retenue ou décalage hors du rail. Ensuite, la place est
+    /// seulement retenue après un déplacement. O(n) ; le rail et les règles ne sont lus que pour une fenêtre apparue.
+    private func placeFloatingWindows(in snapshot: DaemonSnapshot) {
+        let config = service.effectiveConfig
+        let moves = floatingPlacement.observe(
+            FloatingPlacement.candidates(in: snapshot), displays: snapshot.displays.map(\.frame.cgRect),
+            avoidRail: config.exclusions.floatingAvoidRail, railWidth: { CGFloat(RailSettings.load().width) },
+            key: { FloatingPlacement.rememberKey(for: $0, rules: config.rules) })
+        for move in moves {
+            let actual = service.setFrame(move.frame, of: move.window)
+            floatingPlacement.applied(move.window.id, frame: actual ?? move.window.frame.cgRect)
+            events.append(RoadieEvent(type: "floating.placed", details: [
+                "windowID": String(move.window.id.rawValue), "app": move.window.appName, "reason": move.reason,
+                "frame": "\(Int(move.frame.minX)),\(Int(move.frame.minY)) \(Int(move.frame.width))x\(Int(move.frame.height))",
+                "applied": String(actual != nil)]))
+        }
+    }
+
     /// Une nouvelle géométrie de configuration remplace les placements mémorisés, même si
     /// leur écart reste dans la tolérance des intents. Les zooms et les arbres sont conservés.
     /// Appelé avant la demande à TickScheduler : aucune écriture AX ni contournement des gestes.
@@ -405,6 +425,7 @@ public final class LayoutMaintainer {
             // Référence d'observation et priorité conservées : le geste est traité au relâchement.
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
+        placeFloatingWindows(in: snapshot)
 
         if settingsGeometryPending {
             exactSettingsScopes.formUnion(activeScopes(in: snapshot).filter {

@@ -253,6 +253,7 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
             }
             append("scratchpad", rule.action.scratchpad, to: &lines)
             appendBool("emit_event", rule.action.emitEvent, to: &lines)
+            appendBool("remember_frame", rule.action.rememberFrame, to: &lines)
             lines.append("")
         }
         return lines.joined(separator: "\n")

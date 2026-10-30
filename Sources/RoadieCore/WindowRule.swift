@@ -106,6 +106,8 @@ public struct RuleAction: Equatable, Codable, Sendable {
     public var gapOverride: Int?
     public var scratchpad: String?
     public var emitEvent: Bool?
+    /// Session 132 : la fenêtre flottante visée revient à sa dernière place (position et taille).
+    public var rememberFrame: Bool?
 
     public init(
         manage: Bool? = nil,
@@ -118,7 +120,8 @@ public struct RuleAction: Equatable, Codable, Sendable {
         layout: String? = nil,
         gapOverride: Int? = nil,
         scratchpad: String? = nil,
-        emitEvent: Bool? = nil
+        emitEvent: Bool? = nil,
+        rememberFrame: Bool? = nil
     ) {
         self.manage = manage
         self.exclude = exclude
@@ -131,6 +134,7 @@ public struct RuleAction: Equatable, Codable, Sendable {
         self.gapOverride = gapOverride
         self.scratchpad = scratchpad
         self.emitEvent = emitEvent
+        self.rememberFrame = rememberFrame
     }
 
     enum CodingKeys: String, CodingKey {
@@ -145,6 +149,7 @@ public struct RuleAction: Equatable, Codable, Sendable {
         case gapOverride = "gap_override"
         case scratchpad
         case emitEvent = "emit_event"
+        case rememberFrame = "remember_frame"
     }
 }
 

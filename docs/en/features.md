@@ -612,6 +612,15 @@ window, or "Ne plus faire flotter…" when it is already listed. A row wins over
 tiling. `roadie window explain [ID]` shows what Accessibility reports about a window (subrole, buttons,
 first frame) and why it is tiled or floating.
 
+**Floating window placement**: an untiled window that opens over the rail (Finder's Get Info opens at the
+top left) is moved just to its right, without resizing; Settings > Règles > "Fenêtres flottantes hors du
+rail" (`[exclusions] floating_avoid_rail`, on by default). To have a window come back where you left it,
+position and size, tick "Remember its place" on its row in the list above or on its rule
+(`remember_frame = true`). The place is kept per row or rule, not per title: every Finder Get Info window
+shares one. Only a window's opening is handled: afterwards Roadie only records your moves, and windows
+already open when Roadie starts are left alone. An app may impose its size (Finder fixes the width of its
+Get Info windows).
+
 | Key | Effect |
 |-----|--------|
 | letters, digits, space | filter |

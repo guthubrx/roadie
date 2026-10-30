@@ -344,9 +344,9 @@ struct SettingsViewModelTests {
     func collectionsCannotBeOverwrittenWithAScalar() throws {
         let (model, config) = try makeModel()
         model.select(.regles)
-        let entries = try #require(model.sections.first?.descriptors)
+        // Session 132 : la catégorie a aussi un interrupteur (fenêtres flottantes hors du rail).
+        let entries = try #require(model.sections.first?.descriptors).filter { $0.collection != nil }
         #expect(!entries.isEmpty)
-        #expect(entries.allSatisfy { $0.collection != nil })
 
         let before = try String(contentsOf: config, encoding: .utf8)
         for entry in entries {

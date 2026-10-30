@@ -15,7 +15,7 @@ extension SettingsCatalog {
             "title": tr("Titre", "Title"), "title_regex": tr("Titre (expression régulière)", "Title (regular expression)"), "role": tr("Rôle d'accessibilité", "Accessibility role"),
             "subrole": tr("Sous-rôle d'accessibilité", "Accessibility subrole"), "display": tr("Écran", "Display"), "desktop": tr("Bureau", "Desktop"), "stage": "Stage",
             "manage": tr("Gérer la fenêtre", "Manage the window"), "exclude": tr("Exclure du tuilage", "Exclude from tiling"), "follow": tr("Suivre l'assignation", "Follow the assignment"),
-            "floating": tr("Rendre flottante", "Make floating"), "emit_event": tr("Émettre un événement", "Emit an event"), "assign_desktop": tr("Envoyer vers le bureau", "Send to desktop"),
+            "floating": tr("Rendre flottante", "Make floating"), "emit_event": tr("Émettre un événement", "Emit an event"), "remember_frame": tr("Retenir la place", "Remember its place"), "assign_desktop": tr("Envoyer vers le bureau", "Send to desktop"),
             "assign_display": tr("Envoyer vers l'écran", "Send to display"), "assign_stage": tr("Envoyer vers le stage", "Send to stage"), "scratchpad": tr("Groupe temporaire", "Scratchpad")
         ]
         func field(_ key: String, _ label: String, _ kind: SettingKind = .text,
@@ -113,7 +113,9 @@ extension SettingsCatalog {
                         oneOf: [["display_id", "display_name"]])
         case "exclusions.floating_windows":
             return rows(id, [field("app", tr("Application", "App"), required: true, help: tr("Nom affiché (Thunderbird) ou identifiant (org.mozilla.thunderbird).", "Display name (Thunderbird) or identifier (org.mozilla.thunderbird).")),
-                             field("title", tr("Titre", "Title"), required: true, help: tr("# : un nombre ; * : n'importe quel texte. Exemple : # Reminder.", "#: a number; *: any text. Example: # Reminder."))])
+                             field("title", tr("Titre", "Title"), required: true, help: tr("# : un nombre ; * : n'importe quel texte. Exemple : # Reminder.", "#: a number; *: any text. Example: # Reminder.")),
+                             field("remember_frame", labels["remember_frame"] ?? "", .bool, value: .bool(false),
+                                   help: tr("La fenêtre rouvre là où vous l'avez laissée, à la même taille.", "The window reopens where you left it, at the same size."))])
         case "stage_manager.workspaces":
             return rows(id, [field("id", tr("Identifiant", "Identifier"), required: true), field("display_name", tr("Nom du stage", "Stage name"), required: true)], key: "id")
         case "borders.stage_overrides", "rail.preview.stage_overrides":
@@ -124,7 +126,7 @@ extension SettingsCatalog {
                           field("stop_processing", tr("Arrêter après cette règle", "Stop after this rule"), .bool, value: .bool(false))]
             fields += ["app", "app_regex", "title", "title_regex", "role", "subrole", "display", "desktop", "stage"].map { field("match." + $0, tr("Critère : ", "Match: ") + (labels[$0] ?? $0)) }
             fields.append(field("match.is_floating", tr("Fenêtre flottante", "Floating window"), .bool))
-            fields += ["manage", "exclude", "follow", "floating", "emit_event"].map { field("action." + $0, tr("Action : ", "Action: ") + (labels[$0] ?? $0), .bool) }
+            fields += ["manage", "exclude", "follow", "floating", "emit_event", "remember_frame"].map { field("action." + $0, tr("Action : ", "Action: ") + (labels[$0] ?? $0), .bool) }
             fields += ["assign_desktop", "assign_display", "assign_stage", "scratchpad"].map { field("action." + $0, tr("Action : ", "Action: ") + (labels[$0] ?? $0)) }
             let storedActionHelp = tr("Enregistré dans la règle. Ce paramètre ne modifie pas encore le tuilage.", "Saved in the rule. This setting does not change tiling yet.")
             fields += [field("action.layout", tr("Méthode de tuilage", "Tiling method"), .text, help: storedActionHelp),

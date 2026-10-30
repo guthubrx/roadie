@@ -254,9 +254,13 @@ sans écrire de règle complète :
 [[exclusions.floating_windows]]
 app = "Thunderbird"        # nom affiché ou identifiant (org.mozilla.thunderbird)
 title = "# Reminder"       # # : un nombre ; * : n'importe quel texte ; sans casse
+remember_frame = true      # facultatif : rouvre là où vous l'avez laissée (position et taille)
 ```
 
 La liste se modifie aussi dans Paramètres > Règles et depuis le menu Fenêtre de la barre de titre.
+`remember_frame = true` vaut aussi dans l'`action` d'une règle (`action = { exclude = true, remember_frame = true }`).
+Une fenêtre flottante qui s'ouvre sur le rail est décalée à sa droite, sauf avec
+`[exclusions] floating_avoid_rail = false`.
 
 ## Champs de match
 
