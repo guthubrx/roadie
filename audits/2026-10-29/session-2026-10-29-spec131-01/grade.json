@@ -1,0 +1,28 @@
+{
+  "protocol": "15.0.0",
+  "grade": "A",
+  "score": 100,
+  "date": "2026-10-30",
+  "spec": "specs/131-actions-alfred",
+  "scope": "Session 131 : actions d'Alfred et nouveautés d'Alfred 6 (diff depuis a9c627fc)",
+  "decision": "pass",
+  "release_blocked": false,
+  "coverage_percent": 100.0,
+  "controls_verified": 14,
+  "controls_applicable": 14,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [],
+  "source_drift": [],
+  "input_sha256": "20fe5b2fed7e3d96e9177cb2374b8abfb1398a55d74044aa0cbf59aac44a223f",
+  "manifest_sha256": "35b04c6527ae789ae7cf33eab161362a1887aee424749255946cacf30f4005c6",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

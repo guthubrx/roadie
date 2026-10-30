@@ -1,0 +1,1033 @@
+{
+  "controls": [
+    {
+      "id": "security.static",
+      "title": "Analyse statique du code",
+      "tool": "semgrep",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200327666973Z/run.json",
+          "sha256": "50bb82ce0754c6498225598a63ad9f3c533fbd7853e61e67aff5bc5ead192a48"
+        }
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "title": "Secrets dans les fichiers",
+      "tool": "gitleaks",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200333869759Z/run.json",
+          "sha256": "ae545138c00e882fd9e41f48dba19391a5d770a364af6488113dc9a0201a8362"
+        }
+      ]
+    },
+    {
+      "id": "security.history",
+      "title": "Secrets dans l'historique Git",
+      "tool": "gitleaks-history",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s).  Historique limité à a9c627fc4ace91da82dfb4436e2c4629a3d847c9..740a0f78fb6615b931e9dd60463d4dc5f8c3cccd; les commits antérieurs sont hors périmètre.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200337310987Z/run.json",
+          "sha256": "eaa4bf39a55cf7638fce420a51d1308075048834189f80e9e4249f85b8ad2f9c"
+        }
+      ]
+    },
+    {
+      "id": "security.dependencies",
+      "title": "Vulnérabilités des dépendances",
+      "tool": "osv-scanner",
+      "status": "pass",
+      "rationale": "completed, 0 candidat(s). ",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200336366000Z/run.json",
+          "sha256": "d576e562e7f2f02ed3662f9c569c1a127aaec75de863691d35cec54fdbfcd253"
+        }
+      ]
+    },
+    {
+      "id": "security.authorization",
+      "title": "Authentification, autorisation et frontières de confiance",
+      "status": "pass",
+      "rationale": "Diff lu : aucune nouvelle entrée ; écritures de fichiers sur verbe explicite, corbeille seule suppression, menus de l'application mémorisée seulement.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ]
+    },
+    {
+      "id": "correctness.logic",
+      "title": "Invariants métier, erreurs et pertes de données",
+      "status": "pass",
+      "rationale": "Diff et appelants lus ; tables d'Alfred prouvées ou déduites et documentées ; numéro inconnu refusé ; convergence FR-003 ajoutée et testée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ]
+    },
+    {
+      "id": "correctness.concurrency",
+      "title": "Concurrence, annulation et idempotence",
+      "status": "pass",
+      "rationale": "États partagés ajoutés sous verrou ou sur le fil principal ; boîte Sendable justifiée ; session de barre neuve à chaque ouverture.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ]
+    },
+    {
+      "id": "performance.complexity",
+      "title": "Complexité, N+1, bornes et chemins critiques",
+      "status": "pass",
+      "rationale": "Recherches O(n) sur listes préparées, menus bornés, dictionnaire mesuré (92 ms à froid, 10 ms ensuite).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/mesure-dictionnaire.swift",
+          "sha256": "f22936a8bd0ce7568b359e03e36641f27f52e2b7511389c88220056ba438a5da"
+        }
+      ]
+    },
+    {
+      "id": "tests.regression",
+      "title": "Tests utiles et régressions",
+      "status": "pass",
+      "rationale": "Suite complète 2 318 tests / 343 suites et 28 tests de scripts au commit audité.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200338189254Z/stdout.json",
+          "sha256": "385f5d74904edab833ebabe78d002026dd22dd3b23c83f7b105906e7f1f8d0f6"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200603856047Z/stderr.log",
+          "sha256": "f67b3b811ef6378f2e1c7e24e345806cfa758a3aff3ab509e6491a6b01df9601"
+        }
+      ]
+    },
+    {
+      "id": "architecture.dependencies",
+      "title": "Couches et cycles de dépendances",
+      "status": "pass",
+      "rationale": "Aucune dépendance ajoutée ; six fichiers pour des responsabilités distinctes ; réutilisations listées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ]
+    },
+    {
+      "id": "quality.minimalism",
+      "title": "Minimalisme et frugalité",
+      "status": "pass",
+      "rationale": "Checklist exécutée sur le diff : ~3 lignes suppressibles ; réutilisations préférées aux créations.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ]
+    },
+    {
+      "id": "quality.llm",
+      "title": "Vertus LLM et responsabilité future",
+      "status": "pass",
+      "rationale": "Diff relu, invariants et limites écrits ; pas de revue indépendante (Bridget indisponible).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ]
+    },
+    {
+      "id": "reliability.observability",
+      "title": "Défaillances, journaux et limites de ressources",
+      "status": "pass",
+      "rationale": "Événements ajoutés sans saisie ni chemin (nombres, durées, verbe) ; échecs de verbes notifiés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ]
+    },
+    {
+      "id": "spec.traceability",
+      "title": "Exigences de la spécification reliées aux preuves",
+      "status": "pass",
+      "rationale": "FR-001 à FR-016 reliées au code et aux tests (Converge) ; SC-003 non mesuré, journalisé.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "REL-TEXTVIEW-CONSTRAINT",
+      "file": "Sources/RoadieDaemon/WorkflowTextPanel.swift",
+      "symbol": "WorkflowTextPanel.layout",
+      "instance": "input-width-without-input",
+      "line": 117,
+      "category": "reliability",
+      "title": "Vue Texte sans champ de saisie : exception de mise en page puis plantage",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "La largeur du champ de saisie est contrainte même quand il n'est pas dans la pile ; l'exception AppKit traverse Swift et corrompt l'état d'exécution (plantage à la minuterie suivante, 4 essais sur 4).",
+      "remediation": "Ne contraindre que les lignes présentes dans la pile.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/WorkflowTextPanel.swift",
+          "sha256": "756150658782acd7e8952eca3110cae305b3b7af6d2cffe09f86c962c02eeeef",
+          "line": 117
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "NSStackView(views: rows) unique ; ajouts conditionnels limités à ce panneau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Corrigé après le commit audité (6d17d0da), test ou rendu de contrôle, confirmé par l'utilisateur.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "UX-BAR-SCROLL",
+      "file": "Sources/RoadieDaemon/TargetOverlayPresenter.swift",
+      "symbol": "TargetSearchDismissal.eventMask",
+      "instance": "no-scroll-wheel",
+      "line": 861,
+      "category": "quality",
+      "title": "Barre sans défilement au trackpad",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Le tap de la barre n'écoute pas scrollWheel : la liste et la grille apps ne défilent pas.",
+      "remediation": "Écouter la molette en recherche et déplacer la sélection.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetOverlayPresenter.swift",
+          "sha256": "c12cb142f2f6242436045f2bf8c38ee502cea6ae1f1941069d081e63d420b099",
+          "line": 861
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Aucun autre tap de la barre ne gère de liste défilante.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Corrigé après le commit audité (6d17d0da), test ou rendu de contrôle, confirmé par l'utilisateur.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "UX-SEARCHFIELD-BEZEL",
+      "file": "Sources/RoadieDaemon/WorkflowTextPanel.swift",
+      "symbol": "WorkflowViewStyle.decorate",
+      "instance": "search-field-without-bezel",
+      "line": 376,
+      "category": "quality",
+      "title": "Champ de recherche SF Symbols : loupe sur le texte",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Le style retire le cadre natif, qui réserve la place de la loupe d'un NSSearchField ; reproduit hors écran.",
+      "remediation": "Garder le cadre natif des champs de recherche.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/WorkflowTextPanel.swift",
+          "sha256": "756150658782acd7e8952eca3110cae305b3b7af6d2cffe09f86c962c02eeeef",
+          "line": 376
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/recherche-symboles-avant.png",
+          "sha256": "84a14d92b46bc69667f67e2c81c95b3072b7e05de1b0bf3b9ad6db5deb87f4e4"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/recherche-symboles-apres.png",
+          "sha256": "62116ade1abe2893b0069f15af26265f16347f0a65b8337378efd2f8b60ef613"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "decorate n'est appelé que sur deux champs, dont un seul de recherche.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Corrigé après le commit audité (6d17d0da), test ou rendu de contrôle, confirmé par l'utilisateur.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/recherche-symboles-avant.png",
+            "sha256": "84a14d92b46bc69667f67e2c81c95b3072b7e05de1b0bf3b9ad6db5deb87f4e4"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/recherche-symboles-apres.png",
+            "sha256": "62116ade1abe2893b0069f15af26265f16347f0a65b8337378efd2f8b60ef613"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "UX-ALIAS-FEEDBACK",
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "symbol": "TargetModeRuntimeController.performFileAction",
+      "instance": "alias-without-feedback",
+      "line": 1973,
+      "category": "quality",
+      "title": "Créer un alias sans retour visible",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "L'alias est créé sur disque mais rien ne le montre à l'utilisateur.",
+      "remediation": "Montrer les alias créés sélectionnés dans le Finder.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "sha256": "e327f89ce12e39f4f0a5f1aeabbec1d42d41f81150c62cc3f8b122655fcf88ee",
+          "line": 1973
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Seul verbe de fichier sans effet visible ailleurs que sur disque.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Corrigé après le commit audité (6d17d0da), test ou rendu de contrôle, confirmé par l'utilisateur.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      }
+    }
+  ],
+  "axis_checks": [
+    {
+      "id": "axes.security.01",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Semgrep sans signal, SwiftLint sur les sources changées (2 signaux nouveaux, protégés), diff lu en entier.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200631636100Z/stdout.json",
+          "sha256": "48bb0ee03fbe9dbcc238f7f9057caf5557db2f72b658921a8e079f537388ed55"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Semgrep sans signal, SwiftLint sur les sources changées (2 signaux nouveaux, protégés), diff lu en entier. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.02",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Gitleaks sans signal sur les fichiers figés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200333869759Z/raw.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Gitleaks sans signal sur les fichiers figés. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.03",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Historique de la session (depuis a9c627fc) sans signal.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200337310987Z/raw.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Historique de la session (depuis a9c627fc) sans signal. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.04",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Actions locales sur verbe explicite, sans shell, arguments séparés, application ciblée mémorisée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Actions locales sur verbe explicite, sans shell, arguments séparés, application ciblée mémorisée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.security.05",
+      "axis": "security",
+      "status": "pass",
+      "rationale": "Aucune dépendance ajoutée ; OSV sans avis.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200336366000Z/stdout.json",
+          "sha256": "54345d5194d238b6017d0f3181f392109ce35023cc6b4bdfa8c134943dcb578e"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Aucune dépendance ajoutée ; OSV sans avis. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.llm_security.01",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM ajouté (IA d'Alfred 6 écartée).",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.02",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM ajouté (IA d'Alfred 6 écartée).",
+      "evidence": []
+    },
+    {
+      "id": "axes.llm_security.03",
+      "axis": "llm_security",
+      "status": "not_applicable",
+      "rationale": "Aucun appel à un service LLM ajouté (IA d'Alfred 6 écartée).",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.01",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Sans objet pour ce diff : aucune sauvegarde, bascule ou restauration, ni ergonomie de parcours ou séparation construction/exécution touchée.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.02",
+      "axis": "reliability",
+      "status": "pass",
+      "rationale": "Tâches téléchargées une fois par processus ; échecs notifiés ; reprise après échec non testée en réel.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Tâches téléchargées une fois par processus ; échecs notifiés ; reprise après échec non testée en réel. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.reliability.03",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Sans objet pour ce diff : aucune sauvegarde, bascule ou restauration, ni ergonomie de parcours ou séparation construction/exécution touchée.",
+      "evidence": []
+    },
+    {
+      "id": "axes.reliability.04",
+      "axis": "reliability",
+      "status": "not_applicable",
+      "rationale": "Sans objet pour ce diff : aucune sauvegarde, bascule ou restauration, ni ergonomie de parcours ou séparation construction/exécution touchée.",
+      "evidence": []
+    },
+    {
+      "id": "axes.tests.01",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Sources et tests compilés au commit audité.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200338189254Z/stdout.json",
+          "sha256": "385f5d74904edab833ebabe78d002026dd22dd3b23c83f7b105906e7f1f8d0f6"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Sources et tests compilés au commit audité. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.02",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Semgrep et SwiftLint ciblés ; règles Swift limitées.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200631636100Z/stdout.json",
+          "sha256": "48bb0ee03fbe9dbcc238f7f9057caf5557db2f72b658921a8e079f537388ed55"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Semgrep et SwiftLint ciblés ; règles Swift limitées. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.03",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Tests de chaque exigence, dont mise en page réelle des tableaux et données réelles de macOS ; suite complète réussie.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200338189254Z/stdout.json",
+          "sha256": "385f5d74904edab833ebabe78d002026dd22dd3b23c83f7b105906e7f1f8d0f6"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Tests de chaque exigence, dont mise en page réelle des tableaux et données réelles de macOS ; suite complète réussie. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.04",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Runtime livré installé et signé, santé 5/5 ; parcours réels de l'utilisateur sur ce runtime (C1 à C4 trouvés et corrigés).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/mesures-runtime.md",
+          "sha256": "491bab5bbdbfd533f5c915c7730a79f385ad935b7959a879b520c165bd9e61f5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Runtime livré installé et signé, santé 5/5 ; parcours réels de l'utilisateur sur ce runtime (C1 à C4 trouvés et corrigés). Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.tests.05",
+      "axis": "tests",
+      "status": "pass",
+      "rationale": "Rendus hors écran regardés (grille, tableau) ; parcours graphiques réels non rejoués.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Rendus hors écran regardés (grille, tableau) ; parcours graphiques réels non rejoués. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.performance.01",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Menus lus une fois par ouverture, raccourcis Apple gardés 10 minutes ; pas d'essai de charge.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Menus lus une fois par ouverture, raccourcis Apple gardés 10 minutes ; pas d'essai de charge. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.performance.02",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Catalogue SF Symbols mesuré (environ 5 Mio, chargé à l'ouverture du navigateur) ; roadied 246 Mio sans référence antérieure.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/mesures-runtime.md",
+          "sha256": "491bab5bbdbfd533f5c915c7730a79f385ad935b7959a879b520c165bd9e61f5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/mesure-memoire.swift",
+          "sha256": "8ce190aba28c2eeedbfab09969a0c430328f9ef944c3755c9ba86d8d9092c978"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Catalogue SF Symbols mesuré (environ 5 Mio, chargé à l'ouverture du navigateur) ; roadied 246 Mio sans référence antérieure. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.performance.03",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Lectures AX bornées (0,25 s par appel, 0,8 s au total), osascript borné, empreinte hors du fil principal.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Lectures AX bornées (0,25 s par appel, 0,8 s au total), osascript borné, empreinte hors du fil principal. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.performance.04",
+      "axis": "performance",
+      "status": "pass",
+      "rationale": "Dictionnaire mesuré ; durée des menus seulement journalisée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/mesure-dictionnaire.swift",
+          "sha256": "f22936a8bd0ce7568b359e03e36641f27f52e2b7511389c88220056ba438a5da"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Dictionnaire mesuré ; durée des menus seulement journalisée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.complexity.01",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Complexités annotées sur chaque fonction publique ajoutée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Complexités annotées sur chaque fonction publique ajoutée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.complexity.02",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Parcours bornés (menus, symboles 600 résultats, taille de dossier 50 000 éléments).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Parcours bornés (menus, symboles 600 résultats, taille de dossier 50 000 éléments). Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.complexity.03",
+      "axis": "complexity",
+      "status": "pass",
+      "rationale": "Catalogue SF Symbols lu une fois ; empreinte par blocs ; coût du très gros fichier non borné en durée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Catalogue SF Symbols lu une fois ; empreinte par blocs ; coût du très gros fichier non borné en durée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.quality.01",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Refus explicites (destination, homonyme, numéro inconnu) et notifications d'échec.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Refus explicites (destination, homonyme, numéro inconnu) et notifications d'échec. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.quality.02",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Bilan par source pour les lots ; « en remplaçant » met l'ancien à la corbeille avant l'écriture.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Bilan par source pour les lots ; « en remplaçant » met l'ancien à la corbeille avant l'écriture. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.quality.03",
+      "axis": "quality",
+      "status": "pass",
+      "rationale": "Parcours réels essayés par l'utilisateur (29-30 octobre) : quatre défauts trouvés (C1 à C4), corrigés après le commit audité et confirmés ; fiche Informations remplacée par la fenêtre du Finder.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Parcours réels essayés par l'utilisateur (29-30 octobre) : quatre défauts trouvés (C1 à C4), corrigés après le commit audité et confirmés ; fiche Informations remplacée par la fenêtre du Finder. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.architecture.01",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Logique pure dans des fichiers dédiés, contrôleur réduit à l'aiguillage.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Logique pure dans des fichiers dédiés, contrôleur réduit à l'aiguillage. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.architecture.02",
+      "axis": "architecture",
+      "status": "not_applicable",
+      "rationale": "Sans objet pour ce diff : aucune sauvegarde, bascule ou restauration, ni ergonomie de parcours ou séparation construction/exécution touchée.",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.03",
+      "axis": "architecture",
+      "status": "not_applicable",
+      "rationale": "Sans objet pour ce diff : aucune sauvegarde, bascule ou restauration, ni ergonomie de parcours ou séparation construction/exécution touchée.",
+      "evidence": []
+    },
+    {
+      "id": "axes.architecture.04",
+      "axis": "architecture",
+      "status": "pass",
+      "rationale": "Données SF Symbols et dictionnaire de macOS lus au besoin, repli vide si absents.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Données SF Symbols et dictionnaire de macOS lus au besoin, repli vide si absents. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.ai_hygiene.01",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Invariants, preuves et limites écrits (research, analyse, validation).",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Invariants, preuves et limites écrits (research, analyse, validation). Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.ai_hygiene.02",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Changements par lot, commits par lot, tests par exigence.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200338189254Z/stdout.json",
+          "sha256": "385f5d74904edab833ebabe78d002026dd22dd3b23c83f7b105906e7f1f8d0f6"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Changements par lot, commits par lot, tests par exigence. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.ai_hygiene.03",
+      "axis": "ai_hygiene",
+      "status": "pass",
+      "rationale": "Pas de revue indépendante : délégation Bridget indisponible.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 1,
+      "rating_rationale": "Pas de revue indépendante : délégation Bridget indisponible. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.minimalism.01",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Aucune dépendance ajoutée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200336366000Z/stdout.json",
+          "sha256": "54345d5194d238b6017d0f3181f392109ce35023cc6b4bdfa8c134943dcb578e"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Aucune dépendance ajoutée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.minimalism.02",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "Binaire +2,4 % (+506 112 octets) contre la 0.11.1 publiée ; aucune dépendance ajoutée.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/mesures-runtime.md",
+          "sha256": "491bab5bbdbfd533f5c915c7730a79f385ad935b7959a879b520c165bd9e61f5"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Binaire +2,4 % (+506 112 octets) contre la 0.11.1 publiée ; aucune dépendance ajoutée. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.minimalism.03",
+      "axis": "minimalism",
+      "status": "pass",
+      "rationale": "~3 lignes suppressibles relevées sur tout le diff.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "~3 lignes suppressibles relevées sur tout le diff. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.business.01",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Données de macOS lues telles quelles (symboles, catégories, versions), testées sur ce Mac.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200338189254Z/stdout.json",
+          "sha256": "385f5d74904edab833ebabe78d002026dd22dd3b23c83f7b105906e7f1f8d0f6"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Données de macOS lues telles quelles (symboles, catégories, versions), testées sur ce Mac. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.business.02",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Clés ajoutées facultatives, défauts identiques à l'existant, valeur inconnue ramenée au défaut ; fichier d'épinglage absent = vide.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/mesures-runtime.md",
+          "sha256": "491bab5bbdbfd533f5c915c7730a79f385ad935b7959a879b520c165bd9e61f5"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261029T200338189254Z/stdout.json",
+          "sha256": "385f5d74904edab833ebabe78d002026dd22dd3b23c83f7b105906e7f1f8d0f6"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Clés ajoutées facultatives, défauts identiques à l'existant, valeur inconnue ramenée au défaut ; fichier d'épinglage absent = vide. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.business.03",
+      "axis": "business",
+      "status": "pass",
+      "rationale": "Format d'Alfred : numéros prouvés ou déduits et documentés.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 2,
+      "rating_rationale": "Format d'Alfred : numéros prouvés ou déduits et documentés. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.traceability.01",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Défauts trouvés reliés à leur preuve et à leur correction ; exigences reliées aux tests.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Défauts trouvés reliés à leur preuve et à leur correction ; exigences reliées aux tests. Le niveau supérieur exige une qualification plus complète."
+    },
+    {
+      "id": "axes.traceability.02",
+      "axis": "traceability",
+      "status": "pass",
+      "rationale": "Toutes les exigences obligatoires de la spec 131 vérifiées, sauf SC-003 mesuré à l'essai.",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "notes/analyse.md",
+          "sha256": "3a9476b9e4c5cebeba964e526297ce6054254469bf2cd38e0b910fadd0979171"
+        }
+      ],
+      "level": 3,
+      "rating_rationale": "Toutes les exigences obligatoires de la spec 131 vérifiées, sauf SC-003 mesuré à l'essai. Le niveau supérieur exige une qualification plus complète."
+    }
+  ],
+  "minimalism": "Potentiel minimalisme : ~3 lignes suppressibles à comportement constant (conformités CaseIterable réservées aux tests), mesuré sur tout le diff.",
+  "responsibility": "Diff relu en entier ; logique pure séparée et testée ; deux défauts trouvés et corrigés avant figement, quatre autres à l'essai réel puis corrigés ; pas de revue indépendante."
+}

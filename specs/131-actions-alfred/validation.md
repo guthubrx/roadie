@@ -44,3 +44,16 @@ Indisponible : `bridget_auto_delegate` absent du catalogue Bridget (incident rem
 
 ## Preuves visuelles
 Pas de diaporama : clics simulés refusés sur ce poste.
+
+## Essai réel de l'utilisateur et corrections (29-30 octobre 2026)
+
+- SC-003 mesuré : menus lus en 85, 346 et 395 ms (`launcher.menus`).
+- Défauts trouvés à l'essai, corrigés (6d17d0da) et confirmés : vue Texte sans champ de saisie qui faisait
+  planter Roadie (défaut de la session 117, révélé par la fiche Informations ; exception de mise en page
+  reproduite sous lldb), barre sans défilement au trackpad, loupe sur le texte de la recherche SF Symbols, alias
+  créé sans retour visible.
+- Informations : la fiche Roadie, jugée moins utile que le Finder, est remplacée par la fenêtre ⌘I du Finder
+  (1d67637b) ; code de la fiche et de l'empreinte SHA-256 retiré.
+- Au passage : `roadie window explain 0` arrêtait le daemon (892f7ddc) ; verbe appris compté une fois (b563fcd6).
+- Audit V15 finalisé : `audits/2026-10-29/session-2026-10-29-spec131-01`, note A, décision pass, validateur
+  conforme ; les quatre défauts y figurent comme corrigés avec leurs preuves.

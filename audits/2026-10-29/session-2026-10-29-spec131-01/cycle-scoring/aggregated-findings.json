@@ -1,0 +1,240 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": false,
+    "decision": "pass"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "REL-TEXTVIEW-CONSTRAINT",
+      "file": "Sources/RoadieDaemon/WorkflowTextPanel.swift",
+      "symbol": "WorkflowTextPanel.layout",
+      "instance": "input-width-without-input",
+      "line": 117,
+      "category": "reliability",
+      "title": "Vue Texte sans champ de saisie : exception de mise en page puis plantage",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "La largeur du champ de saisie est contrainte même quand il n'est pas dans la pile ; l'exception AppKit traverse Swift et corrompt l'état d'exécution (plantage à la minuterie suivante, 4 essais sur 4).",
+      "remediation": "Ne contraindre que les lignes présentes dans la pile.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/WorkflowTextPanel.swift",
+          "sha256": "756150658782acd7e8952eca3110cae305b3b7af6d2cffe09f86c962c02eeeef",
+          "line": 117
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "NSStackView(views: rows) unique ; ajouts conditionnels limités à ce panneau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Corrigé après le commit audité (6d17d0da), test ou rendu de contrôle, confirmé par l'utilisateur.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fingerprint": "f3311562a0179592e435"
+    },
+    {
+      "rule_id": "UX-BAR-SCROLL",
+      "file": "Sources/RoadieDaemon/TargetOverlayPresenter.swift",
+      "symbol": "TargetSearchDismissal.eventMask",
+      "instance": "no-scroll-wheel",
+      "line": 861,
+      "category": "quality",
+      "title": "Barre sans défilement au trackpad",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Le tap de la barre n'écoute pas scrollWheel : la liste et la grille apps ne défilent pas.",
+      "remediation": "Écouter la molette en recherche et déplacer la sélection.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetOverlayPresenter.swift",
+          "sha256": "c12cb142f2f6242436045f2bf8c38ee502cea6ae1f1941069d081e63d420b099",
+          "line": 861
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Aucun autre tap de la barre ne gère de liste défilante.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Corrigé après le commit audité (6d17d0da), test ou rendu de contrôle, confirmé par l'utilisateur.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fingerprint": "c4d49d69300fbddb4200"
+    },
+    {
+      "rule_id": "UX-SEARCHFIELD-BEZEL",
+      "file": "Sources/RoadieDaemon/WorkflowTextPanel.swift",
+      "symbol": "WorkflowViewStyle.decorate",
+      "instance": "search-field-without-bezel",
+      "line": 376,
+      "category": "quality",
+      "title": "Champ de recherche SF Symbols : loupe sur le texte",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "Le style retire le cadre natif, qui réserve la place de la loupe d'un NSSearchField ; reproduit hors écran.",
+      "remediation": "Garder le cadre natif des champs de recherche.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/WorkflowTextPanel.swift",
+          "sha256": "756150658782acd7e8952eca3110cae305b3b7af6d2cffe09f86c962c02eeeef",
+          "line": 376
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/recherche-symboles-avant.png",
+          "sha256": "84a14d92b46bc69667f67e2c81c95b3072b7e05de1b0bf3b9ad6db5deb87f4e4"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/recherche-symboles-apres.png",
+          "sha256": "62116ade1abe2893b0069f15af26265f16347f0a65b8337378efd2f8b60ef613"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "decorate n'est appelé que sur deux champs, dont un seul de recherche.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Corrigé après le commit audité (6d17d0da), test ou rendu de contrôle, confirmé par l'utilisateur.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/recherche-symboles-avant.png",
+            "sha256": "84a14d92b46bc69667f67e2c81c95b3072b7e05de1b0bf3b9ad6db5deb87f4e4"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/recherche-symboles-apres.png",
+            "sha256": "62116ade1abe2893b0069f15af26265f16347f0a65b8337378efd2f8b60ef613"
+          }
+        ]
+      },
+      "fingerprint": "277d137ef179cef5a672"
+    },
+    {
+      "rule_id": "UX-ALIAS-FEEDBACK",
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "symbol": "TargetModeRuntimeController.performFileAction",
+      "instance": "alias-without-feedback",
+      "line": 1973,
+      "category": "quality",
+      "title": "Créer un alias sans retour visible",
+      "severity": "LOW",
+      "confidence": "high",
+      "status": "fixed",
+      "rationale": "L'alias est créé sur disque mais rien ne le montre à l'utilisateur.",
+      "remediation": "Montrer les alias créés sélectionnés dans le Finder.",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "sha256": "e327f89ce12e39f4f0a5f1aeabbec1d42d41f81150c62cc3f8b122655fcf88ee",
+          "line": 1973
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/essai-utilisateur.md",
+          "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+        }
+      ],
+      "variants": {
+        "status": "done",
+        "rationale": "Seul verbe de fichier sans effet visible ailleurs que sur disque.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Corrigé après le commit audité (6d17d0da), test ou rendu de contrôle, confirmé par l'utilisateur.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/essai-utilisateur.md",
+            "sha256": "23487dd587fbd6cac170175d072f54e3f5d593b5d6daeadecb30d550ff417771"
+          }
+        ]
+      },
+      "fingerprint": "f847454a4c3e5593458e"
+    }
+  ],
+  "suppressed": []
+}
