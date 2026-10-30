@@ -2583,7 +2583,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func finishAction(_ action: LauncherAction) {
         // Verbe choisi à la deuxième étape : il remonte pour ce type d'objet (session 111).
         switch step {
-        case .verbs, .destinations where !finished: launcher.recordVisit(action.verb.rankingKey(for: action.subject), "")
+        case .verbs where !finished, .destinations where !finished: launcher.recordVisit(action.verb.rankingKey(for: action.subject), "")
         default: break
         }
         if action.position == nil, case .target(let target) = action.subject, let verb = Self.searchVerb(action.verb, for: target) {
