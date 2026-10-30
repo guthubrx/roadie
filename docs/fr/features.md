@@ -449,6 +449,12 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
   cible, Maj + étiquette clique, Retour clique. Le lanceur garde son propre raccourci (`search_hotkey`) ;
   `launcher_on_screen = false` (Paramètres > Recherche) lui retire alors la section « À l'écran » et la
   lecture des fenêtres visibles.
+- **Zones récentes** (session 135) : chaque zone cliquée par la recherche à l'écran entre dans un historique
+  (20 au plus, `~/.roadies/zone-history.json`). `zone_history_hotkey` (par exemple `alt+tab` ; vide par
+  défaut) se tient comme ⌘Tab : chaque appui avance dans la liste, Maj en plus recule, relâcher ⌥ ramène la
+  fenêtre de la zone avec sa stage et son bureau, puis clique la zone. Roadie retrouve la zone par son élément
+  s'il existe encore, sinon par sa place dans la fenêtre si celle-ci a gardé sa taille ; sinon la fenêtre
+  revient sans clic. Si la fenêtre est déjà au premier plan, ⌥Tab propose d'abord la zone d'avant.
 - **Fautes de frappe** (session 134) : sans aucune correspondance exacte, la recherche à l'écran admet une
   lettre oubliée, en trop, remplacée ou deux lettres inversées : une faute à partir de 4 lettres, deux à
   partir de 8 (« enregsitrer » trouve « Enregistrer »). La barre l'indique par « ≈ approché ». Dans le

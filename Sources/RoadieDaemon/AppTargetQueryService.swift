@@ -1085,3 +1085,25 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         return Rect(CGRect(origin: point, size: size))
     }
 }
+
+extension LiveAppTargetProvider {
+    /// Clic sur une zone retrouvée par ⌥Tab (session 135) : attend que sa fenêtre soit au premier plan (changement de
+    /// stage ou de bureau compris), relit l'élément et la fenêtre, puis clique sans touche. Rien n'est cliqué si la
+    /// zone ne se retrouve pas (`ZoneNavigation.point`). Appelé hors du fil principal : l'attente le bloquerait.
+    func clickZone(_ record: ZoneRecord, element: AXUIElement?, timeout: TimeInterval = 1.5) -> TargetActionResult {
+        let windowID = CGWindowID(record.windowID)
+        switch waitForFocus(windowID, record.pid, timeout) {
+        case .focused: break
+        case .windowGone: return TargetActionResult(changed: false, message: "zone: window_gone", error: "stale_target")
+        case .timedOut:
+            return TargetActionResult(changed: false, message: "zone: focus_failed \(Self.focusDescription(pid: record.pid))", error: "focus_failed")
+        }
+        let window = axWindowElements(pid: record.pid)[windowID].flatMap { Self.readFrame($0, timeout: 0.3) }
+        let zone = element.flatMap { Self.readFrame($0, timeout: 0.3) }
+        guard let point = ZoneNavigation.point(for: record, elementFrame: zone, windowFrame: window) else {
+            return TargetActionResult(changed: false, message: "zone: unlocated", error: "zone_unlocated")
+        }
+        postClick(at: point, button: .left, down: .leftMouseDown, up: .leftMouseUp, clickCount: 1)
+        return TargetActionResult(changed: true, message: "zone: clicked \(zone == nil ? "relative" : "element")")
+    }
+}

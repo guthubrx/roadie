@@ -22,10 +22,10 @@ struct SettingsCatalogTests {
         // Spec075 : raccourci des verbes et recherche web. Spec088 : deux réglages des workflows. Session 096 : quatre réglages de la barre vide.
         // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
         // terminal, signets, tri, apprentissage, confirmation). Session 108 : douze touches de la barre.
-        // Session 110 : Calculette ouverte par un calcul. Session 111 : ordre appris des verbes. Session 113 : mots-clés in et tags. Session 114 : historique web. Session 115 : réglages dans la barre et touche ⌘,. Session 119 : cinq réglages simples de la barre. Session 121 : icône du sélecteur et sa taille. Session 127 : langue de l'interface. Session 131 : trois modificateurs de Retour et style des fenêtres de workflow. Session 132 : fenêtres flottantes hors du rail. Session 133 : raccourci de la recherche à l'écran. Session 134 : fautes de frappe rattrapées, éléments à l'écran dans le lanceur.
-        #expect(simple.count == 254)
+        // Session 110 : Calculette ouverte par un calcul. Session 111 : ordre appris des verbes. Session 113 : mots-clés in et tags. Session 114 : historique web. Session 115 : réglages dans la barre et touche ⌘,. Session 119 : cinq réglages simples de la barre. Session 121 : icône du sélecteur et sa taille. Session 127 : langue de l'interface. Session 131 : trois modificateurs de Retour et style des fenêtres de workflow. Session 132 : fenêtres flottantes hors du rail. Session 133 : raccourci de la recherche à l'écran. Session 134 : fautes de frappe rattrapées, éléments à l'écran dans le lanceur. Session 135 : raccourci des zones récentes.
+        #expect(simple.count == 255)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 174)
+        #expect(simple.count - railSimple.count == 175)
     }
 
     @Test
@@ -168,7 +168,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 254)
+        #expect(expected.count == 255)
     }
 
     // MARK: - Défauts

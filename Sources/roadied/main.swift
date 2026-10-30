@@ -27,6 +27,8 @@ var targetModeRuntimeController: TargetModeRuntimeController?
 var targetSearchHotkey: TargetSearchHotkey?
 var targetActionsHotkey: TargetSearchHotkey?
 var targetScreenSearchHotkey: TargetSearchHotkey?
+var zoneSwitcher: ZoneSwitcherController?
+var zoneHotkeys: [TargetSearchHotkey] = []
 var overviewController: OverviewController?
 var windowSwitcherController: WindowSwitcherController?
 var windowSwitcherBridge: WindowSwitcherRuntimeBridge?
@@ -238,6 +240,20 @@ func startTargetModeComponent() {
     }
     targetScreenSearchHotkey?.start()
     ShutdownRegistry.register { targetScreenSearchHotkey?.stop() }
+    // Session 135 : historique des zones, tenu comme ⌘Tab ; la même touche avec Maj recule.
+    zoneSwitcher = ZoneSwitcherController(service: service)
+    zoneHotkeys = [(false, OSType(0x5244_5A46)), (true, OSType(0x5244_5A42))].map { reverse, signature in
+        TargetSearchHotkey(configLoader: {
+            var config = ConfigReloadService.shared.currentConfig().experimental.targetMode
+            config.searchHotkey = ZoneNavigation.hotkey(config.zoneHistoryHotkey, reverse: reverse)
+            return config
+        }, signature: signature, eventType: reverse ? "target_mode.zone_back_hotkey" : "target_mode.zone_hotkey",
+           settingsIDs: ["target_mode.zone_history_hotkey", "target_mode.enabled", "target_mode.overlay_enabled", "*"]) {
+            zoneSwitcher?.press(reverse: reverse)
+        }
+    }
+    zoneHotkeys.forEach { $0.start() }
+    ShutdownRegistry.register { zoneHotkeys.forEach { $0.stop() } }
 }
 
 @MainActor

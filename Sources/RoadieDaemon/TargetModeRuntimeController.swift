@@ -534,7 +534,12 @@ public final class TargetModeRuntimeController: NSObject {
                     self.focus(WindowID(rawValue: id))
                     return TargetActionResult(changed: true, message: "launcher: window \(id)", target: target)
                 }
-                return targets.activate(target: target, action: verb)
+                let result = targets.activate(target: target, action: verb)
+                // Session 135 : une zone cliquée rejoint l'historique de ⌥Tab.
+                if result.changed, target.source == .app, [.click, .doubleClick, .rightClick, .commandClick].contains(verb) {
+                    self?.rememberZone(target, snapshot: snapshot)
+                }
+                return result
             },
             // Recherche à l'écran (session 133) : ni liste ni index des applications.
             launcher: command.name == "targets.screen" ? .disabled
@@ -1241,6 +1246,21 @@ public final class TargetModeRuntimeController: NSObject {
         Task { @MainActor in
             if let entry = await switcher.load().entries.first(where: { $0.id == window }) { _ = switcher.activate(entry) }
         }
+    }
+
+    /// Zone cliquée (session 135) : fenêtre, texte, position relative et élément d'accessibilité, pour ⌥Tab. O(w).
+    private func rememberZone(_ target: RoadieTarget, snapshot: DaemonSnapshot) {
+        guard let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target),
+              let window = snapshot.windows.first(where: { $0.window.id.rawValue == windowID })?.window,
+              let zone = target.clickFrame ?? target.frame else { return }
+        let frame = window.frame
+        let record = ZoneRecord(appName: window.appName, bundleID: window.bundleID, pid: pid, windowID: windowID,
+                                windowTitle: window.title, title: target.title.isEmpty ? target.subtitle : target.title,
+                                relative: Rect(x: zone.x - frame.x, y: zone.y - frame.y, width: zone.width, height: zone.height),
+                                windowWidth: frame.width, windowHeight: frame.height, date: Date())
+        let entry = AppTargetElementRegistry.shared.entry(for: target.id)
+        ZoneHistory.shared.record(record, element: entry?.clickElement ?? entry?.element)
+        events.append(RoadieEvent(type: "zone.recorded", details: ["app": window.appName, "count": String(ZoneHistory.shared.records.count)]))
     }
 
     /// ⌥ Retour sur une application : sa fenêtre préférée rejoint la stage active et passe devant ;

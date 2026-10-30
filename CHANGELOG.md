@@ -26,6 +26,8 @@ jour et les limites connues ; les README décrivent la version courante.
 - Fautes de frappe rattrapées (`typo_max_errors`) : à l'écran sans correspondance exacte, et dans une section
   « Vouliez-vous dire » du lanceur, toujours après les correspondances exactes.
 - `launcher_on_screen` : le lanceur peut ne plus lire les éléments à l'écran.
+- Zones récentes (`zone_history_hotkey`, ⌥Tab) : revenir aux zones cliquées par la recherche à l'écran, même
+  dans une autre stage ou sur un autre bureau, comme ⌘Tab pour les fenêtres.
 
 ### Corrections
 
