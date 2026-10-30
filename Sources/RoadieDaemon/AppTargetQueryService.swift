@@ -995,10 +995,10 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         let upEvent = CGEvent(mouseEventSource: nil, mouseType: up, mouseCursorPosition: point, mouseButton: button)
         downEvent?.setIntegerValueField(.mouseEventClickState, value: clickCount)
         upEvent?.setIntegerValueField(.mouseEventClickState, value: clickCount)
-        if !flags.isEmpty {
-            downEvent?.flags = flags
-            upEvent?.flags = flags
-        }
+        // Toujours fixées, vides pour un clic simple : sans cela, le clic reprenait les touches tenues à cet instant
+        // (Maj de Maj + étiquette), et un clic devenait un Maj + clic (essai du 30 octobre 2026).
+        downEvent?.flags = flags
+        upEvent?.flags = flags
         if let downEvent { postEvent(downEvent) }
         if let upEvent { postEvent(upEvent) }
     }

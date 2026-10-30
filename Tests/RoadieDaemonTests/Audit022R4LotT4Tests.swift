@@ -54,6 +54,9 @@ struct Audit022R4LotT4Tests {
         #expect(asked.values == ["77/4242"])
         #expect(result.changed)
         #expect(spy.events.map(\.type) == [.leftMouseDown, .leftMouseUp])
+        // Session 134 : un clic simple ne porte aucune touche, même si Maj est encore tenue (Maj + étiquette).
+        let modifiers: CGEventFlags = [.maskShift, .maskCommand, .maskAlternate, .maskControl]
+        #expect(spy.events.allSatisfy { $0.flags.intersection(modifiers).isEmpty })
     }
 
     @Test

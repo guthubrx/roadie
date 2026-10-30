@@ -34,6 +34,7 @@ jour et les limites connues ; les README décrivent la version courante.
 - Le verbe choisi à l'étape des verbes n'est plus compté après la fermeture de la barre.
 - Clic sur un élément à l'écran refusé juste après la barre (l'accessibilité la voyait encore au premier
   plan) : la fenêtre visée en haut de la pile suffit désormais.
+- Maj + étiquette envoyait un Maj + clic (la touche encore tenue) : un clic simple ne porte plus de touche.
 
 ## 0.11.1 - 2026-10-29
 
