@@ -8,7 +8,7 @@ jour et les limites connues ; les README décrivent la version courante.
 ### Nouveautés
 
 - Actions d'Alfred dans la barre : sur un ou plusieurs fichiers (copier, copier ou déplacer vers un dossier, en
-  remplaçant ou non, ouvrir avec, e-mail, corbeille, alias, informations avec empreinte SHA-256, étiquettes,
+  remplaçant ou non, ouvrir avec, e-mail, corbeille, alias, fenêtre d'informations du Finder, étiquettes,
   parcourir, terminal, contenu d'un paquet), sur un texte tapé ou sélectionné (copier, web, adresses extraites,
   e-mail, grand texte), sur un onglet (fermer, copier l'adresse, nouvelle fenêtre) et sur une application
   (relancer, quitter les autres, épingler dans Apps). Actions universelles des workflows sur textes et adresses.

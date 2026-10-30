@@ -6,7 +6,6 @@
   `webSearch`, `openURL`, `extractURLs`, `emailText`, `largeType` ; onglet `closeTab`, `copyURL`, `newWindowTab` ;
   application `relaunch`, `quitOthers` ; workflow `universal(entry)` (actions universelles).
 - **LauncherDestination.Kind** (ajouts) : `.folder(path)`, `.application(path)`, `.tag(name)`.
-- **FileInfo** : type (UTI, MIME), taille, création, modification, SHA-256.
 - **ReturnModifiers** : effet de ⌘, ⌥, ⌃ (`new-stage`, `here`, `send`, `web`, `copy`, `reveal`, `quicklook`,
   `verbs`).
 - **AlfredSystemCommand** : numéro → commande (table R2) ; **AlfredMusicCommand** : numéro → commande (table R3).

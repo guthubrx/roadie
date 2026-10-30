@@ -69,8 +69,8 @@ par `NSDataDetector` (liens et e-mails).
 
 API système existantes, sans dépendance : `FileManager.copyItem`/`moveItem`/`trashItem`, alias par
 `URL.bookmarkData(options: .suitableForBookmarkFile)` puis `URL.writeBookmarkData`, étiquettes par
-`URLResourceValues.tagNames`, informations par `URLResourceValues` (type, taille, dates) et SHA-256 par CryptoKit
-en lecture par blocs, presse-papiers par `NSPasteboard.writeObjects([URL])`, e-mail par
+`URLResourceValues.tagNames`, informations par la fenêtre ⌘I du Finder (AppleScript `open information window`,
+choix du 30 octobre 2026 : la fiche Roadie, avec SHA-256, faisait moins bien que le Finder), presse-papiers par `NSPasteboard.writeObjects([URL])`, e-mail par
 `NSSharingService(named: .composeEmail)`, ouvrir avec par `NSWorkspace.open(_:withApplicationAt:)`, terminal par
 `LauncherTerminal` (réutilisé). Destinations nouvelles : dossiers (Spotlight, dossiers récents et favoris du
 Finder) et applications (catalogue existant). Refus si la destination existe déjà, sauf verbe « en remplaçant ».

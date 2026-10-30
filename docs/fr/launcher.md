@@ -82,7 +82,7 @@ Les actions d'Alfred sont aussi là. Une application se relance, quitte toutes l
 Un fichier (ou plusieurs, en sélection multiple) se copie dans le presse-papiers, se copie ou se déplace vers un
 dossier (tapez un chemin, ou choisissez un dossier habituel ou récent ; « en remplaçant » met d'abord l'ancien à
 la corbeille), s'ouvre avec une autre application, part par e-mail, va à la corbeille, reçoit un alias, une
-étiquette du Finder ou ses informations (type, taille, dates, empreinte SHA-256). Un dossier se parcourt dans la
+étiquette du Finder, ou ouvre sa fenêtre d'informations du Finder (⌘I). Un dossier se parcourt dans la
 barre ou ouvre un terminal ; un paquet montre son contenu. Un texte (Tab sur la recherche web, ou Capslock + Maj
 + F avec un texte sélectionné) se copie, se cherche sur le web, part par e-mail, s'affiche en grand ou donne ses
 adresses web et e-mail, chacune avec ses verbes. Un onglet ouvert se ferme, donne son adresse ou s'ouvre dans une

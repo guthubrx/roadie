@@ -11,8 +11,8 @@ Format : `- [ ] Tnnn [Pn] [USn] description (fichiers) - vérification`. Tests a
 ## Phase 2 - US1 Fichiers (P1)
 
 - [x] T002 [P1] [US1] Tests des opérations de fichier sur dossiers temporaires : copier vers, déplacer vers, refus si
-  le nom existe, « en remplaçant » (ancien à la corbeille), corbeille, alias, informations (type, taille, dates,
-  SHA-256), étiquettes (`Tests/RoadieDaemonTests/Spec131FileOperationsTests.swift`) - échouent avant T003.
+  le nom existe, « en remplaçant » (ancien à la corbeille), corbeille, alias, informations (fenêtre ⌘I du
+  Finder depuis le 30 octobre 2026), étiquettes (`Tests/RoadieDaemonTests/Spec131FileOperationsTests.swift`) - échouent avant T003.
 - [x] T003 [P1] [US1] `LauncherFileOperations` : opérations pures et sûres, une ou plusieurs sources
   (`Sources/RoadieDaemon/LauncherFileOperations.swift`) - T002 réussit.
 - [x] T004 [P1] [US1] Verbes de fichier proposés (`LauncherVerb.verbs(for: .file)`) et en sélection multiple

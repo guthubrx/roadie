@@ -1,8 +1,6 @@
 import AppKit
-import CryptoKit
 import Foundation
 import RoadieCore
-import UniformTypeIdentifiers
 
 /// Opérations des verbes de fichier de la barre (session 131), comme les actions d'Alfred : copier ou déplacer vers
 /// un dossier, corbeille, alias, informations, étiquettes. Rien n'est écrasé : « en remplaçant » met d'abord
@@ -77,73 +75,10 @@ enum LauncherFileOperations {
         return candidate.path
     }
 
-    /// Fiche d'un élément : type, taille, dates et empreinte SHA-256 (fichier ordinaire seulement).
-    struct Info: Equatable {
-        var kind: String
-        var typeIdentifier: String
-        var mimeType: String?
-        var size: Int64
-        var created: Date?
-        var modified: Date?
-        var sha256: String?
-
-        /// Lignes de la fiche sous son en-tête (le type y figure déjà), chacune copiable : taille et dates d'abord,
-        /// identifiants techniques ensuite. O(1).
-        var lines: [(label: String, value: String)] {
-            let format = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
-            let bytes = NumberFormatter.localizedString(from: NSNumber(value: size), number: .decimal)
-            // Nombre exact d'octets seulement s'il diffère de l'arrondi (« 849 octets » n'est pas répété).
-            var lines = [(tr("Taille", "Size"), size < 1_000 ? format : "\(format) (\(bytes) " + tr("octets", "bytes") + ")")]
-            let dates = DateFormatter()
-            dates.dateStyle = .medium
-            dates.timeStyle = .short
-            if let created { lines.append((tr("Créé", "Created"), dates.string(from: created))) }
-            if let modified { lines.append((tr("Modifié", "Modified"), dates.string(from: modified))) }
-            lines.append(("UTI", typeIdentifier))
-            if let mimeType { lines.append(("MIME", mimeType)) }
-            if let sha256 { lines.append(("SHA-256", sha256)) }
-            return lines
-        }
-    }
-
-    /// Fiche d'un élément ; taille d'un dossier : somme de ses fichiers, 50 000 au plus. O(f) pour un dossier,
-    /// O(octets) pour l'empreinte d'un fichier, lu par blocs de 1 Mio.
-    static func info(_ path: String, files: FileManager = .default) throws -> Info {
-        let url = URL(fileURLWithPath: path)
-        let values = try url.resourceValues(forKeys: [.contentTypeKey, .localizedTypeDescriptionKey, .fileSizeKey,
-                                                      .creationDateKey, .contentModificationDateKey, .isDirectoryKey])
-        let type = values.contentType ?? .data
-        var size = Int64(values.fileSize ?? 0)
-        var hash: String?
-        if values.isDirectory == true {
-            size = folderSize(url, files: files)
-        } else {
-            hash = try sha256(path)
-        }
-        return Info(kind: values.localizedTypeDescription ?? type.identifier, typeIdentifier: type.identifier,
-                    mimeType: type.preferredMIMEType, size: size, created: values.creationDate,
-                    modified: values.contentModificationDate, sha256: hash)
-    }
-
-    private static func folderSize(_ url: URL, files: FileManager) -> Int64 {
-        guard let walker = files.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
-        var total: Int64 = 0
-        var count = 0
-        for case let item as URL in walker {
-            count += 1
-            if count > 50_000 { break }
-            total += Int64((try? item.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        }
-        return total
-    }
-
-    /// Empreinte SHA-256 en hexadécimal, lue par blocs. O(octets).
-    static func sha256(_ path: String) throws -> String {
-        let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
-        defer { try? handle.close() }
-        var hasher = SHA256()
-        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty { hasher.update(data: chunk) }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    /// Script qui ouvre la fenêtre « Lire les informations » du Finder pour chaque élément, comme ⌘I. O(s).
+    static func finderInfoScript(_ paths: [String]) -> String {
+        let windows = paths.map { "open information window of (POSIX file \"\($0.applescriptEscaped)\" as alias)" }
+        return (["tell application \"Finder\"", "activate"] + windows + ["end tell"]).joined(separator: "\n")
     }
 
     /// Étiquettes du Finder d'un élément. O(1).

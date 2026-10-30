@@ -77,27 +77,11 @@ struct Spec131FileOperationsTests {
         #expect(FileManager.default.fileExists(atPath: alias) && alias != second)
         #expect((try? URL(resolvingAliasFileAt: URL(fileURLWithPath: alias)))?.standardizedFileURL.path == c.standardizedFileURL.path)
 
-        let info = try LauncherFileOperations.info(c.path)
-        #expect(info.size == 3)
-        #expect(info.sha256 == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
-        #expect(info.typeIdentifier == "public.plain-text")
-        #expect(info.lines.contains { $0.label == "SHA-256" })
-        #expect(try LauncherFileOperations.info(box.source.path).sha256 == nil)
-
-    }
-
-    /// Fiche : le type est dans l'en-tête, pas dans les lignes ; hauteur ajustée au contenu ; fermeture. O(1).
-    @MainActor @Test func infoPanelFitsItsContent() throws {
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("spec131-info-\(UUID().uuidString).txt")
-        defer { try? FileManager.default.removeItem(at: file) }
-        try "abc".write(to: file, atomically: true, encoding: .utf8)
-        let info = try LauncherFileOperations.info(file.path)
-        #expect(!info.lines.contains { $0.value == info.kind })
-        FileInfoPanel.show(path: file.path, info: info)
-        let panel = try #require(FileInfoPanel.current?.panel)
-        #expect(panel.isVisible && panel.frame.height > 200 && panel.frame.height < 480)
-        FileInfoPanel.current?.close()
-        #expect(!panel.isVisible && FileInfoPanel.current == nil)
+        // Informations : la fenêtre ⌘I du Finder, une par élément ; guillemets et barres obliques inverses échappés.
+        let script = LauncherFileOperations.finderInfoScript(["/tmp/a \"b\".txt", "/tmp/c\\d"])
+        #expect(script.hasPrefix("tell application \"Finder\"\nactivate\n") && script.hasSuffix("\nend tell"))
+        #expect(script.contains(#"open information window of (POSIX file "/tmp/a \"b\".txt" as alias)"#))
+        #expect(script.contains(#"(POSIX file "/tmp/c\\d" as alias)"#))
     }
 
     @Test func tagsToggleLikeACheckbox() throws {

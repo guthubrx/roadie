@@ -30,8 +30,8 @@ sans fin ; les choix écartés restent visibles avec leur raison.
 L'utilisateur trouve un fichier, ouvre ses verbes (Tab ou →) et peut : le copier dans le presse-papiers (collable
 dans le Finder), le copier ou le déplacer vers un dossier choisi à l'étape suivante (en remplaçant si un fichier
 du même nom existe, après confirmation), l'ouvrir avec une application choisie, l'envoyer par e-mail en pièce
-jointe, le mettre à la corbeille, créer un alias à côté, voir ses informations (type, taille, dates, empreinte
-SHA-256 copiable), ajouter ou retirer une étiquette du Finder, parcourir un dossier dans la barre, ouvrir un
+jointe, le mettre à la corbeille, créer un alias à côté, ouvrir sa fenêtre « Lire les informations » du Finder (⌘I ;
+décision du 30 octobre 2026, une fiche Roadie faisait moins bien), ajouter ou retirer une étiquette du Finder, parcourir un dossier dans la barre, ouvrir un
 terminal dans son dossier, montrer le contenu d'un paquet. Les verbes s'appliquent aussi à une sélection
 multiple de fichiers.
 

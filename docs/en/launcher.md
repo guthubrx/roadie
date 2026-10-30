@@ -77,7 +77,7 @@ destination: stage, desktop, display or "New stage".
 Alfred's actions are there too. An app can be relaunched, quit all others, or be pinned in Apps. A file (or
 several, with multiple selection) can be copied to the clipboard, copied or moved to a folder (type a path, or
 pick a usual or recent folder; "replacing" first moves the old one to the Trash), opened with another app, sent by
-email, moved to the Trash, given an alias, a Finder tag, or shown with its info (type, size, dates, SHA-256). A
+email, moved to the Trash, given an alias or a Finder tag, or shown in the Finder's Get Info window (⌘I). A
 folder can be browsed in the bar or opened in a terminal; a package shows its contents. Text (Tab on the web
 search, or Capslock + Shift + F with selected text) can be copied, searched on the web, sent by email, shown in
 large type, or split into its web and email addresses, each with its own verbs. An open tab can be closed, have

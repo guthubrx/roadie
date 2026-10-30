@@ -1975,8 +1975,12 @@ public final class TargetModeRuntimeController: NSObject {
             // Retour visible (essai du 29 octobre 2026) : les alias créés sont montrés sélectionnés dans le Finder.
             if !report.done.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(report.done.map { URL(fileURLWithPath: $0) }) }
         case .info:
-            guard let path = paths.first else { return refused(label, "file") }
-            showInfo(path)
+            // La fenêtre « Lire les informations » du Finder (⌘I), complète et modifiable (décision du 30 octobre 2026).
+            let title = verb.title, script = LauncherFileOperations.finderInfoScript(paths)
+            Task {
+                let answer = await LauncherBrowsers.run(LauncherSystemCommand.guarded(script), timeout: 10)
+                if let message = LauncherSystemCommand.failureMessage(title, answer: answer) { notifyFailure(message) }
+            }
         case .addTag:
             guard case .tag(let tag)? = destination?.kind else { return refused(label, "destination") }
             report = LauncherFileOperations.toggleTag(tag, on: paths)
@@ -2002,14 +2006,6 @@ public final class TargetModeRuntimeController: NSObject {
             return TargetActionResult(changed: !report.done.isEmpty, message: "\(label): \(report.failures.count) failed", error: "file_action_failed")
         }
         return TargetActionResult(changed: true, message: "\(label): \(report.done.count)")
-    }
-
-    /// Fiche d'un élément (`FileInfoPanel`), lue hors du fil principal. O(octets) pour l'empreinte.
-    private func showInfo(_ path: String) {
-        Task.detached(priority: .userInitiated) {
-            let info = try? LauncherFileOperations.info(path)
-            await MainActor.run { FileInfoPanel.show(path: path, info: info) }
-        }
     }
 
     /// Verbes d'un texte (tapé ou sélectionné). « Extraire les adresses » est traité par la barre, qui reste ouverte.

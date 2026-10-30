@@ -13,7 +13,7 @@ barre ; trois présentations nouvelles (Apps, SF Symbols, menus) ; styles et tab
 ## Contexte technique
 
 - **Langage** : Swift 6 (outils SwiftPM 6.0), macOS 14 minimum, arm64.
-- **Dépendances** : aucune nouvelle. AppKit, CoreServices (dictionnaire), CryptoKit (SHA-256), UniformTypeIdentifiers,
+- **Dépendances** : aucune nouvelle. AppKit, CoreServices (dictionnaire),
   Accessibilité (menus), AppleScript par `osascript` (Musique, onglets, mode sombre), `screencapture`, `shortcuts`.
 - **Stockage** : épinglages d'Apps dans un fichier du lanceur (`TestEnvironment.launcherFile`) ; réglages dans
   `roadies.toml` (`[experimental.target_mode]`).
