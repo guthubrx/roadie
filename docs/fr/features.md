@@ -450,7 +450,7 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
   `launcher_on_screen = false` (Paramètres > Recherche) lui retire alors la section « À l'écran » et la
   lecture des fenêtres visibles.
 - **Zones récentes** (sessions 135 et 136) : chaque zone cliquée par la recherche à l'écran, et chaque clic
-  ordinaire dans une fenêtre, devient une zone avec sa photo (`~/.roadies/zone-history.json`,
+  ordinaire dans une fenêtre, devient une zone avec sa photo, sans entourage (`~/.roadies/zone-history.json`,
   `~/.roadies/zone-thumbs/`). Un profil du sélecteur avec `source = "zones"` (par exemple `hotkey = "alt+tab"`)
   les montre exactement comme ⌘Tab montre les fenêtres : présentations, styles, flèches, souris, Échap,
   recherche, regroupement par bureau et stage. Valider ramène la fenêtre de la zone (stage et bureau compris) et

@@ -409,10 +409,10 @@ public final class WindowSwitcherController {
         let members = entries.map(Self.member(for:))
         var images: [WindowID: NSImage]
         if !session.zones.isEmpty {
-            // Zones : leur photo entourée en vignettes, sinon l'icône de l'application.
+            // Zones : leur photo en vignettes, sinon l'icône de l'application.
             images = Self.appIcons(for: entries)
             if session.appearance.style == .thumbnails {
-                for entry in entries { if let photo = session.zones[entry.id].flatMap({ ZoneThumbnails.shared.framedImage(for: $0.record) }) { images[entry.id] = photo } }
+                for entry in entries { if let photo = session.zones[entry.id].flatMap({ ZoneThumbnails.shared.photo(for: $0.record) }) { images[entry.id] = photo } }
             }
         } else if session.appearance.style == .thumbnails {
             images = thumbnails.images(for: members)
@@ -432,7 +432,7 @@ public final class WindowSwitcherController {
                 ? tr("Aucune zone récente : cliquez des endroits, ou utilisez la recherche à l'écran", "No recent zones: click places, or use on-screen search")
                 : tr("Aucune fenêtre dans ce contexte", "No windows here"),
             iconOnlyIDs: session.appearance.style != .thumbnails ? []
-                : !session.zones.isEmpty ? Set(entries.lazy.filter { session.zones[$0.id].flatMap { ZoneThumbnails.shared.framedImage(for: $0.record) } == nil }.map(\.id))
+                : !session.zones.isEmpty ? Set(entries.lazy.filter { session.zones[$0.id].flatMap { ZoneThumbnails.shared.photo(for: $0.record) } == nil }.map(\.id))
                 : Set(entries.lazy.filter { !self.thumbnails.hasCapturedImage(for: $0.id) }.map(\.id))
         )
         if session.appearance.style == .thumbnails, session.zones.isEmpty {
@@ -635,7 +635,7 @@ public final class WindowSwitcherController {
 
     private func previewImage(for id: WindowID?) -> NSImage? {
         guard let id else { return nil }
-        if let zone = session?.zones[id] { return ZoneThumbnails.shared.framedImage(for: zone.record) }
+        if let zone = session?.zones[id] { return ZoneThumbnails.shared.photo(for: zone.record) }
         return thumbnails.cachedImage(for: id)
     }
 

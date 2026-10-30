@@ -50,8 +50,8 @@ struct Spec135ZoneHistoryTests {
         #expect(ZoneHistory(path: path).records.count == 19)
     }
 
-    /// Photo : 300 × 180 points autour de la zone, gardée dans la fenêtre ; zone entourée dans la photo.
-    @MainActor @Test func photoCropsAroundTheZoneAndRingsIt() {
+    /// Photo : 300 × 180 points autour de la zone, gardée dans la fenêtre.
+    @MainActor @Test func photoCropsAroundTheZone() {
         let window = CGSize(width: 1200, height: 800)
         #expect(ZoneThumbnails.crop(zone: CGRect(x: 580, y: 390, width: 40, height: 20), windowSize: window, area: CGSize(width: 440, height: 260))
                 == CGRect(x: 380, y: 270, width: 440, height: 260))
@@ -59,13 +59,6 @@ struct Spec135ZoneHistoryTests {
         #expect(ZoneThumbnails.crop(zone: CGRect(x: 10, y: 5, width: 40, height: 20), windowSize: window).origin == .zero)
         #expect(ZoneThumbnails.crop(zone: CGRect(x: 1180, y: 790, width: 10, height: 5), windowSize: window).maxX == 1200)
         #expect(ZoneThumbnails.crop(zone: .zero, windowSize: CGSize(width: 250, height: 150)) == CGRect(x: 0, y: 0, width: 250, height: 150))
-        // Entourage : axe vertical retourné, 3 points de marge.
-        #expect(ZoneThumbnails.ring(zone: CGRect(x: 580, y: 390, width: 40, height: 20), crop: CGRect(x: 380, y: 270, width: 440, height: 260))
-                == CGRect(x: 197, y: 117, width: 46, height: 26))
-        // Ligne de T3 Code presque aussi large que la photo (essai) : l'entourage reste dans la photo.
-        let crop = CGRect(x: 9.5, y: 556, width: 300, height: 180)
-        let wide = ZoneThumbnails.ring(zone: CGRect(x: 10, y: 646, width: 439, height: 80), crop: crop)
-        #expect(wide.map { CGRect(origin: .zero, size: crop.size).contains($0) } == true)
         #expect(ZoneThumbnails.fileName("299224|12|-3") == "299224-12--3.png")
     }
 }

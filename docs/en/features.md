@@ -435,7 +435,7 @@ letter filters the targets; Return clicks the green target.
   `launcher_on_screen = false` (Settings > Search) then removes its "On screen" section and the reading of
   visible windows.
 - **Recent zones** (sessions 135 and 136): every zone clicked by on-screen search, and every ordinary click in
-  a window, becomes a zone with its photo (`~/.roadies/zone-history.json`, `~/.roadies/zone-thumbs/`). A switcher
+  a window, becomes a zone with its photo, unringed (`~/.roadies/zone-history.json`, `~/.roadies/zone-thumbs/`). A switcher
   profile with `source = "zones"` (for example `hotkey = "alt+tab"`) shows them exactly as ⌘Tab shows windows:
   presentations, styles, arrows, mouse, Escape, search, grouping by desktop and stage. Confirming brings the
   zone's window back (stage and desktop included) and clicks the zone, through its element if it still exists,

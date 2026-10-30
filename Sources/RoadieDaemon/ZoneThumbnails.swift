@@ -53,28 +53,10 @@ final class ZoneThumbnails {
         return image
     }
 
-    /// Photo d'une zone avec la zone entourée en jaune (sélecteur, session 136) ; nil sans photo. O(1).
-    func framedImage(for record: ZoneRecord) -> NSImage? {
-        guard let photo = image(for: record.key), let crop = record.thumbnailCrop?.cgRect else { return nil }
-        guard let ring = Self.ring(zone: record.relative.cgRect, crop: crop) else { return photo }
-        return NSImage(size: crop.size, flipped: false) { bounds in
-            photo.draw(in: bounds)
-            let path = NSBezierPath(roundedRect: ring, xRadius: 4, yRadius: 4)
-            path.lineWidth = 2
-            NSColor.systemYellow.setStroke()
-            path.stroke()
-            return true
-        }
-    }
-
-    /// Entourage de la zone dans la photo, en points de la photo (origine en bas à gauche), avec 3 points de marge,
-    /// gardé dans la photo : une zone aussi large qu'elle ne laissait voir que deux traits (essai du 30 octobre 2026).
-    /// nil si la zone est hors de la photo. O(1).
-    static func ring(zone: CGRect, crop: CGRect) -> CGRect? {
-        let local = zone.offsetBy(dx: -crop.minX, dy: -crop.minY)
-        let ring = CGRect(x: local.minX, y: crop.height - local.maxY, width: local.width, height: local.height).insetBy(dx: -3, dy: -3)
-        let kept = ring.intersection(CGRect(origin: .zero, size: crop.size).insetBy(dx: 1, dy: 1))
-        return kept.isNull || kept.isEmpty ? nil : kept
+    /// Photo d'une zone pour le sélecteur, sans entourage (demande du 30 octobre 2026 : la bordure reste sur la vraie
+    /// application) ; nil sans photo. O(1).
+    func photo(for record: ZoneRecord) -> NSImage? {
+        record.thumbnailCrop == nil ? nil : image(for: record.key)
     }
 
     func remove(_ key: String) {

@@ -6,3 +6,5 @@
 - `scripts/test --no-parallel` : 2 348 tests dans 350 suites réussis.
 - Roadie installé, santé 5/5, signature roadied-cert, configuration valide.
 - Non vérifié : survol et clics réels (clics simulés refusés sur ce poste) ; aucun diaporama.
+- Demande du 30 octobre 2026 : photos des zones affichées sans entourage jaune dans le sélecteur (`photo(for:)`) ;
+  la bordure reste sur la vraie application. Dessin dans la photo (`framedImage`, `ring`) et son test retirés.
