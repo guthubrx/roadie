@@ -29,3 +29,28 @@ enum SwitcherNavigation {
         setting == "always" || (setting != "never" && automatic)
     }
 }
+
+/// Maj seule pendant le sélecteur (session 139), comme dans AltTab : relâchée sans pas entre-temps (Tab, flèche),
+/// elle recule d'une carte. Maj + Tab garde son seul recul : un pas pendant que Maj est tenue annule le sien.
+struct SwitcherShiftTap: Equatable {
+    private var down = false
+    private var stepped = false
+
+    /// `initiallyDown` : Maj déjà tenue à l'ouverture (⌘⇧Tab), qui compte comme un pas.
+    init(initiallyDown: Bool = false) {
+        down = initiallyDown
+        stepped = initiallyDown
+    }
+
+    /// Un pas du sélecteur pendant que Maj est tenue. O(1).
+    mutating func noteStep() {
+        if down { stepped = true }
+    }
+
+    /// État de Maj relevé ; vrai quand Maj vient d'être relâchée seule. O(1).
+    mutating func update(shift: Bool) -> Bool {
+        defer { down = shift }
+        if shift, !down { stepped = false }
+        return !shift && down && !stepped
+    }
+}

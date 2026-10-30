@@ -471,32 +471,118 @@ struct Spec124DocScreenshots {
         try await eachLanguage { try await zoneSwitcherImage() }
     }
 
-    /// Photo d'une zone : 300 × 180 points découpés dans la fausse fenêtre, autour de `origin` (coin haut gauche).
-    private static func zonePhoto(_ look: Look, at origin: CGPoint) -> NSImage {
-        let window = mock(look)
-        let crop = CGSize(width: 600, height: 360)
-        return NSImage(size: CGSize(width: 300, height: 180), flipped: false) { rect in
-            window.draw(in: rect, from: CGRect(x: origin.x, y: 800 - origin.y - crop.height, width: crop.width, height: crop.height),
-                        operation: .copy, fraction: 1)
+    /// Photo d'une zone : petite scène inventée, avec du texte lisible (session 139 : les blocs gris ne se comprenaient
+    /// pas), à l'échelle d'une vraie photo de zone (300 × 180 points). Aucun contenu réel.
+    private enum ZoneScene { case booking, inbox, agenda, code, board, note }
+
+    private static func zonePhoto(_ scene: ZoneScene) -> NSImage {
+        NSImage(size: CGSize(width: 300, height: 180), flipped: true) { rect in
+            func text(_ string: String, _ x: CGFloat, _ y: CGFloat, size: CGFloat = 12, weight: NSFont.Weight = .regular,
+                      color: NSColor = .black, mono: Bool = false) {
+                let font = mono ? NSFont.monospacedSystemFont(ofSize: size, weight: weight) : NSFont.systemFont(ofSize: size, weight: weight)
+                (string as NSString).draw(at: CGPoint(x: x, y: y), withAttributes: [.font: font, .foregroundColor: color])
+            }
+            func box(_ frame: CGRect, _ color: NSColor, radius: CGFloat = 6) {
+                color.setFill()
+                NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius).fill()
+            }
+            let grey = NSColor(calibratedWhite: 0.45, alpha: 1)
+            switch scene {
+            case .booking:
+                box(rect, NSColor(calibratedWhite: 0.97, alpha: 1), radius: 0)
+                box(CGRect(x: 10, y: 8, width: 280, height: 22), .white, radius: 8)
+                text("voyages-exemple.fr/lisbonne", 22, 11, size: 11, color: grey)
+                box(CGRect(x: 10, y: 40, width: 280, height: 132), .white, radius: 10)
+                text(tr("Lisbonne · 3 nuits", "Lisbon · 3 nights"), 22, 50, size: 15, weight: .semibold)
+                text(tr("Hôtel Alfama · 12 au 15 nov.", "Alfama Hotel · Nov 12–15"), 22, 72, size: 11, color: grey)
+                text("412 €", 22, 96, size: 20, weight: .bold, color: NSColor.systemGreen.blended(withFraction: 0.3, of: .black) ?? .systemGreen)
+                box(CGRect(x: 168, y: 126, width: 110, height: 34), .systemBlue, radius: 9)
+                text(tr("Réserver", "Book"), 194, 134, size: 14, weight: .semibold, color: .white)
+            case .inbox:
+                box(rect, .white, radius: 0)
+                let rows = [(tr("Banque Exemple", "Example Bank"), tr("Relevé d'octobre", "October statement"), false),
+                            ("Léa Martin", tr("Photos du week-end", "Weekend photos"), true),
+                            (tr("Équipe projet", "Project team"), tr("Ordre du jour de jeudi", "Thursday's agenda"), false)]
+                for (index, row) in rows.enumerated() {
+                    let y = 8 + CGFloat(index) * 56
+                    if row.2 { box(CGRect(x: 6, y: y, width: 288, height: 52), .systemBlue, radius: 8) }
+                    let main: NSColor = row.2 ? .white : .black, soft: NSColor = row.2 ? NSColor(calibratedWhite: 0.92, alpha: 1) : grey
+                    text(row.0, 16, y + 7, size: 13, weight: .semibold, color: main)
+                    text(row.1, 16, y + 27, size: 12, color: soft)
+                    text(tr("9 h 4\(index)", "9:4\(index)"), 244, y + 8, size: 10, color: soft)
+                }
+            case .agenda:
+                box(rect, .white, radius: 0)
+                text(tr("Jeudi 30", "Thursday 30"), 12, 8, size: 14, weight: .bold)
+                for (index, hour) in ["9:00", "10:00", "11:00", "12:00"].enumerated() {
+                    let y = 40 + CGFloat(index) * 36
+                    text(hour, 10, y - 6, size: 10, color: grey)
+                    NSColor(calibratedWhite: 0.88, alpha: 1).setFill()
+                    CGRect(x: 52, y: y, width: 240, height: 1).fill()
+                }
+                box(CGRect(x: 56, y: 76, width: 230, height: 34), NSColor.systemBlue.withAlphaComponent(0.85))
+                text(tr("Réunion produit", "Product meeting"), 64, 80, size: 12, weight: .semibold, color: .white)
+                text(tr("10:00 – 11:00 · Salle Lisbonne", "10:00 – 11:00 · Lisbon room"), 64, 95, size: 10, color: .white)
+                box(CGRect(x: 56, y: 148, width: 230, height: 26), NSColor.systemGreen.withAlphaComponent(0.8))
+                text(tr("Déjeuner avec Léa", "Lunch with Léa"), 64, 153, size: 11, weight: .semibold, color: .white)
+            case .code:
+                box(rect, NSColor(calibratedWhite: 0.12, alpha: 1), radius: 0)
+                let lines = ["func total(_ items: [Item]) -> Int {", "    let prices = items.map(\\.price)", "    return itens.reduce(0, +)", "}"]
+                for (index, line) in lines.enumerated() {
+                    let y = 14 + CGFloat(index) * 22
+                    text("\(40 + index)", 8, y, size: 11, color: NSColor(calibratedWhite: 0.45, alpha: 1), mono: true)
+                    text(line, 34, y, size: 11, color: index == 2 ? NSColor.systemPink : NSColor(calibratedWhite: 0.88, alpha: 1), mono: true)
+                }
+                NSColor.systemRed.setFill()
+                CGRect(x: 108, y: 72, width: 40, height: 2).fill()
+                box(CGRect(x: 30, y: 112, width: 262, height: 52), NSColor.systemRed.withAlphaComponent(0.25))
+                text(tr("Erreur ligne 42", "Error on line 42"), 40, 118, size: 12, weight: .semibold, color: .systemRed)
+                text(tr("« itens » est inconnu ; vouliez-vous dire « items » ?", "“itens” is unknown; did you mean “items”?"), 40, 138,
+                     size: 10, color: NSColor(calibratedWhite: 0.9, alpha: 1))
+            case .board:
+                box(rect, NSColor(calibratedWhite: 0.95, alpha: 1), radius: 0)
+                for (index, note) in [(tr("Budget 2027", "2027 budget"), NSColor.systemYellow), (tr("Planning", "Schedule"), NSColor.systemPink),
+                                      (tr("Idées", "Ideas"), NSColor.systemTeal)].enumerated() {
+                    let x = 12 + CGFloat(index) * 96
+                    box(CGRect(x: x, y: 24 + CGFloat(index % 2) * 18, width: 86, height: 110), note.1.withAlphaComponent(0.75), radius: 4)
+                    text(note.0, x + 8, 34 + CGFloat(index % 2) * 18, size: 12, weight: .semibold)
+                    for line in 0..<3 {
+                        text(["• T1 : 40 k€", "• T2 : 55 k€", "• Marge 12 %"][line], x + 8, 56 + CGFloat(index % 2) * 18 + CGFloat(line) * 16, size: 9,
+                             color: NSColor(calibratedWhite: 0.25, alpha: 1))
+                    }
+                }
+            case .note:
+                box(rect, .white, radius: 0)
+                box(CGRect(x: 0, y: 0, width: 96, height: 180), NSColor(calibratedRed: 0.99, green: 0.95, blue: 0.80, alpha: 1), radius: 0)
+                for (index, title) in [tr("Lisbonne", "Lisbon"), tr("Courses", "Groceries"), tr("Livres", "Books")].enumerated() {
+                    if index == 0 { box(CGRect(x: 4, y: 10, width: 88, height: 26), NSColor.systemYellow.withAlphaComponent(0.6)) }
+                    text(title, 12, 15 + CGFloat(index) * 32, size: 12, weight: index == 0 ? .semibold : .regular)
+                }
+                text(tr("Lisbonne", "Lisbon"), 108, 12, size: 16, weight: .bold)
+                for (index, line) in [tr("• Pastéis de Belém", "• Pastéis de Belém"), tr("• Tram 28 jusqu'à Alfama", "• Tram 28 to Alfama"),
+                                      tr("• Coucher de soleil au miradouro", "• Sunset at the miradouro"), tr("• Fado le samedi", "• Fado on Saturday")].enumerated() {
+                    text(line, 108, 44 + CGFloat(index) * 24, size: 11, color: NSColor(calibratedWhite: 0.2, alpha: 1))
+                }
+            }
             return true
         }
     }
 
     private func zoneSwitcherImage() async throws {
         let windowsEntries = entries()
-        func zone(_ look: Look, _ title: String, _ origin: CGPoint) -> (ZoneRecord, NSImage)? {
+        func zone(_ look: Look, _ scene: ZoneScene, _ title: String) -> (ZoneRecord, NSImage)? {
             guard let index = windows.firstIndex(where: { $0.look == look }) else { return nil }
             let record = ZoneRecord(appName: windows[index].app, bundleID: "doc.\(index)", pid: Int32(9000 + index), windowID: UInt32(index + 1),
-                                    windowTitle: windows[index].title, title: title, relative: Rect(x: origin.x / 2, y: origin.y / 2, width: 80, height: 24),
+                                    windowTitle: windows[index].title, title: title, relative: Rect(x: 100, y: 100, width: 80, height: 24),
                                     windowWidth: 640, windowHeight: 400, date: Date())
-            return (record, Self.zonePhoto(look, at: origin))
+            return (record, Self.zonePhoto(scene))
         }
-        let zones = [zone(.browser, tr("Bouton « Réserver »", "“Book” button"), CGPoint(x: 360, y: 300)),
-                     zone(.mail, tr("Message de Léa", "Message from Léa"), CGPoint(x: 20, y: 60)),
-                     zone(.calendar, tr("Réunion de jeudi", "Thursday meeting"), CGPoint(x: 520, y: 180)),
-                     zone(.code, tr("Erreur ligne 42", "Error on line 42"), CGPoint(x: 30, y: 220)),
-                     zone(.board, tr("Carte « Budget »", "“Budget” card"), CGPoint(x: 420, y: 90)),
-                     zone(.notes, tr("Note « Lisbonne »", "“Lisbon” note"), CGPoint(x: 0, y: 60))].compactMap { $0 }
+        let zones = [zone(.browser, .booking, tr("Bouton « Réserver »", "“Book” button")),
+                     zone(.mail, .inbox, tr("Message de Léa", "Message from Léa")),
+                     zone(.calendar, .agenda, tr("Réunion produit", "Product meeting")),
+                     zone(.code, .code, tr("Erreur ligne 42", "Error on line 42")),
+                     zone(.board, .board, tr("Note « Budget 2027 »", "“2027 budget” note")),
+                     zone(.notes, .note, tr("Note « Lisbonne »", "“Lisbon” note"))].compactMap { $0 }
         let built = WindowSwitcherZones.build(records: zones.map(\.0), windows: windowsEntries)
         var images: [WindowID: NSImage] = [:]
         for (entry, photo) in zip(built.entries, zones.map(\.1)) { images[entry.id] = photo }

@@ -134,6 +134,8 @@ private final class WindowSwitcherSession {
     /// Profil `zones` (session 136) : zones montrées, par identifiant d'entrée, et leur ordre.
     var zones: [WindowID: SwitcherZone] = [:]
     var zoneRecentIDs: [WindowID] = []
+    /// Maj seule recule d'une carte (session 139).
+    var shiftTap = SwitcherShiftTap()
 
     init(
         id: Int,
@@ -277,6 +279,7 @@ public final class WindowSwitcherController {
         )
         nextSessionID += 1
         let newSession = WindowSwitcherSession(id: nextSessionID, profile: profile, config: config, required: required, state: state)
+        newSession.shiftTap = SwitcherShiftTap(initiallyDown: held.contains(.shift))
         session = newSession
         hotkeys?.holdEscape(true)
 
@@ -352,6 +355,12 @@ public final class WindowSwitcherController {
         if session.state.modifiers(held: isHeld) {
             validate(session)
             return
+        }
+        // Maj relâchée seule, touche du sélecteur toujours tenue : une carte en arrière, comme dans AltTab. Pas pendant
+        // la saisie d'une recherche (majuscules), ni si le raccourci contient lui-même Maj.
+        if session.shiftTap.update(shift: held.contains(.shift)), isHeld, !session.required.contains(.shift),
+           session.panel?.isSearchEditing != true {
+            advance(backwards: true)
         }
         if !session.panelVisible, session.state.phase == .acquiring,
            Date().timeIntervalSince(session.startedAt) > 0.15 {
@@ -454,6 +463,7 @@ public final class WindowSwitcherController {
 
     private func advance(backwards: Bool) {
         guard let session else { return }
+        session.shiftTap.noteStep()
         guard session.state.step(backwards: backwards) else { return }
         session.actionFailed = false
         session.model?.next(backwards: backwards)
