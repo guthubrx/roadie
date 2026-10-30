@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import RoadieDaemon
@@ -71,5 +72,18 @@ struct Spec131BarCommandsTests {
         private var count = 0
         func increment() { lock.withLock { count += 1 } }
         var value: Int { lock.withLock { count } }
+    }
+}
+
+/// Essai du 29 octobre 2026 : le trackpad fait défiler la liste et la grille de la barre.
+struct Spec131ScrollTests {
+    @Test func scrollDeltasBecomeSelectionSteps() {
+        #expect(LauncherScroll.steps(accumulated: 0, delta: 10) == (0, 10))
+        #expect(LauncherScroll.steps(accumulated: 10, delta: 15).steps == 1)
+        #expect(LauncherScroll.steps(accumulated: 0, delta: -50).steps == -2)
+        let (steps, rest) = LauncherScroll.steps(accumulated: 0, delta: -50)
+        #expect(abs(rest - (-50 + 2 * LauncherScroll.step)) < 0.001 && steps == -2)
+        #expect(TargetSearchDismissal.eventMask(search: true) & CGEventMask(1 << CGEventType.scrollWheel.rawValue) != 0)
+        #expect(TargetSearchDismissal.eventMask(search: false) & CGEventMask(1 << CGEventType.scrollWheel.rawValue) == 0)
     }
 }

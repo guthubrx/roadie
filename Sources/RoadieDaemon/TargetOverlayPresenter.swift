@@ -315,6 +315,12 @@ extension KeyEventTapSession {
                 if consumed { return nil }
                 return Unmanaged.passUnretained(event)
             }
+            // Défilement sur la liste ou la grille (session 131) : il déplace la sélection, la fenêtre dessous ne bouge pas.
+            if type == .scrollWheel, let search = session as? TargetSearchSession {
+                let delta = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
+                let consumed = MainActor.assumeIsolated { search.handleScroll(at: event.location, delta: delta) }
+                return consumed ? nil : Unmanaged.passUnretained(event)
+            }
             // Glisser de la barre (session 102) : seul un glisser commencé sur la barre est pris.
             if type == .leftMouseDragged || type == .leftMouseUp, let search = session as? TargetSearchSession {
                 let consumed = MainActor.assumeIsolated { search.handleMouseDrag(at: event.location, ended: type == .leftMouseUp) }
@@ -861,7 +867,8 @@ enum TargetSearchDismissal {
     static func eventMask(search: Bool) -> CGEventMask {
         let keyboard = CGEventMask(1 << CGEventType.keyDown.rawValue)
         guard search else { return keyboard }
-        let mouseTypes: [CGEventType] = [.leftMouseDown, .rightMouseDown, .otherMouseDown, .leftMouseDragged, .leftMouseUp]
+        // Session 131 : défilement au trackpad ou à la molette sur la liste et la grille.
+        let mouseTypes: [CGEventType] = [.leftMouseDown, .rightMouseDown, .otherMouseDown, .leftMouseDragged, .leftMouseUp, .scrollWheel]
         return mouseTypes.reduce(keyboard) { mask, type in
             mask | CGEventMask(1 << type.rawValue)
         }
@@ -1121,6 +1128,25 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     func cancel() {
         finish(TargetActionResult(changed: false, message: "target_search_cancelled", error: "cancelled"))
     }
+
+    /// Défilement accumulé au-dessus de la liste ou de la grille : un pas de `LauncherScroll.step` points déplace la
+    /// sélection d'une ligne (d'une rangée en grille), donc la partie visible. Faux hors de la liste. O(1).
+    fileprivate func handleScroll(at point: CGPoint, delta: Double) -> Bool {
+        guard !finished, let layout = searchBarLayout, let panel = layout.panel else { return false }
+        let nsPoint = RoadieScreenCoordinate.axRectToNS(CGRect(origin: point, size: .zero)).origin
+        guard panel.contains(nsPoint) else { return false }
+        let (steps, rest) = LauncherScroll.steps(accumulated: scrollAccumulator, delta: delta)
+        scrollAccumulator = rest
+        guard steps != 0 else { return true }
+        let input = SearchKeyInput(kind: steps > 0 ? .previous : .next)
+        for _ in 0..<abs(steps) {
+            if step == .objects { navigate(input) } else { handleStep(input) }
+        }
+        syncHighlight()
+        render()
+        return true
+    }
+    private var scrollAccumulator = 0.0
 
     fileprivate func handleMouseDown(at point: CGPoint, type: CGEventType, clicks: Int = 1) -> Bool {
         guard !finished else { return false }

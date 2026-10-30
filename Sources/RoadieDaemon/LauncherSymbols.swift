@@ -189,16 +189,25 @@ final class LauncherSymbolsPanel: NSObject, NSWindowDelegate, NSSearchFieldDeleg
         scroll.documentView = grid
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
-        nameLabel.font = .monospacedSystemFont(ofSize: 20, weight: .regular)
+        nameLabel.font = .monospacedSystemFont(ofSize: 17, weight: .regular)
         nameLabel.alignment = .center
+        // Noms longs (« rectangle.portrait.and.arrow.forward.fill ») : deux lignes plutôt qu'un nom coupé (essai du 29 octobre).
+        nameLabel.maximumNumberOfLines = 2
+        nameLabel.lineBreakMode = .byCharWrapping
+        nameLabel.cell?.wraps = true
         categoriesLabel.font = .systemFont(ofSize: 12)
         categoriesLabel.textColor = .secondaryLabelColor
         categoriesLabel.alignment = .center
         versionsLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
-        let sizes: [CGFloat] = [120, 64, 32, 16]
+        // Quatre tailles dans des cases fixes : sans elles, le grand aperçu débordait sur les petits (essai du 29 octobre).
+        let sizes: [CGFloat] = [72, 40, 22, 13]
         for (view, size) in zip(previews, sizes) {
             view.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: size, weight: .regular)
             view.contentTintColor = .labelColor
+            view.imageScaling = .scaleProportionallyDown
+            view.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([view.widthAnchor.constraint(equalToConstant: size * 2.2),
+                                         view.heightAnchor.constraint(equalToConstant: size * 1.6)])
         }
         let side = NSStackView(views: previews + [versionsLabel])
         side.orientation = .vertical

@@ -1972,6 +1972,8 @@ public final class TargetModeRuntimeController: NSObject {
             for path in paths {
                 do { report.done.append(try LauncherFileOperations.makeAlias(path)) } catch { report.failures[path] = error.localizedDescription }
             }
+            // Retour visible (essai du 29 octobre 2026) : les alias créés sont montrés sélectionnés dans le Finder.
+            if !report.done.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(report.done.map { URL(fileURLWithPath: $0) }) }
         case .info:
             guard let path = paths.first else { return refused(label, "file") }
             showInfo(path)

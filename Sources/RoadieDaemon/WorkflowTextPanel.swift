@@ -110,13 +110,12 @@ final class WorkflowTextPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
         style.decorate(input)
         content.addSubview(stack)
         panel.contentView = content
+        // Seules les lignes de la pile sont contraintes : une contrainte vers le champ de saisie absent lève une
+        // exception AppKit qui, traversant le code Swift, faisait planter Roadie à la minuterie suivante (session 131).
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor), stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             stack.topAnchor.constraint(equalTo: content.topAnchor), stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            scroll.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -20),
-            input.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -20),
-            footer.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -20),
-        ])
+        ] + rows.map { $0.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -20) })
         scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
     }
 
@@ -373,7 +372,9 @@ enum WorkflowViewStyle: String, CaseIterable, Sendable {
     /// Commande de saisie : bulle de verre arrondie avec liseré clair (Glassy), aplat plein sans liseré (Flat Dark),
     /// champ de macOS sinon. O(1).
     @MainActor func decorate(_ field: NSTextField) {
-        guard self == .glassyDark || self == .glassyLight || self == .flatDark else { return }
+        // Un champ de recherche garde son cadre natif : c'est lui qui réserve la place de la loupe ; sans lui, le texte
+        // passait sous la loupe (navigateur SF Symbols, essai du 30 octobre).
+        guard self == .glassyDark || self == .glassyLight || self == .flatDark, !(field is NSSearchField) else { return }
         field.isBezeled = false
         field.drawsBackground = false
         field.focusRingType = .none

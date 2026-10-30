@@ -153,3 +153,15 @@ struct LauncherPositionStore: Sendable {
         try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
     }
 }
+
+/// Défilement de la barre (session 131) : points de défilement accumulés, convertis en pas de sélection. Positif :
+/// vers le haut (ligne précédente), comme le contenu suit les doigts. O(1).
+enum LauncherScroll {
+    static let step = 22.0
+
+    static func steps(accumulated: Double, delta: Double) -> (steps: Int, rest: Double) {
+        let total = accumulated + delta
+        let steps = Int(total / step)
+        return (steps, total - Double(steps) * step)
+    }
+}

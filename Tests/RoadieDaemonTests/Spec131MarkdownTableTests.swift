@@ -46,4 +46,19 @@ struct Spec131MarkdownTableTests {
         #expect(abs(frame("A").midY - frame("B").midY) < 2 && frame("B").minX > frame("A").maxX)
         #expect(frame("1").minY > frame("A").maxY - 1)
     }
+
+    /// Fiche « Informations » (sans champ de saisie) : la mise en page levait une exception AppKit qui faisait
+    /// planter Roadie. Chaque placement du champ doit s'ouvrir.
+    @MainActor @Test func textPanelOpensWithEveryInputPlacement() throws {
+        for placement in [AlfredTextView.InputPlacement.none, .above, .below] {
+            var view = AlfredTextView(workflowID: "roadie.info", objectUID: "info", title: "spec131-\(placement.rawValue)", folder: "/")
+            view.behaviour = .markdown
+            view.inputPlacement = placement
+            view.chunks = ["# Fiche\n\n| | |\n|---|---|\n| Taille | `1 o` |"]
+            WorkflowTextPanel.show(view, plainContinues: false, runScript: nil) { _, _, _ in }
+            let panel = try #require(NSApp.windows.first { $0.title == view.title })
+            #expect(panel.isVisible)
+            panel.close()
+        }
+    }
 }
