@@ -446,7 +446,9 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
 - **Recherche à l'écran seule** (session 133) : `screen_search_hotkey` (par exemple
   `command+control+alt+f`, Capslock + F ; vide par défaut) ou `roadie targets screen` ouvre la barre sans
   la liste du lanceur. Seules la saisie et les étiquettes des éléments visibles s'affichent : ↑/↓ changent de
-  cible, Maj + étiquette la choisit, Retour clique. Le lanceur garde son propre raccourci (`search_hotkey`).
+  cible, Maj + étiquette clique, Retour clique. Le lanceur garde son propre raccourci (`search_hotkey`) ;
+  `launcher_on_screen = false` (Paramètres > Recherche) lui retire alors la section « À l'écran » et la
+  lecture des fenêtres visibles.
 - **Fautes de frappe** (session 134) : sans aucune correspondance exacte, la recherche à l'écran admet une
   lettre oubliée, en trop, remplacée ou deux lettres inversées : une faute à partir de 4 lettres, deux à
   partir de 8 (« enregsitrer » trouve « Enregistrer »). La barre l'indique par « ≈ approché ». Dans le

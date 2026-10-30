@@ -510,6 +510,8 @@ public final class TargetModeRuntimeController: NSObject {
             runDeferred: { argv in commands.runDeferred(argv) },
             openSettings: { category in SettingsWindowController.shared.show(category: category) },
             load: { deliver, done in
+                // Lanceur sans éléments à l'écran (session 134) : aucune lecture des fenêtres visibles.
+                guard command.name == "targets.screen" || config.launcherOnScreen else { return done() }
                 DispatchQueue.global(qos: .userInitiated).async {
                     let scan = LiveAppTargetProvider().scanVisibleWindows(config: scanConfig) { window in
                         DispatchQueue.main.async {

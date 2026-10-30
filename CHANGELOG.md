@@ -25,12 +25,15 @@ jour et les limites connues ; les README décrivent la version courante.
   ouvre la barre sans liste, avec les seules étiquettes des éléments visibles.
 - Fautes de frappe rattrapées (`typo_max_errors`) : à l'écran sans correspondance exacte, et dans une section
   « Vouliez-vous dire » du lanceur, toujours après les correspondances exactes.
+- `launcher_on_screen` : le lanceur peut ne plus lire les éléments à l'écran.
 
 ### Corrections
 
 - Une vue Texte de workflow sans champ de saisie faisait planter Roadie (exception de mise en page).
 - `roadie window explain 0` arrêtait le daemon : un numéro de fenêtre invalide est refusé.
 - Le verbe choisi à l'étape des verbes n'est plus compté après la fermeture de la barre.
+- Clic sur un élément à l'écran refusé juste après la barre (l'accessibilité la voyait encore au premier
+  plan) : la fenêtre visée en haut de la pile suffit désormais.
 
 ## 0.11.1 - 2026-10-29
 

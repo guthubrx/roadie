@@ -503,6 +503,10 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "idle_frequent_enabled", tr("Barre vide : Souvent ici", "Empty bar: Often here"),
               tr("Avant la saisie, propose les applications que vous ouvrez le plus souvent depuis la stage active.", "Before you type, suggests the apps you open most often from the active stage."),
               .bool, .bool(true)),
+        entry(.recherche, "experimental.target_mode", "launcher_on_screen", tr("Éléments à l'écran dans le lanceur", "On-screen elements in the launcher"),
+              tr("Le lanceur lit aussi les boutons et textes visibles (section « À l'écran »). Coupé, il ne cherche que ", "The launcher also reads visible buttons and text (“On screen” section). Off, it only searches ")
+              + tr("applications, fenêtres, stages et fichiers ; la recherche à l'écran garde son propre raccourci.", "apps, windows, stages and files; on-screen search keeps its own shortcut."),
+              .bool, .bool(true)),
         entry(.recherche, "experimental.target_mode", "typo_max_errors", tr("Fautes de frappe rattrapées", "Typos forgiven"),
               tr("Sans correspondance exacte, la recherche à l'écran et la section « Vouliez-vous dire » du lanceur admettent ", "Without an exact match, on-screen search and the launcher's “Did you mean” section allow ")
               + tr("des fautes : une à partir de 4 lettres, deux à partir de 8, au plus ce nombre. 0 : coupé.", "typos: one from 4 letters, two from 8, at most this number. 0: off."),

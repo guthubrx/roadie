@@ -22,4 +22,12 @@ struct Spec133ScreenSearchTests {
             $0.level == .error && $0.path == "experimental.target_mode.screen_search_hotkey" })
         #expect(SettingsCatalog.find(id: "target_mode.screen_search_hotkey")?.category == .raccourcis)
     }
+
+    /// Session 134 : le lanceur peut ne plus lire l'écran, la recherche à l'écran ayant son raccourci.
+    @Test func launcherCanSkipOnScreenElements() throws {
+        #expect(TargetModeConfig().launcherOnScreen)
+        let config = try TOMLDecoder().decode(RoadieConfig.self, from: "[experimental.target_mode]\nlauncher_on_screen = false\n")
+        #expect(!config.experimental.targetMode.launcherOnScreen)
+        #expect(SettingsCatalog.find(id: "target_mode.launcher_on_screen")?.category == .recherche)
+    }
 }

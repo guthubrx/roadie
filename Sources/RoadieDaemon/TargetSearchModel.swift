@@ -201,6 +201,14 @@ public struct TargetSearchModel: Equatable, Sendable {
         return true
     }
 
+    /// Recherche à l'écran (session 134) : Maj + étiquette complète vaut un clic simple sur sa cible (l'action
+    /// par défaut pour une cible Roadie). nil tant que l'étiquette n'est pas complète ou ne mène à rien. O(m).
+    public mutating func chooseLabel(_ character: String) -> TargetActionVerb? {
+        guard typeLabel(character), let target = highlighted, target.label.uppercased() == labelBuffer else { return nil }
+        pendingReturnAt = nil
+        return Self.verb(.click, for: target)
+    }
+
     /// Retour : Maj = clic droit, Cmd = Cmd-clic, immédiats. Retour seul est différé de
     /// `doubleReturnInterval` : un second Retour dans ce délai donne un double-clic (nil sinon,
     /// la session appelle `pendingReturn` à l'échéance). Cible Roadie : son action par défaut.

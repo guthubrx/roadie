@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import RoadieCore
 import Testing
@@ -75,5 +76,29 @@ struct Spec134TypoTests {
         let config = try TOMLDecoder().decode(RoadieConfig.self, from: "[experimental.target_mode]\ntypo_max_errors = 7\n")
         #expect(config.experimental.targetMode.typoMaxErrors == 2)
         #expect(SettingsCatalog.find(id: "target_mode.typo_max_errors")?.category == .recherche)
+    }
+
+    /// Essai du 30 octobre 2026 : Maj + étiquette doit cliquer, pas seulement choisir la cible.
+    @Test func shiftLabelClicksItsTarget() {
+        var model = TargetSearchModel(targets: [target("A", "Enregistrer"), target("S", "Envoyer")])
+        model.type("en")
+        let label = try? #require(model.matches.last?.label)
+        #expect(model.chooseLabel(label ?? "") == .click)
+        #expect(model.highlighted?.title == "Envoyer")
+        #expect(model.chooseLabel("Z") == nil)
+    }
+
+    /// Essai du 30 octobre 2026 : barre fermée, l'accessibilité voit encore Roadie au premier plan (axFront = Roadie,
+    /// Excel au premier plan pour macOS) ; le clic part si la fenêtre visée est active et tout en haut de la pile.
+    @Test func clickWaitsForTheRightWindowEvenRightAfterTheBar() {
+        let roadie: pid_t = 17686, excel: pid_t = 7965
+        func reached(_ front: pid_t?, focused: Bool = true, top: CGWindowID? = 169648) -> Bool {
+            LiveAppTargetProvider.isFocusReached(axFront: front, ownPID: roadie, targetPID: excel, targetWindowFocused: focused,
+                                                 topWindow: top, windowID: 169648)
+        }
+        #expect(reached(excel) && reached(roadie))
+        // Autre fenêtre en haut de la pile, autre application au premier plan, ou mauvaise fenêtre active : pas de clic.
+        #expect(!reached(roadie, top: 290990) && !reached(roadie, top: nil))
+        #expect(!reached(40761) && !reached(excel, focused: false))
     }
 }

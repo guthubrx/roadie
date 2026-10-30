@@ -845,20 +845,26 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         // cible porte sa fenêtre ; sans elle, le focus ne se vérifie pas et rien n'est cliqué. Fenêtre
         // déjà active (cas courant) : l'attente répond dès la première lecture, sans délai.
         guard let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target) else {
-            return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
+            return TargetActionResult(changed: false, message: "stale_target: no_window \(target.id)", target: target, error: "stale_target")
         }
         switch waitForFocus(windowID, pid, 0.5) {
         case .focused:
             break
         case .windowGone:
-            return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
+            return TargetActionResult(changed: false, message: "stale_target: window_gone \(target.id)", target: target, error: "stale_target")
         case .timedOut:
-            return TargetActionResult(changed: false, message: "focus_failed: \(target.id)", target: target, error: "focus_failed")
+            // Diagnostic (essai du 30 octobre 2026) : ce que l'accessibilité voit au premier plan à l'échéance.
+            return TargetActionResult(changed: false, message: "focus_failed: \(Self.focusDescription(pid: pid)) \(target.id)",
+                                      target: target, error: "focus_failed")
         }
         // REL-012 : l'overlay a pu rester ouvert, la fenêtre bouger ou la page défiler pendant l'attente.
         // Le point de clic n'est sûr que si la zone cliquée occupe encore le cadre affiché (R2-02).
-        guard AppTargetQueryService.isStillInPlace(shown, current: currentFrame(target)) else {
-            return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
+        let current = currentFrame(target)
+        guard AppTargetQueryService.isStillInPlace(shown, current: current) else {
+            // Session 134 : élément illisible (remplacé) ou déplacé, avec ses deux cadres, pour le diagnostic.
+            let describe = { (frame: Rect) in "\(Int(frame.x)),\(Int(frame.y)) \(Int(frame.width))x\(Int(frame.height))" }
+            let reason = current.map { "moved \(describe(shown)) -> \(describe($0))" } ?? "unreadable"
+            return TargetActionResult(changed: false, message: "stale_target: \(reason) \(target.id)", target: target, error: "stale_target")
         }
         let point = CGPoint(x: frame.midX, y: frame.midY)
         switch action {
@@ -881,21 +887,61 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     /// que son application soit active et que la fenêtre soit la sienne, sinon une application peut
     /// ne prendre le premier clic que pour s'activer. Fenêtre disparue ou délai dépassé : pas de clic
     /// (REL-012).
+    /// Application au premier plan pour l'accessibilité, et fenêtre active de l'application visée. Diagnostic.
+    static func focusDescription(pid: pid_t) -> String {
+        var focusedPID: pid_t = 0
+        let front = copyElementAttribute(AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute)
+            .flatMap { AXUIElementGetPid($0, &focusedPID) == .success ? focusedPID : nil }
+        var title: CFTypeRef?
+        let window = copyElementAttribute(AXUIElementCreateApplication(pid), kAXFocusedWindowAttribute)
+        if let window { AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &title) }
+        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        return "axFront=\(front.map(String.init) ?? "none") frontmost=\(frontmost.map(String.init) ?? "none") target=\(pid)"
+            + " targetFocusedWindow=\(window == nil ? "none" : "\"\((title as? String) ?? "?")\"")"
+    }
+
     private static func waitUntilFocused(windowID: CGWindowID, pid: pid_t, timeout: TimeInterval) -> AppWindowFocusWait {
         guard let expected = axWindowElements(pid: pid)[windowID] else { return .windowGone }
         let system = AXUIElementCreateSystemWide()
         let appElement = AXUIElementCreateApplication(pid)
         let deadline = Date().addingTimeInterval(timeout)
+        let ownPID = getpid()
         repeat {
             var focusedPID: pid_t = 0
-            if let app = copyElementAttribute(system, kAXFocusedApplicationAttribute),
-               AXUIElementGetPid(app, &focusedPID) == .success, focusedPID == pid,
-               let window = copyElementAttribute(appElement, kAXFocusedWindowAttribute), CFEqual(window, expected) {
+            let axFront = copyElementAttribute(system, kAXFocusedApplicationAttribute)
+                .flatMap { AXUIElementGetPid($0, &focusedPID) == .success ? focusedPID : nil }
+            let targetFocused = copyElementAttribute(appElement, kAXFocusedWindowAttribute).map { CFEqual($0, expected) } ?? false
+            // La pile des fenêtres n'est lue que si la barre de Roadie paraît encore avoir le clavier.
+            let top = axFront == ownPID ? frontWindowID(excluding: ownPID) : nil
+            if isFocusReached(axFront: axFront, ownPID: ownPID, targetPID: pid, targetWindowFocused: targetFocused,
+                              topWindow: top, windowID: windowID) {
                 return .focused
             }
             Thread.sleep(forTimeInterval: 0.02)
         } while Date() < deadline
         return .timedOut
+    }
+
+    /// Fenêtre visée prête à recevoir le clic : son application au premier plan pour l'accessibilité avec cette
+    /// fenêtre active ; ou bien, la barre de Roadie venant de se fermer (l'accessibilité la voit encore au premier
+    /// plan, essai du 30 octobre 2026), cette fenêtre active dans son application et tout en haut de la pile des
+    /// fenêtres, hors Roadie : le clic tombe sur elle. O(1).
+    static func isFocusReached(axFront: pid_t?, ownPID: pid_t, targetPID: pid_t, targetWindowFocused: Bool,
+                               topWindow: CGWindowID?, windowID: CGWindowID) -> Bool {
+        guard targetWindowFocused else { return false }
+        if axFront == targetPID { return true }
+        return axFront == ownPID && topWindow == windowID
+    }
+
+    /// Fenêtre ordinaire (calque 0) la plus haute à l'écran, hors du processus donné et des liserés de
+    /// JankyBorders (même critère que `isKnownBorderDecoration` : processus « borders », sans titre). O(w).
+    private static func frontWindowID(excluding pid: pid_t) -> CGWindowID? {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return nil }
+        return list.first { info in
+            let decoration = (info[kCGWindowOwnerName as String] as? String) == "borders"
+                && ((info[kCGWindowName as String] as? String) ?? "").isEmpty
+            return (info[kCGWindowLayer as String] as? Int) == 0 && (info[kCGWindowOwnerPID as String] as? Int32) != pid && !decoration
+        }.flatMap { $0[kCGWindowNumber as String] as? CGWindowID }
     }
 
     /// Relecture de la zone cliquée d'une cible (REL-012, R2-02, R2-03) : l'élément conservé par le

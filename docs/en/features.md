@@ -431,7 +431,9 @@ letter filters the targets; Return clicks the green target.
 - **On-screen search only** (session 133): `screen_search_hotkey` (for example
   `command+control+alt+f`, Capslock + F; empty by default) or `roadie targets screen` opens the bar without
   the launcher list. Only the input and the labels of visible elements show: ↑/↓ change the target,
-  Shift + label picks it, Return clicks. The launcher keeps its own shortcut (`search_hotkey`).
+  Shift + label clicks, Return clicks. The launcher keeps its own shortcut (`search_hotkey`);
+  `launcher_on_screen = false` (Settings > Search) then removes its "On screen" section and the reading of
+  visible windows.
 - **Typos** (session 134): with no exact match at all, on-screen search allows a missing, extra or wrong
   letter, or two swapped letters: one typo from 4 letters, two from 8 ("enregsitrer" finds "Enregistrer").
   The bar shows "≈ approximate". In the launcher, a "Did you mean" section comes last, only under three exact

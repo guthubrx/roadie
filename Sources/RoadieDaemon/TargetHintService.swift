@@ -409,6 +409,8 @@ public struct TargetHintService {
             "action": (requestedAction ?? target.actions.first ?? .inspect).rawValue,
             "changed": String(result.changed),
             "error": result.error ?? "",
+            // Session 134 : raison détaillée d'un refus (« stale_target: moved … »), pour le diagnostic.
+            "message": result.changed ? "" : result.message,
         ]))
         return result
     }

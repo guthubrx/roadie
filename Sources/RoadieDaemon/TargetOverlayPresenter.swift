@@ -1353,9 +1353,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             model.type(value)
             if model.isCommandMode, !Self.isPath(model.query) { enterCommandMode() }
         case .labelCharacter(let value):
-            // Recherche à l'écran : Maj + étiquette choisit la cible, comme avant le lanceur (session 133).
+            // Recherche à l'écran : Maj + étiquette complète clique la cible, comme Retour (essai du 30 octobre
+            // 2026 : choisir sans cliquer ne se devinait pas). Une étiquette de deux lettres attend la seconde.
             if screenOnly {
-                _ = model.typeLabel(value)
+                if let verb = model.chooseLabel(value), let target = model.highlighted {
+                    finishActivating(target, verb)
+                    return
+                }
                 break
             }
             // Maj + lettre d'une pastille : sa ligne s'ouvre, comme ⌘ + chiffre (SPEC-084).
@@ -2848,6 +2852,14 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         // Aucune correspondance exacte : la barre dit que les étiquettes viennent d'une faute rattrapée (session 134).
         if model.corrected { bar.chip = tr("≈ approché", "≈ approximate") }
         show(badges: badges, bar: bar)
+        // Maj + lettre d'une étiquette affichée : le champ la transmet comme étiquette, pas comme texte (essai du
+        // 30 octobre 2026 : sans cette liste, la majuscule s'ajoutait à la saisie).
+        inputPanel?.labelLetters = Self.labelLetters(of: badges.map(\.label))
+    }
+
+    /// Lettres des étiquettes montrées, en minuscules, pour reconnaître Maj + lettre. O(e).
+    static func labelLetters(of labels: [String]) -> Set<String> {
+        Set(labels.flatMap { $0.lowercased().map(String.init) })
     }
 
     /// Ligne des étapes verbe et destination.
