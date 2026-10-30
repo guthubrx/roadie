@@ -5,6 +5,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+## 0.13.0 - 2026-10-30
+
 ### Nouveautés
 
 - Maj seule recule d'une carte dans Cmd+Tab et Option+Tab, comme dans AltTab (Maj + Tab inchangé).

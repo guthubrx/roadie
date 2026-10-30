@@ -14,8 +14,8 @@ Group a project's apps in a stage, find them in the side rail and switch desktop
 Type a few letters to open an app, a window, a file or a web page, and choose where it opens. Your
 Alfred workflows run there too, without the Powerpack.
 
-**[Download Roadie 0.12.0](https://github.com/guthubrx/roadie/releases/tag/v0.12.0)** ·
-[What's new](docs/releases/v0.12.0.en.md) · [Installation guide](#manual-installation)
+**[Download Roadie 0.13.0](https://github.com/guthubrx/roadie/releases/tag/v0.13.0)** ·
+[What's new](docs/releases/v0.13.0.en.md) · [Installation guide](#manual-installation)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie workspaces across multiple displays" width="100%">
@@ -123,11 +123,12 @@ brings the window back, switching stage or desktop if needed, and clicks the zon
 Option+Tab goes back and forth between your last two places, even across stages. We know of no other macOS
 tool that does this.
 
-- **Zones come from your clicks** (3 per window by default) and from **on-screen search** (Capslock + F in the
+- **Zones come from your clicks** (3 per window by default, or another count for each app) and from **on-screen search** (Capslock + F in the
   author's setup): type a word visible on screen, its button gets a label, Return or Shift + label clicks it.
   Typos are forgiven when nothing matches exactly.
 - **Photos stay current**: a window you leave has its zones photographed again, at most every 10 seconds.
 - **A yellow border** shows the chosen zone in the real app while you pick, and where the click landed.
+- **Shift alone steps back one card**, as in AltTab, in Option+Tab as in Cmd+Tab.
 - **On each card**, × removes the zone and the no-entry sign stops an app's clicks from creating zones.
 - **Kept 24 hours, 20 zones**, adjustable in Settings > Switcher; photos never leave your Mac.
 

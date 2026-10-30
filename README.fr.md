@@ -14,8 +14,8 @@ les applications d'un projet dans une stage, retrouve-les dans le rail et passe 
 l'autre sur chaque écran. Tape quelques lettres pour ouvrir une application, une fenêtre, un fichier
 ou une page web, et choisis où elle s'ouvre. Tes workflows d'Alfred y tournent aussi, sans Powerpack.
 
-**[Télécharger Roadie 0.12.0](https://github.com/guthubrx/roadie/releases/tag/v0.12.0)** ·
-[Découvrir les nouveautés](docs/releases/v0.12.0.md) · [Guide d'installation](#installation-manuelle)
+**[Télécharger Roadie 0.13.0](https://github.com/guthubrx/roadie/releases/tag/v0.13.0)** ·
+[Découvrir les nouveautés](docs/releases/v0.13.0.md) · [Guide d'installation](#installation-manuelle)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">
@@ -125,12 +125,13 @@ recherche, Échap). Relâche Option : Roadie ramène la fenêtre, en changeant d
 reclique la zone. Option+Tab, relâcher, Option+Tab fait l'aller-retour entre tes deux derniers endroits, même
 d'une stage à l'autre. Nous ne connaissons pas d'autre outil pour macOS qui le fasse.
 
-- **Les zones viennent de tes clics** (3 par fenêtre par défaut) et de la **recherche à l'écran** (Capslock + F
+- **Les zones viennent de tes clics** (3 par fenêtre par défaut, un autre nombre possible pour chaque application) et de la **recherche à l'écran** (Capslock + F
   chez l'auteur) : tape un mot visible à l'écran, son bouton reçoit une étiquette, Retour ou Maj + étiquette le
   clique. Les fautes de frappe sont rattrapées quand rien ne correspond exactement.
 - **Les photos restent à jour** : une fenêtre que tu quittes voit ses zones reprises en photo, au plus toutes les
   10 secondes.
 - **Une bordure jaune** montre la zone choisie dans la vraie application pendant le choix, puis où le clic est tombé.
+- **Maj seule recule d'une carte**, comme dans AltTab, dans Option+Tab comme dans Cmd+Tab.
 - **Sur chaque carte**, × retire la zone et le sens interdit empêche les clics d'une application de créer des zones.
 - **Gardées 24 heures, 20 zones**, réglable dans Paramètres > Sélecteur ; les photos ne quittent jamais ton Mac.
 
