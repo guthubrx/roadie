@@ -357,3 +357,6 @@ poursuit les tests et la livraison autorisés.
 - Ne pas modifier directement `.agents/skills/speckit-*`, `.specify/templates/*`, `.specify/scripts/*` ou `.specify/workflows/*`.
 - Les commandes utilisateur canoniques vivent dans `~/.speckit/commands/` et sont publiees vers Codex/Claude/Gemini par `~/.speckit/scripts/sync-agent-adapters.py`.
 <!-- SPECKIT-USER END -->
+Session 139 installée : Maj seule recule dans Cmd+Tab et Option+Tab (`SwitcherShiftTap`), images de zones réalistes.
+Session 140 installée : zones de clics par application (`[[switcher.zone_clicks_per_app]]`, valeur globale sinon).
+Session 141 : 0.13.0 publiée (Latest), tag 57fe791e. Reçu : specs/141-release-0130/validation.md.
