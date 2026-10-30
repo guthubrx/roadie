@@ -464,6 +464,10 @@ extension SettingsCatalog {
         entry(.raccourcis, "experimental.target_mode", "actions_hotkey", tr("Raccourci des verbes de la fenêtre active", "Active window verbs shortcut"),
               tr("Ouvre la barre directement sur les verbes de la fenêtre au premier plan : envoyer, flotter, plein écran. Vide : désactivé.", "Opens the bar directly on the verbs of the frontmost window: send, float, full screen. Empty: off."),
               .text, .string("command+control+alt+shift+f")),
+        entry(.raccourcis, "experimental.target_mode", "screen_search_hotkey", tr("Raccourci de la recherche à l'écran", "On-screen search shortcut"),
+              tr("Ouvre la barre sans la liste du lanceur : les éléments visibles qui correspondent reçoivent une étiquette, Retour clique. ", "Opens the bar without the launcher list: matching visible elements get a label, Return clicks. ")
+              + tr("Par exemple command+control+alt+f (Capslock + F). Vide : désactivé.", "For example command+control+alt+f (Capslock + F). Empty: off."),
+              .text, .string("")),
         entry(.recherche, "experimental.target_mode", "web_search_url", tr("Recherche web (⌃ Retour)", "Web search (⌃ Return)"),
               tr("Adresse ouverte par ⌃ Retour dans la barre ; {query} reçoit le texte tapé.", "Address opened by ⌃ Return in the bar; {query} receives the typed text."),
               .text, .string("https://www.google.com/search?q={query}")),

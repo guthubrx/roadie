@@ -225,7 +225,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "rules validate|list|explain [--json] [--config PATH]"),
         CLICommandSpec(usage: "group create|add|remove|focus|dissolve|list ..."),
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
-        CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|actions|hide ..."),
+        CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|screen|actions|hide ..."),
         CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
         CLICommandSpec(usage: "project save [NAME] | open NAME | list [--json] | delete NAME"),
         CLICommandSpec(usage: "undo"),
@@ -1898,6 +1898,9 @@ public final class CLICommandRouter {
         case "search":
             // SPEC-021 : même session que le raccourci global `search_hotkey`.
             return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "targets.search"), json: json)
+        case "screen":
+            // Session 133 : recherche à l'écran, sans la liste du lanceur (`screen_search_hotkey`).
+            return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "targets.screen"), json: json)
         case "actions":
             // SPEC-075 : la barre ouverte aux verbes de la fenêtre active.
             return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "targets.actions"), json: json)

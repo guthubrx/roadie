@@ -235,6 +235,7 @@ public enum TargetOverlayPresenter {
         ) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         launcher: LauncherSearchContext = .disabled,
+        screenOnly: Bool = false,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
         let session = TargetSearchSession(
@@ -246,6 +247,7 @@ public enum TargetOverlayPresenter {
             openSettings: openSettings,
             activate: activate,
             launcher: launcher,
+            screenOnly: screenOnly,
             onFinish: onFinish
         )
         if let immediate = session.start() {
@@ -922,6 +924,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var isLoading = true
     /// Lanceur (SPEC-073) : liste en sections au-dessus de la barre, et ligne choisie.
     private var launcher: LauncherSearchContext
+    /// Recherche à l'écran (session 133) : aucune liste, seulement les étiquettes des éléments visibles.
+    private let screenOnly: Bool
     private var launcherList = LauncherList.empty
     private var launcherSelection: String?
     /// Requête et cibles de la dernière liste : elle n'est recalculée que si l'une change.
@@ -1006,8 +1010,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         openSettings: @escaping @MainActor (SettingCategory?) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         launcher: LauncherSearchContext,
+        screenOnly: Bool = false,
         onFinish: (@MainActor (TargetActionResult) -> Void)?
     ) {
+        self.screenOnly = screenOnly
         self.launcher = launcher
         let mouse = NSEvent.mouseLocation
         let pointerScreen = NSScreen.screens.first { $0.frame.contains(mouse) }?.frame
@@ -1345,6 +1351,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             model.type(value)
             if model.isCommandMode, !Self.isPath(model.query) { enterCommandMode() }
         case .labelCharacter(let value):
+            // Recherche à l'écran : Maj + étiquette choisit la cible, comme avant le lanceur (session 133).
+            if screenOnly {
+                _ = model.typeLabel(value)
+                break
+            }
             // Maj + lettre d'une pastille : sa ligne s'ouvre, comme ⌘ + chiffre (SPEC-084).
             guard let index = letterRows[value], index < launcherList.rows.count else { return }
             launcherSelection = launcherList.rows[index].id
@@ -1488,6 +1499,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// ligne est choisie ; nouvelles cibles seulement : la ligne choisie est gardée si elle reste. O(a + n).
     /// Lignes de la barre, puis la présentation choisie pour leur source (session 099).
     private func refreshLauncher() {
+        // Recherche à l'écran : la liste reste vide ; ↑/↓ et Retour passent aux cibles (session 133).
+        guard !screenOnly else { return }
         LauncherOpenClock.measure("rows") { refreshLauncherRows() }
         viewSource = currentViewSource()
         applyViewMode()
@@ -2746,6 +2759,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             ))
             return
         }
+        if screenOnly {
+            renderScreenSearch()
+            return
+        }
         refreshLauncher()
         // Icône d'une fenêtre : celle de son application, retrouvée par son nom. O(a).
         let appPaths = Dictionary(launcher.apps.map { ($0.name, $0.path) }, uniquingKeysWith: { first, _ in first })
@@ -2810,6 +2827,21 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         // Barre vide : aucune lettre ; sinon les cibles montrées en reçoivent une (SPEC-084).
         show(badges: [], bar: bar, letterTargets: !model.query.isEmpty)
+    }
+
+    /// Recherche à l'écran (session 133), rendu d'avant le lanceur : barre vide, aucune étiquette ; sinon chaque
+    /// correspondance porte son étiquette, la cible choisie est encadrée, toutes le sont à une lettre. O(m).
+    private func renderScreenSearch() {
+        let highlightedID = model.highlighted?.id
+        let framesAll = model.hasShortLabels
+        let badges: [TargetOverlayBadge] = (model.query.isEmpty ? [] : model.matches).compactMap { target in
+            guard let frame = target.frame?.cgRect else { return nil }
+            return TargetOverlayBadge(label: target.label, title: target.title, kind: target.kind, isActive: target.isActive,
+                                      frame: RoadieScreenCoordinate.axRectToNS(frame), isHighlighted: target.id == highlightedID,
+                                      isFramed: framesAll || target.id == highlightedID, isSearchResult: true)
+        }
+        show(badges: badges, bar: TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties,
+                                                  isLoading: isLoading, suggestions: []))
     }
 
     /// Ligne des étapes verbe et destination.
@@ -2980,6 +3012,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let selectable = Self.subject(of: launcherList.row(for: launcherSelection)).flatMap(LauncherSelection.key) != nil
         inputPanel?.selectionKeys = step == .objects ? SelectionKeys(hasSelection: !selection.isEmpty, rowSelectable: selectable) : SelectionKeys()
         inputPanel?.field.placeholderString = switch step {
+        case .objects where screenOnly: tr("Chercher à l'écran", "Find on screen")
         case .objects: launcher.workflowGrid.map { tr("Filtrer : ", "Filter: ") + $0.entry.workflowName } ?? tr("Rechercher ou saisir /commande", "Search or type /command")
         case .verbs: tr("Verbe ou destination…", "Verb or destination…")
         case .destinations, .batchDestinations: tr("Stage, bureau ou écran…", "Stage, desktop or display…")

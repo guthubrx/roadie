@@ -443,6 +443,10 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
   encadre.
 - **Valider sur une autre fenetre** : Roadie focalise la fenetre, attend que
   son application soit active (0,5 s au plus), puis clique.
+- **Recherche à l'écran seule** (session 133) : `screen_search_hotkey` (par exemple
+  `command+control+alt+f`, Capslock + F ; vide par défaut) ou `roadie targets screen` ouvre la barre sans
+  la liste du lanceur. Seules la saisie et les étiquettes des éléments visibles s'affichent : ↑/↓ changent de
+  cible, Maj + étiquette la choisit, Retour clique. Le lanceur garde son propre raccourci (`search_hotkey`).
 
 **Lanceur** : au-dessus de la barre, une liste groupe les résultats en sections :
 **Applications** (toutes les applications installées), **Fenêtres**, **Stages et

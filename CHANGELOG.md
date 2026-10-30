@@ -21,6 +21,8 @@ jour et les limites connues ; les README décrivent la version courante.
   barre Glassy Dark et Glassy Light, styles des fenêtres de workflow, tableaux Markdown dans la vue Texte.
 - Fenêtres flottantes : décalées hors du rail à leur ouverture (`floating_avoid_rail`), et place retenue,
   position et taille, pour les lignes ou règles où « Retenir la place » est coché (`remember_frame`).
+- Recherche à l'écran séparée du lanceur : `screen_search_hotkey` (Capslock + F) ou `roadie targets screen`
+  ouvre la barre sans liste, avec les seules étiquettes des éléments visibles.
 
 ### Corrections
 

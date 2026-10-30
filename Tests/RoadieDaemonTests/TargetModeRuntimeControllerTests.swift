@@ -9,6 +9,20 @@ import RoadieStages
 
 @Suite
 struct TargetModeRuntimeControllerTests {
+    /// Session 133 : Capslock + F ouvre la barre à l'écran, sans lanceur ; ⌘Espace garde le lanceur.
+    @Test @MainActor
+    func screenSearchOpensTheBarWithoutTheLauncher() throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-screen-search-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fixture = RuleChoiceFixture(sandbox: sandbox)
+        fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.screen"))
+        #expect(fixture.presenter.searchScreenOnly == true)
+        #expect(fixture.presenter.searchLauncher?.destinations.isEmpty == true)
+        fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        #expect(fixture.presenter.searchScreenOnly == false)
+    }
+
     @Test(arguments: [RuleChoice.later, .never]) @MainActor
     func ruleChoiceReportsCorruptMemoryInsteadOfSuccess(_ choice: RuleChoice) throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-choice-\(UUID().uuidString)")
@@ -524,6 +538,7 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
     var searchRunDeferred: (@MainActor ([String]) -> Void)?
     var searchOpenSettings: (@MainActor (SettingCategory?) -> Void)?
     var searchLauncher: LauncherSearchContext?
+    var searchScreenOnly: Bool?
 
     func startInteractive(
         _ state: TargetOverlayState,
@@ -567,8 +582,10 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
         ) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         launcher: LauncherSearchContext,
+        screenOnly: Bool,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
+        searchScreenOnly = screenOnly
         searchStyle = style
         searchTargets = targets
         searchCommands = commands

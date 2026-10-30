@@ -94,6 +94,7 @@ protocol TargetModeOverlayPresenting {
         ) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         launcher: LauncherSearchContext,
+        screenOnly: Bool,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle?
 }
@@ -147,6 +148,7 @@ struct LiveTargetModeOverlayPresenter: TargetModeOverlayPresenting {
         ) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         launcher: LauncherSearchContext,
+        screenOnly: Bool,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
         TargetOverlayPresenter.startSearch(
@@ -159,6 +161,7 @@ struct LiveTargetModeOverlayPresenter: TargetModeOverlayPresenting {
             load: load,
             activate: activate,
             launcher: launcher,
+            screenOnly: screenOnly,
             onFinish: onFinish
         )
     }
@@ -257,6 +260,11 @@ public final class TargetModeRuntimeController: NSObject {
         handle(TargetModeRuntimeCommand(name: "targets.search"))
     }
 
+    /// Raccourci de la recherche à l'écran, sans la liste du lanceur (session 133).
+    public func requestScreenSearch() {
+        handle(TargetModeRuntimeCommand(name: "targets.screen"))
+    }
+
     /// Raccourci des verbes de la fenêtre active (SPEC-075).
     public func requestActions() {
         handle(TargetModeRuntimeCommand(name: "targets.actions"))
@@ -339,7 +347,7 @@ public final class TargetModeRuntimeController: NSObject {
             break
         }
         // Raccourci de recherche maintenu ou répété : la recherche ouverte reste ouverte.
-        if command.name == "targets.search", currentCommand == "targets.search", currentSession != nil {
+        if command.name == "targets.search" || command.name == "targets.screen", currentCommand == command.name, currentSession != nil {
             return
         }
         currentSession?.cancel()
@@ -348,7 +356,7 @@ public final class TargetModeRuntimeController: NSObject {
         switch command.name {
         case "targets.interactive":
             startTargetsInteractive(command)
-        case "targets.search", "targets.actions":
+        case "targets.search", "targets.actions", "targets.screen":
             startTargetsSearch(command)
         case "grid.interactive":
             startGridInteractive(command)
@@ -367,7 +375,7 @@ public final class TargetModeRuntimeController: NSObject {
         let config = suppliedConfig ?? service.effectiveConfig
         let style: TargetOverlayStyle
         switch currentCommand {
-        case "targets.search", "targets.actions": style = .launcher(config.experimental.targetMode)
+        case "targets.search", "targets.actions", "targets.screen": style = .launcher(config.experimental.targetMode)
         case "grid.interactive": style = .grid(config.experimental.targetGrid)
         default: style = .labels(config.experimental.targetMode)
         }
@@ -526,7 +534,10 @@ public final class TargetModeRuntimeController: NSObject {
                 }
                 return targets.activate(target: target, action: verb)
             },
-            launcher: launcherContext(initialSubject: initialSubject, targets: roadieTargets, initialQuery: command.string("query"), snapshot: snapshot),
+            // Recherche à l'écran (session 133) : ni liste ni index des applications.
+            launcher: command.name == "targets.screen" ? .disabled
+                : launcherContext(initialSubject: initialSubject, targets: roadieTargets, initialQuery: command.string("query"), snapshot: snapshot),
+            screenOnly: command.name == "targets.screen",
             onFinish: { [weak self] result in
                 if let self { clock.finish(events: self.events) }
                 self?.finish(result, command: command.name)

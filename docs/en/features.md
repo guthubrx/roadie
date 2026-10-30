@@ -428,6 +428,10 @@ letter filters the targets; Return clicks the green target.
   `A`, `S`, `D`... and every result is framed.
 - **Validating in another window**: Roadie focuses the window, waits until its
   app is active (at most 0.5 s), then clicks.
+- **On-screen search only** (session 133): `screen_search_hotkey` (for example
+  `command+control+alt+f`, Capslock + F; empty by default) or `roadie targets screen` opens the bar without
+  the launcher list. Only the input and the labels of visible elements show: ↑/↓ change the target,
+  Shift + label picks it, Return clicks. The launcher keeps its own shortcut (`search_hotkey`).
 
 **Launcher**: above the bar, a list groups results into sections: **Applications**
 (every installed app), **Windows**, **Stages and desktops**, then **On screen** (the

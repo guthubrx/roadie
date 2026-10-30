@@ -26,6 +26,7 @@ var titlebarContextMenuController: TitlebarContextMenuController?
 var targetModeRuntimeController: TargetModeRuntimeController?
 var targetSearchHotkey: TargetSearchHotkey?
 var targetActionsHotkey: TargetSearchHotkey?
+var targetScreenSearchHotkey: TargetSearchHotkey?
 var overviewController: OverviewController?
 var windowSwitcherController: WindowSwitcherController?
 var windowSwitcherBridge: WindowSwitcherRuntimeBridge?
@@ -226,6 +227,17 @@ func startTargetModeComponent() {
     }
     targetActionsHotkey?.start()
     ShutdownRegistry.register { targetActionsHotkey?.stop() }
+    // Session 133 : recherche à l'écran, sans la liste du lanceur.
+    targetScreenSearchHotkey = TargetSearchHotkey(configLoader: {
+        var config = ConfigReloadService.shared.currentConfig().experimental.targetMode
+        config.searchHotkey = config.screenSearchHotkey
+        return config
+    }, signature: 0x5244_5343, eventType: "target_mode.screen_search_hotkey",
+       settingsIDs: ["target_mode.screen_search_hotkey", "target_mode.enabled", "target_mode.overlay_enabled", "*"]) {
+        targetModeRuntimeController?.requestScreenSearch()
+    }
+    targetScreenSearchHotkey?.start()
+    ShutdownRegistry.register { targetScreenSearchHotkey?.stop() }
 }
 
 @MainActor
