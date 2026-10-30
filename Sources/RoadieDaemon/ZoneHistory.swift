@@ -79,6 +79,11 @@ struct ZonePolicy: Equatable, Sendable {
     var maxAge: TimeInterval = 24 * 3600
     var clicksPerWindow = 3
 
+    /// Zones utiles seulement avec un profil `zones` actif (session 136) : sans lui, ni zone, ni photo. O(p).
+    static func isUsed(_ config: WindowSwitcherConfig) -> Bool {
+        config.enabled && config.shortcuts.contains { $0.enabled && $0.source == "zones" }
+    }
+
     @MainActor static var current: ZonePolicy {
         let config = ConfigReloadService.shared.currentConfig().switcher
         return ZonePolicy(maxCount: config.zoneHistorySize, maxAge: TimeInterval(config.zoneHistoryHours) * 3600,
@@ -187,6 +192,7 @@ final class ZoneHistory {
 @MainActor
 enum ZoneRecorder {
     static func remember(_ record: ZoneRecord, element: AXUIElement?, events: EventLog) {
+        guard ZonePolicy.isUsed(ConfigReloadService.shared.currentConfig().switcher) else { return }
         ZoneHistory.shared.record(record, element: element, policy: .current).forEach(ZoneThumbnails.shared.remove)
         events.append(RoadieEvent(type: "zone.recorded", details: [
             "app": record.appName, "source": record.fromClick == true ? "click" : "search",

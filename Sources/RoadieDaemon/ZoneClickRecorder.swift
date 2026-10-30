@@ -35,7 +35,8 @@ public final class ZoneClickRecorder {
     }
 
     private func clicked(_ event: NSEvent) {
-        guard ConfigReloadService.shared.currentConfig().switcher.zoneClicksPerWindow > 0,
+        let switcher = ConfigReloadService.shared.currentConfig().switcher
+        guard switcher.zoneClicksPerWindow > 0, ZonePolicy.isUsed(switcher),
               let cgEvent = event.cgEvent, cgEvent.getIntegerValueField(.eventSourceUserData) != Self.roadieClickTag else { return }
         let point = cgEvent.location
         let events = events

@@ -132,4 +132,15 @@ struct Spec136SwitcherZonesTests {
         #expect(ZoneNavigation.screenRect(of: record, window: WindowSwitcherEntry(window: snapshot, scope: nil, isMinimized: true),
                                           screens: [CGRect(x: 0, y: 0, width: 9000, height: 9000)]) == nil)
     }
+
+    /// Sans profil de zones actif, ni zone ni photo : rien n'est enregistré pour qui n'utilise pas ⌥Tab.
+    @Test func zonesAreOnlyRecordedWithAZonesProfile() {
+        #expect(!ZonePolicy.isUsed(WindowSwitcherConfig()))
+        let zones = WindowSwitcherShortcutConfig(id: "zones", hotkey: "alt+tab", source: "zones")
+        #expect(ZonePolicy.isUsed(WindowSwitcherConfig(shortcuts: [WindowSwitcherShortcutConfig(), zones])))
+        var off = zones
+        off.enabled = false
+        #expect(!ZonePolicy.isUsed(WindowSwitcherConfig(shortcuts: [WindowSwitcherShortcutConfig(), off])))
+        #expect(!ZonePolicy.isUsed(WindowSwitcherConfig(enabled: false, shortcuts: [zones])))
+    }
 }

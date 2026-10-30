@@ -5,6 +5,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+## 0.12.0 - 2026-10-30
+
 ### Nouveautés
 
 - Actions d'Alfred dans la barre : sur un ou plusieurs fichiers (copier, copier ou déplacer vers un dossier, en

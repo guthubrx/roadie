@@ -465,6 +465,64 @@ struct Spec124DocScreenshots {
         try save(rep, "window-switcher")
     }
 
+    /// Session 136 : le sélecteur de zones (⌥Tab), avec des zones inventées découpées dans les mêmes fausses fenêtres.
+    @Test func zoneSwitcher() async throws {
+        guard output != nil else { return }
+        try await eachLanguage { try await zoneSwitcherImage() }
+    }
+
+    /// Photo d'une zone : 300 × 180 points découpés dans la fausse fenêtre, autour de `origin` (coin haut gauche).
+    private static func zonePhoto(_ look: Look, at origin: CGPoint) -> NSImage {
+        let window = mock(look)
+        let crop = CGSize(width: 600, height: 360)
+        return NSImage(size: CGSize(width: 300, height: 180), flipped: false) { rect in
+            window.draw(in: rect, from: CGRect(x: origin.x, y: 800 - origin.y - crop.height, width: crop.width, height: crop.height),
+                        operation: .copy, fraction: 1)
+            return true
+        }
+    }
+
+    private func zoneSwitcherImage() async throws {
+        let windowsEntries = entries()
+        func zone(_ look: Look, _ title: String, _ origin: CGPoint) -> (ZoneRecord, NSImage)? {
+            guard let index = windows.firstIndex(where: { $0.look == look }) else { return nil }
+            let record = ZoneRecord(appName: windows[index].app, bundleID: "doc.\(index)", pid: Int32(9000 + index), windowID: UInt32(index + 1),
+                                    windowTitle: windows[index].title, title: title, relative: Rect(x: origin.x / 2, y: origin.y / 2, width: 80, height: 24),
+                                    windowWidth: 640, windowHeight: 400, date: Date())
+            return (record, Self.zonePhoto(look, at: origin))
+        }
+        let zones = [zone(.browser, tr("Bouton « Réserver »", "“Book” button"), CGPoint(x: 360, y: 300)),
+                     zone(.mail, tr("Message de Léa", "Message from Léa"), CGPoint(x: 20, y: 60)),
+                     zone(.calendar, tr("Réunion de jeudi", "Thursday meeting"), CGPoint(x: 520, y: 180)),
+                     zone(.code, tr("Erreur ligne 42", "Error on line 42"), CGPoint(x: 30, y: 220)),
+                     zone(.board, tr("Carte « Budget »", "“Budget” card"), CGPoint(x: 420, y: 90)),
+                     zone(.notes, tr("Note « Lisbonne »", "“Lisbon” note"), CGPoint(x: 0, y: 60))].compactMap { $0 }
+        let built = WindowSwitcherZones.build(records: zones.map(\.0), windows: windowsEntries)
+        var images: [WindowID: NSImage] = [:]
+        for (entry, photo) in zip(built.entries, zones.map(\.1)) { images[entry.id] = photo }
+        // Cartes plus larges que le défaut : les textes des zones restent lisibles sur la capture.
+        let panel = WindowSwitcherPanel(appearance: WindowSwitcherAppearance(config: WindowSwitcherConfig(thumbnailWidth: 300)))
+        defer { panel.close() }
+        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.appIcons = icons()
+        panel.configure(profile: WindowSwitcherShortcutConfig(id: "zones", name: tr("Zones récentes", "Recent zones"), source: "zones"))
+        panel.layout(in: CGRect(x: 0, y: 0, width: 1600, height: 1000))
+        panel.render(entries: built.entries, selectedID: built.entries[1].id, query: "", images: images,
+                     previewImage: images[built.entries[1].id], emptyMessage: "")
+        let content = try #require(panel.contentView)
+        content.layoutSubtreeIfNeeded()
+        let panelRep = try #require(content.bitmapImageRepForCachingDisplay(in: content.bounds))
+        content.cacheDisplay(in: content.bounds, to: panelRep)
+        let margin: CGFloat = 48
+        let rep = try await bitmap(size: CGSize(width: content.bounds.width + 2 * margin, height: content.bounds.height + 2 * margin)) { bounds in
+            Self.drawBackdrop(bounds)
+            let panelRect = bounds.insetBy(dx: margin, dy: margin)
+            NSBezierPath(roundedRect: panelRect, xRadius: 16, yRadius: 16).addClip()
+            Self.over(panelRep, in: panelRect)
+        }
+        try save(rep, "zone-switcher")
+    }
+
     @Test func overview() async throws {
         guard output != nil else { return }
         try await eachLanguage { try await overviewImage() }

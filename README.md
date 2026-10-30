@@ -14,8 +14,8 @@ Group a project's apps in a stage, find them in the side rail and switch desktop
 Type a few letters to open an app, a window, a file or a web page, and choose where it opens. Your
 Alfred workflows run there too, without the Powerpack.
 
-**[Download Roadie 0.11.1](https://github.com/guthubrx/roadie/releases/tag/v0.11.1)** ·
-[What's new](docs/releases/v0.11.1.en.md) · [Installation guide](#manual-installation)
+**[Download Roadie 0.12.0](https://github.com/guthubrx/roadie/releases/tag/v0.12.0)** ·
+[What's new](docs/releases/v0.12.0.en.md) · [Installation guide](#manual-installation)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie workspaces across multiple displays" width="100%">
@@ -25,7 +25,7 @@ Alfred workflows run there too, without the Powerpack.
 
 | | |
 |---|---|
-| **Window manager** | Automatic tiling, named stages, per-display virtual desktops, side rail, window switcher (Cmd+Tab), overview |
+| **Window manager** | Automatic tiling, named stages, per-display virtual desktops, side rail, window switcher (Cmd+Tab), zone switcher (Option+Tab), overview |
 | **Launcher** | Apps, windows, open documents and tabs, files, browser bookmarks and history, settings, calculator, web, Alfred workflows |
 
 They work together. The launcher knows where to put what it opens: in the Personal stage, on the other
@@ -109,6 +109,30 @@ the bottom, center or top, and you can drag it.
 <sub>Screenshots drawn by Roadie's renderer with sample windows and files. The whole interface follows the macOS
 language (English, or French on a Mac set to French), or the language chosen in Settings > General.</sub>
 
+## Go back to where you clicked: the zone switcher
+
+<p align="center">
+  <img src="docs/assets/screenshots/zone-switcher.png" alt="Roadie's zone switcher: recent places with their photo, grouped by desktop and stage" width="100%">
+</p>
+
+Cmd+Tab brings back a window. Roadie also brings back a **place inside a window**: the button you pressed,
+the spreadsheet cell you edited, the message you were reading. Every place you click becomes a zone, with a
+small photo taken at that moment. Hold Option and press Tab: the recent zones show up as cards, grouped by
+desktop and stage, exactly like windows in Cmd+Tab (arrows, mouse, search, Escape). Release Option: Roadie
+brings the window back, switching stage or desktop if needed, and clicks the zone again. Option+Tab, release,
+Option+Tab goes back and forth between your last two places, even across stages. We know of no other macOS
+tool that does this.
+
+- **Zones come from your clicks** (3 per window by default) and from **on-screen search** (Capslock + F in the
+  author's setup): type a word visible on screen, its button gets a label, Return or Shift + label clicks it.
+  Typos are forgiven when nothing matches exactly.
+- **Photos stay current**: a window you leave has its zones photographed again, at most every 10 seconds.
+- **A yellow border** shows the chosen zone in the real app while you pick, and where the click landed.
+- **On each card**, × removes the zone and the no-entry sign stops an app's clicks from creating zones.
+- **Kept 24 hours, 20 zones**, adjustable in Settings > Switcher; photos never leave your Mac.
+
+[Window switcher and zones guide](docs/en/features.md)
+
 ## What you can do with Roadie
 
 | Your goal | Feature |
@@ -118,6 +142,7 @@ language (English, or French on a Mac set to French), or the language chosen in 
 | Use multiple displays | Independent desktops, new windows on the active display by default, window and stage transfers |
 | Keep a window within reach | Pins, bookmarks and window groups |
 | Find and launch anything | Launcher, verbs and destinations, phrases, Alfred workflows |
+| Go back to a place you clicked | Zone switcher (Option+Tab), on-screen search with typo tolerance |
 | Work from the keyboard | Labels, grids and `/` commands in the bar |
 | Personalize the interface | Live settings, independent sizes and font choices |
 | Automate routine actions | Placement rules, short macros, commands and a JSON API |

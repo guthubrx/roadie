@@ -328,6 +328,11 @@ l'utilisateur ; `roadie targets screen`). Session 134 installée : fautes de fra
 clic à l'écran fiable juste après la barre, Maj + étiquette qui clique sans Maj, `launcher_on_screen`.
 `pick_modifier = control` chez l'utilisateur (Maj + chiffre tape en AZERTY). 2 335 tests / 347 suites.
 Reçus : specs/133-recherche-ecran/, specs/134-fautes-de-frappe/validation.md.
+Sessions 135 à 137 installées : zones récentes (endroits cliqués par la recherche à l'écran et par les clics, avec
+photo) dans un profil du sélecteur `source = "zones"` (Option+Tab chez l'utilisateur), même comportement que Cmd+Tab,
+retour et clic, aller-retour, bordure jaune sur l'application, photos reprises en quittant une fenêtre, 20 zones,
+24 h, 3 zones de clics par fenêtre ; icônes des cartes (× et sens interdit). Reçus : specs/135 à 137.
+Session 138 : 0.12.0 publiée (sessions 131 à 137). Reçu : specs/138-release-0120/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :

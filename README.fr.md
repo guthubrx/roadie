@@ -14,8 +14,8 @@ les applications d'un projet dans une stage, retrouve-les dans le rail et passe 
 l'autre sur chaque écran. Tape quelques lettres pour ouvrir une application, une fenêtre, un fichier
 ou une page web, et choisis où elle s'ouvre. Tes workflows d'Alfred y tournent aussi, sans Powerpack.
 
-**[Télécharger Roadie 0.11.1](https://github.com/guthubrx/roadie/releases/tag/v0.11.1)** ·
-[Découvrir les nouveautés](docs/releases/v0.11.1.md) · [Guide d'installation](#installation-manuelle)
+**[Télécharger Roadie 0.12.0](https://github.com/guthubrx/roadie/releases/tag/v0.12.0)** ·
+[Découvrir les nouveautés](docs/releases/v0.12.0.md) · [Guide d'installation](#installation-manuelle)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">
@@ -25,7 +25,7 @@ ou une page web, et choisis où elle s'ouvre. Tes workflows d'Alfred y tournent 
 
 | | |
 |---|---|
-| **Gestionnaire de fenêtres** | Tuilage automatique, stages nommées, bureaux virtuels par écran, rail latéral, sélecteur de fenêtres (Cmd+Tab), vue d'ensemble |
+| **Gestionnaire de fenêtres** | Tuilage automatique, stages nommées, bureaux virtuels par écran, rail latéral, sélecteur de fenêtres (Cmd+Tab), sélecteur de zones (Option+Tab), vue d'ensemble |
 | **Lanceur** | Applications, fenêtres, documents et onglets ouverts, fichiers, signets et historique des navigateurs, réglages, calcul, web, workflows d'Alfred |
 
 Les deux se parlent. Le lanceur sait où placer ce qu'il ouvre : dans la stage Perso, sur l'autre
@@ -111,6 +111,31 @@ place en bas, au centre ou en haut, et se déplace à la souris.
 Toute l'interface suit la langue de macOS (en français sur un Mac réglé en français, en anglais sinon), ou celle choisie
 dans Paramètres > Général.</sub>
 
+## Revenir là où tu as cliqué : le sélecteur de zones
+
+<p align="center">
+  <img src="docs/assets/screenshots/fr/zone-switcher.png" alt="Sélecteur de zones de Roadie : endroits récents avec leur photo, regroupés par bureau et stage" width="100%">
+</p>
+
+Cmd+Tab ramène une fenêtre. Roadie ramène aussi **un endroit dans une fenêtre** : le bouton sur lequel tu as
+appuyé, la cellule du tableur que tu modifiais, le message que tu lisais. Chaque endroit cliqué devient une zone,
+avec une petite photo prise à ce moment. Garde Option enfoncée et appuie sur Tab : les zones récentes s'affichent
+en cartes, regroupées par bureau et par stage, exactement comme les fenêtres dans Cmd+Tab (flèches, souris,
+recherche, Échap). Relâche Option : Roadie ramène la fenêtre, en changeant de stage ou de bureau si besoin, et
+reclique la zone. Option+Tab, relâcher, Option+Tab fait l'aller-retour entre tes deux derniers endroits, même
+d'une stage à l'autre. Nous ne connaissons pas d'autre outil pour macOS qui le fasse.
+
+- **Les zones viennent de tes clics** (3 par fenêtre par défaut) et de la **recherche à l'écran** (Capslock + F
+  chez l'auteur) : tape un mot visible à l'écran, son bouton reçoit une étiquette, Retour ou Maj + étiquette le
+  clique. Les fautes de frappe sont rattrapées quand rien ne correspond exactement.
+- **Les photos restent à jour** : une fenêtre que tu quittes voit ses zones reprises en photo, au plus toutes les
+  10 secondes.
+- **Une bordure jaune** montre la zone choisie dans la vraie application pendant le choix, puis où le clic est tombé.
+- **Sur chaque carte**, × retire la zone et le sens interdit empêche les clics d'une application de créer des zones.
+- **Gardées 24 heures, 20 zones**, réglable dans Paramètres > Sélecteur ; les photos ne quittent jamais ton Mac.
+
+[Guide du sélecteur et des zones](docs/fr/features.md)
+
 ## Ce que tu peux faire avec Roadie
 
 | Besoin | Fonction |
@@ -120,6 +145,7 @@ dans Paramètres > Général.</sub>
 | Travailler sur plusieurs écrans | Bureaux indépendants, nouvelles fenêtres sur l'écran actif par défaut, transfert des fenêtres et des stages |
 | Garder une fenêtre accessible | Épinglages, signets et groupes de fenêtres |
 | Tout trouver et tout lancer | Lanceur, verbes et destinations, phrases, workflows d'Alfred |
+| Revenir à un endroit cliqué | Sélecteur de zones (Option+Tab), recherche à l'écran tolérante aux fautes |
 | Agir au clavier | Étiquettes, grilles et commandes `/` dans la barre |
 | Adapter l'interface | Réglages immédiats, tailles indépendantes et choix de polices |
 | Automatiser les habitudes | Règles de placement, macros courtes, commandes et API JSON |
