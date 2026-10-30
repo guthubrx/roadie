@@ -317,6 +317,17 @@ attendues 600 s avec notification d'échec, index des littéraux, parcours Firef
 2 272 tests / 332 suites, PID 79678, santé 5/5. Reçu : specs/129-corrections-audit/validation.md.
 Session 130 : 0.11.1 publiée (corrections de l'audit). Notes docs/releases/v0.11.1*.md, reçu
 specs/130-release-0111/validation.md.
+Session 131 installée : actions d'Alfred dans la barre (verbes de fichiers, texte, onglets, applications ; Informations =
+fenêtre ⌘I du Finder), ⌘/⌥/⌃ + Retour réglables, menus de l'application active, commandes système et Musique,
+nouveautés d'Alfred 6 (grille `apps`, `symbols`, thèmes en verre, tableaux Markdown). Vue Texte sans champ de saisie
+qui plantait Roadie corrigée. Audit V15 A/pass. Reçu : specs/131-actions-alfred/validation.md.
+Session 132 installée : fenêtres flottantes décalées hors du rail à l'ouverture (`floating_avoid_rail`), place retenue
+par règle (`remember_frame`, `~/.roadies/floating-frames.json`). Reçu : specs/132-place-fenetres-flottantes/.
+Session 133 installée : recherche à l'écran séparée du lanceur (`screen_search_hotkey`, Capslock + F chez
+l'utilisateur ; `roadie targets screen`). Session 134 installée : fautes de frappe rattrapées (`typo_max_errors`),
+clic à l'écran fiable juste après la barre, Maj + étiquette qui clique sans Maj, `launcher_on_screen`.
+`pick_modifier = control` chez l'utilisateur (Maj + chiffre tape en AZERTY). 2 335 tests / 347 suites.
+Reçus : specs/133-recherche-ecran/, specs/134-fautes-de-frappe/validation.md.
 Current SpecKit feature: `061-vue-ensemble`.
 
 Contexte :
