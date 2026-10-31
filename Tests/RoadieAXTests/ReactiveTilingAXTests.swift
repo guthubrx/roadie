@@ -23,6 +23,8 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
     var frameAfterWrite: CGRect?
     var afterFrameWrite: (@Sendable () -> Void)?
     var readBack = CGRect(x: 0, y: 0, width: 100, height: 100)
+    var simulatesFrameAttributes = false
+    var resizeOrigins: [CGPoint] = []
 
     func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
         enumerations += 1
@@ -61,6 +63,17 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
             return .success
         }
         calls.append("set \(attribute)")
+        if simulatesFrameAttributes, setErrors[attribute] == nil {
+            let ax = unsafeBitCast(value, to: AXValue.self)
+            if attribute == kAXPositionAttribute {
+                var point = CGPoint.zero
+                if AXValueGetValue(ax, .cgPoint, &point) { readBack.origin = point }
+            } else if attribute == kAXSizeAttribute {
+                resizeOrigins.append(readBack.origin)
+                var size = CGSize.zero
+                if AXValueGetValue(ax, .cgSize, &size) { readBack.size = size }
+            }
+        }
         if let frameAfterWrite { readBack = frameAfterWrite }
         afterFrameWrite?()
         return setErrors[attribute] ?? .success
@@ -109,6 +122,19 @@ private struct WriterFixture {
 
 @Suite
 struct AXWindowFrameWriterTests {
+    @Test func spec147NewWindowReachesDestinationBeforeAnyResize() {
+        let f = WriterFixture()
+        f.io.windows[50] = index(pid: 50, ids: [1])
+        f.io.readBack = CGRect(x: 150, y: 40, width: 570, height: 436)
+        f.io.simulatesFrameAttributes = true
+        let target = CGRect(x: 4432, y: -759, width: 914, height: 1052)
+        let result = f.writer.setFrames([WindowFrameUpdate(window: window(1, pid: 50), frame: target,
+                                                         positionsBeforeResizing: true)], generation: 1)
+        #expect(result[WindowID(rawValue: 1)] == target)
+        #expect(!f.io.resizeOrigins.isEmpty)
+        #expect(f.io.resizeOrigins.allSatisfy { $0 == target.origin })
+        #expect(f.frames.entry(for: 1)?.writesInGeneration == 1)
+    }
     @Test func spec142RevokedBatchDoesNotReachAX() {
         let fixture = WriterFixture()
         fixture.io.windows[50] = index(pid: 50, ids: [1])
@@ -449,12 +475,12 @@ struct AXWindowFrameWriterTests {
 @Suite("Spec062 écriture et sonde")
 struct Spec062AXTests {
     /// Garer une fenêtre : une seule écriture, la position ; la taille n’est jamais touchée.
-    @Test
-    func preservesSizeWritesPositionOnly() {
+    @Test(arguments: [false, true])
+    func preservesSizeWritesPositionOnly(positionFirst: Bool) {
         let fixture = WriterFixture()
         fixture.io.windows[62] = index(pid: 62, ids: [621])
         fixture.io.nativeFullscreen = false
-        let update = WindowFrameUpdate(window: window(621, pid: 62), frame: CGRect(x: 5351, y: 100, width: 449, height: 258), preservesSize: true)
+        let update = WindowFrameUpdate(window: window(621, pid: 62), frame: CGRect(x: 5351, y: 100, width: 449, height: 258), preservesSize: true, positionsBeforeResizing: positionFirst)
         _ = fixture.writer.setFrames([update], generation: 1)
         #expect(fixture.io.frameWrites == ["set AXPosition"])
         #expect(fixture.frames.entry(for: 621)?.axResultCodes?["sizeBefore"] == nil)
@@ -795,4 +821,29 @@ private final class NSLockPermit142: @unchecked Sendable {
     private var current = true
     var isCurrent: Bool { lock.withLock { current } }
     func invalidate() { lock.withLock { current = false } }
+}
+
+extension AXWindowFrameWriterTests {
+    @Test func spec147RejectedEarlyPositionKeepsLegacyFallbackAndBudget() {
+        let f = WriterFixture()
+        f.io.windows[50] = index(pid: 50, ids: [1])
+        f.io.setErrors[kAXPositionAttribute] = .failure
+        let target = CGRect(x: 4432, y: -759, width: 914, height: 1052)
+        let result = f.writer.setFrames([WindowFrameUpdate(window: window(1, pid: 50), frame: target,
+                                                         positionsBeforeResizing: true)], generation: 1)
+        #expect(result[WindowID(rawValue: 1)]! == nil)
+        #expect(f.io.frameWrites == ["set AXPosition", "set AXSize", "set AXPosition"])
+        #expect(f.frames.entry(for: 1)?.writesInGeneration == 1)
+        #expect(f.frames.entry(for: 1)?.axResultCodes?["positionBefore"] == AXError.failure.rawValue)
+    }
+    @Test func spec147RevocationAfterTheFirstMoveNeverReachesResize() {
+        let f = WriterFixture()
+        f.io.windows[50] = index(pid: 50, ids: [1])
+        let generations = f.generations, expected = generations.current
+        f.io.afterFrameWrite = { _ = generations.next() }
+        _ = f.writer.setFrames([WindowFrameUpdate(window: window(1, pid: 50),
+                frame: CGRect(x: 4432, y: -759, width: 914, height: 1052), positionsBeforeResizing: true)],
+            generation: expected, isCurrent: { generations.current == expected })
+        #expect(f.io.frameWrites == ["set AXPosition"])
+    }
 }

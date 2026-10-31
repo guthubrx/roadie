@@ -5,6 +5,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Premier placement des nouvelles fenêtres tuilées : rejoindre la destination
+  avant d'ajuster la taille, pour éviter un agrandissement sur l'écran d'origine.
+  Vérifié sur dix ouvertures iTerm2 ; la première surface créée par macOS et de
+  courts ajustements de taille à destination peuvent encore être visibles.
+
 - Effets réglables dans Paramètres > Effets : profils, courbes, durée, intensité et
   ressort, avec aperçu local. Les réglages Roadie sont indépendants de macOS.
 - Destination de glisser au choix : contour ou vraie fenêtre avec remise en page

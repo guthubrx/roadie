@@ -12,12 +12,20 @@ final class Drag143Backend: SystemSnapshotProviding, WindowFrameWriting, @unchec
     private let lock = NSLock()
     private var entries: [WindowSnapshot]
     private var written: [(WindowID, CGRect)] = []
+    private var updates: [WindowFrameUpdate] = []
     var blockedPID: Int32?
     let gate = DispatchSemaphore(value: 0)
     init(screen: DisplaySnapshot, windows: [WindowSnapshot]) { self.screen = screen; entries = windows }
     func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: true) }
     func displays() -> [DisplaySnapshot] { [screen] }
     func windows() -> [WindowSnapshot] { lock.withLock { entries } }
+    func setFrames(_ batch: [WindowFrameUpdate]) -> [WindowID: CGRect?] {
+        lock.withLock { updates.append(contentsOf: batch) }
+        var result: [WindowID: CGRect?] = [:]
+        for update in batch { result[update.window.id] = setFrame(update.frame, of: update.window) }
+        return result
+    }
+    var frameUpdates: [WindowFrameUpdate] { lock.withLock { updates } }
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         if window.pid == blockedPID { gate.wait() }
         return lock.withLock {

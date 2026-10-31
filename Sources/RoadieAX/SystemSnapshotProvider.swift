@@ -105,11 +105,15 @@ public struct WindowFrameUpdate: Sendable {
     /// Position seule : garer une fenêtre ne doit jamais changer sa taille, même si le cadre
     /// observé était transitoire (Mission Control réduit les cadres rapportés). SPEC-062.
     public var preservesSize: Bool
+    /// Première disposition : rejoindre la destination avant de grandir sur l'écran de naissance.
+    public var positionsBeforeResizing: Bool
 
-    public init(window: WindowSnapshot, frame: CGRect, preservesSize: Bool = false) {
+    public init(window: WindowSnapshot, frame: CGRect, preservesSize: Bool = false,
+                positionsBeforeResizing: Bool = false) {
         self.window = window
         self.frame = frame
         self.preservesSize = preservesSize
+        self.positionsBeforeResizing = positionsBeforeResizing
     }
 }
 
@@ -1518,9 +1522,14 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         else { return nil }
 
         var codes = ["nativeFullscreen": nativeCode]
-        let phases: [(String, String, AXValue)] = update.preservesSize
+        var phases: [(String, String, AXValue)] = update.preservesSize
             ? [("position", kAXPositionAttribute, axPosition)]
             : [("sizeBefore", kAXSizeAttribute, axSize), ("position", kAXPositionAttribute, axPosition), ("sizeAfter", kAXSizeAttribute, axSize)]
+        if update.positionsBeforeResizing, !update.preservesSize {
+            // L'application peut contraindre une taille à l'écran d'origine. Rejoindre
+            // d'abord la destination ; garder ensuite les réparations habituelles.
+            phases.insert(("positionBefore", kAXPositionAttribute, axPosition), at: 0)
+        }
         for (phase, attribute, value) in phases {
             guard isCurrent() else { return nil }
             let error = io.setValue(value, of: attribute, on: element)
@@ -1533,7 +1542,7 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
                 windowIndex.invalidate(pid: pid)
                 return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen, isCurrent: isCurrent)
             }
-            if error != .success, attribute == kAXPositionAttribute {
+            if error != .success, attribute == kAXPositionAttribute, phase != "positionBefore" {
                 return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen, isCurrent: isCurrent)
             }
         }

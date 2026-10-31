@@ -48,6 +48,14 @@ public final class FrameTransitionRuntime {
         let policy = service.effectiveConfig.fx.animations.policy(for: action)
         guard policy.enabled, !plan.commands.isEmpty, generation == generations.current,
               generation != PlacementGeneration.outsideBudget, !isMouseDown() else { return nil }
+        events.append(RoadieEvent(type: "effects.frames_policy", details: [
+            "generation": String(generation), "action": action.rawValue,
+            "directWindowIDs": immediateWindowIDs.sorted().map { String($0.rawValue) }.joined(separator: ","),
+            "frames": plan.commands.map { command in
+                let from = command.window.frame, to = command.frame
+                return "\(command.window.id.rawValue):\(from.x),\(from.y),\(from.width),\(from.height)->\(to.x),\(to.y),\(to.width),\(to.height);preservesSize=\(command.preservesSize)"
+            }.joined(separator: "|")
+        ]))
         if session?.generation != generation || session?.finalSubmitted == true {
             let retained = Set(plan.commands.map { "ax-\(ObjectIdentifier(self))-\($0.window.pid)-\($0.window.id.rawValue)" })
             // Révoquer les anciens lots sans perdre la vitesse des fenêtres reprises.
@@ -74,7 +82,9 @@ public final class FrameTransitionRuntime {
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
         }
         let displays = service.cachedGestureSnapshot()?.displays ?? []
-        for command in plan.commands {
+        for original in plan.commands {
+            var command = original
+            if immediateWindowIDs.contains(command.window.id) { command.positionsBeforeResizing = true }
             let window = command.window, id = window.id
             current.commands[id] = command
             current.windows[id] = current.windows[id] ?? window
@@ -136,7 +146,8 @@ public final class FrameTransitionRuntime {
             let commands = current.frames.compactMap { id, frame -> ApplyCommand? in
                 guard let window = current.windows[id], let final = current.commands[id],
                       !window.frame.cgRect.matchesFrame(frame.cgRect) || current.dispatcher.mayChange(window) else { return nil }
-                return ApplyCommand(window: window, frame: frame, preservesSize: final.preservesSize)
+                return ApplyCommand(window: window, frame: frame, preservesSize: final.preservesSize,
+                                    positionsBeforeResizing: final.positionsBeforeResizing)
             }
             if !commands.isEmpty { current.dispatcher.submit(commands, generation: PlacementGeneration.outsideBudget) }
         }

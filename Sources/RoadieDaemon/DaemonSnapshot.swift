@@ -1297,20 +1297,24 @@ public struct ApplyCommand: Equatable, Codable, Sendable {
     public var frame: Rect
     /// Garer une fenêtre de stage masquée : position seule, la taille réelle est conservée (SPEC-062).
     public var preservesSize: Bool
+    public var positionsBeforeResizing: Bool
 
-    public init(window: WindowSnapshot, frame: Rect, preservesSize: Bool = false) {
+    public init(window: WindowSnapshot, frame: Rect, preservesSize: Bool = false,
+                positionsBeforeResizing: Bool = false) {
         self.window = window
         self.frame = frame
         self.preservesSize = preservesSize
+        self.positionsBeforeResizing = positionsBeforeResizing
     }
 
-    enum CodingKeys: String, CodingKey { case window, frame, preservesSize }
+    enum CodingKeys: String, CodingKey { case window, frame, preservesSize, positionsBeforeResizing }
     /// Les commandes encodées avant SPEC-062 n’ont pas `preservesSize`.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(window: try container.decode(WindowSnapshot.self, forKey: .window),
                   frame: try container.decode(Rect.self, forKey: .frame),
-                  preservesSize: try container.decodeIfPresent(Bool.self, forKey: .preservesSize) ?? false)
+                  preservesSize: try container.decodeIfPresent(Bool.self, forKey: .preservesSize) ?? false,
+                  positionsBeforeResizing: try container.decodeIfPresent(Bool.self, forKey: .positionsBeforeResizing) ?? false)
     }
 }
 
@@ -2173,7 +2177,8 @@ public extension SnapshotService {
             return false
         }
         let updates = commands.map { command in
-            WindowFrameUpdate(window: command.window, frame: command.frame.cgRect, preservesSize: command.preservesSize)
+            WindowFrameUpdate(window: command.window, frame: command.frame.cgRect, preservesSize: command.preservesSize,
+                              positionsBeforeResizing: command.positionsBeforeResizing || immediateWindowIDs.contains(command.window.id))
         }
         let actualFrames = updates.isEmpty ? [:] : frameWriter.setFrames(updates, generation: generation, isCurrent: isCurrent)
 
