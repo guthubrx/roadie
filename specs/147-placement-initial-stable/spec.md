@@ -1,5 +1,5 @@
 #147 — Stabiliser le placement initial
-Statut : In Progress. Retour utilisateur après146 : succès sur une ouverture, puis alternance. La validation générale146 est retirée ; ses essais ponctuels restent des observations. Base5f0e6182b0431b1afb0362be308bf3e5ad1c6905.
+Statut : Implemented. Retour utilisateur après146 : succès sur une ouverture, puis alternance. La validation générale146 est retirée ; ses essais ponctuels restent des observations. Base5f0e6182b0431b1afb0362be308bf3e5ad1c6905. Correction147 active, dix nouvelles ouvertures natives vérifiées ; limites dans validation.md.
 
 FR1 : pendant le premier placement d’une fenêtre tuilée, rejoindre la destination avant son agrandissement ; pas de trajet interpolé ni d’agrandissement visible à l’ancien emplacement provoqué par l’ordre des écritures. Les erreurs transitoires gardent un repli borné et contrôlé.
 FR2 : distinguer création neuve, rappel d’une fenêtre connue et ajustements natifs de taille/position. Conserver les animations normales des fenêtres déjà stabilisées.
