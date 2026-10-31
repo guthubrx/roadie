@@ -3,12 +3,12 @@
   "root": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability",
   "session": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-transfert145-01",
   "created_at": "2026-10-31T15:10:34.504173+00:00",
-  "commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
-  "git_status": " M .specify/feature.json\n M Sources/RoadieDaemon/DropPreviewController.swift\n M Sources/RoadieDaemon/FocusFollowsMouseController.swift\n M Sources/RoadieDaemon/FrameTransitionRuntime.swift\n M Sources/RoadieDaemon/LiveDropPreview.swift\n M Sources/RoadieDaemon/RailController.swift\n M Tests/RoadieDaemonTests/Spec144RealDropTests.swift\n?? Tests/RoadieDaemonTests/Spec145WindowDragTransferTests.swift\n?? docs/analyses/2026-10-30-comparatif-marche/\n?? docs/analyses/2026-10-30-omniwm/\n?? preuves-corrections/2026-10-31-145-apercu-entre-ecrans/\n?? specs/145-apercu-entre-ecrans/\n",
+  "commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+  "git_status": " M AGENTS.md\n M specs/145-apercu-entre-ecrans/spec.md\n M specs/145-apercu-entre-ecrans/tasks.md\n M specs/145-apercu-entre-ecrans/validation.md\n?? audits/2026-10-31/session-2026-10-31-transfert145-01/revisions/000-input.json\n?? docs/analyses/2026-10-30-comparatif-marche/\n?? docs/analyses/2026-10-30-omniwm/\n?? specs/145-apercu-entre-ecrans/livraison.md\n",
   "scope": "Session145 : vraie destination entre écrans, geste et masquage",
   "spec": "specs/145-apercu-entre-ecrans/spec.md",
   "mode": "fix",
-  "revision": 0,
+  "revision": 1,
   "base_ref": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
   "files": {
     ".agents/skills/speckit-analyze/SKILL.md": {
@@ -296,8 +296,8 @@
       "bytes": 369
     },
     "AGENTS.md": {
-      "sha256": "d57b75d65a9a2297d3e564c62a32adee31766aa159367ef7bce641a8a0646e15",
-      "bytes": 32686
+      "sha256": "7679bdf925532c75c2b4ad705f32bcd7a8fb249b07a396c7b3ca2a8e15d76465",
+      "bytes": 33124
     },
     "CHANGELOG.md": {
       "sha256": "59c67714f087e1595e825078bde8518ddde419a19b5c796926278896ae1dacc1",
@@ -6243,6 +6243,10 @@
       "sha256": "3297c27edb040fe48919c35598b6bc4c1b025b2145b1269309d17430062f1eb9",
       "bytes": 2392
     },
+    "specs/145-apercu-entre-ecrans/livraison.md": {
+      "sha256": "d99e3b4a58d9b1ad64603010cb45665e3d9668f7f80027725df91d1e526a0345",
+      "bytes": 4959
+    },
     "specs/145-apercu-entre-ecrans/plan.md": {
       "sha256": "2755f9d9f5b0b27b845a62c3c0509c727053c53e5bae486637a6711f936d1096",
       "bytes": 2324
@@ -6256,16 +6260,16 @@
       "bytes": 1030
     },
     "specs/145-apercu-entre-ecrans/spec.md": {
-      "sha256": "a5b492e6842605cd8b026119a5754275b1b23183c554a8787c8c31504fcc8390",
+      "sha256": "ab3e87784a736ea9dd4e7e63b305a6b0bb63f4b4e86c5475aa1c897825080ce0",
       "bytes": 1539
     },
     "specs/145-apercu-entre-ecrans/tasks.md": {
-      "sha256": "22fbf012c44818b5a5bc03af4694ffa8356d2ab86343cc88fa56fffa5bb88892",
+      "sha256": "cbe956bc129a2bbbf48577a9aacc5472b3514739f93d129cf52d4a40335d700d",
       "bytes": 1138
     },
     "specs/145-apercu-entre-ecrans/validation.md": {
-      "sha256": "0d32386c4cd2a28887b04bb394d79442a896ff31337bbef1a4beab3f4b4b20ca",
-      "bytes": 4477
+      "sha256": "3a5684153bd108b0b80d7597f7bb8cb7c755721636b5a10a47249fcd13e9734e",
+      "bytes": 4544
     }
   },
   "selected_files": [

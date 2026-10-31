@@ -36,6 +36,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -45,12 +55,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -60,8 +70,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -88,6 +98,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -97,12 +117,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -112,8 +132,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -140,6 +160,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -149,12 +179,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -164,8 +194,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -192,6 +222,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -201,12 +241,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -216,8 +256,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -244,6 +284,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -253,12 +303,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -268,8 +318,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -296,6 +346,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -305,12 +365,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -320,8 +380,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -348,6 +408,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -357,12 +427,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -372,8 +442,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -400,6 +470,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -409,12 +489,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -424,8 +504,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -452,6 +532,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -461,12 +551,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -476,8 +566,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -504,6 +594,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -513,12 +613,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -528,8 +628,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -556,6 +656,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -565,12 +675,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -580,8 +690,8 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -608,6 +718,16 @@
           "kind": "artifact",
           "path": "notes/history-refutations.json",
           "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
         }
       ],
       "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
@@ -617,12 +737,12 @@
         "reviewer": "Vérification locale déterministe des octets Git",
         "independent": false,
         "verdict": "refuted",
-        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
@@ -632,12 +752,354 @@
         "evidence": [
           {
             "kind": "artifact",
-            "path": "notes/history-refutations.json",
-            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
           }
         ]
       },
       "fingerprint": "9102892e618458cac1fa"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 87,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Sources/RoadieAX/WindowKeyFocus.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151535557358Z/raw.json",
+          "sha256": "1931447e6bdb96b7169faab5d8111d60150297b13d8a8e0d7f01c4b5d6571dcc"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "fingerprint": "4e8a580c8ed017fda3ba"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 88,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151535557358Z/raw.json",
+          "sha256": "1931447e6bdb96b7169faab5d8111d60150297b13d8a8e0d7f01c4b5d6571dcc"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "fingerprint": "04c0e8929eeb7e446619"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 89,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151535557358Z/raw.json",
+          "sha256": "1931447e6bdb96b7169faab5d8111d60150297b13d8a8e0d7f01c4b5d6571dcc"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "fingerprint": "b3f1b7a3e79d96c03615"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 318,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151535557358Z/raw.json",
+          "sha256": "1931447e6bdb96b7169faab5d8111d60150297b13d8a8e0d7f01c4b5d6571dcc"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "fingerprint": "7bbe5504a50f7e7c0cf6"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 479,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151535557358Z/raw.json",
+          "sha256": "1931447e6bdb96b7169faab5d8111d60150297b13d8a8e0d7f01c4b5d6571dcc"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "fingerprint": "57d5a728bbc090820600"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 511,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151535557358Z/raw.json",
+          "sha256": "1931447e6bdb96b7169faab5d8111d60150297b13d8a8e0d7f01c4b5d6571dcc"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations-r1.json",
+          "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 de chaque candidat ; égalité vérifiée pour tous, aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations-r1.json",
+            "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
+          }
+        ]
+      },
+      "fingerprint": "ff5c046ce7a68c0ddea8"
     }
   ],
   "suppressed": []

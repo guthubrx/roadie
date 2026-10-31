@@ -1,7 +1,7 @@
 # Audit Code V15
 
 Périmètre : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability
-Sources : commit 90703f0962c66952d4beaee04bf7b0ed0be72f41 ; mode fix.
+Sources : commit edd99a41b228ad35f41079dddc5860401a6c1441 ; mode fix.
 Décision : **pass** ; note globale : A. Les notes de qualité par axe sont présentées ci-dessous ; le compteur de pénalités n'est pas une note de qualité.
 Contrôles vérifiés : 13/13.
 
@@ -191,13 +191,37 @@ Qualité observée = somme des niveaux justifiés / maximum des critères notés
   /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json:514 ; 9102892e618458cac1fa
   La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.
   Action : Aucun changement de règle ou baseline ; contre-preuve conservée.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json:87 ; 4e8a580c8ed017fda3ba
+  La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.
+  Action : Aucun changement de règle ou baseline ; contre-preuve conservée.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json:88 ; 04c0e8929eeb7e446619
+  La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.
+  Action : Aucun changement de règle ou baseline ; contre-preuve conservée.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json:89 ; b3f1b7a3e79d96c03615
+  La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.
+  Action : Aucun changement de règle ou baseline ; contre-preuve conservée.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json:318 ; 7bbe5504a50f7e7c0cf6
+  La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.
+  Action : Aucun changement de règle ou baseline ; contre-preuve conservée.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json:479 ; 57d5a728bbc090820600
+  La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.
+  Action : Aucun changement de règle ou baseline ; contre-preuve conservée.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json:511 ; ff5c046ce7a68c0ddea8
+  La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.
+  Action : Aucun changement de règle ou baseline ; contre-preuve conservée.
 
 ## Vérification réalisée
 
 - security.static : pass ; completed, 0 candidat(s). 
-- security.secrets : pass ; completed, 0 candidat(s).  Périmètre et limites dans la note invocation.
-- security.history : pass ; Historique après v0.4.0 jusqu’à90703f09 examiné :12empreintes SHA256 signalées, toutes recalculées sur leur commit et réfutées. Aucun candidat restant ; histoire antérieure hors périmètre.
-- security.dependencies : pass ; completed, 0 candidat(s).  Périmètre et limites dans la note invocation.
+- security.secrets : pass ; completed, 0 candidat(s).  Périmètre et limites dans la note invocation. Périmètre et limites dans la note invocation.
+- security.history : pass ; Historique borné après v0.4.0 :30occurrences relues, 18identités distinctes après déduplication des révisions ; empreintes toutes recalculées et réfutées.
+- security.dependencies : pass ; completed, 0 candidat(s).  Périmètre et limites dans la note invocation. Périmètre et limites dans la note invocation.
 - security.authorization : pass ; AX/CG locaux existants, qualification sémantique, IDs/PID ; aucun changement de droit.
 - correctness.logic : pass ; Séparation des deux fins de geste, annulation et dépôt conservés ; masque déjà atteint corrigé en red/green.
 - correctness.concurrency : pass ; État MainActor, résultat de qualification à verrou, séquences au clic et permis ; un vrai up routé, files existantes.

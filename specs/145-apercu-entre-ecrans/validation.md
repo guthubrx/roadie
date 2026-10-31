@@ -1,4 +1,6 @@
-# Validation145 — en cours
+# Validation145 — vérifiée
+
+Chronologie des vérifications ; reçu final dans livraison.md.
 
 Prototype isolé : cause native observée, source visible sur cible après fin de glisser session ; tableaux et captures horsGit. Tests :36/5 suites PASS, redcrossécran échoue bien avant retrait de la garde. Première intégration : qualification0,9ms acceptée, mais aucune décision de capture et déplacement natif ; pas de succès revendiqué. Diagnostic ajouté pour séparer clicCG, routeNSEvent et préparation de contexte. Le code chargé est une validation, pas la livraison définitive.
 

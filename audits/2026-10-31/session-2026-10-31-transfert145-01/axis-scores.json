@@ -1,7 +1,7 @@
 {
   "scoring_version": "axes-2",
-  "input_sha256": "bee2ef2da0a52807791fd86b0a476a1975d4661e1bbc630c5c20f14de4ce45d0",
-  "manifest_sha256": "83751e0e4c486b64fd8d211255fa2eb5ff85ce2aa9315d1614907476a4cf3e4f",
+  "input_sha256": "f67ccabc291ea6bff6fb7636793a52a4d39789dc74ebecf1e9f74d7e7e641267",
+  "manifest_sha256": "db39f6ca8a9fa41ca37bdb83e3d65e76ac4292b545b00e2e71f006afd8f56e54",
   "axes": {
     "security": {
       "title": "Sécurité",
@@ -36,7 +36,13 @@
         "3a10794cc7617b23ca68",
         "d4864cfc135aa8c5b090",
         "96444f032664f7bfbc71",
-        "9102892e618458cac1fa"
+        "9102892e618458cac1fa",
+        "4e8a580c8ed017fda3ba",
+        "04c0e8929eeb7e446619",
+        "b3f1b7a3e79d96c03615",
+        "7bbe5504a50f7e7c0cf6",
+        "57d5a728bbc090820600",
+        "ff5c046ce7a68c0ddea8"
       ],
       "demonstrated_score": 70,
       "criteria": [
@@ -81,8 +87,8 @@
             },
             {
               "kind": "artifact",
-              "path": "notes/history-refutations.json",
-              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+              "path": "notes/history-refutations-r1.json",
+              "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
             }
           ],
           "excluded": false
@@ -128,8 +134,8 @@
             },
             {
               "kind": "artifact",
-              "path": "notes/history-refutations.json",
-              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+              "path": "notes/history-refutations-r1.json",
+              "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
             }
           ],
           "excluded": false
@@ -175,8 +181,8 @@
             },
             {
               "kind": "artifact",
-              "path": "notes/history-refutations.json",
-              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+              "path": "notes/history-refutations-r1.json",
+              "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
             }
           ],
           "excluded": false
@@ -222,8 +228,8 @@
             },
             {
               "kind": "artifact",
-              "path": "notes/history-refutations.json",
-              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+              "path": "notes/history-refutations-r1.json",
+              "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
             }
           ],
           "excluded": false
@@ -269,8 +275,8 @@
             },
             {
               "kind": "artifact",
-              "path": "notes/history-refutations.json",
-              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+              "path": "notes/history-refutations-r1.json",
+              "sha256": "d78e1c00d243348d7e9ff41235f734ff53c6452d65e4ca23f434bdee7e5912c5"
             }
           ],
           "excluded": false
@@ -1728,12 +1734,12 @@
             {
               "kind": "source",
               "path": "specs/145-apercu-entre-ecrans/spec.md",
-              "sha256": "a5b492e6842605cd8b026119a5754275b1b23183c554a8787c8c31504fcc8390"
+              "sha256": "ab3e87784a736ea9dd4e7e63b305a6b0bb63f4b4e86c5475aa1c897825080ce0"
             },
             {
               "kind": "source",
               "path": "specs/145-apercu-entre-ecrans/validation.md",
-              "sha256": "0d32386c4cd2a28887b04bb394d79442a896ff31337bbef1a4beab3f4b4b20ca"
+              "sha256": "3a5684153bd108b0b80d7597f7bb8cb7c755721636b5a10a47249fcd13e9734e"
             }
           ],
           "excluded": false
@@ -1765,12 +1771,12 @@
             {
               "kind": "source",
               "path": "specs/145-apercu-entre-ecrans/spec.md",
-              "sha256": "a5b492e6842605cd8b026119a5754275b1b23183c554a8787c8c31504fcc8390"
+              "sha256": "ab3e87784a736ea9dd4e7e63b305a6b0bb63f4b4e86c5475aa1c897825080ce0"
             },
             {
               "kind": "source",
               "path": "specs/145-apercu-entre-ecrans/validation.md",
-              "sha256": "0d32386c4cd2a28887b04bb394d79442a896ff31337bbef1a4beab3f4b4b20ca"
+              "sha256": "3a5684153bd108b0b80d7597f7bb8cb7c755721636b5a10a47249fcd13e9734e"
             }
           ],
           "excluded": false
@@ -1802,12 +1808,12 @@
             {
               "kind": "source",
               "path": "specs/145-apercu-entre-ecrans/spec.md",
-              "sha256": "a5b492e6842605cd8b026119a5754275b1b23183c554a8787c8c31504fcc8390"
+              "sha256": "ab3e87784a736ea9dd4e7e63b305a6b0bb63f4b4e86c5475aa1c897825080ce0"
             },
             {
               "kind": "source",
               "path": "specs/145-apercu-entre-ecrans/validation.md",
-              "sha256": "0d32386c4cd2a28887b04bb394d79442a896ff31337bbef1a4beab3f4b4b20ca"
+              "sha256": "3a5684153bd108b0b80d7597f7bb8cb7c755721636b5a10a47249fcd13e9734e"
             }
           ],
           "excluded": false

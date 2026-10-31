@@ -70,7 +70,7 @@
   ".specify/templates/tasks-template.md": "fb7a30a6e8e7319b7134bd52a26dd52fb7dd9106ab8fa08b6fb551d704dac498",
   ".specify/workflows/speckit/workflow.yml": "30862b06e500cf482819b8b8db31de86a9d621633110692598e806ba0407b3d1",
   ".specify/workflows/workflow-registry.json": "09433f01c07bd58b2e62adb4474ff4f24119e5ffcb5bb6835e5609902bfc7410",
-  "AGENTS.md": "d57b75d65a9a2297d3e564c62a32adee31766aa159367ef7bce641a8a0646e15",
+  "AGENTS.md": "7679bdf925532c75c2b4ad705f32bcd7a8fb249b07a396c7b3ca2a8e15d76465",
   "CHANGELOG.md": "59c67714f087e1595e825078bde8518ddde419a19b5c796926278896ae1dacc1",
   "Makefile": "4c3188dfeb14c91ef852e79a5ce166aa688c04fedb7f4d365940e685d647b260",
   "Package.resolved": "31a743aaba8b88433692dd3a31e8c29ba112aae7fce32ca838d3e2a0a8e06f13",
@@ -1557,10 +1557,11 @@
   "specs/144-effets-reglables/validation.md": "70486ae7972adb744f36c2f489a7ac42f0fec10d8c963892f00cfbc69b1fe31c",
   "specs/145-apercu-entre-ecrans/adversarial-review.md": "2bd814f7342d1868fa800084fe27343477c0fa34eda0ce23112176d84ca0a4d3",
   "specs/145-apercu-entre-ecrans/analysis.md": "3297c27edb040fe48919c35598b6bc4c1b025b2145b1269309d17430062f1eb9",
+  "specs/145-apercu-entre-ecrans/livraison.md": "d99e3b4a58d9b1ad64603010cb45665e3d9668f7f80027725df91d1e526a0345",
   "specs/145-apercu-entre-ecrans/plan.md": "2755f9d9f5b0b27b845a62c3c0509c727053c53e5bae486637a6711f936d1096",
   "specs/145-apercu-entre-ecrans/research.md": "65c0a2b8c26fbc75cfa308bba1b27784149bda2cf85e6a97c3231ca078115e76",
   "specs/145-apercu-entre-ecrans/reuse-audit.md": "d135d8e2d6d4cb7bac3061923ff2fdba6e2b515373010d1b71ee86133721b412",
-  "specs/145-apercu-entre-ecrans/spec.md": "a5b492e6842605cd8b026119a5754275b1b23183c554a8787c8c31504fcc8390",
-  "specs/145-apercu-entre-ecrans/tasks.md": "22fbf012c44818b5a5bc03af4694ffa8356d2ab86343cc88fa56fffa5bb88892",
-  "specs/145-apercu-entre-ecrans/validation.md": "0d32386c4cd2a28887b04bb394d79442a896ff31337bbef1a4beab3f4b4b20ca"
+  "specs/145-apercu-entre-ecrans/spec.md": "ab3e87784a736ea9dd4e7e63b305a6b0bb63f4b4e86c5475aa1c897825080ce0",
+  "specs/145-apercu-entre-ecrans/tasks.md": "cbe956bc129a2bbbf48577a9aacc5472b3514739f93d129cf52d4a40335d700d",
+  "specs/145-apercu-entre-ecrans/validation.md": "3a5684153bd108b0b80d7597f7bb8cb7c755721636b5a10a47249fcd13e9734e"
 }

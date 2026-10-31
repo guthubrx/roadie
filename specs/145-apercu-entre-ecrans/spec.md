@@ -1,6 +1,6 @@
 # Session145 — Vraie destination entre écrans
 
-Statut : In Progress. Correction autorisée par le refus explicite du repli entre écrans. Base90703f0962c66952d4beaee04bf7b0ed0be72f41 ; dépendance144.
+Statut : Implemented. Correction autorisée par le refus explicite du repli entre écrans. Base90703f0962c66952d4beaee04bf7b0ed0be72f41 ; dépendance144.
 
 L’utilisateur veut la vraie fenêtre, avec son contenu remis en page, également lorsqu’il glisse d’un écran à l’autre. Le contour inter-écrans livré en144 ne répond pas à cette demande. Conserver le même geste et les réglages actuels.
 
