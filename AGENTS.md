@@ -360,3 +360,10 @@ poursuit les tests et la livraison autorisés.
 Session 139 installée : Maj seule recule dans Cmd+Tab et Option+Tab (`SwitcherShiftTap`), images de zones réalistes.
 Session 140 installée : zones de clics par application (`[[switcher.zone_clicks_per_app]]`, valeur globale sinon).
 Session 141 : 0.13.0 publiée (Latest), tag 57fe791e. Reçu : specs/141-release-0130/validation.md.
+Session 142 implémentée et installée : suivi des voisines pendant un redimensionnement natif
+en spatialBsp, écriture asynchrone coalescée et proportions finales enregistrées une fois.
+2 375 tests / 355 suites et 28 tests de scripts réussis ; première revue traitée,
+seconde non admise par Bridget. UUID 4ED973A1-25AE-39EA-86B7-DA47F3FC7E6D,
+PID 81878, santé 5/5 ; certificat et configuration conservés. Commit local,
+sans release. Preuves partielles : Mac verrouillé avant l’essai après installation ;
+aucun gain de latence native revendiqué. Reçu : specs/142-redimensionnement-natif/validation.md.
