@@ -277,10 +277,6 @@ final class DividerResizeCoordinator {
     }
 
     private static func isActive(_ scope: StageScope, in state: PersistentStageState) -> Bool {
-        guard state.currentDesktopID(for: scope.displayID) == scope.desktopID,
-              let stored = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }),
-              stored.activeStageID == scope.stageID,
-              stored.stages.first(where: { $0.id == scope.stageID })?.mode.usesTreeEngine == true else { return false }
-        return true
+        state.isActiveTreeScope(scope)
     }
 }

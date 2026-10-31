@@ -33,6 +33,9 @@ public protocol WindowFrameWriting: Sendable {
     /// `generation` : génération de placement globale et monotone, transmise au registre des
     /// frames écrites (budget de 2 écritures par fenêtre et par génération, A2).
     func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?]
+    /// Lot interactif révocable : la permission est revérifiée entre les appels AX.
+    func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64,
+                   isCurrent: @Sendable () -> Bool) -> [WindowID: CGRect?]
     /// Lecture AX fraîche du cadre (seconde observation d'un refus, A14). nil si illisible.
     func readFrame(of window: WindowSnapshot) -> CGRect?
     func focus(_ window: WindowSnapshot) -> Bool
@@ -61,6 +64,12 @@ public extension WindowFrameWriting {
     /// Écrivains sans registre (doubles de test) : la génération est ignorée.
     func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?] {
         setFrames(updates)
+    }
+
+    func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64,
+                   isCurrent: @Sendable () -> Bool) -> [WindowID: CGRect?] {
+        guard isCurrent() else { return [:] }
+        return setFrames(updates, generation: generation)
     }
 
     func readFrame(of window: WindowSnapshot) -> CGRect? { nil }
@@ -1147,9 +1156,15 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     // Point commun d'écriture : une fenêtre dont le budget A13 de `generation` est épuisé n'est pas
     // écrite (résultat nil, aucun appel AX) ; l'appelant le signale (T213).
     public func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?] {
+        setFrames(updates, generation: generation, isCurrent: { true })
+    }
+
+    public func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64,
+                          isCurrent: @Sendable () -> Bool) -> [WindowID: CGRect?] {
         var results: [WindowID: CGRect?] = [:]
         let reserved = Set(updates.map { $0.window.id.rawValue })
         for (pid, group) in Dictionary(grouping: updates, by: { $0.window.pid }) {
+            guard isCurrent() else { break }
             var windows: PIDWindows?
             // AXEnhancedUserInterface : lu au premier placement de l'application, retabli en fin de lot.
             var enhancedUI: (app: AXUIElement, restore: Bool)?
@@ -1160,6 +1175,7 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
                 }
             }
             for update in group {
+                guard isCurrent() else { break }
                 var applied: CGRect?
                 if !writtenFrames.isOverBudget(windowID: update.window.id.rawValue, generation: generation),
                    !registry.isQuarantined(pid),
@@ -1169,7 +1185,7 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
                     // relu interdit toute écriture et ne consomme pas le budget de placement.
                     let (nativeError, nativeValue) = io.value(of: "AXFullScreen", on: element)
                     let nativeFullscreen = nativeError == .success ? nativeValue.flatMap(AXReadValue.flag) : nil
-                    if !registry.noteResult(nativeError, pid: pid), nativeFullscreen != true {
+                    if !registry.noteResult(nativeError, pid: pid), nativeFullscreen != true, isCurrent() {
                         if enhancedUI == nil {
                             let app = AXMessaging.application(pid)
                             enhancedUI = (app, disableEnhancedUserInterface(app, pid: pid))
@@ -1177,7 +1193,8 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
                         if !registry.isQuarantined(pid) {
                             applied = write(
                                 update, generation: generation, on: element, pid: pid,
-                                nativeCode: nativeError.rawValue, nativeFullscreen: nativeFullscreen
+                                nativeCode: nativeError.rawValue, nativeFullscreen: nativeFullscreen,
+                                isCurrent: isCurrent
                             )
                             // Une écriture partielle peut avoir changé le cadre même en échec.
                             // La relecture réussie est réutilisable ; sinon la prochaine résolution relira.
@@ -1492,7 +1509,7 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     /// AX est enregistree dans le registre, meme en echec : elle compte au budget A13 (T213).
     private func write(
         _ update: WindowFrameUpdate, generation: UInt64, on element: AXUIElement, pid: pid_t,
-        nativeCode: Int32, nativeFullscreen: Bool?
+        nativeCode: Int32, nativeFullscreen: Bool?, isCurrent: @Sendable () -> Bool = { true }
     ) -> CGRect? {
         var position = update.frame.origin
         var size = update.frame.size
@@ -1505,31 +1522,36 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
             ? [("position", kAXPositionAttribute, axPosition)]
             : [("sizeBefore", kAXSizeAttribute, axSize), ("position", kAXPositionAttribute, axPosition), ("sizeAfter", kAXSizeAttribute, axSize)]
         for (phase, attribute, value) in phases {
+            guard isCurrent() else { return nil }
             let error = io.setValue(value, of: attribute, on: element)
+            guard isCurrent() else { return nil }
             codes[phase] = error.rawValue
             if registry.noteResult(error, pid: pid) {
-                return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen)
+                return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen, isCurrent: isCurrent)
             }
             if error == .invalidUIElement {
                 windowIndex.invalidate(pid: pid)
-                return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen)
+                return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen, isCurrent: isCurrent)
             }
             if error != .success, attribute == kAXPositionAttribute {
-                return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen)
+                return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen, isCurrent: isCurrent)
             }
         }
         let readBack = frame(of: element, pid: pid) { codes["readBack"] = $0.rawValue }
-        return record(update, readBack: readBack, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen)
+        // Une ancienne réponse ne remplace jamais le registre d'une demande plus récente.
+        guard isCurrent() else { return nil }
+        return record(update, readBack: readBack, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen, isCurrent: isCurrent)
     }
 
     /// Inscrit une tentative d'ecriture au registre et rend sa frame relue (nil en echec). O(1).
     private func record(
         _ update: WindowFrameUpdate, readBack: CGRect?, generation: UInt64,
-        codes: [String: Int32], nativeFullscreen: Bool?
+        codes: [String: Int32], nativeFullscreen: Bool?, isCurrent: @Sendable () -> Bool = { true }
     ) -> CGRect? {
         writtenFrames.record(
             windowID: update.window.id.rawValue, requested: update.frame, readBack: readBack,
-            generation: generation, at: now(), axResultCodes: codes, nativeFullscreenReading: nativeFullscreen
+            generation: generation, at: now(), axResultCodes: codes, nativeFullscreenReading: nativeFullscreen,
+            isCurrent: isCurrent
         )
         return readBack
     }

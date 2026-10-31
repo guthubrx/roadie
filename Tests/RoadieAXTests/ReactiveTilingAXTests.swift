@@ -21,6 +21,7 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
     var titles: [AXUIElement: String] = [:]
     var readBackError: AXError?
     var frameAfterWrite: CGRect?
+    var afterFrameWrite: (@Sendable () -> Void)?
     var readBack = CGRect(x: 0, y: 0, width: 100, height: 100)
 
     func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
@@ -61,6 +62,7 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
         }
         calls.append("set \(attribute)")
         if let frameAfterWrite { readBack = frameAfterWrite }
+        afterFrameWrite?()
         return setErrors[attribute] ?? .success
     }
 
@@ -107,6 +109,26 @@ private struct WriterFixture {
 
 @Suite
 struct AXWindowFrameWriterTests {
+    @Test func spec142RevokedBatchDoesNotReachAX() {
+        let fixture = WriterFixture()
+        fixture.io.windows[50] = index(pid: 50, ids: [1])
+        let result = fixture.writer.setFrames([WindowFrameUpdate(window: window(1, pid: 50), frame: .zero)],
+                                             generation: 1, isCurrent: { false })
+        #expect(result.isEmpty)
+        #expect(fixture.io.calls.isEmpty)
+        #expect(fixture.io.enumerations == 0)
+    }
+
+    @Test func spec142RevocationBetweenAttributesStopsWritesAndOldPublication() {
+        let fixture = WriterFixture()
+        fixture.io.windows[50] = index(pid: 50, ids: [1])
+        let permit = NSLockPermit142()
+        fixture.io.afterFrameWrite = { permit.invalidate() }
+        _ = fixture.writer.setFrames([WindowFrameUpdate(window: window(1, pid: 50), frame: .zero)],
+                                     generation: 1, isCurrent: { permit.isCurrent })
+        #expect(fixture.io.frameWrites == ["set AXSize"])
+        #expect(fixture.frames.entry(for: 1) == nil)
+    }
     @Test
     func missingIDsReadEachFallbackCandidateOncePerBatch() {
         let fixture = WriterFixture()
@@ -766,4 +788,11 @@ extension MinimizedFocus040Tests {
         #expect(fixture.io.calls.last == "action AXRaise")
         #expect(!fixture.io.calls.contains("get AXFocusedWindow"))
     }
+}
+
+private final class NSLockPermit142: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = true
+    var isCurrent: Bool { lock.withLock { current } }
+    func invalidate() { lock.withLock { current = false } }
 }

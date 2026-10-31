@@ -481,6 +481,14 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         pin(for: windowID) != nil
     }
 
+    /// Contexte partagé des gestes natifs et des poignées. O(s + t), portées puis stages.
+    func isActiveTreeScope(_ scope: StageScope) -> Bool {
+        guard currentDesktopID(for: scope.displayID) == scope.desktopID,
+              let stored = scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }),
+              stored.activeStageID == scope.stageID else { return false }
+        return stored.stages.first(where: { $0.id == scope.stageID })?.mode.usesTreeEngine == true
+    }
+
     public func bookmark(named name: String) -> PersistentWindowBookmark? {
         windowBookmarks.first { $0.name == PersistentWindowBookmark.normalizedName(name) }
     }

@@ -47,7 +47,11 @@ Use cases:
 
 In `spatialBsp`, drag a handle in the gap between two window groups to adjust their
 proportions. Other dividers keep their relative positions. The result is saved in
-the tree. Native resizing with window edges remains available.
+the tree. In `spatialBsp`, native window edges and corners now make neighboring
+windows follow during the gesture, even when handles are hidden. macOS keeps
+control of the grabbed window. Proportions are saved on release. A slow app may
+limit how quickly its own windows follow; queued old sizes are replaced.
+Other modes keep their existing behavior on release.
 
 **Tiling > Resize handles** shows or hides the handles without retiling windows
 (`tiling.resize_handles`, enabled by default). A handle is a contrasting short line

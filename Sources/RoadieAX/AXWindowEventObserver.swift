@@ -161,6 +161,9 @@ public final class AXWindowEventObserver {
         }
         let event = AXWindowEvent(name: name, pid: pid, windowID: windowID)
         let observed = Self.frameNotifications.contains(name) && windowID != nil
+            // Le filtrage d'écho est désactivé pendant l'appui. Cette lecture n'y servirait
+            // donc à rien et ferait attendre le fil principal pendant le resize natif.
+            && !mouseButtonsPressed()
             && !AXUnresponsiveApps.shared.isQuarantined(pid)
             ? AXWindowFrameWriter().frame(of: element, pid: pid) : nil
         dispatch(event, observedFrame: observed, now: Date())

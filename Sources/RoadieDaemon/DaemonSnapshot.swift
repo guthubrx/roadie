@@ -2148,9 +2148,13 @@ public extension SnapshotService {
     /// refuserait aussi), la frame observée est acceptée et signalée ; la fenêtre est absente des
     /// `items` et de `attempted` (T213).
     // O(n) - n = commandes.
-    func apply(_ plan: ApplyPlan, generation: UInt64 = PlacementGeneration.shared.current) -> ApplyResult {
+    func apply(_ plan: ApplyPlan, generation: UInt64 = PlacementGeneration.shared.current,
+               isCurrent: @Sendable () -> Bool = { true }, publish: Bool = true,
+               respectLastingRefusals: Bool = false) -> ApplyResult {
         var items: [ApplyResultItem] = []
         let commands = plan.commands.filter { command in
+            if respectLastingRefusals && frameRegistry.refusesLastingly(windowID: command.window.id.rawValue,
+                target: command.frame.cgRect, observed: command.window.frame.cgRect) { return false }
             guard frameRegistry.isOverBudget(windowID: command.window.id.rawValue, generation: generation) else { return true }
             acceptOverBudget(command.window, requested: command.frame, generation: generation)
             return false
@@ -2158,7 +2162,7 @@ public extension SnapshotService {
         let updates = commands.map { command in
             WindowFrameUpdate(window: command.window, frame: command.frame.cgRect, preservesSize: command.preservesSize)
         }
-        let actualFrames = updates.isEmpty ? [:] : frameWriter.setFrames(updates, generation: generation)
+        let actualFrames = updates.isEmpty ? [:] : frameWriter.setFrames(updates, generation: generation, isCurrent: isCurrent)
 
         for command in commands {
             guard let rawActual = actualFrames[command.window.id], let actual = rawActual else {
@@ -2180,7 +2184,7 @@ public extension SnapshotService {
                 actual: Rect(actual)
             ))
         }
-        republishSharedSnapshot(after: items, windows: commands.map(\.window))
+        if publish && isCurrent() { republishSharedSnapshot(after: items, windows: commands.map(\.window)) }
         var applied = 0, clamped = 0, failed = 0
         for item in items {
             switch item.status {
@@ -2304,6 +2308,17 @@ public extension SnapshotService {
             return
         }
         processState.republish(frames: frames)
+    }
+
+    /// Publication sur MainActor après validation de la session, jamais depuis un lot devenu ancien.
+    @MainActor func publishInteractive(_ result: ApplyResult, commands: [ApplyCommand]) {
+        republishSharedSnapshot(after: result.items, windows: commands.map(\.window))
+    }
+
+    /// Le cadre appartient au geste de l'utilisateur, pas au registre de nos écritures.
+    /// Le clic suivant doit retrouver cette frame, même avant la prochaine passe complète.
+    @MainActor func publishNativeObservation(windowID: WindowID, frame: CGRect) {
+        processState.republish(frames: [windowID: Rect(frame)])
     }
 }
 

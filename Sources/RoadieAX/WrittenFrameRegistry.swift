@@ -66,9 +66,11 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
     /// confirmation de refus. L'historique reste séparé du budget. O(1), borne de 32 cadres.
     public func record(
         windowID: UInt32, requested: CGRect, readBack: CGRect?, generation: UInt64, at date: Date,
-        axResultCodes: [String: Int32]? = nil, nativeFullscreenReading: Bool? = nil
+        axResultCodes: [String: Int32]? = nil, nativeFullscreenReading: Bool? = nil,
+        isCurrent: @Sendable () -> Bool = { true }
     ) {
         lock.withLock {
+            guard isCurrent() else { return }
             var entry = WrittenFrame(
                 requested: requested, readBack: readBack, accepted: nil, writtenAt: date,
                 generation: generation, writesInGeneration: 1, refusalConfirmedAt: nil,

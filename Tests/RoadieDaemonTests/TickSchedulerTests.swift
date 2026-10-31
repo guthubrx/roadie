@@ -370,11 +370,11 @@ struct UserInputGestureTests {
         let down = Date(timeIntervalSince1970: 100)
 
         input.mouseDown(at: CGPoint(x: 10, y: 10), now: down)
-        #expect(input.currentGesture == GestureSession(windowID: 7, startFrame: frame, startedAt: down))
+        #expect(input.currentGesture == GestureSession(windowID: 7, startFrame: frame, startedAt: down, startLocation: CGPoint(x: 10, y: 10)))
         input.mouseUp(leftButton: true, now: down.addingTimeInterval(0.4))
 
         #expect(releases == [true])
-        #expect(input.takeGesture() == GestureSession(windowID: 7, startFrame: frame, startedAt: down, endedAt: down.addingTimeInterval(0.4)))
+        #expect(input.takeGesture() == GestureSession(windowID: 7, startFrame: frame, startedAt: down, endedAt: down.addingTimeInterval(0.4), startLocation: CGPoint(x: 10, y: 10)))
         #expect(input.takeGesture() == nil)
     }
 

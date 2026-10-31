@@ -5,6 +5,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- En `spatialBsp`, les voisines suivent les bords et coins natifs pendant le geste,
+  sans poignée requise. La fenêtre saisie reste sous contrôle de macOS ; les
+  proportions sont enregistrées au relâchement. Les écritures des voisines passent
+  en arrière-plan par application et gardent la dernière cible en attente.
+
 ## 0.13.0 - 2026-10-30
 
 ### Nouveautés

@@ -21,6 +21,7 @@ let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
 var dividerResizeRuntime: DividerResizeRuntime?
+var nativeResizeRuntime: NativeResizeRuntime?
 var focusFollowsMouseController: FocusFollowsMouseController?
 var titlebarContextMenuController: TitlebarContextMenuController?
 var targetModeRuntimeController: TargetModeRuntimeController?
@@ -300,6 +301,7 @@ func installDisplayChangeObserver(displaySettleSeconds: Double, onHealed: @escap
         queue: .main
     ) { _ in
         Task { @MainActor in
+            nativeResizeRuntime?.cancel(reason: "display_changed")
             displaySettlingUntil = Date().addingTimeInterval(displaySettleSeconds)
             pendingDisplayHeal?.cancel()
             pendingDisplayHeal = Task { @MainActor in
@@ -329,6 +331,7 @@ func installPowerObservers(reconcile: @escaping @MainActor () -> Void) {
             MainActor.assumeIsolated {
                 pendingWakeReconcile?.cancel()
                 pendingWakeReconcile = nil
+                nativeResizeRuntime?.cancel(reason: "sleep")
                 tickSuspendedUntil = .distantFuture
             }
         })
@@ -365,6 +368,7 @@ func installWorkspaceObservers(maintainer: LayoutMaintainer, scheduler: TickSche
     let spaceDidChange: @MainActor () -> Void = { maintainer.spaceDidChange(displayUUID: nil) }
     workspaceObservers.append(center.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
         MainActor.assumeIsolated {
+            nativeResizeRuntime?.cancel(reason: "space_changed")
             spaceDidChange()
             scheduler.request(cause: "ax:activeSpaceDidChange")
             events.append(RoadieEvent(type: "space_did_change"))
@@ -392,6 +396,11 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     UserInputActivity.shared.startMonitoring()
 
     let maintainer = LayoutMaintainer()
+    let nativeResize = NativeResizeRuntime(service: service, minimums: { scope, snapshot in
+        maintainer.dividerMinimums(for: scope, in: snapshot)
+    })
+    nativeResizeRuntime = nativeResize
+    ShutdownRegistry.register { nativeResize.cancel(reason: "shutdown") }
     // Les poignées appartiennent au processus écrivain, y compris en mode modulaire.
     let dividers = DividerResizeRuntime(service: service, minimums: { scope, snapshot in
         maintainer.dividerMinimums(for: scope, in: snapshot)
@@ -423,10 +432,12 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
         isBlocked: {
             let now = Date()
             return UserInputActivity.shared.blocksLayout(mouseButtonsPressed: NSEvent.pressedMouseButtons != 0)
+                || nativeResize.isHoldingLayout
                 || now < displaySettlingUntil || now < tickSuspendedUntil
         },
         onObservationChange: { service.noteObservationChange() }
     )
+    nativeResize.setCompletion { scheduler.buttonsReleased(gestureEnded: true) }
 
     let settingsController = SettingsLiveApplyController(
         stageStore: service.effectiveStageStore,
@@ -486,13 +497,20 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
             return target.map { ($0.window.id.rawValue, $0.window.frame.cgRect) }
         },
         onDragStart: { gesture in
-            _ = service.sharedSnapshot()
+            if let snapshot = service.cachedGestureSnapshot(), nativeResize.begin(gesture, snapshot: snapshot) {
+                // Le suivi natif n'a pas besoin d'un inventaire AX complet au premier mouvement.
+            } else {
+                _ = service.sharedSnapshot()
+            }
             EventLog().append(RoadieEvent(type: "window_gesture_target", details: [
                 "windowID": gesture.windowID.map(String.init) ?? "none",
                 "phase": "drag_started"
             ]))
         },
-        onRelease: { scheduler.buttonsReleased(gestureEnded: $0) }
+        onRelease: {
+            nativeResize.end()
+            scheduler.buttonsReleased(gestureEnded: $0)
+        }
     )
     installWorkspaceObservers(maintainer: maintainer, scheduler: scheduler)
     // Les échos de nos écritures sont absorbés par l'observateur (A1) : ils n'arrivent pas ici.

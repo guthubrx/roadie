@@ -49,8 +49,12 @@ Cas d'usage :
 
 En mode `spatialBsp`, tire une poignée dans l'espace entre deux groupes de fenêtres
 pour modifier leur proportion. Les autres séparations gardent leur position relative.
-Le résultat est enregistré dans l'arbre. Le redimensionnement natif par les bords
-des fenêtres reste disponible.
+Le résultat est enregistré dans l'arbre. Avec les bords et coins natifs, les
+fenêtres voisines suivent désormais pendant le geste en `spatialBsp`, même si les
+poignées sont masquées. macOS garde le contrôle de la fenêtre saisie. Les
+proportions sont enregistrées au relâchement. Une application lente peut limiter
+le suivi de ses propres fenêtres ; ses anciennes tailles en attente sont remplacées.
+Les autres modes conservent leur comportement au relâchement.
 
 Le réglage **Tuilage > Poignées de redimensionnement** masque ou affiche ces prises
 sans retuiler les fenêtres (`tiling.resize_handles`, activé par défaut). Les poignées

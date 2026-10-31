@@ -79,14 +79,17 @@ public final class FocusFollowsMouseController {
 public struct GestureSession: Equatable, Sendable {
     public var windowID: UInt32?
     public var startFrame: CGRect?
+    public var startLocation: CGPoint?
     public var startedAt: Date
     public var endedAt: Date?
     /// Preuve de mouvement avec le bouton gauche enfoncé ; un clic seul ne demande aucune attente AX.
     public var didDrag: Bool
 
-    public init(windowID: UInt32?, startFrame: CGRect?, startedAt: Date, endedAt: Date? = nil, didDrag: Bool = false) {
+    public init(windowID: UInt32?, startFrame: CGRect?, startedAt: Date, endedAt: Date? = nil,
+                didDrag: Bool = false, startLocation: CGPoint? = nil) {
         self.windowID = windowID
         self.startFrame = startFrame
+        self.startLocation = startLocation
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.didDrag = didDrag
@@ -193,7 +196,7 @@ public final class UserInputActivity: @unchecked Sendable {
         let target = lock.withLock { gestureTarget }?(point)
         lock.withLock {
             physicalReleaseObservedAt = nil
-            gesture = GestureSession(windowID: target?.windowID, startFrame: target?.frame, startedAt: now)
+            gesture = GestureSession(windowID: target?.windowID, startFrame: target?.frame, startedAt: now, startLocation: point)
         }
     }
 
@@ -235,6 +238,24 @@ public final class UserInputActivity: @unchecked Sendable {
         }
     }
 
+    /// Un resize natif confirmé remplace seulement l'ancien geste de cette fenêtre.
+    /// La session courante reste disponible aux observateurs ; aucun takeGesture concurrent.
+    public func confirmNativeResize(_ session: GestureSession) {
+        lock.withLock {
+            guard gesture?.windowID == session.windowID, gesture?.startedAt == session.startedAt else { return }
+            if finishedGesture?.windowID == session.windowID { finishedGesture = nil }
+        }
+    }
+
+    /// Le writer a enregistré les proportions du geste exact : la passe normale ne le rejoue pas.
+    public func completeNativeResize(_ session: GestureSession) {
+        lock.withLock {
+            guard finishedGesture?.windowID == session.windowID,
+                  finishedGesture?.startedAt == session.startedAt else { return }
+            finishedGesture = nil
+        }
+    }
+
     /// L'état physique peut précéder mouseUp : attendre son callback 300 ms au plus après
     /// relâchement observé, puis conserver le geste récupéré pour la passe qui consulte la garde.
     /// Un bouton encore appuyé reste bloquant, sans durée maximale de glissement. O(1).
@@ -266,6 +287,7 @@ public final class UserInputActivity: @unchecked Sendable {
         guard session.windowID != nil else { return false }
         if let previous = finishedGesture, previous.windowID == session.windowID {
             session.startFrame = previous.startFrame
+            session.startLocation = previous.startLocation
             session.startedAt = previous.startedAt
             session.didDrag = previous.didDrag || session.didDrag
         }
