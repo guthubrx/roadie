@@ -367,3 +367,9 @@ seconde non admise par Bridget. UUID 4ED973A1-25AE-39EA-86B7-DA47F3FC7E6D,
 PID 81878, santé 5/5 ; certificat et configuration conservés. Commit local,
 sans release. Preuves partielles : Mac verrouillé avant l’essai après installation ;
 aucun gain de latence native revendiqué. Reçu : specs/142-redimensionnement-natif/validation.md.
+
+Session 143 installée : voisines réelles pendant le glisser, option immédiate live_drag_preview
+dans Tuilage. 2 383 tests / 356 suites et 28 scripts réussis ; santé 5/5, certificat/configuration
+conservés. Geste natif observé et usage confirmé par l’utilisateur. Preuves partielles :
+réglage et Échap non enregistrés en natif ; revue non admise par Bridget. Commit local.
+Reçu : specs/143-glisser-direct/validation.md.

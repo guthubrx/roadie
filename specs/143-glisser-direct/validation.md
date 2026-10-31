@@ -14,3 +14,10 @@ Diaporama partiel dans preuves-corrections/2026-10-31-143-glisser-direct/preuves
 
 ## Self-review
 Moteur de visée figé conservé, pas d'autre calcul de dépôt ni writer. Aucune persistance dans l'aperçu. Coalescence et révocation communes à la session 142. Clôture bornée, pas de remise à zéro visible au dépôt. Complexité ajoutée linéaire par cible ; minuteur temporaire de contrôle du contexte uniquement pendant le geste. Abstraction justifiée : même propriétaire pour titres et rail, aucune dépendance.
+
+## Installation et confirmation
+Source 24c1f9bf6717f9dcda5c8f976682e43252d8316f. Release roadied 151,85 s et CLI 2,17 s. UUID CB98FF64-B0E9-38C5-A966-6AE77F466ABC, PID 9409, santé 5/5. Certificat et configuration inchangés.
+
+Parcours natif après : B passe de (4432,-759,914,2114) à (3509,303,1837,1052) pendant l'appui ; C reste stable. Captures avant/après appui visualisées. Un premier geste visait la place déjà occupée, donc son absence de déplacement ne prouvait aucun échec. L'utilisateur confirme ensuite : « Ça marche très bien maintenant ». Aucun gain de latence chiffré revendiqué.
+
+Preuves partielles : parcours graphique du réglage et Échap non enregistrés en natif ; tests comportementaux réussis. La demande suivante porte sur les effets Wayland. Fixture arrêtée normalement et stage validation143 supprimée ; la stage de l'utilisateur était déjà revenue à sa stage d'origine et n'a pas été changée. Revue indépendante non admise, détails dans review-code.md. Commits locaux, aucune release.

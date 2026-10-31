@@ -77,3 +77,5 @@
 | 129 | Implémentée et installée | `session-129-corrections-audit` (fusionnée) | `specs/129-corrections-audit` | Corrections de l'audit V15 du 29 octobre : actions de workflow sans délai, commandes système attendues et échecs signalés, index des littéraux, parcours Firefox linéaire, code mort ; 2 272 tests |
 | 130 | Clôturée et publiée | `130-release-0111` (fusionnée) | `specs/130-release-0111` | Publication 0.11.1 (audit V15 du 29 octobre et corrections de la session 129) |
 | 142 | Implémentée et installée ; comparaison native après en attente | `session-142-redimensionnement-natif` | `specs/142-redimensionnement-natif` | Bords natifs spatialBsp, lots asynchrones coalescés ; 2 375 tests et 28 scripts, santé 5/5 ; première revue traitée, seconde non admise ; Mac verrouillé, preuves partielles ; commit local sans release |
+
+| 143 | Installée, usage confirmé ; preuves partielles | `session-143-glisser-direct` | `specs/143-glisser-direct` | Voisines réelles pendant le glisser, option Tuilage, 2 383 tests et 28 scripts, santé 5/5 ; revue non admise ; réglage/Échap non enregistrés en natif |
