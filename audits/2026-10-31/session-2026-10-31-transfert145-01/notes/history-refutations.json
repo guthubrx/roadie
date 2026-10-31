@@ -1,0 +1,110 @@
+[
+  {
+    "commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+    "line": 87,
+    "source": "Sources/RoadieAX/WindowKeyFocus.swift",
+    "expected": "fbf8a7bef15d02157b722a92e6076bcaeeb907e38c52314d2caf46cd93ed7dc8",
+    "actual": "fbf8a7bef15d02157b722a92e6076bcaeeb907e38c52314d2caf46cd93ed7dc8",
+    "equal": true
+  },
+  {
+    "commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+    "line": 88,
+    "source": "Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+    "expected": "96e254c50cf895707ce97933004e5ad6def91525a1601fdb0171bb9acbe68991",
+    "actual": "96e254c50cf895707ce97933004e5ad6def91525a1601fdb0171bb9acbe68991",
+    "equal": true
+  },
+  {
+    "commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+    "line": 89,
+    "source": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+    "expected": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6",
+    "actual": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6",
+    "equal": true
+  },
+  {
+    "commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+    "line": 318,
+    "source": "Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+    "expected": "03621020b4748b3f5d3bd10d8b29cc6458aebe8b5724cbde3d1d12cc1ead6d6c",
+    "actual": "03621020b4748b3f5d3bd10d8b29cc6458aebe8b5724cbde3d1d12cc1ead6d6c",
+    "equal": true
+  },
+  {
+    "commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+    "line": 479,
+    "source": "Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+    "expected": "1db5a372959b1ac507494ba83c0c17a1b19e64319f86bc506f441ef40fda631c",
+    "actual": "1db5a372959b1ac507494ba83c0c17a1b19e64319f86bc506f441ef40fda631c",
+    "equal": true
+  },
+  {
+    "commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+    "line": 511,
+    "source": "Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+    "expected": "06a213bff511b2d5ab2f224f881479f09e499c5aa3d80b31acbe6dbc5218a5e1",
+    "actual": "06a213bff511b2d5ab2f224f881479f09e499c5aa3d80b31acbe6dbc5218a5e1",
+    "equal": true
+  },
+  {
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "line": 90,
+    "source": "Sources/RoadieAX/WindowKeyFocus.swift",
+    "expected": "fbf8a7bef15d02157b722a92e6076bcaeeb907e38c52314d2caf46cd93ed7dc8",
+    "actual": "fbf8a7bef15d02157b722a92e6076bcaeeb907e38c52314d2caf46cd93ed7dc8",
+    "equal": true
+  },
+  {
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "line": 91,
+    "source": "Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+    "expected": "96e254c50cf895707ce97933004e5ad6def91525a1601fdb0171bb9acbe68991",
+    "actual": "96e254c50cf895707ce97933004e5ad6def91525a1601fdb0171bb9acbe68991",
+    "equal": true
+  },
+  {
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "line": 92,
+    "source": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+    "expected": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6",
+    "actual": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6",
+    "equal": true
+  },
+  {
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "line": 321,
+    "source": "Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+    "expected": "03621020b4748b3f5d3bd10d8b29cc6458aebe8b5724cbde3d1d12cc1ead6d6c",
+    "actual": "03621020b4748b3f5d3bd10d8b29cc6458aebe8b5724cbde3d1d12cc1ead6d6c",
+    "equal": true
+  },
+  {
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "line": 482,
+    "source": "Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+    "expected": "1db5a372959b1ac507494ba83c0c17a1b19e64319f86bc506f441ef40fda631c",
+    "actual": "1db5a372959b1ac507494ba83c0c17a1b19e64319f86bc506f441ef40fda631c",
+    "equal": true
+  },
+  {
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "map": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "line": 514,
+    "source": "Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+    "expected": "06a213bff511b2d5ab2f224f881479f09e499c5aa3d80b31acbe6dbc5218a5e1",
+    "actual": "06a213bff511b2d5ab2f224f881479f09e499c5aa3d80b31acbe6dbc5218a5e1",
+    "equal": true
+  }
+]

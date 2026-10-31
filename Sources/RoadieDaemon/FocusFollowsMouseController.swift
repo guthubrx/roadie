@@ -54,13 +54,16 @@ public final class FocusFollowsMouseController {
         lastMousePoint = mousePoint
         guard let previousPoint,
               hypot(mousePoint.x - previousPoint.x, mousePoint.y - previousPoint.y) > Self.minimumMovement,
-              NSEvent.pressedMouseButtons == 0
+              !UserInputActivity.shared.isCapturedPointerHeld, NSEvent.pressedMouseButtons == 0,
+              !WindowDragActivity.shared.isActive(includingReleaseGrace: false)
         else { return }
 
         isReading = true
         defer { isReading = false }
         guard let snapshot = await snapshotService.readerSnapshot(),
-              configLoader().focus.focusFollowsMouse, NSEvent.pressedMouseButtons == 0,
+              configLoader().focus.focusFollowsMouse, !UserInputActivity.shared.isCapturedPointerHeld,
+              NSEvent.pressedMouseButtons == 0,
+              !WindowDragActivity.shared.isActive(includingReleaseGrace: false),
               let currentPoint = CGEvent(source: nil)?.location,
               hypot(currentPoint.x - mousePoint.x, currentPoint.y - mousePoint.y) <= Self.minimumMovement
         else { return }
@@ -120,6 +123,7 @@ public final class UserInputActivity: @unchecked Sendable {
     private var gesture: GestureSession?
     private var finishedGesture: GestureSession?
     private var physicalReleaseObservedAt: Date?
+    private var capturedPointerHeld = false
     private var gestureTarget: GestureTarget?
     private var releaseHandler: ReleaseHandler?
     private var dragStartHandler: (@MainActor (GestureSession) -> Void)?
@@ -170,7 +174,8 @@ public final class UserInputActivity: @unchecked Sendable {
     }
 
     @MainActor
-    private func handle(_ event: NSEvent, recordsInput: Bool) {
+    func handle(_ event: NSEvent, recordsInput: Bool) {
+        guard !WindowDragNativeRelease.matches(event.cgEvent) else { return }
         switch event.type {
         case .leftMouseDown:
             if let point = event.cgEvent?.location ?? CGEvent(source: nil)?.location {
@@ -231,6 +236,10 @@ public final class UserInputActivity: @unchecked Sendable {
     /// Session en cours (bouton gauche enfoncé). nil hors geste.
     public var currentGesture: GestureSession? { lock.withLock { gesture } }
 
+    /// Le glisser Roadie continue après la fin interne du glisser natif macOS.
+    public var isCapturedPointerHeld: Bool { lock.withLock { capturedPointerHeld } }
+    public func setCapturedPointerHeld(_ held: Bool) { lock.withLock { capturedPointerHeld = held } }
+
     /// Une poignée a réellement accepté le clic : elle remplace les interprétations natives
     /// courante et antérieure en attente. Le blocage physique des boutons reste indépendant. O(1).
     @MainActor
@@ -265,7 +274,7 @@ public final class UserInputActivity: @unchecked Sendable {
     /// Un bouton encore appuyé reste bloquant, sans durée maximale de glissement. O(1).
     public func blocksLayout(mouseButtonsPressed: Bool, now: Date = Date()) -> Bool {
         lock.withLock {
-            if mouseButtonsPressed {
+            if capturedPointerHeld || mouseButtonsPressed {
                 physicalReleaseObservedAt = nil
                 return true
             }

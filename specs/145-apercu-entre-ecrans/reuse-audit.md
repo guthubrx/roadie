@@ -1,0 +1,5 @@
+# Réutilisation145
+
+Gate : PASS. Propriétaire : WindowDragReorderController existant ; pas de second lecteur souris. Fin du dépôt : RailController.handleMouseUp existant, appelé par un hook ciblé pour le mouseUp physique consommé. Maintien logique : UserInputActivity existant, protégé par verrou. Maintien entre processus : WindowDragActivity existant, renouvelé depuis le timer de rail déjà actif ; pas de service supplémentaire. Placement/annulation : LiveDropPreview et dispatcher existants. Un marqueur partagé pur de CGEvent est placé avec le propriétaire pour filtrer les moniteurs. Aucun outil, endpoint, dépendance, bridge privé ou réglage système ajouté en production.
+
+Masquage T007 : réutiliser HiddenWindowPlacement.isHiddenOrLegacyOffscreen et cachedGestureSnapshot (lecture mémoire). Aucun nouveau détecteur ni service. Un masque déjà atteint doit soumettre sa cible finale sans excursion visuelle. Le test a reproduit la réapparition sur un cadre avec un pixel encore déclaré visible.

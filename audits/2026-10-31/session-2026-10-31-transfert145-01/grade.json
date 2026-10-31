@@ -1,0 +1,28 @@
+{
+  "protocol": "15.0.0",
+  "grade": "A",
+  "score": 100,
+  "date": "2026-10-31",
+  "spec": "specs/145-apercu-entre-ecrans/spec.md",
+  "scope": "Session145 : vraie destination entre écrans, geste et masquage",
+  "decision": "pass",
+  "release_blocked": false,
+  "coverage_percent": 100.0,
+  "controls_verified": 13,
+  "controls_applicable": 13,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [],
+  "source_drift": [],
+  "input_sha256": "bee2ef2da0a52807791fd86b0a476a1975d4661e1bbc630c5c20f14de4ce45d0",
+  "manifest_sha256": "83751e0e4c486b64fd8d211255fa2eb5ff85ce2aa9315d1614907476a4cf3e4f",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

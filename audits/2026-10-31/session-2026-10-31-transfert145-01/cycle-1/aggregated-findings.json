@@ -1,0 +1,644 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": false,
+    "decision": "pass"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 87,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Sources/RoadieAX/WindowKeyFocus.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "f09f4c663ecc3f2c9a49"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 88,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "ee843150da2eaf25c1ac"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 89,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "84c9a4ca3acab1c22692"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 318,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "955e6b8d7b3f285b6391"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 479,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "b231a3b8ae61959456fa"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 511,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "873d37e25c3fdea931b5"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 90,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Sources/RoadieAX/WindowKeyFocus.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "e86aea514743b37b8066"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 91,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "dbc2a0df94977611d029"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 92,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "3a10794cc7617b23ca68"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 321,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "d4864cfc135aa8c5b090"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 482,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "96444f032664f7bfbc71"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 514,
+      "symbol": "Empreintes SHA256 du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T151119807035Z/raw.json",
+          "sha256": "57c7d1bad34dce795d102d3dcfa4a10f0f3dc6866a228f98cb04809f1e7afe55"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-refutations.json",
+          "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+        }
+      ],
+      "rationale": "La valeur égale SHA256 du fichier nommé relu dans le même commit ; aucun moyen d’authentification.",
+      "remediation": "Aucun changement de règle ou baseline ; contre-preuve conservée.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Vérification locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul individuel SHA256 et égalité12/12 ; aucun test d’accès réseau.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les douze candidats de la plage ont été recalculés individuellement ; même mécanisme d’empreintes, aucun autre candidat.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-refutations.json",
+            "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+          }
+        ]
+      },
+      "fingerprint": "9102892e618458cac1fa"
+    }
+  ],
+  "suppressed": []
+}

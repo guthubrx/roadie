@@ -43,10 +43,8 @@ final class LiveDropPreview {
     var showsRealSource: Bool {
         guard let current = session, current.sourceGestureOwned,
               service.effectiveConfig.fx.dropPreview == "real", let candidate = current.lastCandidate,
-              let original = current.originals[candidate.sourceWindowID]?.scope else { return false }
-        // Une capture de glisser AppKit peut masquer la surface sur un autre écran/Space.
-        // Ne jamais faire disparaître la source : le contour conserve alors la destination.
-        return original.displayID == candidate.displayID
+              current.originals[candidate.sourceWindowID]?.scope != nil else { return false }
+        return true
     }
 
     init(service: SnapshotService, generations: PlacementGeneration = .shared,
@@ -81,11 +79,6 @@ final class LiveDropPreview {
     /// O(w + s) par cible : commandes indexées, un seul dernier lot par PID.
     func update(_ candidate: DropPreviewCandidate?) {
         guard let current = session, !current.ending else { return }
-        if let candidate, current.sourceGestureOwned, service.effectiveConfig.fx.dropPreview == "real",
-           current.originals[candidate.sourceWindowID]?.scope?.displayID != candidate.displayID,
-           current.lastCandidate?.displayID != candidate.displayID {
-            EventLog().append(RoadieEvent(type: "drag.real_fallback", details: ["reason": "other_display"]))
-        }
         current.lastCandidate = candidate
         if !service.effectiveConfig.tiling.liveDragPreview && !showsRealSource && current.touched.isEmpty {
             return

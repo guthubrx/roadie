@@ -1,0 +1,194 @@
+[0/1] Planning build
+Building for debugging...
+[0/7] Write sources
+[1/7] Write swift-version--58304C5D6DBC2206.txt
+[3/9] Compiling RoadieDaemon FrameTransitionRuntime.swift
+[4/9] Emitting module RoadieDaemon
+/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/DaemonSnapshot.swift:2450:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2448 |     }
+2449 | 
+2450 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2451 |         railSettings ?? RailSettings.load(path: configService.state.activePath ?? RoadieConfigLoader.defaultConfigPath())
+2452 |     }
+[4/10] Write Objects.LinkFileList
+[7/12] Linking roadied
+[8/12] Linking roadie
+[9/12] Applying roadied
+[10/12] Applying roadie
+[11/12] Linking roadiePackageTests
+Build complete! (6.13s)
+Test Suite 'Selected tests' started at 2026-10-31 16:03:59.377.
+Test Suite 'roadiePackageTests.xctest' started at 2026-10-31 16:03:59.385.
+Test Suite 'roadiePackageTests.xctest' passed at 2026-10-31 16:03:59.385.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-31 16:03:59.385.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.008) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Suite Spec142NativeResizeRuntimeTests started.
+􀟈  Test liveNeighborsMoveWithoutWritingNativeSourceOrPersistingEachFrame() started.
+􁁛  Test liveNeighborsMoveWithoutWritingNativeSourceOrPersistingEachFrame() passed after 0.337 seconds.
+􀟈  Test titleDragAndContentSelectionKeepOrdinaryGesture() started.
+􁁛  Test titleDragAndContentSelectionKeepOrdinaryGesture() passed after 0.311 seconds.
+􀟈  Test externalGenerationCancelsWithoutPersistingStaleRatios() started.
+􁁛  Test externalGenerationCancelsWithoutPersistingStaleRatios() passed after 0.009 seconds.
+􀟈  Test finalFrameAfterMouseUpIsUsedForPersistence() started.
+􁁛  Test finalFrameAfterMouseUpIsUsedForPersistence() passed after 0.327 seconds.
+􀟈  Test slowNeighborDoesNotBlockOtherPIDAndPendingFramesAreCoalesced() started.
+􁁛  Test slowNeighborDoesNotBlockOtherPIDAndPendingFramesAreCoalesced() passed after 0.097 seconds.
+􀟈  Test returningToStartWhileWriteIsBusyQueuesRestoration() started.
+􁁛  Test returningToStartWhileWriteIsBusyQueuesRestoration() passed after 0.055 seconds.
+􀟈  Test changedContextCancelsSession(reason:) started.
+􀟈  Test case passing 1 argument reason → "mode" to changedContextCancelsSession(reason:) started.
+􀟈  Test case passing 1 argument reason → "tree" to changedContextCancelsSession(reason:) started.
+􀟈  Test case passing 1 argument reason → "stage" to changedContextCancelsSession(reason:) started.
+􀟈  Test case passing 1 argument reason → "desktop" to changedContextCancelsSession(reason:) started.
+􀟈  Test case passing 1 argument reason → "zoom" to changedContextCancelsSession(reason:) started.
+􁁛  Test changedContextCancelsSession(reason:) with 5 test cases passed after 0.094 seconds.
+􀟈  Test newClickWhileEndingDoesNotCommitOldTree() started.
+􁁛  Test newClickWhileEndingDoesNotCommitOldTree() passed after 0.023 seconds.
+􀟈  Test contentAndTitleDragsNeverStartNativeCadence(title:) started.
+􀟈  Test case passing 1 argument title → true to contentAndTitleDragsNeverStartNativeCadence(title:) started.
+􀟈  Test case passing 1 argument title → false to contentAndTitleDragsNeverStartNativeCadence(title:) started.
+􁁛  Test contentAndTitleDragsNeverStartNativeCadence(title:) with 2 test cases passed after 0.002 seconds.
+􀟈  Test endingWatchdogReleasesLayoutWithoutAcceptingOldObservation() started.
+􁁛  Test endingWatchdogReleasesLayoutWithoutAcceptingOldObservation() passed after 0.016 seconds.
+􀟈  Test oneMissingObservationDoesNotLoseNativeResize() started.
+􁁛  Test oneMissingObservationDoesNotLoseNativeResize() passed after 0.334 seconds.
+􀟈  Test persistentMissingObservationFallsBackToOrdinaryGestureExactlyOnce() started.
+􁁛  Test persistentMissingObservationFallsBackToOrdinaryGestureExactlyOnce() passed after 0.027 seconds.
+􀟈  Test absentPointerLocationCannotStartNativeSession() started.
+􁁛  Test absentPointerLocationCannotStartNativeSession() passed after 0.001 seconds.
+􁁛  Suite Spec142NativeResizeRuntimeTests passed after 1.639 seconds.
+􀟈  Suite Spec143LiveDragTests started.
+􀟈  Test liveNeighborsMoveWithoutWritingSourceOrPersistingPreview() started.
+􁁛  Test liveNeighborsMoveWithoutWritingSourceOrPersistingPreview() passed after 0.014 seconds.
+􀟈  Test disabledDoesNotWriteAndToggleRestoresImmediately() started.
+􁁛  Test disabledDoesNotWriteAndToggleRestoresImmediately() passed after 0.034 seconds.
+􀟈  Test leavingCandidateRestoresAndDoesNotPersist() started.
+􁁛  Test leavingCandidateRestoresAndDoesNotPersist() passed after 0.032 seconds.
+􀟈  Test changedCandidateRestoresPreviousNeighbors() started.
+􁁛  Test changedCandidateRestoresPreviousNeighbors() passed after 0.031 seconds.
+􀟈  Test cancellationRestoresButCommitDoesNotBounceNeighborsBack() started.
+􁁛  Test cancellationRestoresButCommitDoesNotBounceNeighborsBack() passed after 0.058 seconds.
+􀟈  Test externalCommandAndStageChangeSuppressStaleDrop() started.
+􁁛  Test externalCommandAndStageChangeSuppressStaleDrop() passed after 0.018 seconds.
+􀟈  Test slowApplicationDoesNotBlockOthersAndNewClickCancelsDeferredDrop() started.
+􁁛  Test slowApplicationDoesNotBlockOthersAndNewClickCancelsDeferredDrop() passed after 0.102 seconds.
+􀟈  Test settingPersistsAndDoesNotRetileOrClearIntents() started.
+􁁛  Test settingPersistsAndDoesNotRetileOrClearIntents() passed after 0.010 seconds.
+􁁛  Suite Spec143LiveDragTests passed after 0.303 seconds.
+􀟈  Suite Spec144EffectsTests started.
+􀟈  Test oldConfigurationKeepsContourAndEffectsOff() started.
+􁁛  Test oldConfigurationKeepsContourAndEffectsOff() passed after 0.001 seconds.
+􀟈  Test profilesAndActionOverridesAreIndependent() started.
+􁁛  Test profilesAndActionOverridesAreIndependent() passed after 0.001 seconds.
+􀟈  Test invalidValuesAreRejectedBeforeRuntime() started.
+􁁛  Test invalidValuesAreRejectedBeforeRuntime() passed after 0.001 seconds.
+􀟈  Test temporalCurvesHaveExactEndsAndAreMonotone() started.
+􁁛  Test temporalCurvesHaveExactEndsAndAreMonotone() passed after 0.001 seconds.
+􀟈  Test springRetargetPreservesVelocityAndConverges() started.
+􁁛  Test springRetargetPreservesVelocityAndConverges() passed after 0.001 seconds.
+􀟈  Test springIsFiniteAcrossDampingRange() started.
+􁁛  Test springIsFiniteAcrossDampingRange() passed after 0.001 seconds.
+􀟈  Test appearanceValuesApplyToFadesAndSpecificActionStillWins() started.
+􁁛  Test appearanceValuesApplyToFadesAndSpecificActionStillWins() passed after 0.001 seconds.
+􀟈  Test onlyAnActionlessRootContainerMayActAsAnElectronTitle() started.
+􁁛  Test onlyAnActionlessRootContainerMayActAsAnElectronTitle() passed after 0.001 seconds.
+􀟈  Test titleQualificationUsesTheSameFullBandAsTheDropDetector() started.
+􁁛  Test titleQualificationUsesTheSameFullBandAsTheDropDetector() passed after 0.001 seconds.
+􀟈  Test aChromeTitleBandMustBeWideShallowAndAttachedToTheTop() started.
+􁁛  Test aChromeTitleBandMustBeWideShallowAndAttachedToTheTop() passed after 0.001 seconds.
+􁁛  Suite Spec144EffectsTests passed after 0.002 seconds.
+􀟈  Suite Spec144AnimatorTests started.
+􀟈  Test finishesExactlyWithoutLeavingTimerOrCallback() started.
+􁁛  Test finishesExactlyWithoutLeavingTimerOrCallback() passed after 0.001 seconds.
+􀟈  Test retargetStartsAtShownValueAndDoesNotRunOldCompletion() started.
+􁁛  Test retargetStartsAtShownValueAndDoesNotRunOldCompletion() passed after 0.001 seconds.
+􀟈  Test disabledReplacesRunningTransitionWithExactDestination() started.
+􁁛  Test disabledReplacesRunningTransitionWithExactDestination() passed after 0.001 seconds.
+􀟈  Test roadieAloneControlsAnimations() started.
+􁁛  Test roadieAloneControlsAnimations() passed after 0.001 seconds.
+􀟈  Test realTimerIsReleasedAfterCompletion() started.
+􁁛  Test realTimerIsReleasedAfterCompletion() passed after 0.090 seconds.
+􀟈  Test durationIsIndependentOfIntensityAndAnUnchangedTargetCreatesNoTimer() started.
+􁁛  Test durationIsIndependentOfIntensityAndAnUnchangedTargetCreatesNoTimer() passed after 0.001 seconds.
+􀟈  Test decorativePanelKeepsPassingClicksThroughDuringEffects() started.
+􁁛  Test decorativePanelKeepsPassingClicksThroughDuringEffects() passed after 0.086 seconds.
+􀟈  Test turningEffectsOffFinishesActiveTargetsWithoutRetiling() started.
+􁁛  Test turningEffectsOffFinishesActiveTargetsWithoutRetiling() passed after 0.004 seconds.
+􀟈  Test dragQualificationPublishesWithoutWaitingForTheMainActor() started.
+􁁛  Test dragQualificationPublishesWithoutWaitingForTheMainActor() passed after 0.001 seconds.
+􁁛  Suite Spec144AnimatorTests passed after 0.182 seconds.
+􀟈  Suite Spec144FrameTransitionTests started.
+􀟈  Test queuedWorkIsNotReportedAsAppliedAndEndsAtRealFrame() started.
+􁁛  Test queuedWorkIsNotReportedAsAppliedAndEndsAtRealFrame() passed after 0.116 seconds.
+􀟈  Test cancellationRevokesAllFurtherAnimationWrites() started.
+􁁛  Test cancellationRevokesAllFurtherAnimationWrites() passed after 0.175 seconds.
+􀟈  Test slowAppDoesNotBlockNeighborAndExternalGenerationCancelsQueuedFinal() started.
+􁁛  Test slowAppDoesNotBlockNeighborAndExternalGenerationCancelsQueuedFinal() passed after 0.234 seconds.
+􀟈  Test pressingMouseCancelsTransitionBeforeNextGestureStarts() started.
+􁁛  Test pressingMouseCancelsTransitionBeforeNextGestureStarts() passed after 0.200 seconds.
+􀟈  Test localCommandWithoutRunningAnimationOwnerStillWritesSynchronously() started.
+􁁛  Test localCommandWithoutRunningAnimationOwnerStillWritesSynchronously() passed after 0.003 seconds.
+􀟈  Test newGenerationRetargetsWithoutApplyingTheOldFinalTarget() started.
+􁁛  Test newGenerationRetargetsWithoutApplyingTheOldFinalTarget() passed after 0.899 seconds.
+􀟈  Test aHeldMouseButtonPreventsStartingAnAnimation() started.
+􁁛  Test aHeldMouseButtonPreventsStartingAnAnimation() passed after 0.114 seconds.
+􁁛  Suite Spec144FrameTransitionTests passed after 1.744 seconds.
+􀟈  Suite Spec144RealDropTests started.
+􀟈  Test realSourceAndNeighborsAreIndependent(neighbors:) started.
+􀟈  Test case passing 1 argument neighbors → false to realSourceAndNeighborsAreIndependent(neighbors:) started.
+􀟈  Test case passing 1 argument neighbors → true to realSourceAndNeighborsAreIndependent(neighbors:) started.
+􁁛  Test realSourceAndNeighborsAreIndependent(neighbors:) with 2 test cases passed after 0.088 seconds.
+􀟈  Test realSettingCannotWriteNativeSourceWithoutOwnership() started.
+􁁛  Test realSettingCannotWriteNativeSourceWithoutOwnership() passed after 0.018 seconds.
+􀟈  Test leavingDestinationRestoresSourceAndNoOldTargetReturns() started.
+􁁛  Test leavingDestinationRestoresSourceAndNoOldTargetReturns() passed after 0.048 seconds.
+􀟈  Test changedContextPreventsCommitOfRealSource(change:) started.
+􀟈  Test case passing 1 argument change → "pin" to changedContextPreventsCommitOfRealSource(change:) started.
+􀟈  Test case passing 1 argument change → "closed" to changedContextPreventsCommitOfRealSource(change:) started.
+􀟈  Test case passing 1 argument change → "mode" to changedContextPreventsCommitOfRealSource(change:) started.
+􁁛  Test changedContextPreventsCommitOfRealSource(change:) with 3 test cases passed after 0.054 seconds.
+􀟈  Test changingRealPreviewSettingRestoresSourceWhileKeepingLiveNeighbors() started.
+􁁛  Test changingRealPreviewSettingRestoresSourceWhileKeepingLiveNeighbors() passed after 0.116 seconds.
+􀟈  Test anotherDisplayKeepsRealSourceAndRestoresItOnCancel() started.
+􁁛  Test anotherDisplayKeepsRealSourceAndRestoresItOnCancel() passed after 0.046 seconds.
+􀟈  Test aPinnedOrNativeFullscreenWindowNeverStartsSourceCapture() started.
+􁁛  Test aPinnedOrNativeFullscreenWindowNeverStartsSourceCapture() passed after 0.001 seconds.
+􁁛  Suite Spec144RealDropTests passed after 0.375 seconds.
+􀟈  Suite Spec145WindowDragTransferTests started.
+􀟈  Test nativeReleaseIsMarkedAndKeepsTheOriginalClickIdentity() started.
+􁁛  Test nativeReleaseIsMarkedAndKeepsTheOriginalClickIdentity() passed after 0.001 seconds.
+􀟈  Test nativeReleaseDoesNotCloseTheUserGestureOrNotifyItsReleaseHandler() started.
+􁁛  Test nativeReleaseDoesNotCloseTheUserGestureOrNotifyItsReleaseHandler() passed after 0.006 seconds.
+􀟈  Test capturedPointerKeepsLayoutBlockedWhenMacOSReportsTheNativeButtonReleased() started.
+􁁛  Test capturedPointerKeepsLayoutBlockedWhenMacOSReportsTheNativeButtonReleased() passed after 0.001 seconds.
+􁁛  Suite Spec145WindowDragTransferTests passed after 0.007 seconds.
+􀟈  Suite Spec145ParkedWindowAnimationTests started.
+􀟈  Test aWindowAlreadyParkedNeverSlidesBackIntoTheScreen() started.
+􁁛  Test aWindowAlreadyParkedNeverSlidesBackIntoTheScreen() passed after 0.082 seconds.
+􁁛  Suite Spec145ParkedWindowAnimationTests passed after 0.082 seconds.
+􀟈  Suite Spec142NativeResizeGeometryTests started.
+􀟈  Test neighborsFollowBeforeReleaseAndReturningDoesNotDrift() started.
+􁁛  Test neighborsFollowBeforeReleaseAndReturningDoesNotDrift() passed after 0.001 seconds.
+􀟈  Test cornerChangesTwoFencesAndKeepsAbsentLeaves() started.
+􁁛  Test cornerChangesTwoFencesAndKeepsAbsentLeaves() passed after 0.001 seconds.
+􀟈  Test movingWithoutResizingDoesNotChangeTree() started.
+􁁛  Test movingWithoutResizingDoesNotChangeTree() passed after 0.001 seconds.
+􀟈  Test nativeSourceIsNotInventedBelowNeighborMinimum() started.
+􁁛  Test nativeSourceIsNotInventedBelowNeighborMinimum() passed after 0.001 seconds.
+􁁛  Suite Spec142NativeResizeGeometryTests passed after 0.001 seconds.
+􀟈  Suite Spec142NativeResizeCornersTests started.
+􀟈  Test allFourNativeCorners(id:) started.
+􀟈  Test case passing 1 argument id → 1 to allFourNativeCorners(id:) started.
+􀟈  Test case passing 1 argument id → 2 to allFourNativeCorners(id:) started.
+􀟈  Test case passing 1 argument id → 3 to allFourNativeCorners(id:) started.
+􀟈  Test case passing 1 argument id → 4 to allFourNativeCorners(id:) started.
+􁁛  Test allFourNativeCorners(id:) with 4 test cases passed after 0.001 seconds.
+􀟈  Test symmetricResizeUpdatesBothSameAxisAncestors() started.
+􁁛  Test symmetricResizeUpdatesBothSameAxisAncestors() passed after 0.001 seconds.
+􁁛  Suite Spec142NativeResizeCornersTests passed after 0.001 seconds.
+􁁛  Test run with 64 tests in 10 suites passed after 4.338 seconds.

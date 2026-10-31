@@ -1,0 +1,20 @@
+{
+  "protocol": "15.0.0",
+  "tools": {
+    "semgrep": "/Users/moi/.local/share/audit-v15/venv/bin/semgrep",
+    "opengrep": null,
+    "gitleaks": "/opt/homebrew/bin/gitleaks",
+    "osv-scanner": "/opt/homebrew/bin/osv-scanner",
+    "trivy": "/opt/homebrew/bin/trivy",
+    "knip": "/Users/moi/.local/share/audit-v15/node/node_modules/.bin/knip",
+    "depcruise": "/Users/moi/.local/share/audit-v15/node/node_modules/.bin/depcruise",
+    "ruff": "/Users/moi/Library/Python/3.9/bin/ruff",
+    "schemathesis": "/Users/moi/.local/share/audit-v15/venv/bin/schemathesis",
+    "mutmut": "/Users/moi/.local/share/audit-v15/venv/bin/mutmut",
+    "stryker": "/Users/moi/.local/share/audit-v15/node/node_modules/.bin/stryker",
+    "codeql": null
+  },
+  "tool_home": "/Users/moi/.local/share/audit-v15",
+  "python": "/Users/moi/.local/share/audit-v15/venv/bin/python",
+  "schema_validation": true
+}

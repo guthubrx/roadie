@@ -61,6 +61,7 @@ public final class RailController {
     private lazy var windowDragController: WindowDragReorderController = {
         let controller = WindowDragReorderController(preview: dropPreview, commandService: commandService)
         controller.routeOwnedDrag = { [weak self] point in self?.handleMouseDragged(to: point) }
+        controller.routeOwnedRelease = { [weak self] point in self?.handleMouseUp(at: point) }
         return controller
     }()
     private var focusedWindowID: WindowID?
@@ -263,6 +264,7 @@ public final class RailController {
             Task { @MainActor in self?.cancelRailDrags() }
         }) { clickMonitors.append(global) }
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
+            guard !WindowDragNativeRelease.matches(event.cgEvent) else { return event }
             let screenPoint = RoadieScreenCoordinate.mouseEventPoint(event)
             if Self.isRightMouseEvent(event.type),
                self?.handleRightMouse(event.type, at: screenPoint) == true {
@@ -277,6 +279,7 @@ public final class RailController {
         // sur un panneau, c'est que celui-ci laissait passer le clic (passthrough). Le rail ne doit pas
         // agir en plus de la fenetre qui a recu le clic.
         if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
+            guard !WindowDragNativeRelease.matches(event.cgEvent) else { return }
             let screenPoint = RoadieScreenCoordinate.mouseEventPoint(event)
             DispatchQueue.main.async {
                 if Self.isRightMouseEvent(event.type) {
@@ -319,8 +322,10 @@ public final class RailController {
     /// Le bouton doit etre observe relache pendant 0,4 s : un mouse-up normal est livre quelques ms apres le
     /// relachement et ne doit pas etre perdu.
     private func resetStaleRailDrags() {
+        windowDragController.renewOwnedDrag()
         let pressed = NSEvent.pressedMouseButtons
-        let leftStale = (pendingDrag != nil || windowDragController.hasActiveDrag) && pressed & 1 == 0
+        let leftStale = (pendingDrag != nil || windowDragController.hasActiveDrag)
+            && !UserInputActivity.shared.isCapturedPointerHeld && pressed & 1 == 0
         let rightStale = pendingStageReorder != nil && pressed & 2 == 0
         guard leftStale || rightStale else {
             dragReleasedSince = nil
@@ -387,13 +392,15 @@ public final class RailController {
         case .leftMouseDragged:
             handleMouseDragged(to: screenPoint)
         case .leftMouseUp:
-            handleMouseUp(at: windowDragController.releasePoint(or: screenPoint))
+            handleMouseUp(at: screenPoint)
         default:
             break
         }
     }
 
     private func handleMouseDown(at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {
+        events.append(RoadieEvent(type: "drag.real_router_press", details: ["x": String(Double(screenPoint.x)),
+            "y": String(Double(screenPoint.y)), "global": String(fromGlobalMonitor)]))
         FrameTransitionRuntime.shared.cancel()
         // Un nouveau clic invalide tout drag precedent reste en suspens.
         pendingDrag = nil

@@ -1,0 +1,24 @@
+[0/1] Planning build
+Building for debugging...
+[0/7] Write sources
+[1/7] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Compiling RoadieDaemonTests Spec145WindowDragTransferTests.swift
+[4/5] Emitting module RoadieDaemonTests
+[4/6] Write Objects.LinkFileList
+[5/6] Linking roadiePackageTests
+Build complete! (13.09s)
+Test Suite 'Selected tests' started at 2026-10-31 16:00:35.088.
+Test Suite 'roadiePackageTests.xctest' started at 2026-10-31 16:00:35.095.
+Test Suite 'roadiePackageTests.xctest' passed at 2026-10-31 16:00:35.095.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-31 16:00:35.095.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.007) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Suite Spec145ParkedWindowAnimationTests started.
+􀟈  Test aWindowAlreadyParkedNeverSlidesBackIntoTheScreen() started.
+􀢄  Test aWindowAlreadyParkedNeverSlidesBackIntoTheScreen() recorded an issue at Spec145WindowDragTransferTests.swift:77:9: Expectation failed: writes.allSatisfy { $0.1.minX == parked.minX }
+􀢄  Test aWindowAlreadyParkedNeverSlidesBackIntoTheScreen() failed after 0.332 seconds with 1 issue.
+􀢄  Suite Spec145ParkedWindowAnimationTests failed after 0.332 seconds with 1 issue.
+􀢄  Test run with 1 test in 1 suite failed after 0.332 seconds with 1 issue.

@@ -1,0 +1,20 @@
+Sources/RoadieDaemon/DropPreviewController.swift:626:        if WindowDragNativeRelease.matches(event) { return false }
+Sources/RoadieDaemon/DropPreviewController.swift:700:                WindowDragNativeRelease.finish(event, at: initialAXPoint, clickState: initialClickState)
+Sources/RoadieDaemon/DropPreviewController.swift:866:        _ = userInput.takeGesture()
+Sources/RoadieDaemon/DropPreviewController.swift:909:enum WindowDragNativeRelease {
+Sources/RoadieDaemon/FocusFollowsMouseController.swift:57:              !UserInputActivity.shared.isCapturedPointerHeld, NSEvent.pressedMouseButtons == 0,
+Sources/RoadieDaemon/FocusFollowsMouseController.swift:64:              configLoader().focus.focusFollowsMouse, !UserInputActivity.shared.isCapturedPointerHeld,
+Sources/RoadieDaemon/FocusFollowsMouseController.swift:178:        guard !WindowDragNativeRelease.matches(event.cgEvent) else { return }
+Sources/RoadieDaemon/FocusFollowsMouseController.swift:240:    public var isCapturedPointerHeld: Bool { lock.withLock { capturedPointerHeld } }
+Sources/RoadieDaemon/FocusFollowsMouseController.swift:313:    public func takeGesture() -> GestureSession? {
+Sources/RoadieDaemon/FrameTransitionRuntime.swift:41:             UserInputActivity.shared.isCapturedPointerHeld || NSEvent.pressedMouseButtons != 0
+Sources/RoadieDaemon/FrameTransitionRuntime.swift:89:                || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: displays)) {
+Sources/RoadieDaemon/FrameTransitionRuntime.swift:96:            if command.preservesSize { to = from.offsetBy(dx: -40 * policy.intensity, dy: 0) }
+Sources/RoadieDaemon/RailController.swift:267:            guard !WindowDragNativeRelease.matches(event.cgEvent) else { return event }
+Sources/RoadieDaemon/RailController.swift:282:            guard !WindowDragNativeRelease.matches(event.cgEvent) else { return }
+Sources/RoadieDaemon/RailController.swift:328:            && !UserInputActivity.shared.isCapturedPointerHeld && pressed & 1 == 0
+Sources/RoadieDaemon/RailController.swift:990:            _ = UserInputActivity.shared.takeGesture()
+Sources/RoadieDaemon/LayoutMaintainer.swift:224:        self.takeGesture = takeGesture ?? (testing ? { nil } : { UserInputActivity.shared.takeGesture() })
+Sources/RoadieDaemon/LayoutMaintainer.swift:1279:        if let session = takeGesture() {
+Sources/RoadieDaemon/LayoutMaintainer.swift:2324:            return ApplyCommand(window: entry.window, frame: Rect(frame), preservesSize: true)
+Sources/RoadieDaemon/LayoutMaintainer.swift:2357:            return ApplyCommand(window: entry.window, frame: Rect(frame), preservesSize: true)

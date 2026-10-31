@@ -37,7 +37,9 @@ public final class FrameTransitionRuntime {
     public var isHoldingLayout: Bool { session.map { $0.permit.isCurrent && ProcessInfo.processInfo.systemUptime - $0.started < 1.5 } ?? false }
 
     init(generations: PlacementGeneration = .shared, events: EventLog = EventLog(),
-         isMouseDown: @escaping () -> Bool = { NSEvent.pressedMouseButtons != 0 }) {
+         isMouseDown: @escaping () -> Bool = {
+             UserInputActivity.shared.isCapturedPointerHeld || NSEvent.pressedMouseButtons != 0
+         }) {
         self.generations = generations; self.events = events; self.isMouseDown = isMouseDown
     }
 
@@ -70,6 +72,7 @@ public final class FrameTransitionRuntime {
             }
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
         }
+        let displays = service.cachedGestureSnapshot()?.displays ?? []
         for command in plan.commands {
             let window = command.window, id = window.id
             current.commands[id] = command
@@ -77,11 +80,21 @@ public final class FrameTransitionRuntime {
             current.finished.remove(id)
             var from = current.frames[id]?.cgRect ?? window.frame.cgRect
             var to = command.frame.cgRect
+            let animationID = "ax-\(ObjectIdentifier(self))-\(window.pid)-\(id.rawValue)"
+            current.ids.insert(animationID)
+            // Un pixel de parking peut encore être déclaré visible par WindowServer.
+            // Ne jamais réexposer une fenêtre déjà rangée pendant son masquage.
+            if command.preservesSize && (!window.isOnScreen
+                || window.frame.cgRect.matchesFrame(to)
+                || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: displays)) {
+                EffectAnimator.shared.cancel(animationID)
+                current.frames[id] = command.frame
+                current.finished.insert(id)
+                continue
+            }
             // Le parking n'est pas une destination visuelle : courte sortie puis parking final.
             if command.preservesSize { to = from.offsetBy(dx: -40 * policy.intensity, dy: 0) }
             else if !window.isOnScreen { from = to.offsetBy(dx: 40 * policy.intensity, dy: 0) }
-            let animationID = "ax-\(ObjectIdentifier(self))-\(window.pid)-\(id.rawValue)"
-            current.ids.insert(animationID)
             EffectAnimator.shared.animate(id: animationID, from: [from.minX, from.minY, from.width, from.height],
                 to: [to.minX, to.minY, to.width, to.height], policy: policy) { [weak current] values in
                 current?.frames[id] = Rect(x: values[0], y: values[1], width: max(1, values[2]), height: max(1, values[3]))

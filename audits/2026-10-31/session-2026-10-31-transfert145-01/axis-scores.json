@@ -1,0 +1,1919 @@
+{
+  "scoring_version": "axes-2",
+  "input_sha256": "bee2ef2da0a52807791fd86b0a476a1975d4661e1bbc630c5c20f14de4ce45d0",
+  "manifest_sha256": "83751e0e4c486b64fd8d211255fa2eb5ff85ce2aa9315d1614907476a4cf3e4f",
+  "axes": {
+    "security": {
+      "title": "Sécurité",
+      "score": 70,
+      "grade": "C",
+      "status": "assessed",
+      "controls_verified": 5,
+      "controls_applicable": 5,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.security.01",
+        "axes.security.02",
+        "axes.security.03",
+        "axes.security.04",
+        "axes.security.05"
+      ],
+      "finding_fingerprints": [
+        "f09f4c663ecc3f2c9a49",
+        "ee843150da2eaf25c1ac",
+        "84c9a4ca3acab1c22692",
+        "955e6b8d7b3f285b6391",
+        "b231a3b8ae61959456fa",
+        "873d37e25c3fdea931b5",
+        "e86aea514743b37b8066",
+        "dbc2a0df94977611d029",
+        "3a10794cc7617b23ca68",
+        "d4864cfc135aa8c5b090",
+        "96444f032664f7bfbc71",
+        "9102892e618458cac1fa"
+      ],
+      "demonstrated_score": 70,
+      "criteria": [
+        {
+          "id": "axes.security.01",
+          "axis": "security",
+          "title": "Analyse statique et validation des entrées",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Qualification locale de titre et types CG ; compilateur et Semgrep figé limités sur Swift ; pas de preuve inter-fichiers automatique.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+              "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
+            },
+            {
+              "kind": "source",
+              "path": "Package.resolved",
+              "sha256": "31a743aaba8b88433692dd3a31e8c29ba112aae7fce32ca838d3e2a0a8e06f13"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/scanner-invocation-limit.md",
+              "sha256": "c92668d6fb1258292f29f9b1f267a82b0fd7d43a8b45446f70f4ecc7df07b5ca"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/history-refutations.json",
+              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.02",
+          "axis": "security",
+          "title": "Protection des secrets courants",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Scan de fichiers exigé sur copie SHA hors du worktree ignoré ; aucune valeur secrète ajoutée dans les sources examinées. Copie SHA scannée sans candidat.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+              "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
+            },
+            {
+              "kind": "source",
+              "path": "Package.resolved",
+              "sha256": "31a743aaba8b88433692dd3a31e8c29ba112aae7fce32ca838d3e2a0a8e06f13"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/scanner-invocation-limit.md",
+              "sha256": "c92668d6fb1258292f29f9b1f267a82b0fd7d43a8b45446f70f4ecc7df07b5ca"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/history-refutations.json",
+              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.03",
+          "axis": "security",
+          "title": "Maîtrise des secrets historiques",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+              "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
+            },
+            {
+              "kind": "source",
+              "path": "Package.resolved",
+              "sha256": "31a743aaba8b88433692dd3a31e8c29ba112aae7fce32ca838d3e2a0a8e06f13"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/scanner-invocation-limit.md",
+              "sha256": "c92668d6fb1258292f29f9b1f267a82b0fd7d43a8b45446f70f4ecc7df07b5ca"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/history-refutations.json",
+              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.04",
+          "axis": "security",
+          "title": "Authentification et séparation des droits",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Autorité locale AX déjà accordée ; pas de nouveau droit, SIP, injection ou compte ; fenêtres ciblées par identité stricte.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+              "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
+            },
+            {
+              "kind": "source",
+              "path": "Package.resolved",
+              "sha256": "31a743aaba8b88433692dd3a31e8c29ba112aae7fce32ca838d3e2a0a8e06f13"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/scanner-invocation-limit.md",
+              "sha256": "c92668d6fb1258292f29f9b1f267a82b0fd7d43a8b45446f70f4ecc7df07b5ca"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/history-refutations.json",
+              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.security.05",
+          "axis": "security",
+          "title": "Maîtrise des dépendances vulnérables",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Une seule dépendance Swift verrouillée et inchangée ; OSV explicite du verrou terminé sans candidat. Pas de graphe atteignable complet.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+              "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
+            },
+            {
+              "kind": "source",
+              "path": "Package.resolved",
+              "sha256": "31a743aaba8b88433692dd3a31e8c29ba112aae7fce32ca838d3e2a0a8e06f13"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/scanner-invocation-limit.md",
+              "sha256": "c92668d6fb1258292f29f9b1f267a82b0fd7d43a8b45446f70f4ecc7df07b5ca"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/history-refutations.json",
+              "sha256": "2f6f83940825c2b7ef6e6759d2330926d07c5ade70e913d41b8e609d57c57993"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "llm_security": {
+      "title": "Sécurité IA",
+      "score": null,
+      "grade": "N/A",
+      "status": "not_applicable",
+      "controls_verified": 0,
+      "controls_applicable": 0,
+      "coverage_percent": null,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.llm_security.01",
+        "axes.llm_security.02",
+        "axes.llm_security.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": null,
+      "criteria": [
+        {
+          "id": "axes.llm_security.01",
+          "axis": "llm_security",
+          "title": "Confidentialité et pseudonymisation",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Aucun modèle ni prompt ni réponse LLM dans le produit modifié.",
+          "evidence": [],
+          "excluded": true
+        },
+        {
+          "id": "axes.llm_security.02",
+          "axis": "llm_security",
+          "title": "Permissions des appels externes",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Aucun modèle ni prompt ni réponse LLM dans le produit modifié.",
+          "evidence": [],
+          "excluded": true
+        },
+        {
+          "id": "axes.llm_security.03",
+          "axis": "llm_security",
+          "title": "Résistance aux instructions malveillantes",
+          "weight": 1,
+          "status": "not_applicable",
+          "level": null,
+          "rating_rationale": "Aucun modèle ni prompt ni réponse LLM dans le produit modifié.",
+          "evidence": [],
+          "excluded": true
+        }
+      ]
+    },
+    "reliability": {
+      "title": "Fiabilité et exploitation",
+      "score": 63,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 4,
+      "controls_applicable": 4,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.reliability.01",
+        "axes.reliability.02",
+        "axes.reliability.03",
+        "axes.reliability.04"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 63,
+      "criteria": [
+        {
+          "id": "axes.reliability.01",
+          "axis": "reliability",
+          "title": "Conservation et rotation des sauvegardes",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Archive de rollback et quatre empreintes vérifiées ; politique de rotation générale inchangée, pas de qualification exhaustive de rétention.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
+              "sha256": "c3173fb04686d29ffbddba7ff56d7245437953e1a7d0c0c93fe04b9f8dc69e35"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/InteractiveFrameDispatcher.swift",
+              "sha256": "51eafd751387b3ce82bdc172f6cce7395acf6cf4081f53da43ebd69d9476b64a"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.reliability.02",
+          "axis": "reliability",
+          "title": "Reprise des traitements interrompus",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Permis révoqués, génération externe prioritaire, restauration/annulation testées ; aucun rejeu persistant du geste.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
+              "sha256": "c3173fb04686d29ffbddba7ff56d7245437953e1a7d0c0c93fe04b9f8dc69e35"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/InteractiveFrameDispatcher.swift",
+              "sha256": "51eafd751387b3ce82bdc172f6cce7395acf6cf4081f53da43ebd69d9476b64a"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.reliability.03",
+          "axis": "reliability",
+          "title": "Continuité pendant une bascule",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Configuration inchangée, fin native marquée séparée du vrai up ; démarrage chargé et nouveau restart vérifiés avec santé5/5.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
+              "sha256": "c3173fb04686d29ffbddba7ff56d7245437953e1a7d0c0c93fe04b9f8dc69e35"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/InteractiveFrameDispatcher.swift",
+              "sha256": "51eafd751387b3ce82bdc172f6cce7395acf6cf4081f53da43ebd69d9476b64a"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.reliability.04",
+          "axis": "reliability",
+          "title": "Restauration après sinistre",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Archives précédentes et état sauvegardés ; restauration complète après sinistre non exercée sur le poste utilisateur.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
+              "sha256": "c3173fb04686d29ffbddba7ff56d7245437953e1a7d0c0c93fe04b9f8dc69e35"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/InteractiveFrameDispatcher.swift",
+              "sha256": "51eafd751387b3ce82bdc172f6cce7395acf6cf4081f53da43ebd69d9476b64a"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "tests": {
+      "title": "Tests et validation",
+      "score": 70,
+      "grade": "C",
+      "status": "assessed",
+      "controls_verified": 5,
+      "controls_applicable": 5,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.tests.01",
+        "axes.tests.02",
+        "axes.tests.03",
+        "axes.tests.04",
+        "axes.tests.05"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 70,
+      "criteria": [
+        {
+          "id": "axes.tests.01",
+          "axis": "tests",
+          "title": "Typage des sources et des tests",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Compilateur Swift6 et vérification Sendable sur les sources/tests, compilation et tests natifs ; quelques avertissements hérités conservés.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec145WindowDragTransferTests.swift",
+              "sha256": "275683fe70f71c9247ff6a77db44bbd571abfe55e1c89204f7e799344b4bbc4e"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec144RealDropTests.swift",
+              "sha256": "3d40f1b435a87cc7dca97e2156fcb382fc969f28cf80f9c4d53e07e4bee799cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/full-suite.log",
+              "sha256": "f92d53534dc898c23b64313dccad26d3cdee666383460dcea992403972036b0a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/targeted.log",
+              "sha256": "6f52d614cdd92cd6d29200efd45ba8fc4c6d3841e5869fd90aa010ecd79a91cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/parking-red.log",
+              "sha256": "55a7f77109d46b2bff5092f79d344db5c19bf28d0bb9c42ae47ae2f98e5b37c4"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.02",
+          "axis": "tests",
+          "title": "Analyse de style et erreurs statiques",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Compilation, diff sans espace invalide et règles Semgrep ; pas de linter Swift de style dédié dans le projet.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec145WindowDragTransferTests.swift",
+              "sha256": "275683fe70f71c9247ff6a77db44bbd571abfe55e1c89204f7e799344b4bbc4e"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec144RealDropTests.swift",
+              "sha256": "3d40f1b435a87cc7dca97e2156fcb382fc969f28cf80f9c4d53e07e4bee799cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/full-suite.log",
+              "sha256": "f92d53534dc898c23b64313dccad26d3cdee666383460dcea992403972036b0a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/targeted.log",
+              "sha256": "6f52d614cdd92cd6d29200efd45ba8fc4c6d3841e5869fd90aa010ecd79a91cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/parking-red.log",
+              "sha256": "55a7f77109d46b2bff5092f79d344db5c19bf28d0bb9c42ae47ae2f98e5b37c4"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.03",
+          "axis": "tests",
+          "title": "Régressions et cas limites",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Tests ciblés red/green et scénarios temporels, cellules hors main et contrôles matériels injectés ; suite finale2420tests réussie.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec145WindowDragTransferTests.swift",
+              "sha256": "275683fe70f71c9247ff6a77db44bbd571abfe55e1c89204f7e799344b4bbc4e"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec144RealDropTests.swift",
+              "sha256": "3d40f1b435a87cc7dca97e2156fcb382fc969f28cf80f9c4d53e07e4bee799cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/full-suite.log",
+              "sha256": "f92d53534dc898c23b64313dccad26d3cdee666383460dcea992403972036b0a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/targeted.log",
+              "sha256": "6f52d614cdd92cd6d29200efd45ba8fc4c6d3841e5869fd90aa010ecd79a91cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/parking-red.log",
+              "sha256": "55a7f77109d46b2bff5092f79d344db5c19bf28d0bb9c42ae47ae2f98e5b37c4"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.04",
+          "axis": "tests",
+          "title": "Qualification du runtime livré",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Build signé chargé, UUID/PID et santé5/5 ; usage réel et limites doivent rester distingués des tests.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec145WindowDragTransferTests.swift",
+              "sha256": "275683fe70f71c9247ff6a77db44bbd571abfe55e1c89204f7e799344b4bbc4e"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec144RealDropTests.swift",
+              "sha256": "3d40f1b435a87cc7dca97e2156fcb382fc969f28cf80f9c4d53e07e4bee799cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/full-suite.log",
+              "sha256": "f92d53534dc898c23b64313dccad26d3cdee666383460dcea992403972036b0a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/targeted.log",
+              "sha256": "6f52d614cdd92cd6d29200efd45ba8fc4c6d3841e5869fd90aa010ecd79a91cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/parking-red.log",
+              "sha256": "55a7f77109d46b2bff5092f79d344db5c19bf28d0bb9c42ae47ae2f98e5b37c4"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.tests.05",
+          "axis": "tests",
+          "title": "Tests interface et intégration des données",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Deux sens, annulation/dépôt AppKit/Chrome et nouveau restart ; bouton fermer fenêtre non rejoué, toutes les apps non certifiées.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec145WindowDragTransferTests.swift",
+              "sha256": "275683fe70f71c9247ff6a77db44bbd571abfe55e1c89204f7e799344b4bbc4e"
+            },
+            {
+              "kind": "source",
+              "path": "Tests/RoadieDaemonTests/Spec144RealDropTests.swift",
+              "sha256": "3d40f1b435a87cc7dca97e2156fcb382fc969f28cf80f9c4d53e07e4bee799cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/full-suite.log",
+              "sha256": "f92d53534dc898c23b64313dccad26d3cdee666383460dcea992403972036b0a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/targeted.log",
+              "sha256": "6f52d614cdd92cd6d29200efd45ba8fc4c6d3841e5869fd90aa010ecd79a91cd"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/parking-red.log",
+              "sha256": "55a7f77109d46b2bff5092f79d344db5c19bf28d0bb9c42ae47ae2f98e5b37c4"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "performance": {
+      "title": "Performance et ressources",
+      "score": 63,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 4,
+      "controls_applicable": 4,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.performance.01",
+        "axes.performance.02",
+        "axes.performance.03",
+        "axes.performance.04"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 63,
+      "criteria": [
+        {
+          "id": "axes.performance.01",
+          "axis": "performance",
+          "title": "Admission et saturation des demandes",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Un lot actif et une cible en attente par PID ; dernière cible seulement, délai borné et autres applications indépendantes.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
+              "sha256": "db3cb2b481f89de5fc859fa65983bbca7287862d40d4a8c35804ca2736dabca2"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.performance.02",
+          "axis": "performance",
+          "title": "Budget mémoire",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "État linéaire par fenêtre/PID et une tâche de qualification remplacée ; pas de nouvelle mesure de tas/mémoire privée145.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
+              "sha256": "db3cb2b481f89de5fc859fa65983bbca7287862d40d4a8c35804ca2736dabca2"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.performance.03",
+          "axis": "performance",
+          "title": "Délais, annulation et libération",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Annulation au clic, fin/désactivation et notifications contexte ; tests slowAX et timer libéré ; appel AX engagé non interrompu de force.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
+              "sha256": "db3cb2b481f89de5fc859fa65983bbca7287862d40d4a8c35804ca2736dabca2"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.performance.04",
+          "axis": "performance",
+          "title": "Mesures représentatives de latence et charge",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Huit parcours natifs stables, sans benchmark CPU/GPU ni latence physique isolée du piloteBTT.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
+              "sha256": "db3cb2b481f89de5fc859fa65983bbca7287862d40d4a8c35804ca2736dabca2"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "complexity": {
+      "title": "Complexité algorithmique",
+      "score": 75,
+      "grade": "C",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.complexity.01",
+        "axes.complexity.02",
+        "axes.complexity.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 75,
+      "criteria": [
+        {
+          "id": "axes.complexity.01",
+          "axis": "complexity",
+          "title": "Complexité des points d’entrée",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Moteur O(k), dispatcher O(k+p), tap mouvements O(1) et clic O(w) mémoire ; le BSP quadratique hérité est nommé séparément.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/InteractiveFrameDispatcher.swift",
+              "sha256": "51eafd751387b3ce82bdc172f6cce7395acf6cf4081f53da43ebd69d9476b64a"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.complexity.02",
+          "axis": "complexity",
+          "title": "Bornes des parcours et allocations",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Clés d’animation limitées aux surfaces actives, états retirés, une dernière cible/PID et tâches de qualification remplacées.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/InteractiveFrameDispatcher.swift",
+              "sha256": "51eafd751387b3ce82bdc172f6cce7395acf6cf4081f53da43ebd69d9476b64a"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.complexity.03",
+          "axis": "complexity",
+          "title": "Coût des accès et écritures de données",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Pas de capture supplémentaire, aucune I/O dans le tap ; lecteurs/config/stages existants conservés hors callback.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/InteractiveFrameDispatcher.swift",
+              "sha256": "51eafd751387b3ce82bdc172f6cce7395acf6cf4081f53da43ebd69d9476b64a"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "quality": {
+      "title": "Qualité du code et des erreurs",
+      "score": 75,
+      "grade": "C",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.quality.01",
+        "axes.quality.02",
+        "axes.quality.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 75,
+      "criteria": [
+        {
+          "id": "axes.quality.01",
+          "axis": "quality",
+          "title": "Gestion des refus et messages utilisateur",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Vrai contenu entre les deux écrans observés, annulation et maintien logique ; autres applications et contrôles non certifiés ; diagnostics sans contenu.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
+              "sha256": "c3173fb04686d29ffbddba7ff56d7245437953e1a7d0c0c93fe04b9f8dc69e35"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.quality.02",
+          "axis": "quality",
+          "title": "Gestion des erreurs partielles",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Deferred distinct de résultat final, refus/budgets respectés, échec de persistance explicite ; aucune réussite inventée à la planification.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
+              "sha256": "c3173fb04686d29ffbddba7ff56d7245437953e1a7d0c0c93fe04b9f8dc69e35"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.quality.03",
+          "axis": "quality",
+          "title": "Ergonomie des parcours concernés",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Même geste et même réglage real, aucune UI ni option supplémentaire ; pas d’étude d’ergonomie.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/DropPreviewController.swift",
+              "sha256": "bb29f3e7a97d54692f3fb0607193efd3e71f3191b00eb9f852afa01178b1cedb"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
+              "sha256": "c3173fb04686d29ffbddba7ff56d7245437953e1a7d0c0c93fe04b9f8dc69e35"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "architecture": {
+      "title": "Architecture et dépendances",
+      "score": 75,
+      "grade": "C",
+      "status": "assessed",
+      "controls_verified": 4,
+      "controls_applicable": 4,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.architecture.01",
+        "axes.architecture.02",
+        "axes.architecture.03",
+        "axes.architecture.04"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 75,
+      "criteria": [
+        {
+          "id": "axes.architecture.01",
+          "axis": "architecture",
+          "title": "Frontières et résolution des dépendances",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Core calcul pur, AX qualification/writer, daemon coordination/UI ; pas de dépendance inversée ajoutée.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Package.swift",
+              "sha256": "712be76c06b32c15daff9c9e3d3d0084322924ea0127e0345696e900dda29d4e"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/RailController.swift",
+              "sha256": "9e792d1a6426b18970a8279097926829c7b479c89122653f29b72cd8776041d9"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.architecture.02",
+          "axis": "architecture",
+          "title": "Maîtrise des cycles",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Imports du manifeste lus, aucune dépendance/package ajoutée ; absence de graphe automatique Swift explicitée.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Package.swift",
+              "sha256": "712be76c06b32c15daff9c9e3d3d0084322924ea0127e0345696e900dda29d4e"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/RailController.swift",
+              "sha256": "9e792d1a6426b18970a8279097926829c7b479c89122653f29b72cd8776041d9"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.architecture.03",
+          "axis": "architecture",
+          "title": "Séparation construction et exécution",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Installer signé réutilisé, code chargé vérifié par UUID et certificat ; callbacks et données persistées restent dans leurs propriétaires.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Package.swift",
+              "sha256": "712be76c06b32c15daff9c9e3d3d0084322924ea0127e0345696e900dda29d4e"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/RailController.swift",
+              "sha256": "9e792d1a6426b18970a8279097926829c7b479c89122653f29b72cd8776041d9"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.architecture.04",
+          "axis": "architecture",
+          "title": "Assemblages et dépendances dynamiques",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Identités/générations et services existants réutilisés ; chargements natifs vérifiés, pas de plugin générique ou d’injection dynamique nouvelle.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Package.swift",
+              "sha256": "712be76c06b32c15daff9c9e3d3d0084322924ea0127e0345696e900dda29d4e"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/RailController.swift",
+              "sha256": "9e792d1a6426b18970a8279097926829c7b479c89122653f29b72cd8776041d9"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "ai_hygiene": {
+      "title": "Responsabilité future et hygiène",
+      "score": 67,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.ai_hygiene.01",
+        "axes.ai_hygiene.02",
+        "axes.ai_hygiene.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 67,
+      "criteria": [
+        {
+          "id": "axes.ai_hygiene.01",
+          "axis": "ai_hygiene",
+          "title": "Invariants et compromis expliqués",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Spec/plan/reuse-audit et analysis expliquent fin native, séquence, annulation et masquage ; preuve de reflow réelle jointe.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/reuse-audit.md",
+              "sha256": "d135d8e2d6d4cb7bac3061923ff2fdba6e2b515373010d1b71ee86133721b412"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/analysis.md",
+              "sha256": "3297c27edb040fe48919c35598b6bc4c1b025b2145b1269309d17430062f1eb9"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.ai_hygiene.02",
+          "axis": "ai_hygiene",
+          "title": "Périmètre et maintenabilité du changement",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Pas de nouveau moteur ; propriété du pointeur explicite et état verrouillé dans le service existant.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/reuse-audit.md",
+              "sha256": "d135d8e2d6d4cb7bac3061923ff2fdba6e2b515373010d1b71ee86133721b412"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/analysis.md",
+              "sha256": "3297c27edb040fe48919c35598b6bc4c1b025b2145b1269309d17430062f1eb9"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.ai_hygiene.03",
+          "axis": "ai_hygiene",
+          "title": "Revue contradictoire et responsabilité",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Auto-relecture et protocole local réalisés ; revue indépendante demandée mais admission refusée, sans second avis inventé.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/reuse-audit.md",
+              "sha256": "d135d8e2d6d4cb7bac3061923ff2fdba6e2b515373010d1b71ee86133721b412"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/analysis.md",
+              "sha256": "3297c27edb040fe48919c35598b6bc4c1b025b2145b1269309d17430062f1eb9"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "minimalism": {
+      "title": "Minimalisme et frugalité",
+      "score": 67,
+      "grade": "D",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.minimalism.01",
+        "axes.minimalism.02",
+        "axes.minimalism.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 67,
+      "criteria": [
+        {
+          "id": "axes.minimalism.01",
+          "axis": "minimalism",
+          "title": "Dépendances nécessaires en exploitation",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Aucune dépendance ajoutée ; dispatcher, store, UI de paramètres et fixture existants étendus.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
+              "sha256": "db3cb2b481f89de5fc859fa65983bbca7287862d40d4a8c35804ca2736dabca2"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+              "sha256": "dd457f22c23954f1835f94fa6e699cd7483afbcc8feda8cf9c31274a334037c0"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.minimalism.02",
+          "axis": "minimalism",
+          "title": "Poids et ressources justifiés",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Bail sur minuteur existant, pas de capture produit supplémentaire ; deux appels de fin clairement séparés.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
+              "sha256": "db3cb2b481f89de5fc859fa65983bbca7287862d40d4a8c35804ca2736dabca2"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+              "sha256": "dd457f22c23954f1835f94fa6e699cd7483afbcc8feda8cf9c31274a334037c0"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.minimalism.03",
+          "axis": "minimalism",
+          "title": "Code mort et simplifications possibles",
+          "weight": 1,
+          "status": "pass",
+          "level": 2,
+          "rating_rationale": "Ancien releasePoint et garde display retirés ; diagnostics utiles conservés. Pas de mesure exhaustive de code mort Swift.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
+              "sha256": "db3cb2b481f89de5fc859fa65983bbca7287862d40d4a8c35804ca2736dabca2"
+            },
+            {
+              "kind": "source",
+              "path": "Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+              "sha256": "dd457f22c23954f1835f94fa6e699cd7483afbcc8feda8cf9c31274a334037c0"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "business": {
+      "title": "Métier et fidélité des données",
+      "score": 75,
+      "grade": "C",
+      "status": "assessed",
+      "controls_verified": 3,
+      "controls_applicable": 3,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.business.01",
+        "axes.business.02",
+        "axes.business.03"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 75,
+      "criteria": [
+        {
+          "id": "axes.business.01",
+          "axis": "business",
+          "title": "Fidélité des données lues",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Cadres réels CG/AX, aucune photo étirée ; données de configuration validées et appartenance au scope vérifiée.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/spec.md",
+              "sha256": "a5b492e6842605cd8b026119a5754275b1b23183c554a8787c8c31504fcc8390"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/validation.md",
+              "sha256": "0d32386c4cd2a28887b04bb394d79442a896ff31337bbef1a4beab3f4b4b20ca"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.business.02",
+          "axis": "business",
+          "title": "Cohérence et idempotence des versions",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Pas de mutation pendant aperçu, persistance unique au dépôt, source incompatible rejetée ; configuration antérieure garde ses défauts.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/spec.md",
+              "sha256": "a5b492e6842605cd8b026119a5754275b1b23183c554a8787c8c31504fcc8390"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/validation.md",
+              "sha256": "0d32386c4cd2a28887b04bb394d79442a896ff31337bbef1a4beab3f4b4b20ca"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.business.03",
+          "axis": "business",
+          "title": "Conformité aux règles et données de référence",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Préférences et autorité macOS conservées ; vraie source entre écrans, limite de qualification/application nommée.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/spec.md",
+              "sha256": "a5b492e6842605cd8b026119a5754275b1b23183c554a8787c8c31504fcc8390"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/validation.md",
+              "sha256": "0d32386c4cd2a28887b04bb394d79442a896ff31337bbef1a4beab3f4b4b20ca"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    },
+    "traceability": {
+      "title": "Traçabilité des exigences",
+      "score": 75,
+      "grade": "C",
+      "status": "assessed",
+      "controls_verified": 2,
+      "controls_applicable": 2,
+      "coverage_percent": 100.0,
+      "failed_controls": [],
+      "active_findings": 0,
+      "candidates": 0,
+      "fixed_findings": 0,
+      "severity_counts": {},
+      "limits": [],
+      "control_ids": [
+        "axes.traceability.01",
+        "axes.traceability.02"
+      ],
+      "finding_fingerprints": [],
+      "demonstrated_score": 75,
+      "criteria": [
+        {
+          "id": "axes.traceability.01",
+          "axis": "traceability",
+          "title": "Lien constats, corrections et preuves",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "Constats, reprises et preuves brutes conservés avec SHA ; pas de verdict indépendant inventé.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/analysis.md",
+              "sha256": "3297c27edb040fe48919c35598b6bc4c1b025b2145b1269309d17430062f1eb9"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/adversarial-review.md",
+              "sha256": "2bd814f7342d1868fa800084fe27343477c0fa34eda0ce23112176d84ca0a4d3"
+            }
+          ],
+          "excluded": false
+        },
+        {
+          "id": "axes.traceability.02",
+          "axis": "traceability",
+          "title": "Couverture des exigences obligatoires",
+          "weight": 1,
+          "status": "pass",
+          "level": 3,
+          "rating_rationale": "FR1..FR4 et T007 reliées aux sources/tests ; suite finale et huit parcours, limites et premier échec explicites.",
+          "evidence": [
+            {
+              "kind": "artifact",
+              "path": "notes/context.md",
+              "sha256": "08cba899cf2aa2b39b315d731f01ce5fca80213f42d1f5eccc116e8119b3ae2c"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variants.md",
+              "sha256": "dee037e582de9e6b685e882f529495fad0fdedcc4b4c0fd1e47133a554a6063a"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/variant-search.txt",
+              "sha256": "5b742bae518e0ee6d66fa4d9534149656c1e022cc0b372228d130af7a3049984"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/analysis.md",
+              "sha256": "3297c27edb040fe48919c35598b6bc4c1b025b2145b1269309d17430062f1eb9"
+            },
+            {
+              "kind": "source",
+              "path": "specs/145-apercu-entre-ecrans/adversarial-review.md",
+              "sha256": "2bd814f7342d1868fa800084fe27343477c0fa34eda0ce23112176d84ca0a4d3"
+            }
+          ],
+          "excluded": false
+        }
+      ]
+    }
+  },
+  "unmapped_findings": [],
+  "method": "Qualité observée = somme des niveaux justifiés / maximum des critères notés. Niveaux ancrés de0 à4, poids figés. Le nombre de défauts ne donne plus la note : leurs pénalités restent un garde-fou. Couverture séparée. Note démontrée = points acquis / maximum de tous les critères applicables ; les inconnus ne rapportent aucun point. Aucun niveau justifié : non noté. Pas de moyenne globale des axes.",
+  "rubric_version": "quality-1",
+  "rubric_sha256": "cf850d3dd0976f4cd6ca9385ba320154248c8e85b084392af0efe9acda208607"
+}

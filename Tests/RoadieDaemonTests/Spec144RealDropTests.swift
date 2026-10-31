@@ -78,7 +78,7 @@ extension Spec144RealDropTests {
 
 
 extension Spec144RealDropTests {
-    @Test func anotherDisplayKeepsOutlineAndRestoresAnEarlierLocalPreview() async throws {
+    @Test func anotherDisplayKeepsRealSourceAndRestoresItOnCancel() async throws {
         let f = try Drag143Fixture(enabled: false); defer { f.clean() }
         let other = StageScope(displayID: DisplayID(rawValue: "other"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
         f.store.mutate { state in
@@ -91,11 +91,16 @@ extension Spec144RealDropTests {
         #expect(await f.waitFor { f.backend.frame(f.source) == f.target.cgRect })
         var candidate = f.candidate()
         candidate.displayID = other.displayID; candidate.scope = other
+        let destination = Rect(x: 2100, y: 50, width: 450, height: 800)
+        candidate.frame = destination.cgRect; candidate.placements[f.source] = destination
         f.live.update(candidate)
-        #expect(!f.live.showsRealSource)
-        #expect(await f.waitFor { f.backend.frame(f.source) == f.original(f.source) })
+        #expect(f.live.showsRealSource)
+        #expect(await f.waitFor { f.backend.frame(f.source) == destination.cgRect })
         #expect(f.backend.frame(f.neighbor) == f.original(f.neighbor))
         #expect(f.live.isActive)
+        f.live.finish()
+        #expect(await f.waitFor { !f.live.isActive })
+        #expect(f.backend.frame(f.source) == f.original(f.source))
     }
 }
 
