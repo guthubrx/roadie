@@ -1,0 +1,100 @@
+{
+  "date": "2026-10-31",
+  "version": "v0.7.6",
+  "commit": "3c0783954604eaa9110d0bdb61fa29f953e738ee",
+  "method": "Lecture ciblée de code et de tests. Application native et tests non exécutés.",
+  "roadie_commit": "b223718ff9bedc101035cfd5fb0edc0d8704763f",
+  "sources": [
+    {
+      "path": "/private/tmp/omniwm-study-20261030/v0.7.6/Sources/OmniWM/Core/Controller/MouseEventHandler+ManagedDrag.swift",
+      "repository_path": "Sources/OmniWM/Core/Controller/MouseEventHandler+ManagedDrag.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Controller/MouseEventHandler%2BManagedDrag.swift",
+      "sha256": "117bbb8fb2c28c69e182e5ebf7d388bbd5bef8f8c88f5784e4de8981a14466f8"
+    },
+    {
+      "path": "/private/tmp/omniwm-study-20261030/v0.7.6/Sources/OmniWM/Core/Ax/AppAXContext+Creation.swift",
+      "repository_path": "Sources/OmniWM/Core/Ax/AppAXContext+Creation.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Ax/AppAXContext%2BCreation.swift",
+      "sha256": "e67283f6003eeedce4415f1c9c7a6fd16745a945dc7c7378c5a90a1a21c63395"
+    },
+    {
+      "path": "/private/tmp/omniwm-study-20261030/v0.7.6/Sources/OmniWM/Core/Ax/AppAXFrameMailbox.swift",
+      "repository_path": "Sources/OmniWM/Core/Ax/AppAXFrameMailbox.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Ax/AppAXFrameMailbox.swift",
+      "sha256": "288f14ba5c2ebae97b87053bc4cbe652c961b59774ba348202039fc0dbb39664"
+    },
+    {
+      "path": "/private/tmp/omniwm-study-20261030/v0.7.6/Sources/OmniWM/Core/Controller/MouseEventHandler+InteractionBegin.swift",
+      "repository_path": "Sources/OmniWM/Core/Controller/MouseEventHandler+InteractionBegin.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Controller/MouseEventHandler%2BInteractionBegin.swift",
+      "sha256": "60b82f7715e4dc470646400cb04d25ca5382f721efb187ca58f3d14b8cb9a7c6"
+    },
+    {
+      "path": "/private/tmp/omniwm-study-20261030/v0.7.6/Sources/OmniWM/Core/Controller/LayoutRefreshController+DisplayLink.swift",
+      "repository_path": "Sources/OmniWM/Core/Controller/LayoutRefreshController+DisplayLink.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Controller/LayoutRefreshController%2BDisplayLink.swift",
+      "sha256": "25466e0d5c282bb780188e714e702d5e9ff81eb631eb2e4f8e6512ca29456e24"
+    },
+    {
+      "path": "/private/tmp/omniwm-study-20261030/v0.7.6/Sources/OmniWM/Core/Ax/AXFrameApplicationLedger.swift",
+      "repository_path": "Sources/OmniWM/Core/Ax/AXFrameApplicationLedger.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Ax/AXFrameApplicationLedger.swift",
+      "sha256": "56927fc22be4969361df4ad56a0bf01d74dc71d01eeeef6acfabd396c70e5eef"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Controller/LayoutRefreshController+Requests.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Controller/LayoutRefreshController%2BRequests.swift",
+      "sha256": "8386970d760d63ac4296baad89d2ad4e51ca1c624805f44567ad10df746c0c8a"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Controller/DwindleLayoutHandler+OnDemandFrames.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Controller/DwindleLayoutHandler%2BOnDemandFrames.swift",
+      "sha256": "1a35e59eb11e00e6e6b2802739eebd05d6b7bad8927390d7be8a3fc150f1d5d6"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Controller/NiriLayoutHandler+Animation.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Controller/NiriLayoutHandler%2BAnimation.swift",
+      "sha256": "b3123771a63b0a32456ae801098dbfbb955677440c1a8b0fec86b370b695ecce"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Controller/LayoutDiffExecutor.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Controller/LayoutDiffExecutor.swift",
+      "sha256": "a78d2455d9c4e892a829d9ceff4460760c2e9577123c926b8d61276cf0261ee0"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Layout/Niri/NiriLayoutEngine+ResizeUpdate.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Layout/Niri/NiriLayoutEngine%2BResizeUpdate.swift",
+      "sha256": "a5653d9b960224c0ddb20b02f738fdc4dd79219418a33a42fb59440db3eb93bc"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Layout/Dwindle/DwindleLayoutEngine+InteractiveResize.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Layout/Dwindle/DwindleLayoutEngine%2BInteractiveResize.swift",
+      "sha256": "a694196c7232355184a2cc558815ebbe7500ec7f53748d1699dd8945fdc31367"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Ax/AXManager+FrameBatching.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Ax/AXManager%2BFrameBatching.swift",
+      "sha256": "9b105c955a2a7b1bab98d25b95d29bda1243cc63ad47f9677ed9bdcb00d6d328"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Ax/AXWindowService+FrameWrites.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Ax/AXWindowService%2BFrameWrites.swift",
+      "sha256": "a6c008356aa9cdd5e0e0e8de42cf87ab7e6e510bc24fda18d6e333caed9a52b8"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Ax/AppAXFrameBatchWriter.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Ax/AppAXFrameBatchWriter.swift",
+      "sha256": "4b78e93172da5a02b18d7491b6832c608211ade9c7afece702fbf89b282227ae"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Ax/AppAXEnhancedUIWriteScope.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Ax/AppAXEnhancedUIWriteScope.swift",
+      "sha256": "081744a8d624c486527e5e44863091eaf849c36cfb35cf885ad14e9f53518a73"
+    },
+    {
+      "repository_path": "Sources/OmniWM/Core/Ax/AXFrameFailureAssessment.swift",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Ax/AXFrameFailureAssessment.swift",
+      "sha256": "3ce0928e53855eda701139e1d36aae58de7be3a8f801482a7836e296ec56ae4a"
+    }
+  ]
+}

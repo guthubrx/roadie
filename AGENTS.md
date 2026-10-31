@@ -1,3 +1,7 @@
+## Nettoyage obligatoire après livraison
+
+Demande utilisateur du 31 octobre 2026 : ne pas clôturer par le seul commit, la fusion et le push. Après vérification du code actif et du commit distant, supprimer les branches intégrées, worktrees libérés, caches et binaires temporaires devenus inutiles dans le périmètre du travail. Vérifier leur provenance, leur intégration et leur absence d'utilisation avant suppression. Conserver le worktree d'un fil actif, les changements non intégrés, les preuves originales, les exécutables installés et le retour arrière utile ; expliquer ces exceptions dans le bilan. Toute modification publiable du périmètre doit être commitée et poussée ; ne pas ajouter les données privées, preuves brutes ou caches dans Git.
+
 <!-- SPECKIT START -->
 Session 029 implémentée le 2026-10-14 : fermeture confirmée propagée au StageStore,
 grâce transitoire de 15 secondes conservée, cible p95 inférieure à 400 ms.

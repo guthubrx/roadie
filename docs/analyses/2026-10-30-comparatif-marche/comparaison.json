@@ -1,0 +1,745 @@
+{
+  "date": "2026-10-30",
+  "roadie_version": "0.13.0",
+  "base_commit": "b223718ff9bedc101035cfd5fb0edc0d8704763f",
+  "products": [
+    {
+      "name": "OmniWM",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://github.com/OmniNull/OmniWM",
+      "feature": "Colonnes défilantes, BSP, palette unifiée, terminal tiroir et distribution signée/notarisée.",
+      "gap": "Concurrent direct : l’association gestionnaire + palette existe ailleurs. Roadie ne propose pas ces colonnes ; son paquet public est signé ad hoc.",
+      "access": "Code public · GPL-2.0-only"
+    },
+    {
+      "name": "Rift",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://acsandmann.github.io/rift-docs/",
+      "feature": "Plusieurs moteurs, dont colonnes défilantes et pile, gestes et onglets natifs macOS.",
+      "gap": "Choix de dispositions plus large. Compatibilité des onglets natifs de Roadie à comparer en situation réelle.",
+      "access": "Code public · Apache-2.0"
+    },
+    {
+      "name": "Paneru",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://github.com/karinushka/paneru",
+      "feature": "Ruban horizontal par écran ; une nouvelle fenêtre conserve la taille des voisines.",
+      "gap": "Vrai mode de travail absent du catalogue des moteurs de Roadie.",
+      "access": "Code public · MIT annoncée dans le dépôt"
+    },
+    {
+      "name": "PaperWM.spoon",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://github.com/mogenson/PaperWM.spoon",
+      "feature": "Défilement horizontal dans Hammerspoon, colonnes empilées et gestes.",
+      "gap": "Référence macOS utile pour éprouver le défilement et ses contraintes.",
+      "access": "Code public · licence à vérifier par fichier"
+    },
+    {
+      "name": "AeroSpace",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://nikitabobko.github.io/AeroSpace/guide",
+      "feature": "Arbre de conteneurs, accordéon, modes de raccourcis et événements.",
+      "gap": "Accordéon absent des moteurs Roadie. CLI, événements et bureaux existent déjà chez nous.",
+      "access": "Code public · MIT"
+    },
+    {
+      "name": "yabai",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://github.com/asmvik/yabai",
+      "feature": "Tuilage BSP, commandes, règles et intégration aux Spaces natifs.",
+      "gap": "Référence de comportement des Spaces. Roadie a déjà BSP, règles et commandes ; pas de supériorité de fiabilité démontrée.",
+      "access": "Code public · MIT"
+    },
+    {
+      "name": "Amethyst",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://ianyh.com/amethyst/",
+      "feature": "Nombreuses dispositions et moteurs personnalisés en JavaScript, en bêta.",
+      "gap": "Plus de choix de dispositions sans modifier le moteur principal.",
+      "access": "Code public · licence à vérifier par fichier"
+    },
+    {
+      "name": "Rectangle",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://rectangleapp.com/",
+      "feature": "Placement par bords et coins ; répétition des raccourcis pour changer de taille.",
+      "gap": "Une commande qui fait défiler des proportions serait plus simple à découvrir. Valeur à tester face aux commandes Roadie.",
+      "access": "Code public · MIT"
+    },
+    {
+      "name": "Rectangle Pro",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://rectangleapp.com/pro/",
+      "feature": "Cibles personnalisées, panneau de placement, dispositions déclenchées par les écrans.",
+      "gap": "Modèles visuels réutilisables et rappel par contexte matériel à approfondir.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "Moom",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://manytricks.com/moom/help/whatsnew.html",
+      "feature": "Palette, zones de dépôt et modèles qui peuvent viser des fenêtres indépendamment de leur application.",
+      "gap": "Roadie garde déjà des projets. L’apport est le modèle générique, éditable et facile à appliquer.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "Magnet",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://magnet.crowdcafe.com/",
+      "feature": "Placement simple en moitiés, quarts et tiers depuis les bords.",
+      "gap": "Référence de simplicité. Aucun manque de moteur automatique établi par rapport à ce produit.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "Loop",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://github.com/MrKai77/Loop",
+      "feature": "Menu radial, aperçu avant placement, cycles et fenêtres rangées au bord.",
+      "gap": "Le menu radial apporte un geste court. L’aperçu seul existe déjà dans Roadie.",
+      "access": "Code public · GPL-3.0"
+    },
+    {
+      "name": "Swish",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://highlyopinionated.co/swish/",
+      "feature": "Gestes sur les barres de titre pour placer, fermer et changer d’écran.",
+      "gap": "Lacune de parcours gestuel prêt à l’emploi. BTT sait déjà déclencher Roadie.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "Divvy",
+      "family": "Fenêtres",
+      "platform": "macOS / Windows",
+      "url": "https://mizage.com/divvy/",
+      "feature": "Dessin du rectangle de placement sur une grille.",
+      "gap": "Une grille pour placer une fenêtre serait distincte de la grille Roadie qui sert à cliquer.",
+      "access": "Propriétaire · compatibilité récente non essayée"
+    },
+    {
+      "name": "Mosaic",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://www.lightpillar.com/mosaic.html",
+      "feature": "Dispositions visuelles et groupes de modèles de placement.",
+      "gap": "Création visuelle de modèles, plutôt que nouvelle fonction de regroupement des fenêtres.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "AltTab",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://github.com/lwouis/alt-tab-macos",
+      "feature": "Sélecteur de fenêtres avec aperçus, fenêtres cachées ou réduites.",
+      "gap": "Recouvrement important : Roadie a déjà profils, recherche, styles et Maj seule. Tester les cas difficiles plutôt que recopier les cartes.",
+      "access": "Code public · vérifier la version et la licence ciblées"
+    },
+    {
+      "name": "Glide",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://github.com/tmandry/glide",
+      "feature": "Gestionnaire de fenêtres natif, source utile pour l’architecture macOS.",
+      "gap": "Référence technique complémentaire ; aucun avantage fonctionnel nouveau retenu ici.",
+      "access": "Code public · MIT / Apache-2.0 annoncées"
+    },
+    {
+      "name": "GlazeWM",
+      "family": "Fenêtres",
+      "platform": "Windows / macOS",
+      "url": "https://github.com/glzr-io/glazewm",
+      "feature": "Gestionnaire inspiré d’i3, avec configuration et commandes.",
+      "gap": "À comparer pour la cohérence clavier. Roadie a déjà navigation, bureaux et automatisation.",
+      "access": "Code public · GPL-3.0 annoncée"
+    },
+    {
+      "name": "komorebi",
+      "family": "Fenêtres",
+      "platform": "Windows",
+      "url": "https://github.com/LGUG2Z/komorebi",
+      "feature": "Tuilage, bureaux, écrans et pilotage externe.",
+      "gap": "Source d’idées pour la configuration et les dispositions ; code visible ne signifie pas licence libre.",
+      "access": "Code visible · licence Komorebi spécifique"
+    },
+    {
+      "name": "komorebi for Mac",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://github.com/LGUG2Z/komorebi-for-mac",
+      "feature": "Port macOS avec CLI ; versions publiques et développement privé sponsorisé.",
+      "gap": "À suivre dans la concurrence directe ; pas de gain précis non vérifié attribué à ce port.",
+      "access": "Code visible · licence Komorebi spécifique"
+    },
+    {
+      "name": "FancyZones",
+      "family": "Fenêtres",
+      "platform": "Windows",
+      "url": "https://learn.microsoft.com/en-us/windows/powertoys/fancyzones",
+      "feature": "Éditeur de zones, modèles et affectation d’une fenêtre à plusieurs zones.",
+      "gap": "Zones de placement visuelles et modèles par écran. Ne pas confondre avec les zones de clics Roadie.",
+      "access": "PowerToys · code public"
+    },
+    {
+      "name": "niri",
+      "family": "Fenêtres",
+      "platform": "Linux",
+      "url": "https://github.com/niri-wm/niri",
+      "feature": "Colonnes sur un ruban défilant ; taille des fenêtres conservée à l’ajout.",
+      "gap": "Inspiration de modèle d’interaction. Son compositeur Wayland ne se transplante pas sur macOS.",
+      "access": "Code public · GPL-3.0"
+    },
+    {
+      "name": "PaperWM",
+      "family": "Fenêtres",
+      "platform": "Linux",
+      "url": "https://github.com/paperwm/PaperWM",
+      "feature": "Extension GNOME de tuilage défilant, espaces par écran et navigation continue.",
+      "gap": "Même piste que niri ; Roadie possède déjà la vue d’ensemble et les bureaux par écran.",
+      "access": "Code public · licence à vérifier par fichier"
+    },
+    {
+      "name": "i3",
+      "family": "Fenêtres",
+      "platform": "Linux",
+      "url": "https://i3wm.org/docs/userguide.html",
+      "feature": "Conteneurs imbriqués, disposition en onglets ou en pile et navigation modale.",
+      "gap": "Étudier l’édition de l’arbre et sa lisibilité. Roadie possède déjà des groupes tabbed/stack.",
+      "access": "Code public"
+    },
+    {
+      "name": "Sway",
+      "family": "Fenêtres",
+      "platform": "Linux",
+      "url": "https://swaywm.org/",
+      "feature": "Modèle i3 sur Wayland et outils de composition.",
+      "gap": "Référence clavier ; les fonctions du compositeur ne sont pas des fonctions macOS à porter directement.",
+      "access": "Code public"
+    },
+    {
+      "name": "Hyprland",
+      "family": "Fenêtres",
+      "platform": "Linux",
+      "url": "https://hypr.land/",
+      "feature": "Compositeur Wayland orienté personnalisation et interaction.",
+      "gap": "Animations et personnalisation à évaluer par usage. Aucun classement de fluidité réalisé.",
+      "access": "Code public · détail des modules non audité"
+    },
+    {
+      "name": "macOS : tuilage natif",
+      "family": "Fenêtres",
+      "platform": "macOS",
+      "url": "https://support.apple.com/guide/mac-help/tile-app-windows-mchlef287e5d/mac",
+      "feature": "Placement de fenêtres intégré au système.",
+      "gap": "Référence d’installation sans friction et de gestes connus. Roadie offre déjà une organisation plus structurée.",
+      "access": "Inclus dans macOS"
+    },
+    {
+      "name": "Raycast",
+      "family": "Lanceurs",
+      "platform": "macOS / Windows",
+      "url": "https://manual.raycast.com/quickstart",
+      "feature": "Extensions, calcul de dates et d’unités, presse-papiers, extraits, IA et réglages.",
+      "gap": "Écart utile : calcul enrichi et intégrations installables. Presse-papiers, extraits et IA restent des choix écartés.",
+      "access": "Application propriétaire ; extensions publiques distinctes"
+    },
+    {
+      "name": "Alfred",
+      "family": "Lanceurs",
+      "platform": "macOS",
+      "url": "https://www.alfredapp.com/help/features/",
+      "feature": "Recherche, workflows, actions universelles, extraits et presse-papiers.",
+      "gap": "Le fonctionnement de base est largement repris. Restent la compatibilité complète et des fonctions volontairement écartées.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "LaunchBar",
+      "family": "Lanceurs",
+      "platform": "macOS",
+      "url": "https://www.obdev.at/products/launchbar/features.html",
+      "feature": "Envoi de la sélection vers des actions, Services macOS, opérations de fichiers et ClipMerge.",
+      "gap": "L’envoi de texte et les verbes existent dans Roadie. Étendre aux Services et rendre le parcours plus direct est une piste.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "Quicksilver",
+      "family": "Lanceurs",
+      "platform": "macOS",
+      "url": "https://qsapp.com/",
+      "feature": "Modèle objet/action/destination, catalogue et modules.",
+      "gap": "Le modèle objet/verbe/destination existe déjà. Le catalogue de modules est la différence à travailler.",
+      "access": "Code public · licence à vérifier par composant"
+    },
+    {
+      "name": "Monarch",
+      "family": "Lanceurs",
+      "platform": "macOS",
+      "url": "https://www.monarchlauncher.com/",
+      "feature": "Calcul d’unités, dates et devises, notes locales et presse-papiers.",
+      "gap": "Le calcul enrichi manque. Les notes sont une fonction de confort ; le presse-papiers reste écarté.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "PowerToys Command Palette",
+      "family": "Lanceurs",
+      "platform": "Windows",
+      "url": "https://learn.microsoft.com/en-us/windows/powertoys/command-palette/overview",
+      "feature": "Palette extensible et commandes système dans une interface commune.",
+      "gap": "Gestion de fournisseurs de résultats et catalogue. Les commandes système existent déjà dans Roadie.",
+      "access": "PowerToys · code public"
+    },
+    {
+      "name": "PowerToys Run",
+      "family": "Lanceurs",
+      "platform": "Windows",
+      "url": "https://learn.microsoft.com/en-us/windows/powertoys/run",
+      "feature": "Recherche et commandes par modules.",
+      "gap": "Référence complémentaire à Command Palette ; pas une fonction nouvelle de lancement chez Roadie.",
+      "access": "PowerToys · code public"
+    },
+    {
+      "name": "Flow Launcher",
+      "family": "Lanceurs",
+      "platform": "Windows",
+      "url": "https://github.com/Flow-Launcher/Flow.Launcher",
+      "feature": "Recherche de fichiers et applications, modules communautaires.",
+      "gap": "Écosystème de modules et gestion des sources. Les promesses de rapidité ne sont pas un benchmark comparatif.",
+      "access": "Code public · MIT annoncée"
+    },
+    {
+      "name": "Listary",
+      "family": "Lanceurs",
+      "platform": "Windows",
+      "url": "https://www.listary.com/feature/quick-save-and-open",
+      "feature": "Recherche d’un dossier depuis les dialogues Ouvrir/Enregistrer.",
+      "gap": "Piste forte : envoyer un dossier trouvé vers le dialogue courant au lieu d’ouvrir une autre fenêtre.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "Wox",
+      "family": "Lanceurs",
+      "platform": "macOS / Windows / Linux",
+      "url": "https://github.com/Wox-launcher/Wox",
+      "feature": "Lanceur multiplateforme avec modules Node.js, Python ou scripts.",
+      "gap": "API et catalogue de modules. Aucun besoin établi de porter Roadie sur d’autres OS.",
+      "access": "Code public · GPL-3.0 annoncée"
+    },
+    {
+      "name": "ueli",
+      "family": "Lanceurs",
+      "platform": "Multiplateforme",
+      "url": "https://github.com/oliverschwendener/ueli",
+      "feature": "Lanceur piloté au clavier et extensions.",
+      "gap": "Référence d’intégration de fournisseurs ; avantage précis de performance non évalué.",
+      "access": "Code public · licence à vérifier par fichier"
+    },
+    {
+      "name": "Albert",
+      "family": "Lanceurs",
+      "platform": "macOS / Linux",
+      "url": "https://albertlauncher.github.io/",
+      "feature": "Architecture par modules, API C++ et Python, collection maintenue.",
+      "gap": "Concevoir un contrat simple pour étendre la recherche et les actions.",
+      "access": "Code public · licence à vérifier par fichier"
+    },
+    {
+      "name": "Ulauncher",
+      "family": "Lanceurs",
+      "platform": "Linux",
+      "url": "https://github.com/Ulauncher/Ulauncher",
+      "feature": "Lanceur extensible.",
+      "gap": "Installation des modules et configuration guidée ; recherche approximative déjà présente dans Roadie.",
+      "access": "Code public"
+    },
+    {
+      "name": "rofi",
+      "family": "Lanceurs",
+      "platform": "Linux",
+      "url": "https://github.com/davatorium/rofi",
+      "feature": "Sélecteur de fenêtres, lanceur et remplacement de dmenu.",
+      "gap": "Palette réutilisable depuis un script. Roadie a déjà commandes et Script Filters ; étudier une interface universelle plus simple.",
+      "access": "Code public"
+    },
+    {
+      "name": "KRunner",
+      "family": "Lanceurs",
+      "platform": "Linux",
+      "url": "https://github.com/KDE/krunner",
+      "feature": "Cadre de fournisseurs d’actions à partir d’une requête texte.",
+      "gap": "Modèle de fournisseurs indépendants. Le détail des modules Plasma n’a pas été audité ici.",
+      "access": "Code public"
+    },
+    {
+      "name": "Hammerspoon",
+      "family": "Automatisation",
+      "platform": "macOS",
+      "url": "https://www.hammerspoon.org/",
+      "feature": "API Lua vers macOS, événements matériels et Spoons.",
+      "gap": "Roadie a déjà événements, règles et macros. L’écart est la surface d’extension et les exemples réutilisables.",
+      "access": "Code public"
+    },
+    {
+      "name": "BetterTouchTool",
+      "family": "Automatisation",
+      "platform": "macOS",
+      "url": "https://folivora.ai/features/window-management/",
+      "feature": "Gestes, déplacement, zones personnalisées et commandes.",
+      "gap": "Mieux exploiter l’intégration existante plutôt que reconstruire tous les déclencheurs.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "Keyboard Maestro",
+      "family": "Automatisation",
+      "platform": "macOS",
+      "url": "https://www.keyboardmaestro.com/main/",
+      "feature": "Automatisation par déclencheurs, conditions, boucles et actions.",
+      "gap": "Roadie possède des macros mais pas cet atelier complet. Son éditeur de workflows a été écarté auparavant.",
+      "access": "Propriétaire"
+    },
+    {
+      "name": "Superkey",
+      "family": "Automatisation",
+      "platform": "macOS",
+      "url": "https://superkey.app/",
+      "feature": "Recherche du texte visible par reconnaissance de caractères (OCR), avec lecture Accessibilité en option.",
+      "gap": "Roadie possède déjà la recherche à l’écran ; un repli OCR pourrait couvrir les textes non exposés par l’application.",
+      "access": "Propriétaire · outil voisin"
+    },
+    {
+      "name": "Homerow",
+      "family": "Automatisation",
+      "platform": "macOS",
+      "url": "https://www.homerow.app/",
+      "feature": "Étiquettes clavier pour atteindre boutons, liens et éléments d’interface.",
+      "gap": "Recouvrement avec les cibles clavier Roadie. À comparer pour les parcours et les applications difficiles.",
+      "access": "Propriétaire · outil voisin"
+    }
+  ],
+  "ideas": [
+    {
+      "rank": 1,
+      "title": "Convertir unités, durées, dates et fuseaux dans la barre",
+      "family": "Lanceur",
+      "status": "Absence confirmée du moteur natif",
+      "effort": "Moyen",
+      "why": "La calculatrice traite les nombres et les fonctions. Elle ne comprend pas les unités ni les dates. Un workflow peut compléter cela, sans offrir le même parcours direct.",
+      "example": "Taper « 90 min en heures », « 12 pouces en cm » ou « 17h Paris à Tokyo ».",
+      "proposal": "Commencer par unités, durées et dates locales. Ajouter les devises ensuite avec date du taux et indication de la source.",
+      "limit": "Ne pas confondre cette grammaire déterministe avec une fonction d’IA. Les devises demandent des données externes.",
+      "acceptance": "Expressions FR/EN, virgule décimale, heure d’été, calcul partiel et résultat copiable vérifiés.",
+      "refs": [
+        "https://manual.raycast.com/calculator",
+        "https://www.monarchlauncher.com/"
+      ],
+      "evidence": [
+        "calcul"
+      ]
+    },
+    {
+      "rank": 2,
+      "title": "Choisir un dossier depuis Ouvrir ou Enregistrer",
+      "family": "Lanceur",
+      "status": "Parcours dédié non repéré ; faisabilité à éprouver",
+      "effort": "Élevé",
+      "why": "Roadie ouvre déjà des fichiers et des dossiers. Il ne propose pas un parcours documenté qui change le dossier du dialogue de l’application active.",
+      "example": "Dans « Enregistrer sous », chercher « budget Maya » ; le dialogue se place dans ce dossier sans ouvrir le Finder.",
+      "proposal": "Ajouter le verbe « Utiliser dans ce dialogue ». Proposer aussi les dossiers du projet de la stage.",
+      "limit": "Listary démontre l’idée sur Windows. Sur macOS, il faut distinguer dialogues standard et dialogues propres aux applications.",
+      "acceptance": "Parcours sur TextEdit, navigateur et Office ; nom du fichier conservé ; abandon sans effet ; refus expliqué si dialogue incompatible.",
+      "refs": [
+        "https://www.listary.com/feature/quick-save-and-open"
+      ],
+      "evidence": [
+        "guide",
+        "fichiers"
+      ]
+    },
+    {
+      "rank": 3,
+      "title": "Trouver aussi le texte visible mais inaccessible aux API",
+      "family": "Lanceur",
+      "status": "Repli OCR non repéré dans les sources consultées",
+      "effort": "Élevé",
+      "why": "La recherche à l’écran de Roadie lit l’arbre Accessibilité. Elle peut manquer un texte dessiné dans une image ou une interface qui ne publie pas ses éléments.",
+      "example": "Capslock + F retrouve un mot dans une capture ou une interface distante ; une étiquette permet de cliquer à sa place.",
+      "proposal": "Garder la lecture Accessibilité en premier. Proposer une reconnaissance locale des caractères (OCR) en repli explicite lorsque rien n’est trouvé.",
+      "limit": "Un mot reconnu n’est pas forcément un bouton. Petits caractères, contenu qui bouge et permissions de capture demandent une validation ; aucune capture envoyée à un service par défaut.",
+      "acceptance": "Comparer texte natif, image, PDF scanné et interface distante ; vérifier clic, coordonnées Retina, plusieurs écrans et refus de capture.",
+      "refs": [
+        "https://superkey.app/",
+        "https://manual.raycast.com/screenshots"
+      ],
+      "evidence": [
+        "guide",
+        "cibles"
+      ]
+    },
+    {
+      "rank": 4,
+      "title": "Créer des modèles de placement avec une palette visuelle",
+      "family": "Fenêtres",
+      "status": "Fonctions de base présentes ; éditeur visuel non repéré",
+      "effort": "Élevé",
+      "why": "Arbre BSP, projets, aperçu et glisser existent. Ce qui manque est un modèle de zones lisible, réutilisable avec d’autres fenêtres et facile à appliquer.",
+      "example": "Choisir « 50 % éditeur, 25 % navigateur, 25 % terminal », puis déposer les fenêtres dans le dessin.",
+      "proposal": "Une palette de modèles par écran et par stage. En tuilage, modifier l’arbre ; en flottant, appliquer des cadres.",
+      "limit": "Les « zones » de placement sont distinctes des zones de clics récentes. Le tiler ne doit pas annuler le placement juste après le geste.",
+      "acceptance": "Aperçu fidèle, Échap restaure, ratios conservés, tailles minimales respectées et résultat stable après plusieurs passes du tiler.",
+      "refs": [
+        "https://learn.microsoft.com/en-us/windows/powertoys/fancyzones",
+        "https://manytricks.com/moom/help/whatsnew.html",
+        "https://rectangleapp.com/pro/"
+      ],
+      "evidence": [
+        "modes",
+        "projets"
+      ]
+    },
+    {
+      "rank": 5,
+      "title": "Essayer un mode à colonnes défilantes",
+      "family": "Fenêtres",
+      "status": "Absence confirmée des moteurs",
+      "effort": "Très élevé",
+      "why": "Roadie répartit les fenêtres dans l’espace disponible. Il ne possède pas de ruban dont on déplace la vue pour garder des fenêtres larges.",
+      "example": "Ouvrir six fenêtres : chacune garde sa largeur. Passer à la suivante fait glisser la vue au lieu de réduire toutes les autres.",
+      "proposal": "Un prototype sur une seule stage, avec largeur par colonne, centrage et navigation clavier. Étendre aux gestes et à plusieurs écrans après validation.",
+      "limit": "Les API macOS, le masquage, le plein écran et les bords de moniteurs rendent ce chantier sensible. Le code Wayland n’est pas portable tel quel.",
+      "acceptance": "Largeur stable à l’ajout et au retrait, aucune fuite sur l’écran voisin, rappel et vue d’ensemble cohérents, Échap et redémarrage vérifiés.",
+      "refs": [
+        "https://github.com/karinushka/paneru",
+        "https://acsandmann.github.io/rift-docs/",
+        "https://github.com/niri-wm/niri"
+      ],
+      "evidence": [
+        "modes"
+      ]
+    },
+    {
+      "rank": 6,
+      "title": "Rendre les extensions faciles à trouver et à entretenir",
+      "family": "Lanceur",
+      "status": "Compatibilité et commandes présentes ; expérience à compléter",
+      "effort": "Élevé",
+      "why": "Roadie charge les workflows Alfred. Le chiffre 92/102 vient d’un corpus et d’une classification structurelle ; ce n’est pas une garantie sur tous les workflows ni tous leurs services.",
+      "example": "Trouver un workflow, voir ses dépendances et sa compatibilité, le configurer, puis tester une vraie action depuis Roadie.",
+      "proposal": "Un petit catalogue vérifié, une page par workflow et un diagnostic utile. Séparer la compatibilité détectée de l’exécution réellement testée.",
+      "limit": "Ne pas promettre l’exécution des extensions Raycast : leur API React/Node/TypeScript constitue une autre plateforme. L’éditeur visuel de workflows reste écarté.",
+      "acceptance": "Installation et retrait réversibles ; dépendance manquante nommée ; origine et version visibles ; un parcours réel validé par entrée du catalogue.",
+      "refs": [
+        "https://manual.raycast.com/extensions",
+        "https://developers.raycast.com/",
+        "https://github.com/Flow-Launcher/Flow.Launcher"
+      ],
+      "evidence": [
+        "compat",
+        "guide"
+      ]
+    },
+    {
+      "rank": 7,
+      "title": "Rappeler des modèles selon les écrans et l’activité",
+      "family": "Fenêtres",
+      "status": "Déjà partiel : projets et parking des écrans",
+      "effort": "Moyen à élevé",
+      "why": "Roadie conserve déjà stages et projets au changement d’écran. L’étape utile est un choix explicite entre Bureau, Portable ou Présentation, appliqué à l’activité.",
+      "example": "Rebrancher l’écran du bureau et proposer le modèle « Travail », sans écraser une disposition que l’on vient de modifier.",
+      "proposal": "Étendre les projets existants avec des modèles génériques et des conditions simples, plutôt que recréer la restauration.",
+      "limit": "Une application peut ne pas exposer son document ou refuser sa taille. Montrer un bilan de restauration et les écarts.",
+      "acceptance": "Fenêtres absentes ou lentes signalées, retour arrière, priorité aux déplacements récents, aucun doublon à la reconnexion.",
+      "refs": [
+        "https://rectangleapp.com/pro/",
+        "https://manytricks.com/moom/help/whatsnew.html",
+        "https://www.hammerspoon.org/docs/hs.screen.watcher.html"
+      ],
+      "evidence": [
+        "projets"
+      ]
+    },
+    {
+      "rank": 8,
+      "title": "Rappeler une fenêtre en tiroir puis la ranger",
+      "family": "Fenêtres",
+      "status": "Marqueurs scratchpad présents ; parcours complet non repéré",
+      "effort": "Moyen à élevé",
+      "why": "Une règle sait marquer un scratchpad. Ce marqueur seul n’est pas un mécanisme documenté d’apparition/disparition avec retour au contexte précédent.",
+      "example": "Une touche fait apparaître le terminal au-dessus de la stage ; la même touche le range et rend le clavier au document précédent.",
+      "proposal": "Un tiroir pour une fenêtre existante ou lancée à la demande, sans changer son appartenance par accident.",
+      "limit": "Les fenêtres épinglées et le rappel existent déjà. Le gain porte sur le cycle complet, la position et la restauration du clavier.",
+      "acceptance": "Pas de fenêtre dupliquée ; clavier restauré ; règles flottantes conservées ; fermeture et écran retiré traités.",
+      "refs": [
+        "https://github.com/OmniNull/OmniWM",
+        "https://github.com/MrKai77/Loop"
+      ],
+      "evidence": [
+        "scratchpad",
+        "guide"
+      ]
+    },
+    {
+      "rank": 9,
+      "title": "Ajouter un accordéon et vérifier les onglets natifs",
+      "family": "Fenêtres",
+      "status": "Accordéon absent ; onglets natifs à vérifier",
+      "effort": "Élevé",
+      "why": "Roadie possède déjà des groupes tabbed/stack. Un accordéon qui laisse dépasser les titres et la gestion des vrais onglets macOS sont deux sujets distincts.",
+      "example": "Dans un groupe, une fenêtre reste grande ; les titres des autres restent visibles. Tester aussi plusieurs onglets natifs de Terminal.",
+      "proposal": "Valider d’abord si les groupes existants couvrent le besoin. Ajouter seulement la présentation ou le suivi des onglets manquants.",
+      "limit": "Ne pas annoncer « groupes absents ». La capacité des concurrents à gérer les onglets ne démontre pas une panne chez Roadie.",
+      "acceptance": "Ordre, sélection, fermeture d’un onglet et changement de groupe sans fenêtre fantôme.",
+      "refs": [
+        "https://nikitabobko.github.io/AeroSpace/guide",
+        "https://acsandmann.github.io/rift-docs/"
+      ],
+      "evidence": [
+        "groupes",
+        "modes"
+      ]
+    },
+    {
+      "rank": 10,
+      "title": "Proposer quelques gestes cohérents et un menu radial",
+      "family": "Fenêtres",
+      "status": "Intégration BTT existante ; parcours à simplifier",
+      "effort": "Moyen avec BTT ; élevé en natif",
+      "why": "Roadie sait déjà recevoir des commandes de BTT. Le manque est un ensemble court de gestes faciles à installer et à comprendre.",
+      "example": "Une touche et un mouvement vers la gauche placent la fenêtre ; un geste déplace la stage sur l’autre écran.",
+      "proposal": "Commencer par un profil BTT réversible et un aperçu de l’effet. Étudier ensuite un menu radial Roadie.",
+      "limit": "Éviter deux moteurs qui déplacent la même fenêtre et les conflits avec Mission Control. Aucun changement de raccourcis sans choix utilisateur.",
+      "acceptance": "Parcours physique clavier/trackpad, annulation, conflit signalé et restauration du profil précédent.",
+      "refs": [
+        "https://highlyopinionated.co/swish/",
+        "https://github.com/MrKai77/Loop",
+        "https://folivora.ai/features/window-management/"
+      ],
+      "evidence": [
+        "selecteur"
+      ]
+    },
+    {
+      "rank": 11,
+      "title": "Exporter une configuration portable et restaurable",
+      "family": "Adoption",
+      "status": "Fichiers locaux présents ; parcours global à vérifier",
+      "effort": "Moyen",
+      "why": "Copier le TOML ne suffit pas nécessairement pour retrouver projets, thèmes, workflows et raccourcis sur un autre Mac.",
+      "example": "Exporter ses choix ; importer sur un autre Mac avec un aperçu des changements et des réglages propres à la machine.",
+      "proposal": "Un export global guidé, avec choix des catégories, aperçu des conflits et séparation des identités d’écran et des chemins locaux.",
+      "limit": "Ne pas synchroniser aveuglément les identifiants de fenêtres, les secrets ou les raccourcis BTT. Une sauvegarde guidée peut suffire avant le cloud.",
+      "acceptance": "Aller-retour sur un dossier de test, import partiel, ancienne version et retour arrière.",
+      "refs": [
+        "https://manual.raycast.com/import-export",
+        "https://www.alfredapp.com/help/advanced/sync/"
+      ],
+      "evidence": [
+        "projets",
+        "guide"
+      ]
+    },
+    {
+      "rank": 12,
+      "title": "Faciliter l’installation et le premier usage public",
+      "family": "Adoption",
+      "status": "Écart confirmé de distribution",
+      "effort": "Moyen à élevé",
+      "why": "Le README décrit une version arm64, signée ad hoc et non notarisée. OmniWM annonce déjà une distribution Developer ID et notarisée.",
+      "example": "Télécharger, accorder les permissions utiles et réussir trois actions sans commande de terminal.",
+      "proposal": "Signature de distribution, notarisation et parcours de prise en main. Tester les autorisations, les mises à jour et la restauration de configuration.",
+      "limit": "La notarisation ne prouve pas la qualité du tuilage. Certificat et compte de distribution restent des prérequis distincts.",
+      "acceptance": "Installation sur un profil macOS neuf, permissions refusées puis accordées, configuration conservée après mise à jour.",
+      "refs": [
+        "https://github.com/OmniNull/OmniWM",
+        "https://highlyopinionated.co/swish/"
+      ],
+      "evidence": [
+        "distribution"
+      ]
+    }
+  ],
+  "exclusions": [
+    [
+      "Presse-papiers et fusion de copies",
+      "Alfred, Raycast, LaunchBar, Monarch",
+      "Écart réel, écarté auparavant. À réexaminer seulement si le besoin change."
+    ],
+    [
+      "Extraits et expansion de texte",
+      "Alfred, Raycast",
+      "Écart volontaire confirmé dans la session 131."
+    ],
+    [
+      "Contacts et actions associées",
+      "Alfred, LaunchBar",
+      "Écart volontaire confirmé dans la session 131."
+    ],
+    [
+      "IA et transformation de texte",
+      "Raycast et annonces Alfred 6",
+      "Choix utilisateur conservé. Ne pas présenter une annonce comme une fonction déjà publiée."
+    ],
+    [
+      "Éditeur visuel complet de workflows",
+      "Alfred, Keyboard Maestro",
+      "Hors périmètre conservé. Un catalogue/configurateur est une autre proposition."
+    ]
+  ],
+  "local_sources": {
+    "modes": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieCore/WindowManagementMode.swift",
+    "calcul": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/LauncherCalculator.swift",
+    "compat": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/AlfredCompatibility.swift",
+    "projets": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/StageProjects.swift",
+    "groupes": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/WindowGroupCommands.swift",
+    "macros": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/TargetMacroService.swift",
+    "fichiers": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/LauncherFiles.swift",
+    "filtres": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/AlfredFileFilter.swift",
+    "scratchpad": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/WindowRuleEngine.swift",
+    "guide": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/docs/fr/launcher.md",
+    "selecteur": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/docs/fr/window-switcher.md",
+    "exclusions": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/specs/131-actions-alfred/spec.md",
+    "distribution": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/README.md",
+    "cibles": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/AppTargetQueryService.swift"
+  },
+  "methodology": "Comparaison documentaire de sources officielles et lecture ciblée du code Roadie. Pas de tests concurrents ni de mesure de parts de marché. Les fonctions décrites sur la branche principale d’un projet peuvent précéder sa version publiée.",
+  "code_reads": [
+    {
+      "project": "Paneru",
+      "commit": "425d37aef53503b05b65c784cb00ba59825ae70b",
+      "url": "https://github.com/karinushka/paneru/blob/425d37aef53503b05b65c784cb00ba59825ae70b/src/ecs/layout.rs",
+      "observation": "Colonnes, ruban et contraintes de placement. Le code décrit le maintien d’une mince partie de la fenêtre sur son écran pour éviter sa réaffectation par macOS.",
+      "scope": "Lecture ciblée, pas audit complet ni intégration"
+    },
+    {
+      "project": "Rift",
+      "commit": "572b9425ebe3d09196e5db2601ff8bc539ee407c",
+      "url": "https://github.com/acsandmann/rift/blob/572b9425ebe3d09196e5db2601ff8bc539ee407c/src/layout_engine/systems/scrolling.rs",
+      "observation": "Les colonnes ont une identité et une largeur ; le déplacement de la vue est représenté séparément.",
+      "scope": "Lecture ciblée, pas audit complet ni intégration"
+    },
+    {
+      "project": "Rectangle",
+      "commit": "39466aea1a6c942eb3bbdd4a7b5d6da8662106f5",
+      "url": "https://github.com/rxhanson/Rectangle/blob/39466aea1a6c942eb3bbdd4a7b5d6da8662106f5/Rectangle/WindowCalculation/RepeatedExecutionsCalculation.swift",
+      "observation": "Le calcul parcourt des proportions lorsque la même action se répète.",
+      "scope": "Lecture ciblée, pas audit complet ni intégration"
+    },
+    {
+      "project": "AeroSpace",
+      "commit": "8e7899629c396e2a735c7b5d9950565af239c706",
+      "url": "https://github.com/nikitabobko/AeroSpace/blob/8e7899629c396e2a735c7b5d9950565af239c706/Sources/AppBundle/layout/layoutRecursive.swift",
+      "observation": "Le conteneur choisit tuiles ou accordéon ; la branche la plus récente intervient dans les marges de l’accordéon.",
+      "scope": "Lecture ciblée, pas audit complet ni intégration"
+    }
+  ]
+}

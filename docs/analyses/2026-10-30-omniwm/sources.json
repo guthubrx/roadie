@@ -1,0 +1,148 @@
+{
+  "date": "2026-10-30",
+  "repository": "https://github.com/OmniNull/OmniWM",
+  "tag": "v0.7.6",
+  "commit": "3c0783954604eaa9110d0bdb61fa29f953e738ee",
+  "main_observed": "ce40789d2b86a9f55d9e8b9c5f83e2b5a5f03f7e",
+  "scope": "Lecture ciblée ; application non installée ; tests concurrents lus mais non exécutés ; schéma explicatif original",
+  "sources": [
+    {
+      "title": "Choix du moteur par bureau",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Config/WorkspaceConfig.swift",
+      "observation": "WorkspaceConfiguration garde layoutType : default, niri ou dwindle.",
+      "sha256": "974f4a31b1230461753216821c4c0fb611c590e2a3b0adffa875fba60976d239"
+    },
+    {
+      "title": "Colonnes, tailles et groupes",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Layout/Niri/NiriContainer.swift",
+      "observation": "Chaque conteneur garde ses dimensions, ses bornes, son mode et son membre actif.",
+      "sha256": "5d292a52e402eb373652c308d24fda3dd3669d4794d2c2146541ad7fe1468e70"
+    },
+    {
+      "title": "Position de la vue",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Layout/Niri/ViewportState.swift",
+      "observation": "La colonne active, le décalage de vue et la transition sont des états explicites.",
+      "sha256": "ca23919b40c173f1bd0d55da624ae5abb6c7578e1dfed8c43e10cb1855336d98"
+    },
+    {
+      "title": "Remplissage automatique",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Layout/Niri/NiriLayoutEngine+PrimarySpanFit.swift",
+      "observation": "Quand les conteneurs sont peu nombreux, un remplissage proportionnel peut agrandir leurs tailles. Le redimensionnement manuel suspend ce remplissage jusqu’au changement du nombre de conteneurs.",
+      "sha256": "1c9057999d5d207d66ca3761bfb36e5f7ea7049b9604df02eedc04251b522d68"
+    },
+    {
+      "title": "Géométrie destinée à la vue d’ensemble",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Layout/Niri/NiriOverviewSnapshot.swift",
+      "observation": "L’instantané fournit les rectangles du ruban, son orientation, la position de la vue et les groupes.",
+      "sha256": "4bae87bce4e3fda9aaf5b0bd3f32925e788253a0c26f677b854d59fa6886c744"
+    },
+    {
+      "title": "Projection de cette géométrie",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Overview/OverviewLayoutGeometry+NiriProjection.swift",
+      "observation": "Les rectangles du ruban sont projetés à une échelle commune ; les positions et proportions ne deviennent pas une grille uniforme.",
+      "sha256": "3a00c3db0bdd71dc37fd05590c02862bf2d6485a02079faca6a1cad629b0c2f1"
+    },
+    {
+      "title": "Projection des bureaux classiques",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Overview/OverviewLayoutGeometry+GenericPreview.swift",
+      "observation": "Les bureaux classiques utilisent leurs cadres réels, avec une seule carte affichée par groupe d’onglets.",
+      "sha256": "8baa11994b39d56355a6129845bd9e19e29a4f2cc3fc1028ecda600ffe173942"
+    },
+    {
+      "title": "Zoom et bandes de bureaux",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Overview/OverviewLayoutGeometry.swift",
+      "observation": "Chaque bureau possède une bande et un rectangle correspondant à la portion d’écran. La projection est un changement d’échelle.",
+      "sha256": "4f9f4bdd34141f445af18a5d51e84b4cea34a1c4b60cdc9d22b0f59e9a4b6589"
+    },
+    {
+      "title": "Retour de la vue d’ensemble au bureau",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Controller/NiriLayoutHandler+OverviewViewport.swift",
+      "observation": "Le déplacement du ruban dans la vue d’ensemble peut être remis dans l’état du bureau. Les cadres sont appliqués au bureau actif.",
+      "sha256": "a0dc8e1fbc2a11907702ec4c5f7e70983e79eb05d695db1bcfa7a2a5458ba02c"
+    },
+    {
+      "title": "Tests des formes et du débordement",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Tests/OmniWMTests/OverviewLayoutCalculatorTests.swift",
+      "observation": "Des tests vérifient positions réelles, proportions, zones de dépôt, bornes de défilement et nombre de colonnes hors champ.",
+      "sha256": "714f93819882fa3140ffe780ca4596dc864dd7018a27cf492b3776c88c7e2c16"
+    },
+    {
+      "title": "Tests de conservation de la vue",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Tests/OmniWMTests/OverviewViewportCommitTests.swift",
+      "observation": "Les tests couvrent la conservation de la sélection et du décalage sur les autres écrans.",
+      "sha256": "b333a726f1d5201485a52343992de43e792841f70a1f459267b58783bf391373"
+    },
+    {
+      "title": "Ajout d’une fenêtre en BSP",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Layout/Dwindle/DwindleLayoutEngine+WindowAdmission.swift",
+      "observation": "Le moteur scinde la feuille visée et conserve un arbre avec ratio et orientation.",
+      "sha256": "eef9c6b6709a318fafdf2b7fae3f75c2453131e64988d385d1483d1e1c68c1d3"
+    },
+    {
+      "title": "Regrouper et extraire en Niri",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Layout/Niri/NiriLayoutEngine+ColumnConsumption.swift",
+      "observation": "Les commandes déplacent une fenêtre dans une colonne voisine ou l’en extraient. Les tailles minimales sont prises en compte.",
+      "sha256": "0fc194aced7c146a3928565e62a1f176fad7a15b046a6930b3fe806d6be01ee6"
+    },
+    {
+      "title": "Deux styles de défilement",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Config/TrackpadScrollStyle.swift",
+      "observation": "Le choix sépare l’aimantation aux colonnes de l’inertie.",
+      "sha256": "778fa5e4539fde70d2b932025e93695dba8007f822541db925c72d2029b203ea"
+    },
+    {
+      "title": "Transition d’Overview",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Overview/OverviewNativeTransition.swift",
+      "observation": "L’ouverture et la fermeture utilisent une transition à ressort ; la vitesse du geste intervient dans la décision de terminer ou d’annuler.",
+      "sha256": "3ba18ed43423c4d8a4e8fe68afded2fc4ea48d157adac6ad89206bb093093922"
+    },
+    {
+      "title": "Aperçus rendus",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/Sources/OmniWM/Core/Overview/OverviewPreviewFrame.swift",
+      "observation": "Le rendu conserve une surface d’image issue d’un tampon vidéo, avec une zone de contenu normalisée.",
+      "sha256": "91b0402dfa67e4c8a9da065f51e3a0fc52816d84fee7102e401b12bfc63417a8"
+    },
+    {
+      "title": "Limites de la version publiée",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/website/src/content/docs/help/known-limitations.md",
+      "observation": "Espaces natifs inactifs hors tuilage, contraintes de macOS, limites de restauration et appartenance temporaire aux scratchpads.",
+      "sha256": "967f9457402932ae36afacee8418e63343657d7b9ffc92732c34b6f42d54c6d3"
+    },
+    {
+      "title": "Topologie des écrans",
+      "url": "https://github.com/OmniNull/OmniWM/blob/3c0783954604eaa9110d0bdb61fa29f953e738ee/website/src/content/docs/guides/multi-monitor.md",
+      "observation": "Deux cartes distinguent placement technique macOS et directions physiques utilisées par OmniWM.",
+      "sha256": "b89cfa8dfcf97c60ebec6da4f15165c2d7e088a292e5cec244d96322e0c94efa"
+    }
+  ],
+  "roadie_sources": [
+    {
+      "path": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieStages/RoadieState.swift",
+      "observation": "StageState possède déjà un mode de disposition. Le choix par activité existe donc dans le modèle.",
+      "sha256": "638686d222e84ca4af3f5b2c583a2e2606d7c70da0560544e400af8fa2a8d253"
+    },
+    {
+      "path": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/OverviewModel.swift",
+      "observation": "OverviewLayout compose une grille de cartes au format unique ; les stages sont identifiées dans leurs légendes.",
+      "sha256": "3e71b6b1a61d4a51582b3259ce55acde731cb7eca95a93d290fc50f8eca719b0"
+    },
+    {
+      "path": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieCore/WindowManagementMode.swift",
+      "observation": "Les moteurs actuels sont BSP, arbre BSP persistant, masterStack et flottant, avec un alias historique.",
+      "sha256": "0f196a0c87af47db959d556c2683f601afca38d8a1d8d8ef999b8130224e6883"
+    }
+  ],
+  "web_demo_observation": {
+    "url": "https://omniwm.app/",
+    "action": "Deux appuis sur Focus right dans la simulation du site",
+    "before": {
+      "selected": "Zed",
+      "pan": "0"
+    },
+    "after": {
+      "selected": "Safari",
+      "pan": "0.32666666666666666"
+    },
+    "invariant": "Les largeurs CSS des cinq fenêtres restent identiques ; observation du simulateur, pas de l’application native."
+  }
+}
