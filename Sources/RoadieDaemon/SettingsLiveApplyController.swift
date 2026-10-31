@@ -75,6 +75,7 @@ public final class SettingsLiveApplyController {
         // L'interrupteur des poignées change la présentation, pas la géométrie des fenêtres.
         var geometryTiling = config.tiling
         geometryTiling.resizeHandles = previousConfig.tiling.resizeHandles
+        geometryTiling.liveDragPreview = previousConfig.tiling.liveDragPreview
         let geometryChanged = geometryTiling != previousConfig.tiling || rail != previousRail
         let layoutChanged = geometryChanged
             || config.desktops != previousConfig.desktops

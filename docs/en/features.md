@@ -64,6 +64,16 @@ Recent placement notifications are recognized even when macOS delivers them out
 of order. Size refusals and learned minimums stay tied to their generation and
 window context, so they do not overwrite newer gestures.
 
+## Rearranging while dragging
+
+**Tiling > Rearrange windows while dragging** moves real neighboring windows to
+the proposed drop positions before release. The ghost remains a guide and the
+grabbed window follows the pointer. Leaving a destination or canceling restores
+the neighbors. Turn it off to keep only the ghost (`tiling.live_drag_preview`,
+enabled by default). The choice applies immediately, survives restart and is
+independent of resizing by window edges. It covers drops onto the desktop from
+a title bar or the rail; overview miniatures keep their existing behavior.
+
 ## Modular Runtime
 
 Roadie can run as a classic monolithic daemon or as a set of separate runtime

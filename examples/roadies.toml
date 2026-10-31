@@ -15,6 +15,8 @@ default_strategy = "spatialBsp"
 # EN: Drag the gaps in persistent tree layouts; native window-edge resizing remains available.
 # FR: Tirer les séparations de l'arbre persistant ; les bords natifs restent utilisables.
 resize_handles = true
+# FR: Réorganiser les voisines pendant le glisser. EN: Move neighbors during drag.
+live_drag_preview = true
 gaps_outer = 8
 gaps_inner = 4
 master_ratio = 0.6

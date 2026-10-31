@@ -8,11 +8,16 @@ import RoadieDaemon
 final class PowerUserProvider: SystemSnapshotProviding, @unchecked Sendable {
     var focusedID: WindowID?
     let displaySnapshots: [DisplaySnapshot]
-    var snapshots: [WindowSnapshot]
+    private let snapshotLock = NSLock()
+    private var storedSnapshots: [WindowSnapshot]
+    var snapshots: [WindowSnapshot] {
+        get { snapshotLock.withLock { storedSnapshots } }
+        set { snapshotLock.withLock { storedSnapshots = newValue } }
+    }
 
     init(displays: [DisplaySnapshot] = [powerDisplay()], windows: [WindowSnapshot]) {
         self.displaySnapshots = displays
-        self.snapshots = windows
+        self.storedSnapshots = windows
         self.focusedID = windows.first?.id
     }
 
@@ -23,6 +28,7 @@ final class PowerUserProvider: SystemSnapshotProviding, @unchecked Sendable {
 }
 
 final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
+    private let frameLock = NSLock()
     let provider: PowerUserProvider
     private(set) var focused: [WindowID] = []
     private(set) var frames: [WindowID: Rect] = [:]
@@ -43,6 +49,10 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
     }
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        // L'aperçu interactif envoie les PID en parallèle ; le double conserve
+        // une mutation atomique de ses dictionnaires et du snapshot partagé.
+        frameLock.lock()
+        defer { frameLock.unlock() }
         let rect = Rect(frame)
         frames[window.id] = rect
         frameHistory[window.id, default: []].append(rect)

@@ -7,28 +7,37 @@ import RoadieTiler
 @MainActor
 final class DropPreviewController {
     private let engine: DropPreviewEngine
+    private let live: LiveDropPreview
     private let overlay = DropPreviewOverlayWindow()
     private var lastCandidate: DropPreviewCandidate?
     private var dragContext: DropPreviewContext?
 
     init(engine: DropPreviewEngine = DropPreviewEngine()) {
         self.engine = engine
+        self.live = LiveDropPreview(service: engine.service)
     }
 
     var candidate: DropPreviewCandidate? {
         lastCandidate
     }
+    var isHoldingLayout: Bool { live.isActive }
 
     /// Fige le snapshot utilise pendant tout le drag (SPEC-016 FR-025) : un seul snapshot au lieu d'un par mouvement.
     /// Un contexte deja pris par l'appelant peut etre transmis pour eviter un second snapshot.
     func beginDrag(context: DropPreviewContext? = nil) {
         dragContext = context ?? engine.makeContext()
+        if let dragContext { live.begin(dragContext) }
     }
 
-    func endDrag() {
+    func endDrag(then action: (@MainActor () -> Void)? = nil) {
         dragContext = nil
-        hide()
+        lastCandidate = nil
+        overlay.hide()
+        live.finish(then: action)
     }
+
+    func invalidate() { live.invalidate(); dragContext = nil; lastCandidate = nil; overlay.hide() }
+    func refreshLivePreview() { live.update(lastCandidate) }
 
     /// Snapshot de depart d'un drag de fenetre, partage avec la recherche de la fenetre source.
     func makeContext() -> DropPreviewContext {
@@ -51,12 +60,14 @@ final class DropPreviewController {
             return nil
         }
         lastCandidate = candidate
+        live.update(candidate)
         overlay.show(candidate)
         return candidate
     }
 
     func hide() {
         lastCandidate = nil
+        live.update(nil)
         overlay.hide()
     }
 }
@@ -122,7 +133,7 @@ enum DropPreviewOperation: String, Equatable {
 }
 
 struct DropPreviewEngine {
-    private let service: SnapshotService
+    let service: SnapshotService
 
     init(service: SnapshotService = SnapshotService()) {
         self.service = service
@@ -555,21 +566,21 @@ final class WindowDragReorderController {
         return pending.windowID
     }
 
-    func cancelPendingDrag() {
+    func cancelPendingDrag(then action: (@MainActor () -> Void)? = nil) {
         pending = nil
-        preview.endDrag()
         dragActivity.release()
+        preview.endDrag(then: action)
     }
 
     /// Clic sans bande de titre gérée possible (SPEC-051 C-05) : même effet qu'un clic sans
     /// source de glisser, sans construire de contexte ni de relevé.
     func handleMouseDownOutsideTitleBands() {
-        preview.hide()
+        preview.invalidate()
         pending = nil
     }
 
     func handleMouseDown(at point: CGPoint) {
-        preview.hide()
+        preview.invalidate()
         let context = preview.makeContext()
         guard let source = sourceWindowForDragStart(at: point, in: context.snapshot) else {
             pending = nil
@@ -611,29 +622,31 @@ final class WindowDragReorderController {
     func handleMouseUp(at point: CGPoint) {
         guard let drag = pending else { return }
         pending = nil
-        defer { preview.endDrag() }
         guard drag.didDrag,
               let candidate = preview.update(sourceWindowID: drag.windowID, at: point)
         else {
             if drag.didDrag { dragActivity.release() }
+            preview.endDrag()
             return
         }
         // Dépôt reconnu : il consomme la session de geste, le maintien n'ajuste donc aucune
         // frontière pour ce relâchement (A17).
         _ = userInput.takeGesture()
-        defer { dragActivity.finish(droppedWindowID: candidate.sourceWindowID) }
-        let result = commandService.place(
-            windowID: candidate.sourceWindowID,
-            displayID: candidate.displayID,
-            orderedWindowIDs: candidate.orderedWindowIDs,
-            placements: candidate.placements,
-            treeMutation: candidate.treeMutation
-        )
-        events.append(RoadieEvent(type: "window_drag_apply", scope: candidate.scope, details: [
-            "windowID": String(candidate.sourceWindowID.rawValue),
-            "operation": candidate.operation.rawValue,
-            "changed": String(result.changed)
-        ]))
+        preview.endDrag { [self] in
+            let result = commandService.place(
+                windowID: candidate.sourceWindowID,
+                displayID: candidate.displayID,
+                orderedWindowIDs: candidate.orderedWindowIDs,
+                placements: candidate.placements,
+                treeMutation: candidate.treeMutation
+            )
+            dragActivity.finish(droppedWindowID: candidate.sourceWindowID)
+            events.append(RoadieEvent(type: "window_drag_apply", scope: candidate.scope, details: [
+                "windowID": String(candidate.sourceWindowID.rawValue),
+                "operation": candidate.operation.rawValue,
+                "changed": String(result.changed)
+            ]))
+        }
     }
 
     private func sourceWindowForDragStart(at point: CGPoint, in snapshot: DaemonSnapshot) -> (window: WindowSnapshot, scope: StageScope)? {

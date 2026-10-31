@@ -69,6 +69,17 @@ Les retours macOS de placements récents sont reconnus même lorsqu'ils arrivent
 le désordre. Les refus de taille et les minimums appris restent liés à leur génération
 et au contexte de la fenêtre, pour préserver les gestes plus récents.
 
+## Réorganisation pendant le glisser
+
+**Tuilage > Réorganiser les fenêtres pendant le glisser** déplace les vraies
+fenêtres voisines vers les places du dépôt, avant le relâchement. Le fantôme
+reste un repère et la fenêtre tenue suit la souris. Une sortie ou une annulation
+restaure les voisines. Désactive le réglage pour garder seulement le fantôme
+(`tiling.live_drag_preview`, activé par défaut). Le choix est immédiat, conservé
+après relance et indépendant du redimensionnement par les bords. Il concerne
+les dépôts sur le bureau depuis un titre ou le rail ; les miniatures de la vue
+d’ensemble gardent leur comportement.
+
 ## Runtime modulaire
 
 Roadie peut tourner comme daemon monolithique classique ou comme ensemble de

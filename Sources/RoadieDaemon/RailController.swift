@@ -39,6 +39,7 @@ public final class RailController {
     private var hoverTimer: Timer?
     private var stageLabelTimer: Timer?
     private var screenObserver: NSObjectProtocol?
+    private var spaceObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     private var stageStoreWatcher: RailFileWatcher?
     private var configWatcher: RailFileWatcher?
@@ -51,11 +52,11 @@ public final class RailController {
     private var pendingDrag: PendingRailDrag?
     private var pendingStageReorder: PendingStageReorder?
     private var defersPanelRebuild: Bool {
-        pendingDrag != nil || pendingStageReorder != nil || windowDragController.hasActiveDrag
+        pendingDrag != nil || pendingStageReorder != nil || windowDragController.hasActiveDrag || dropPreview.isHoldingLayout
     }
     private var dragReleasedSince: Date?
     private var dragGhost: RailDragGhostWindow?
-    private let dropPreview = DropPreviewController()
+    private lazy var dropPreview = DropPreviewController(engine: DropPreviewEngine(service: snapshotService))
     private var stageMenuTargets: [NSObject] = []
     private lazy var windowDragController = WindowDragReorderController(preview: dropPreview)
     private var focusedWindowID: WindowID?
@@ -94,7 +95,20 @@ public final class RailController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.rebuildPanels(reason: "screen") }
+            Task { @MainActor in
+                self?.dropPreview.invalidate()
+                self?.cancelRailDrags()
+                self?.rebuildPanels(reason: "screen")
+            }
+        }
+        if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.dropPreview.invalidate()
+                self?.cancelRailDrags()
+            }
         }
     }
 
@@ -120,6 +134,8 @@ public final class RailController {
             NotificationCenter.default.removeObserver(screenObserver)
         }
         screenObserver = nil
+        if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
+        spaceObserver = nil
         if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
         settingsObserver = nil
         cancelRailDrags()
@@ -180,6 +196,7 @@ public final class RailController {
 
     /// Notification des réglages et événement vnode portent la même écriture : un seul cycle.
     private func refreshPanelsForConfigChange(reason: String) {
+        dropPreview.refreshLivePreview()
         let path = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
         let stamp = fileModificationStamp(path)
         guard path != lastConfigRefreshPath || stamp != lastConfigRefreshStamp else { return }
@@ -228,6 +245,16 @@ public final class RailController {
 
     private func startClickMonitors() {
         guard clickMonitors.isEmpty else { return }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+            guard event.keyCode == 53, let self,
+                  self.pendingDrag != nil || self.windowDragController.hasActiveDrag else { return event }
+            self.cancelRailDrags()
+            return nil
+        }) { clickMonitors.append(local) }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+            guard event.keyCode == 53 else { return }
+            Task { @MainActor in self?.cancelRailDrags() }
+        }) { clickMonitors.append(global) }
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
             let screenPoint = RoadieScreenCoordinate.mouseEventPoint(event)
             if Self.isRightMouseEvent(event.type),
@@ -363,7 +390,7 @@ public final class RailController {
         // Un nouveau clic invalide tout drag precedent reste en suspens.
         pendingDrag = nil
         dragGhost?.hide()
-        dropPreview.endDrag()
+        dropPreview.invalidate()
         for (displayID, panel) in panels {
             guard panel.isVisible, panel.frame.contains(screenPoint) else { continue }
             // Evenement global sur un panneau = le panneau laissait passer le clic : la fenetre dessous l'a recu.
@@ -894,24 +921,29 @@ public final class RailController {
         }
         pendingDrag = nil
         dragGhost?.hide()
-        defer { dropPreview.endDrag() }
-
         guard drag.didDrag else {
+            dropPreview.endDrag()
             perform(drag.clickAction ?? .switchStage(drag.sourceStageID), displayID: drag.displayID)
             rebuildPanels()
             return
         }
 
         guard let targetDisplayID = displayID(at: screenPoint),
-              let panel = panels[targetDisplayID] else { return }
+              let panel = panels[targetDisplayID] else { dropPreview.endDrag(); return }
         guard let target = panel.windowDropTarget(at: screenPoint) else {
-            guard displayID(at: screenPoint) != nil else { return }
+            guard displayID(at: screenPoint) != nil else { dropPreview.endDrag(); return }
             print("rail drag summon window \(drag.windowID.rawValue)")
             fflush(stdout)
             if let candidate = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint, displayID: targetDisplayID) {
-                perform(.placeWindow(candidate), displayID: candidate.displayID)
+                dropPreview.endDrag { [self] in
+                    perform(.placeWindow(candidate), displayID: candidate.displayID)
+                    rebuildPanels()
+                }
             } else {
-                perform(.summonWindow(drag.windowID), displayID: targetDisplayID)
+                dropPreview.endDrag { [self] in
+                    perform(.summonWindow(drag.windowID), displayID: targetDisplayID)
+                    rebuildPanels()
+                }
             }
             rebuildPanels()
             return
@@ -921,11 +953,14 @@ public final class RailController {
             sourceStageID: drag.sourceStageID,
             targetDisplayID: targetDisplayID,
             targetStageID: target.stageID
-        ) else { return }
+        ) else { dropPreview.endDrag(); return }
         print("rail drag window \(drag.windowID.rawValue) -> stage \(target.stageID.rawValue) index \(target.insertionIndex)")
         fflush(stdout)
-        applyRailWindowDrop(drag.windowID, target: target, displayID: targetDisplayID, at: screenPoint)
-        rebuildPanels()
+        dropPreview.hide()
+        dropPreview.endDrag { [self] in
+            applyRailWindowDrop(drag.windowID, target: target, displayID: targetDisplayID, at: screenPoint)
+            rebuildPanels()
+        }
     }
 
     private func handleWindowDropOnRail(at screenPoint: CGPoint) -> Bool {
@@ -936,13 +971,15 @@ public final class RailController {
             guard panel.isVisible,
                   let target = panel.windowDropTarget(at: screenPoint)
             else { continue }
-            windowDragController.cancelPendingDrag()
             // Dépôt reconnu sur le navrail : il consomme la session de geste (A17).
             _ = UserInputActivity.shared.takeGesture()
             print("rail external drag window \(windowID.rawValue) -> stage \(target.stageID.rawValue) index \(target.insertionIndex)")
             fflush(stdout)
-            applyRailWindowDrop(windowID, target: target, displayID: displayID, at: screenPoint)
-            rebuildPanels()
+            dropPreview.hide()
+            windowDragController.cancelPendingDrag { [self] in
+                applyRailWindowDrop(windowID, target: target, displayID: displayID, at: screenPoint)
+                rebuildPanels()
+            }
             return true
         }
         return false

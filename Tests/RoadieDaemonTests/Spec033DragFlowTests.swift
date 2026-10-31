@@ -15,7 +15,7 @@ struct Spec033DragFlowTests {
     /// Rejoue le geste complet dans un monde isolé, aux coordonnées négatives de l'incident.
     /// Aucun appel AX n'est adressé aux applications réelles de l'utilisateur.
     @Test(arguments: [false, true])
-    func twoBottomDropsOnExternalDisplayStayPlacedAcrossMaintenance(staleDestroy: Bool) throws {
+    func twoBottomDropsOnExternalDisplayStayPlacedAcrossMaintenance(staleDestroy: Bool) async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("drag033-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -86,6 +86,14 @@ struct Spec033DragFlowTests {
             #expect(candidate.operation == .insertDown)
             #expect(candidate.targetWindowID == teams.id)
             #expect(candidate.placements == expected)
+            // L'aperçu écrit en arrière-plan. Attendre les voisines avant de simuler
+            // le déplacement natif de la source, sans mutation concurrente du mock.
+            for _ in 0..<150 {
+                if expected.filter({ $0.key != outlook.id }).allSatisfy({ id, frame in
+                    provider.snapshots.first { $0.id == id }?.frame == frame
+                }) { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
             // La fenêtre se déplace nativement pendant le geste ; le contexte de départ reste figé.
             provider.snapshots = provider.snapshots.map { window in
                 var updated = window
@@ -93,6 +101,11 @@ struct Spec033DragFlowTests {
                 return updated
             }
             controller.handleMouseUp(at: nsPoint(drop))
+            for _ in 0..<150 {
+                if !preview.isHoldingLayout { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            #expect(!preview.isHoldingLayout)
             #expect(!controller.hasActiveDrag)
             #expect(drag.lastDrop()?.windowID == outlook.id)
             for (id, frame) in expected { #expect(provider.snapshots.first { $0.id == id }?.frame == frame) }

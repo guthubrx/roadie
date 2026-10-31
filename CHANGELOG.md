@@ -5,6 +5,10 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Les voisines prennent leur future place pendant un glisser sur le bureau depuis
+  un titre ou le rail. Réglage immédiat dans Tuilage : `live_drag_preview`, activé
+  par défaut ; désactivé, conserve le fantôme seul. Annuler restaure les voisines.
+
 - En `spatialBsp`, les voisines suivent les bords et coins natifs pendant le geste,
   sans poignée requise. La fenêtre saisie reste sous contrôle de macOS ; les
   proportions sont enregistrées au relâchement. Les écritures des voisines passent

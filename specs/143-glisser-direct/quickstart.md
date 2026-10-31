@@ -1,0 +1,2 @@
+# Vérification
+Trois fenêtres fictives dans une stage dédiée. Glisser A par son titre vers le bord de B, maintenir : B prend sa future place. Changer de côté : dernière disposition visible seule. Sortir et Échap : voisines restaurées. Relâcher sur cible : dépôt conservé. Répéter après désactivation dans Tuilage : voisines immobiles jusqu’au relâchement. Réactiver, vérifier relecture. Captures et clics réels hors Git ; diaporama autonome dans preuves-corrections. Aucune capture privée.
