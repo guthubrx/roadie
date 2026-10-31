@@ -14,6 +14,409 @@
     "candidates": 0,
     "suppressed": 0
   },
-  "findings": [],
+  "findings": [
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 90,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Sources/RoadieAX/WindowKeyFocus.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "fingerprint": "1daee32d29fee7ff06ec"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 91,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "fingerprint": "262b3ac83d0a817628e0"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 92,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "fingerprint": "87b7a2bb1ff402341a06"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 321,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "fingerprint": "f3eb91a5fb82a9dbea70"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 482,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "fingerprint": "30bf823b601dfae759ad"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 514,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "fingerprint": "0b47db443ebb6bdb849e"
+    }
+  ],
   "suppressed": []
 }

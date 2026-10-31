@@ -3,12 +3,12 @@
   "root": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability",
   "session": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-effets144-01",
   "created_at": "2026-10-31T11:50:58.126588+00:00",
-  "commit": "37e5cd92e8bcaa5f0757427f7b16658dc45edd1d",
-  "git_status": " M .specify/feature.json\n M Sources/RoadieCore/Config.swift\n M Sources/RoadieDaemon/DaemonSnapshot.swift\n M Sources/RoadieDaemon/DropPreviewController.swift\n M Sources/RoadieDaemon/FocusFollowsMouseController.swift\n M Sources/RoadieDaemon/LayoutCommandService.swift\n M Sources/RoadieDaemon/LayoutMaintainer.swift\n M Sources/RoadieDaemon/LiveDropPreview.swift\n M Sources/RoadieDaemon/OverviewPanel.swift\n M Sources/RoadieDaemon/RailController.swift\n M Sources/RoadieDaemon/RailPanel.swift\n M Sources/RoadieDaemon/SearchInputPanel.swift\n M Sources/RoadieDaemon/SettingsCatalog.swift\n M Sources/RoadieDaemon/SettingsLiveApplyController.swift\n M Sources/RoadieDaemon/SettingsOrganization.swift\n M Sources/RoadieDaemon/SettingsView.swift\n M Sources/RoadieDaemon/StageCommands.swift\n M Sources/RoadieDaemon/TargetOverlayPresenter.swift\n M Sources/RoadieDaemon/WindowSwitcherPanel.swift\n M Sources/roadied/main.swift\n M Tests/RoadieDaemonTests/SettingsCatalogTests.swift\n M Tests/RoadieDaemonTests/Spec058SettingsLayoutTests.swift\n M Tests/RoadieDaemonTests/Spec061OverviewTests.swift\n M Tests/RoadieDaemonTests/Spec143LiveDragTests.swift\n M docs/en/configuration-rules.md\n M docs/fr/configuration-rules.md\n?? Sources/RoadieAX/WindowTitleDragAccess.swift\n?? Sources/RoadieCore/Motion.swift\n?? Sources/RoadieDaemon/EffectAnimator.swift\n?? Sources/RoadieDaemon/FrameTransitionRuntime.swift\n?? Sources/RoadieDaemon/SettingsCatalogEffects.swift\n?? Tests/RoadieDaemonTests/Spec144EffectsTests.swift\n?? Tests/RoadieDaemonTests/Spec144FrameTransitionTests.swift\n?? Tests/RoadieDaemonTests/Spec144RealDropTests.swift\n?? audits/2026-10-31/\n?? docs/analyses/2026-10-30-comparatif-marche/\n?? docs/analyses/2026-10-30-omniwm/\n?? docs/analyses/2026-10-31-effets-wayland/\n?? docs/decisions/024-effets-et-propriete-glisser.md\n?? preuves-corrections/2026-10-31-144-effets/\n?? specs/144-effets-reglables/\n",
+  "commit": "092ecb14a3944f94d678c590658fbfa97bb739b6",
+  "git_status": " M audits/2026-10-31/session-2026-10-31-effets144-01/notes/final-readonly-review.md\n?? audits/2026-10-31/session-2026-10-31-effets144-01/.run.lock\n?? audits/2026-10-31/session-2026-10-31-effets144-01/notes/user-confirmation-and-activation.md\n?? audits/2026-10-31/session-2026-10-31-effets144-01/revisions/001-input.json\n?? docs/analyses/2026-10-30-comparatif-marche/\n?? docs/analyses/2026-10-30-omniwm/\n",
   "scope": "Session 144 : effets réglables et aperçu réel ; diff et contrats partagés",
   "spec": "specs/144-effets-reglables/spec.md",
   "mode": "fix",
-  "revision": 1,
+  "revision": 2,
   "base_ref": "37e5cd92e8bcaa5f0757427f7b16658dc45edd1d",
   "files": {
     ".agents/skills/speckit-analyze/SKILL.md": {
@@ -176,8 +176,8 @@
       "bytes": 26749
     },
     ".specify/memory/sessions/index.md": {
-      "sha256": "e96180fb131dd40fa0b598082d3d10e9aab22bd1f6fb6242161baa0e1818b53c",
-      "bytes": 18572
+      "sha256": "be097f083210609cc77e0be2d899a062561e0bc98f0b9b5aadcb546f7d86c8f0",
+      "bytes": 19007
     },
     ".specify/memory/sessions/session-019.md": {
       "sha256": "06631676d449a9cc45ff6142717a734388e1718cba2505ead88ac14328e94556",
@@ -296,12 +296,12 @@
       "bytes": 369
     },
     "AGENTS.md": {
-      "sha256": "1e4e20de32a3b0cb4e63c18bc3b29694f00a61884d1a2a11bac0689d1f5ba394",
-      "bytes": 31940
+      "sha256": "d57b75d65a9a2297d3e564c62a32adee31766aa159367ef7bce641a8a0646e15",
+      "bytes": 32686
     },
     "CHANGELOG.md": {
-      "sha256": "dda5b59dd17bf7140a166c2c6afe876082143623403de381c29a7a75e5e15daf",
-      "bytes": 32946
+      "sha256": "59c67714f087e1595e825078bde8518ddde419a19b5c796926278896ae1dacc1",
+      "bytes": 33442
     },
     "Makefile": {
       "sha256": "4c3188dfeb14c91ef852e79a5ce166aa688c04fedb7f4d365940e685d647b260",
@@ -2892,8 +2892,8 @@
       "bytes": 51654
     },
     "preuves-corrections/2026-10-31-144-effets/preuves.html": {
-      "sha256": "ea617072112ffbd91e4a222e39675715dd22141ca474742ea974f6a4bb3750cd",
-      "bytes": 313909
+      "sha256": "ee2609039b86662292764b78e843f5706f4d727c6a339de6a26743428e130fdf",
+      "bytes": 486272
     },
     "scripts/btt/roadie-record-toggle.sh": {
       "sha256": "fccfc488eadbccc7bc0e6b62ddf084ef2b7ef4e8598d2a7b17ee9c85d6ce1542",
@@ -6168,8 +6168,8 @@
       "bytes": 3259
     },
     "specs/144-effets-reglables/adversarial-review-code.md": {
-      "sha256": "bc179f9c9d5a53208eb432cbbfa5a29d65f230487c07add08e68ad58b167d45c",
-      "bytes": 1060
+      "sha256": "06ecdeee8210497bb8fec4ad834205dd86428467e72ffe9e35c0ffbb6cb04bda",
+      "bytes": 1619
     },
     "specs/144-effets-reglables/adversarial-review-plan.md": {
       "sha256": "90580548c539a250a6298ef582e4efa885d2ff1e61101e0b205cf761d35c42a9",
@@ -6192,8 +6192,12 @@
       "bytes": 1992
     },
     "specs/144-effets-reglables/implementation.md": {
-      "sha256": "43305eaa82539763cbedc2f9d9919300552e47207ce668c6ec2dd98431753030",
-      "bytes": 8963
+      "sha256": "259a7ac2dc0518d08f6f479c29401cfb03981867c8c32804cf8ca4bc2b67dc98",
+      "bytes": 10131
+    },
+    "specs/144-effets-reglables/livraison.md": {
+      "sha256": "3dbb36f046066a0b05ecbebd75e021a0045e91e319feb51299724291dec36b46",
+      "bytes": 5233
     },
     "specs/144-effets-reglables/plan.md": {
       "sha256": "df193516061699878a9e908adbb963f31f2a63cc88b4257cd2578561e324b8ae",
@@ -6212,16 +6216,16 @@
       "bytes": 8223
     },
     "specs/144-effets-reglables/spec.md": {
-      "sha256": "32c5b847dc97bc126ec13c0b2fbec11bc260887bbd88236f35ebb0f01784e346",
-      "bytes": 7634
+      "sha256": "2fa1544810f45675e563d575596be73a964b86622f6f467db7c0c363cb8904d8",
+      "bytes": 7659
     },
     "specs/144-effets-reglables/tasks.md": {
-      "sha256": "9e0d98759f565ba50d09485723b542e64ce779c5e797ace606450cdf2c228df3",
-      "bytes": 9969
+      "sha256": "aa81aae411c5bf6c079c240413120d4d371e53f401f0a33e5d7d3e080e3446b4",
+      "bytes": 10332
     },
     "specs/144-effets-reglables/validation.md": {
-      "sha256": "872de58ad17571c7706e1d173224fe3317f089d9a5cce1b6021e12a5b899ba68",
-      "bytes": 7486
+      "sha256": "70486ae7972adb744f36c2f489a7ac42f0fec10d8c963892f00cfbc69b1fe31c",
+      "bytes": 9638
     }
   },
   "selected_files": [

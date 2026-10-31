@@ -1,0 +1,56 @@
+[
+  {
+    "line": 90,
+    "map_file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "source_file": "Sources/RoadieAX/WindowKeyFocus.swift",
+    "stored_sha256": "fbf8a7bef15d02157b722a92e6076bcaeeb907e38c52314d2caf46cd93ed7dc8",
+    "recomputed_sha256": "fbf8a7bef15d02157b722a92e6076bcaeeb907e38c52314d2caf46cd93ed7dc8",
+    "equal": true
+  },
+  {
+    "line": 91,
+    "map_file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "source_file": "Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+    "stored_sha256": "96e254c50cf895707ce97933004e5ad6def91525a1601fdb0171bb9acbe68991",
+    "recomputed_sha256": "96e254c50cf895707ce97933004e5ad6def91525a1601fdb0171bb9acbe68991",
+    "equal": true
+  },
+  {
+    "line": 92,
+    "map_file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "source_file": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+    "stored_sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6",
+    "recomputed_sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6",
+    "equal": true
+  },
+  {
+    "line": 321,
+    "map_file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "source_file": "Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+    "stored_sha256": "03621020b4748b3f5d3bd10d8b29cc6458aebe8b5724cbde3d1d12cc1ead6d6c",
+    "recomputed_sha256": "03621020b4748b3f5d3bd10d8b29cc6458aebe8b5724cbde3d1d12cc1ead6d6c",
+    "equal": true
+  },
+  {
+    "line": 482,
+    "map_file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "source_file": "Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+    "stored_sha256": "1db5a372959b1ac507494ba83c0c17a1b19e64319f86bc506f441ef40fda631c",
+    "recomputed_sha256": "1db5a372959b1ac507494ba83c0c17a1b19e64319f86bc506f441ef40fda631c",
+    "equal": true
+  },
+  {
+    "line": 514,
+    "map_file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+    "commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+    "source_file": "Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+    "stored_sha256": "06a213bff511b2d5ab2f224f881479f09e499c5aa3d80b31acbe6dbc5218a5e1",
+    "recomputed_sha256": "06a213bff511b2d5ab2f224f881479f09e499c5aa3d80b31acbe6dbc5218a5e1",
+    "equal": true
+  }
+]

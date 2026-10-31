@@ -1,7 +1,7 @@
 # Audit Code V15
 
 Périmètre : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability
-Sources : commit 37e5cd92e8bcaa5f0757427f7b16658dc45edd1d ; mode fix.
+Sources : commit 092ecb14a3944f94d678c590658fbfa97bb739b6 ; mode fix.
 Décision : **pass** ; note globale : A. Les notes de qualité par axe sont présentées ci-dessous ; le compteur de pénalités n'est pas une note de qualité.
 Contrôles vérifiés : 13/13.
 
@@ -30,7 +30,7 @@ Qualité observée = somme des niveaux justifiés / maximum des critères notés
 |---|---|---|
 | Analyse statique et validation des entrées | 3 | Entrées TOML finies et bornées, identité CG ID/PID et qualification de surface ; Semgrep générique et compilateur, sans analyse Swift inter-fichiers. |
 | Protection des secrets courants | 3 | Scan de fichiers exigé sur copie SHA hors du worktree ignoré ; aucune valeur secrète ajoutée dans les sources examinées. Scan complet joint. |
-| Maîtrise des secrets historiques | 2 | Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs. |
+| Maîtrise des secrets historiques | 2 | Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs. Six candidats de la carte SHA réfutés par recalcul historique6/6, sans règle modifiée. |
 | Authentification et séparation des droits | 3 | Autorité locale AX déjà accordée ; pas de nouveau droit, SIP, injection ou compte ; fenêtres ciblées par identité stricte. |
 | Maîtrise des dépendances vulnérables | 3 | Une seule dépendance Swift verrouillée et inchangée ; contrôle OSV explicite du verrou réussi. Pas de graphe atteignable complet. |
 
@@ -143,18 +143,42 @@ Qualité observée = somme des niveaux justifiés / maximum des critères notés
 
 {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, "total": 0, "candidates": 0, "suppressed": 0}
 
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json:90 ; 1daee32d29fee7ff06ec
+  La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.
+  Action : Aucune modification des sources ou des règles ; faux positif conservé et documenté.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json:91 ; 262b3ac83d0a817628e0
+  La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.
+  Action : Aucune modification des sources ou des règles ; faux positif conservé et documenté.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json:92 ; 87b7a2bb1ff402341a06
+  La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.
+  Action : Aucune modification des sources ou des règles ; faux positif conservé et documenté.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json:321 ; f3eb91a5fb82a9dbea70
+  La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.
+  Action : Aucune modification des sources ou des règles ; faux positif conservé et documenté.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json:482 ; 30bf823b601dfae759ad
+  La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.
+  Action : Aucune modification des sources ou des règles ; faux positif conservé et documenté.
+- [refuted] HIGH : Detected a Generic API Key, potentially exposing access to various services and sensitive operations.
+  /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json:514 ; 0b47db443ebb6bdb849e
+  La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.
+  Action : Aucune modification des sources ou des règles ; faux positif conservé et documenté.
 
 ## Vérification réalisée
 
 - security.static : pass ; completed, 0 candidat(s). 
-- security.secrets : pass ; completed, 0 candidat(s).  Copie SHA exacte hors chemin .worktrees, 13.27Mo effectivement scannés ; voir note invocation.
-- security.history : pass ; completed, 0 candidat(s).  Historique limité à 5ab0ab9544de68edbd6642f58ac6140ef8a07f1e..37e5cd92e8bcaa5f0757427f7b16658dc45edd1d; les commits antérieurs sont hors périmètre.
+- security.secrets : pass ; completed, 0 candidat(s).  Copie SHA exacte hors chemin .worktrees, fichiers effectivement scannés ; voir note invocation.
+- security.history : pass ; Scan terminé sur la plage aprèsv0.4.0 jusqu’à092ecb14 ; six candidats de cartes SHA256 réfutés par recalcul des octets au commit historique. Aucun candidat non résolu. Les commits antérieurs àv0.4.0 restent hors périmètre.
 - security.dependencies : pass ; completed, 0 candidat(s).  Verrou explicite TOMLKit0.6.0, aucune dépendance ajoutée.
 - security.authorization : pass ; Autorité locale AX, identité CG ID/PID et qualification sémantique, aucun changement de droits ; contrôles/tabs et fenêtres incompatibles exclus.
 - correctness.logic : pass ; Calcul de cibles, héritage et deferred examinés dans leurs consommateurs ; tests courbes, tailles refusées et restauration ; huit essais Chrome réels.
 - correctness.concurrency : pass ; État de géométrie MainActor, résultat AX à verrou, permis et générations entre attributs, coalescence par PID et fin bornée ; aucun takeGesture ajouté.
 - performance.complexity : pass ; O(k) calcul d’animation, un lot actif/dernière cible par PID, tap O(1) par mouvement et O(w) par clic mémoire ; BSP hérité séparé et limites mesures explicites.
-- tests.regression : pass ; 2416 tests/360 suites et28 tests de scripts réussis sur la révision1 ; tests ciblés et huit parcours natifs Chrome documentés.
+- tests.regression : pass ; 2416 tests/360 suites et28 tests de scripts réussis sur la révision2 ; tests ciblés et huit parcours natifs Chrome documentés.
 - architecture.dependencies : pass ; Core pur, couche AX pour qualification et writer, coordination daemon ; aucune dépendance ajoutée, dispatcher et services existants réutilisés.
 - quality.minimalism : pass ; Un moteur partagé par quatre usages, reprise de la session et fixture143 ; pas de service générique ni capture supplémentaire. Potentiel de suppression exhaustive non mesuré.
 - quality.llm : not_applicable ; La modification ne contient ni appel de modèle, ni agent produit, ni traitement de réponse LLM. La qualification de fenêtre est locale AX/CG.

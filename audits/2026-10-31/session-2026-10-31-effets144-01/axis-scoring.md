@@ -23,7 +23,7 @@ Qualité observée = somme des niveaux justifiés / maximum des critères notés
 |---|---|---|
 | Analyse statique et validation des entrées | 3 | Entrées TOML finies et bornées, identité CG ID/PID et qualification de surface ; Semgrep générique et compilateur, sans analyse Swift inter-fichiers. |
 | Protection des secrets courants | 3 | Scan de fichiers exigé sur copie SHA hors du worktree ignoré ; aucune valeur secrète ajoutée dans les sources examinées. Scan complet joint. |
-| Maîtrise des secrets historiques | 2 | Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs. |
+| Maîtrise des secrets historiques | 2 | Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs. Six candidats de la carte SHA réfutés par recalcul historique6/6, sans règle modifiée. |
 | Authentification et séparation des droits | 3 | Autorité locale AX déjà accordée ; pas de nouveau droit, SIP, injection ou compte ; fenêtres ciblées par identité stricte. |
 | Maîtrise des dépendances vulnérables | 3 | Une seule dépendance Swift verrouillée et inchangée ; contrôle OSV explicite du verrou réussi. Pas de graphe atteignable complet. |
 

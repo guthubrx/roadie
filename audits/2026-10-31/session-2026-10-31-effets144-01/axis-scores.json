@@ -1,7 +1,7 @@
 {
   "scoring_version": "axes-2",
-  "input_sha256": "f53a7532b784ea2676b3fab17c2d15fc3b02d87d563885d1aef571b6655e53c9",
-  "manifest_sha256": "4a622c47f97ce964055c08e143cf79cd363c546716da9896abd763738f119af7",
+  "input_sha256": "7d419f97b05b3653d0e04f28a9ae90b6a3d1c65829a5bd3c34333e7453b097d4",
+  "manifest_sha256": "0b651cd33f7b6619afa37c746295e758369c3b60455f7767567e75037e6c245f",
   "axes": {
     "security": {
       "title": "Sécurité",
@@ -24,7 +24,14 @@
         "axes.security.04",
         "axes.security.05"
       ],
-      "finding_fingerprints": [],
+      "finding_fingerprints": [
+        "1daee32d29fee7ff06ec",
+        "262b3ac83d0a817628e0",
+        "87b7a2bb1ff402341a06",
+        "f3eb91a5fb82a9dbea70",
+        "30bf823b601dfae759ad",
+        "0b47db443ebb6bdb849e"
+      ],
       "demonstrated_score": 70,
       "criteria": [
         {
@@ -47,6 +54,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
               "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -58,23 +70,23 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130301038728Z/run.json",
-              "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+              "path": "runs/20261031T132341439475Z/run.json",
+              "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130407442669Z/run.json",
-              "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+              "path": "runs/20261031T132410629671Z/run.json",
+              "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130426981426Z/run.json",
-              "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+              "path": "runs/20261031T132411985557Z/run.json",
+              "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130453347014Z/run.json",
-              "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+              "path": "runs/20261031T132539849232Z/run.json",
+              "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
             }
           ],
           "excluded": false
@@ -99,6 +111,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
               "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -110,23 +127,23 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130301038728Z/run.json",
-              "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+              "path": "runs/20261031T132341439475Z/run.json",
+              "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130407442669Z/run.json",
-              "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+              "path": "runs/20261031T132410629671Z/run.json",
+              "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130426981426Z/run.json",
-              "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+              "path": "runs/20261031T132411985557Z/run.json",
+              "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130453347014Z/run.json",
-              "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+              "path": "runs/20261031T132539849232Z/run.json",
+              "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
             }
           ],
           "excluded": false
@@ -138,7 +155,7 @@
           "weight": 1,
           "status": "pass",
           "level": 2,
-          "rating_rationale": "Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs.",
+          "rating_rationale": "Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs. Six candidats de la carte SHA réfutés par recalcul historique6/6, sans règle modifiée.",
           "evidence": [
             {
               "kind": "artifact",
@@ -151,6 +168,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
               "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -162,23 +184,33 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130301038728Z/run.json",
-              "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+              "path": "runs/20261031T132341439475Z/run.json",
+              "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130407442669Z/run.json",
-              "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+              "path": "runs/20261031T132410629671Z/run.json",
+              "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130426981426Z/run.json",
-              "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+              "path": "runs/20261031T132411985557Z/run.json",
+              "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130453347014Z/run.json",
-              "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+              "path": "runs/20261031T132539849232Z/run.json",
+              "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/history-sha-refutation.md",
+              "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/history-sha-refutation.json",
+              "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
             }
           ],
           "excluded": false
@@ -203,6 +235,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
               "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -214,23 +251,23 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130301038728Z/run.json",
-              "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+              "path": "runs/20261031T132341439475Z/run.json",
+              "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130407442669Z/run.json",
-              "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+              "path": "runs/20261031T132410629671Z/run.json",
+              "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130426981426Z/run.json",
-              "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+              "path": "runs/20261031T132411985557Z/run.json",
+              "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130453347014Z/run.json",
-              "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+              "path": "runs/20261031T132539849232Z/run.json",
+              "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
             }
           ],
           "excluded": false
@@ -255,6 +292,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
               "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -266,23 +308,23 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130301038728Z/run.json",
-              "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+              "path": "runs/20261031T132341439475Z/run.json",
+              "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130407442669Z/run.json",
-              "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+              "path": "runs/20261031T132410629671Z/run.json",
+              "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130426981426Z/run.json",
-              "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+              "path": "runs/20261031T132411985557Z/run.json",
+              "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130453347014Z/run.json",
-              "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+              "path": "runs/20261031T132539849232Z/run.json",
+              "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
             }
           ],
           "excluded": false
@@ -389,6 +431,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
               "sha256": "f8ca18151f3c1ea74a682eec137d6c3049065552aab210d38b12d539306b0556"
@@ -419,6 +466,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -453,6 +505,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
               "sha256": "f8ca18151f3c1ea74a682eec137d6c3049065552aab210d38b12d539306b0556"
@@ -483,6 +540,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -544,13 +606,18 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130804508075Z/run.json",
-              "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130515697456Z/run.json",
-              "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+              "path": "runs/20261031T132540505308Z/run.json",
+              "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261031T132653686786Z/run.json",
+              "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
             },
             {
               "kind": "source",
@@ -586,13 +653,18 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130804508075Z/run.json",
-              "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130515697456Z/run.json",
-              "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+              "path": "runs/20261031T132540505308Z/run.json",
+              "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261031T132653686786Z/run.json",
+              "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
             },
             {
               "kind": "source",
@@ -628,13 +700,18 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130804508075Z/run.json",
-              "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130515697456Z/run.json",
-              "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+              "path": "runs/20261031T132540505308Z/run.json",
+              "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261031T132653686786Z/run.json",
+              "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
             },
             {
               "kind": "source",
@@ -670,13 +747,18 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130804508075Z/run.json",
-              "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130515697456Z/run.json",
-              "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+              "path": "runs/20261031T132540505308Z/run.json",
+              "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261031T132653686786Z/run.json",
+              "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
             },
             {
               "kind": "source",
@@ -712,13 +794,18 @@
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130804508075Z/run.json",
-              "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "artifact",
-              "path": "runs/20261031T130515697456Z/run.json",
-              "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+              "path": "runs/20261031T132540505308Z/run.json",
+              "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+            },
+            {
+              "kind": "artifact",
+              "path": "runs/20261031T132653686786Z/run.json",
+              "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
             },
             {
               "kind": "source",
@@ -778,6 +865,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
               "sha256": "52f8d0725a1ba3fcc5e6b85c1ab5b3da6a35e1098a58f64c6d1dadfd86c3beac"
@@ -808,6 +900,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -842,6 +939,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
               "sha256": "52f8d0725a1ba3fcc5e6b85c1ab5b3da6a35e1098a58f64c6d1dadfd86c3beac"
@@ -872,6 +974,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -930,6 +1037,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/DropPreviewController.swift",
               "sha256": "da6bc90861a78c07fa20977a2c1ccef6609972a3f6e89c87f7ba4bd5ae6217a5"
@@ -962,6 +1074,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/DropPreviewController.swift",
               "sha256": "da6bc90861a78c07fa20977a2c1ccef6609972a3f6e89c87f7ba4bd5ae6217a5"
@@ -992,6 +1109,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -1050,6 +1172,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/SettingsCatalogEffects.swift",
               "sha256": "c2a74e675c92efe012947fce28f31b96b5e498f3da503245eb7690df3efbe90e"
@@ -1082,6 +1209,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/SettingsCatalogEffects.swift",
               "sha256": "c2a74e675c92efe012947fce28f31b96b5e498f3da503245eb7690df3efbe90e"
@@ -1112,6 +1244,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -1171,6 +1308,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Package.swift",
               "sha256": "712be76c06b32c15daff9c9e3d3d0084322924ea0127e0345696e900dda29d4e"
@@ -1201,6 +1343,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -1235,6 +1382,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Package.swift",
               "sha256": "712be76c06b32c15daff9c9e3d3d0084322924ea0127e0345696e900dda29d4e"
@@ -1265,6 +1417,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -1323,6 +1480,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "docs/decisions/024-effets-et-propriete-glisser.md",
               "sha256": "fa3b1e9bec0065c85ed817fe937e6b7dac0e3ccea54755b287ba704ad523347e"
@@ -1355,6 +1517,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "docs/decisions/024-effets-et-propriete-glisser.md",
               "sha256": "fa3b1e9bec0065c85ed817fe937e6b7dac0e3ccea54755b287ba704ad523347e"
@@ -1385,6 +1552,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -1443,6 +1615,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/EffectAnimator.swift",
               "sha256": "8edd436f049592fe1964a1e7d7e15b88a79918ab21b37c1abd6773d527bac3df"
@@ -1475,6 +1652,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/EffectAnimator.swift",
               "sha256": "8edd436f049592fe1964a1e7d7e15b88a79918ab21b37c1abd6773d527bac3df"
@@ -1505,6 +1687,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -1563,6 +1750,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/DropPreviewController.swift",
               "sha256": "da6bc90861a78c07fa20977a2c1ccef6609972a3f6e89c87f7ba4bd5ae6217a5"
@@ -1595,6 +1787,11 @@
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
             },
             {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
               "kind": "source",
               "path": "Sources/RoadieDaemon/DropPreviewController.swift",
               "sha256": "da6bc90861a78c07fa20977a2c1ccef6609972a3f6e89c87f7ba4bd5ae6217a5"
@@ -1625,6 +1822,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "source",
@@ -1683,6 +1885,11 @@
             },
             {
               "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+            },
+            {
+              "kind": "artifact",
               "path": "notes/header-repeat-events.json",
               "sha256": "c99261387979fa28d8827d2fd8a81eb8b3841152e6828b7e8220e3ae450ea6cd"
             },
@@ -1712,6 +1919,11 @@
               "kind": "artifact",
               "path": "notes/final-readonly-review.md",
               "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+            },
+            {
+              "kind": "artifact",
+              "path": "notes/user-confirmation-and-activation.md",
+              "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
             },
             {
               "kind": "artifact",

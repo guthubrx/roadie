@@ -9,8 +9,8 @@
       "evidence": [
         {
           "kind": "artifact",
-          "path": "runs/20261031T130301038728Z/run.json",
-          "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+          "path": "runs/20261031T132341439475Z/run.json",
+          "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
         }
       ]
     },
@@ -19,12 +19,12 @@
       "title": "Secrets dans les fichiers",
       "tool": "gitleaks",
       "status": "pass",
-      "rationale": "completed, 0 candidat(s).  Copie SHA exacte hors chemin .worktrees, 13.27Mo effectivement scannés ; voir note invocation.",
+      "rationale": "completed, 0 candidat(s).  Copie SHA exacte hors chemin .worktrees, fichiers effectivement scannés ; voir note invocation.",
       "evidence": [
         {
           "kind": "artifact",
-          "path": "runs/20261031T130407442669Z/run.json",
-          "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+          "path": "runs/20261031T132410629671Z/run.json",
+          "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
         },
         {
           "kind": "artifact",
@@ -33,8 +33,8 @@
         },
         {
           "kind": "artifact",
-          "path": "notes/scanner-snapshot-map.json",
-          "sha256": "aad610a49b00825d96a2f2af250c278194aa51a12906d3fd97ee2ebe10778a72"
+          "path": "notes/scanner-snapshot-map-final.json",
+          "sha256": "30111dbd21a9615f5f7f197ea6eb274f21f3581d4e298a6d069364f7ee557e3f"
         }
       ]
     },
@@ -43,12 +43,22 @@
       "title": "Secrets dans l'historique Git",
       "tool": "gitleaks-history",
       "status": "pass",
-      "rationale": "completed, 0 candidat(s).  Historique limité à 5ab0ab9544de68edbd6642f58ac6140ef8a07f1e..37e5cd92e8bcaa5f0757427f7b16658dc45edd1d; les commits antérieurs sont hors périmètre.",
+      "rationale": "Scan terminé sur la plage aprèsv0.4.0 jusqu’à092ecb14 ; six candidats de cartes SHA256 réfutés par recalcul des octets au commit historique. Aucun candidat non résolu. Les commits antérieurs àv0.4.0 restent hors périmètre.",
       "evidence": [
         {
           "kind": "artifact",
-          "path": "runs/20261031T130426981426Z/run.json",
-          "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+          "path": "runs/20261031T132411985557Z/run.json",
+          "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
         }
       ]
     },
@@ -61,8 +71,8 @@
       "evidence": [
         {
           "kind": "artifact",
-          "path": "runs/20261031T130453347014Z/run.json",
-          "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+          "path": "runs/20261031T132539849232Z/run.json",
+          "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
         },
         {
           "kind": "artifact",
@@ -86,6 +96,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         }
       ]
     },
@@ -104,6 +119,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         }
       ]
     },
@@ -122,6 +142,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         }
       ]
     },
@@ -140,6 +165,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         }
       ]
     },
@@ -147,7 +177,7 @@
       "id": "tests.regression",
       "title": "Tests utiles et régressions",
       "status": "pass",
-      "rationale": "2416 tests/360 suites et28 tests de scripts réussis sur la révision1 ; tests ciblés et huit parcours natifs Chrome documentés.",
+      "rationale": "2416 tests/360 suites et28 tests de scripts réussis sur la révision2 ; tests ciblés et huit parcours natifs Chrome documentés.",
       "evidence": [
         {
           "kind": "artifact",
@@ -161,13 +191,18 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130804508075Z/run.json",
-          "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130515697456Z/run.json",
-          "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+          "path": "runs/20261031T132540505308Z/run.json",
+          "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132653686786Z/run.json",
+          "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
         }
       ]
     },
@@ -186,6 +221,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         }
       ]
     },
@@ -204,6 +244,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         }
       ]
     },
@@ -229,6 +274,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         }
       ]
     },
@@ -247,11 +297,413 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         }
       ]
     }
   ],
-  "findings": [],
+  "findings": [
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 90,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Sources/RoadieAX/WindowKeyFocus.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 91,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 92,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Sources/RoadieAX/WindowTitleDragAccess.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 321,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 482,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 514,
+      "symbol": "SHA256 des fichiers du snapshot",
+      "instance": "Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+      "category": "security",
+      "title": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132411985557Z/raw.json",
+          "sha256": "660d462a33ee61b1ebc45737f4c30064956994c4cb83382ded674c2c32fb8a98"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        }
+      ],
+      "rationale": "La valeur signalée égale exactement SHA256 du contenu du fichier nommé, relu dans le commit historique. Elle ne permet aucune authentification.",
+      "remediation": "Aucune modification des sources ou des règles ; faux positif conservé et documenté.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe des octets Git",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Recalcul SHA256 de six fichiers au commit source, égalité6/6 ; aucun appel réseau ou test d’accès.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les six entrées signalées dans la carte historique ont été vérifiées individuellement ; même mécanisme, aucun autre candidat dans la plage scannée.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.json",
+            "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
+          },
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+          }
+        ]
+      }
+    }
+  ],
   "axis_checks": [
     {
       "id": "axes.security.01",
@@ -270,6 +722,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
           "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -281,23 +738,23 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130301038728Z/run.json",
-          "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+          "path": "runs/20261031T132341439475Z/run.json",
+          "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130407442669Z/run.json",
-          "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+          "path": "runs/20261031T132410629671Z/run.json",
+          "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130426981426Z/run.json",
-          "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+          "path": "runs/20261031T132411985557Z/run.json",
+          "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130453347014Z/run.json",
-          "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+          "path": "runs/20261031T132539849232Z/run.json",
+          "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
         }
       ],
       "rating_rationale": "Entrées TOML finies et bornées, identité CG ID/PID et qualification de surface ; Semgrep générique et compilateur, sans analyse Swift inter-fichiers.",
@@ -320,6 +777,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
           "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -331,23 +793,23 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130301038728Z/run.json",
-          "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+          "path": "runs/20261031T132341439475Z/run.json",
+          "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130407442669Z/run.json",
-          "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+          "path": "runs/20261031T132410629671Z/run.json",
+          "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130426981426Z/run.json",
-          "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+          "path": "runs/20261031T132411985557Z/run.json",
+          "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130453347014Z/run.json",
-          "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+          "path": "runs/20261031T132539849232Z/run.json",
+          "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
         }
       ],
       "rating_rationale": "Scan de fichiers exigé sur copie SHA hors du worktree ignoré ; aucune valeur secrète ajoutée dans les sources examinées. Scan complet joint.",
@@ -357,7 +819,7 @@
       "id": "axes.security.03",
       "axis": "security",
       "status": "pass",
-      "rationale": "Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs.",
+      "rationale": "Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs. Six candidats de la carte SHA réfutés par recalcul historique6/6, sans règle modifiée.",
       "evidence": [
         {
           "kind": "artifact",
@@ -370,6 +832,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
           "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -381,26 +848,36 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130301038728Z/run.json",
-          "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+          "path": "runs/20261031T132341439475Z/run.json",
+          "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130407442669Z/run.json",
-          "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+          "path": "runs/20261031T132410629671Z/run.json",
+          "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130426981426Z/run.json",
-          "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+          "path": "runs/20261031T132411985557Z/run.json",
+          "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130453347014Z/run.json",
-          "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+          "path": "runs/20261031T132539849232Z/run.json",
+          "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "4be42ba6de0dba2df1d86deb556a35239307f7dcc13682d7d0723e902958e34e"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.json",
+          "sha256": "8709aa2cd2e7c1b97ce1e8effc82041966f705f45db78d2c25e4f3cad6addb37"
         }
       ],
-      "rating_rationale": "Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs.",
+      "rating_rationale": "Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs. Six candidats de la carte SHA réfutés par recalcul historique6/6, sans règle modifiée.",
       "level": 2
     },
     {
@@ -420,6 +897,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
           "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -431,23 +913,23 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130301038728Z/run.json",
-          "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+          "path": "runs/20261031T132341439475Z/run.json",
+          "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130407442669Z/run.json",
-          "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+          "path": "runs/20261031T132410629671Z/run.json",
+          "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130426981426Z/run.json",
-          "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+          "path": "runs/20261031T132411985557Z/run.json",
+          "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130453347014Z/run.json",
-          "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+          "path": "runs/20261031T132539849232Z/run.json",
+          "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
         }
       ],
       "rating_rationale": "Autorité locale AX déjà accordée ; pas de nouveau droit, SIP, injection ou compte ; fenêtres ciblées par identité stricte.",
@@ -470,6 +952,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieAX/WindowTitleDragAccess.swift",
           "sha256": "e15a16f69d70dfd7d8df0b0a8809161cc6ee8cc4d25d864791b43b2c310dece6"
@@ -481,23 +968,23 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130301038728Z/run.json",
-          "sha256": "0335e8100d42ede13a0a7f56f3ae0402cfdd4c6f3857bd85f58a6767465b4649"
+          "path": "runs/20261031T132341439475Z/run.json",
+          "sha256": "e91a59d1b40f556da411e3cf8486bf7baf4ccbbc3d0e72f143cd5a0fc74d355e"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130407442669Z/run.json",
-          "sha256": "07486f5121e669162c1223e91dee866f61dd398947b41b632e52a270b84828e8"
+          "path": "runs/20261031T132410629671Z/run.json",
+          "sha256": "89a7c8a63fba5dd638bba32338aa852dc926c4054eb01fec04acc8804d42dec8"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130426981426Z/run.json",
-          "sha256": "f83113d9e343948edcdf25b40addfbc2103ca638d3091090780dd3779baab230"
+          "path": "runs/20261031T132411985557Z/run.json",
+          "sha256": "edff57c907322a0952978c030181086234c5db8fed54352a866c8c0e4a32e4a0"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130453347014Z/run.json",
-          "sha256": "d597cca01cccbfc3fb7f019891ef4760a64582c9eaed0897136149714b68885c"
+          "path": "runs/20261031T132539849232Z/run.json",
+          "sha256": "6a7039b3e6a99839010d789c71a0e8079af04bdad8f6afff702706ada188fc25"
         }
       ],
       "rating_rationale": "Une seule dépendance Swift verrouillée et inchangée ; contrôle OSV explicite du verrou réussi. Pas de graphe atteignable complet.",
@@ -541,6 +1028,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
           "sha256": "f8ca18151f3c1ea74a682eec137d6c3049065552aab210d38b12d539306b0556"
@@ -569,6 +1061,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -601,6 +1098,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/LiveDropPreview.swift",
           "sha256": "f8ca18151f3c1ea74a682eec137d6c3049065552aab210d38b12d539306b0556"
@@ -629,6 +1131,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -662,13 +1169,18 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130804508075Z/run.json",
-          "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130515697456Z/run.json",
-          "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+          "path": "runs/20261031T132540505308Z/run.json",
+          "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132653686786Z/run.json",
+          "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
         },
         {
           "kind": "source",
@@ -702,13 +1214,18 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130804508075Z/run.json",
-          "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130515697456Z/run.json",
-          "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+          "path": "runs/20261031T132540505308Z/run.json",
+          "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132653686786Z/run.json",
+          "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
         },
         {
           "kind": "source",
@@ -742,13 +1259,18 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130804508075Z/run.json",
-          "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130515697456Z/run.json",
-          "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+          "path": "runs/20261031T132540505308Z/run.json",
+          "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132653686786Z/run.json",
+          "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
         },
         {
           "kind": "source",
@@ -782,13 +1304,18 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130804508075Z/run.json",
-          "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130515697456Z/run.json",
-          "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+          "path": "runs/20261031T132540505308Z/run.json",
+          "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132653686786Z/run.json",
+          "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
         },
         {
           "kind": "source",
@@ -822,13 +1349,18 @@
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130804508075Z/run.json",
-          "sha256": "16be0bc9a4ca9316dd1743325f423ed21ceca70dd33465ed92f35f8e0a8c848f"
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "artifact",
-          "path": "runs/20261031T130515697456Z/run.json",
-          "sha256": "8505e55ea58197a23b199bb8ef5625a9dbdf8c577c2e175fd4de065fa4c4a485"
+          "path": "runs/20261031T132540505308Z/run.json",
+          "sha256": "b170c3b4da06df3c5040d7ab48f51815b531e36429571319bc745a1473db71b0"
+        },
+        {
+          "kind": "artifact",
+          "path": "runs/20261031T132653686786Z/run.json",
+          "sha256": "670c781e8b6c5f834a319965cff0e96950df95d0a840c0cbf0d6cdd938ae3616"
         },
         {
           "kind": "source",
@@ -861,6 +1393,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
           "sha256": "52f8d0725a1ba3fcc5e6b85c1ab5b3da6a35e1098a58f64c6d1dadfd86c3beac"
@@ -889,6 +1426,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -921,6 +1463,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/FrameTransitionRuntime.swift",
           "sha256": "52f8d0725a1ba3fcc5e6b85c1ab5b3da6a35e1098a58f64c6d1dadfd86c3beac"
@@ -949,6 +1496,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -981,6 +1533,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/DropPreviewController.swift",
           "sha256": "da6bc90861a78c07fa20977a2c1ccef6609972a3f6e89c87f7ba4bd5ae6217a5"
@@ -1009,6 +1566,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -1041,6 +1603,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/DropPreviewController.swift",
           "sha256": "da6bc90861a78c07fa20977a2c1ccef6609972a3f6e89c87f7ba4bd5ae6217a5"
@@ -1069,6 +1636,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -1101,6 +1673,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/SettingsCatalogEffects.swift",
           "sha256": "c2a74e675c92efe012947fce28f31b96b5e498f3da503245eb7690df3efbe90e"
@@ -1129,6 +1706,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -1161,6 +1743,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Package.swift",
           "sha256": "712be76c06b32c15daff9c9e3d3d0084322924ea0127e0345696e900dda29d4e"
@@ -1189,6 +1776,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -1221,6 +1813,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Package.swift",
           "sha256": "712be76c06b32c15daff9c9e3d3d0084322924ea0127e0345696e900dda29d4e"
@@ -1249,6 +1846,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -1281,6 +1883,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "docs/decisions/024-effets-et-propriete-glisser.md",
           "sha256": "fa3b1e9bec0065c85ed817fe937e6b7dac0e3ccea54755b287ba704ad523347e"
@@ -1309,6 +1916,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -1341,6 +1953,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "docs/decisions/024-effets-et-propriete-glisser.md",
           "sha256": "fa3b1e9bec0065c85ed817fe937e6b7dac0e3ccea54755b287ba704ad523347e"
@@ -1369,6 +1986,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -1401,6 +2023,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/EffectAnimator.swift",
           "sha256": "8edd436f049592fe1964a1e7d7e15b88a79918ab21b37c1abd6773d527bac3df"
@@ -1429,6 +2056,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -1461,6 +2093,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/DropPreviewController.swift",
           "sha256": "da6bc90861a78c07fa20977a2c1ccef6609972a3f6e89c87f7ba4bd5ae6217a5"
@@ -1491,6 +2128,11 @@
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
         },
         {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
           "kind": "source",
           "path": "Sources/RoadieDaemon/DropPreviewController.swift",
           "sha256": "da6bc90861a78c07fa20977a2c1ccef6609972a3f6e89c87f7ba4bd5ae6217a5"
@@ -1519,6 +2161,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "source",
@@ -1552,6 +2199,11 @@
         },
         {
           "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
+        },
+        {
+          "kind": "artifact",
           "path": "notes/header-repeat-events.json",
           "sha256": "c99261387979fa28d8827d2fd8a81eb8b3841152e6828b7e8220e3ae450ea6cd"
         },
@@ -1579,6 +2231,11 @@
           "kind": "artifact",
           "path": "notes/final-readonly-review.md",
           "sha256": "ab52583e7178574891f69f3168e0a1b3e4a17ec35168f8941991854cdec99b07"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/user-confirmation-and-activation.md",
+          "sha256": "378b91adc58723d6f217cf44285811156885aac7c095fe050f11f4e9c2d43c28"
         },
         {
           "kind": "artifact",
