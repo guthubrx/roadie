@@ -1,4 +1,4 @@
-# Validation146 — en cours
+# Validation146 — vérifiée (limites natives explicites)
 
 Avant : utilisateur iTerm2 id494130 ; activation observée sans placement, safety suivant et animation300,5ms. Reproduction dédiée avec commande native iTerm et contenu fictif : premier essai8cadresCG distincts ; second6cadres,541ms entre première surface et cadre final. Captures initiale/finale du second essai ; aucune fenêtre utilisateur fermée. Les deux fenêtres fictives iTerm se sont terminées à la fin de leur commande de test15s ; terminal494130 conservé.
 
