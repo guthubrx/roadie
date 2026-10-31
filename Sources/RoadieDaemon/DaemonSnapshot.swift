@@ -2152,13 +2152,15 @@ public extension SnapshotService {
     // O(n) - n = commandes.
     func apply(_ plan: ApplyPlan, generation: UInt64 = PlacementGeneration.shared.current,
                isCurrent: @Sendable () -> Bool = { true }, publish: Bool = true,
-               respectLastingRefusals: Bool = false, animation: AnimationAction = .move) -> ApplyResult {
+               respectLastingRefusals: Bool = false, animation: AnimationAction = .move,
+               immediateWindowIDs: Set<WindowID> = []) -> ApplyResult {
         // Les appels interactifs publish=false gardent leur contrat immédiat. Les commandes
         // hors MainActor restent immédiates ; aucun transfert synchrone vers le fil principal.
         if publish, Thread.isMainThread, effectiveConfig.fx.animations.enabled {
             let deferred = MainActor.assumeIsolated {
                 let runtime = FrameTransitionRuntime.shared
-                return runtime.acceptsCommands ? runtime.schedule(plan, service: self, generation: generation, action: animation) : nil
+                return runtime.acceptsCommands ? runtime.schedule(plan, service: self, generation: generation, action: animation,
+                    immediateWindowIDs: immediateWindowIDs) : nil
             }
             if let deferred { return deferred }
         }

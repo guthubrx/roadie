@@ -443,3 +443,39 @@ struct WindowDragReleaseGraceTests {
         producer.reset()
     }
 }
+
+extension TickSchedulerTests {
+    @Test func spec146DiscoveryRetriesAreBoundedAndDoNotKeepPollingAtRest() {
+        let h = Harness()
+        h.scheduler.request(cause: "ax:didActivateApplication")
+        h.timer.advance(by: 2)
+        #expect(h.ticks.count == 4)
+        #expect(h.ticks.dropFirst().allSatisfy { $0.cause == "deadline:window_discovery" })
+        h.timer.advance(by: 60)
+        #expect(h.ticks.count == 4 && h.timer.armedCount == 0)
+    }
+    @Test func spec146DiscoveryStopsAsSoonAsPlacementWasPossible() {
+        let h = Harness()
+        h.onTick = { if h.ticks.count == 2 { h.result = MaintenanceTick(commands: 1, applied: 1, clamped: 0, failed: 0) } }
+        h.scheduler.request(cause: "ax:AXWindowCreated")
+        h.timer.advance(by: 2)
+        #expect(h.ticks.count == 2)
+        #expect(h.timer.armedCount == 0)
+    }
+    @Test func spec146NormalFocusDoesNotTriggerDiscoveryPolling() {
+        let h = Harness()
+        h.scheduler.request(cause: "ax:AXFocusedWindowChanged")
+        h.timer.advance(by: 2)
+        #expect(h.ticks.count == 1 && h.timer.armedCount == 0)
+    }
+    @Test func spec146DiscoveryKeepsTheMouseHoldGuard() {
+        let h = Harness(); h.blocked = true
+        h.scheduler.request(cause: "ax:AXWindowCreated")
+        h.timer.advance(by: 2)
+        #expect(h.ticks.isEmpty)
+        h.blocked = false
+        h.scheduler.buttonsReleased(gestureEnded: false)
+        h.timer.advance(by: 2)
+        #expect(h.ticks.count == 4)
+    }
+}

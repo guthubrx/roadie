@@ -43,7 +43,8 @@ public final class FrameTransitionRuntime {
         self.generations = generations; self.events = events; self.isMouseDown = isMouseDown
     }
 
-    func schedule(_ plan: ApplyPlan, service: SnapshotService, generation: UInt64, action: AnimationAction) -> ApplyResult? {
+    func schedule(_ plan: ApplyPlan, service: SnapshotService, generation: UInt64, action: AnimationAction,
+                  immediateWindowIDs: Set<WindowID> = []) -> ApplyResult? {
         let policy = service.effectiveConfig.fx.animations.policy(for: action)
         guard policy.enabled, !plan.commands.isEmpty, generation == generations.current,
               generation != PlacementGeneration.outsideBudget, !isMouseDown() else { return nil }
@@ -82,6 +83,12 @@ public final class FrameTransitionRuntime {
             var to = command.frame.cgRect
             let animationID = "ax-\(ObjectIdentifier(self))-\(window.pid)-\(id.rawValue)"
             current.ids.insert(animationID)
+            if immediateWindowIDs.contains(id), !command.preservesSize {
+                EffectAnimator.shared.cancel(animationID)
+                current.frames[id] = command.frame
+                current.finished.insert(id)
+                continue
+            }
             // Un pixel de parking peut encore être déclaré visible par WindowServer.
             // Ne jamais réexposer une fenêtre déjà rangée pendant son masquage.
             if command.preservesSize && (!window.isOnScreen
@@ -100,6 +107,8 @@ public final class FrameTransitionRuntime {
                 current?.frames[id] = Rect(x: values[0], y: values[1], width: max(1, values[2]), height: max(1, values[3]))
             } completion: { [weak current] in current?.finished.insert(id) }
         }
+        // La première cible part dès maintenant par le writer asynchrone commun.
+        if !immediateWindowIDs.isEmpty { pulse() }
         return ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0,
             items: plan.commands.map { ApplyResultItem(windowID: $0.window.id, status: .deferred, requested: $0.frame, actual: nil) })
     }

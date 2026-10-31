@@ -987,7 +987,13 @@ public final class LayoutMaintainer {
                 && scopesByID[id].flatMap { snapshot.state.stage(scope: $0)?.mode.usesTreeEngine } != true
         }
         let before = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id.rawValue, writtenFrames.entry(for: $0.window.id.rawValue)) })
-        let firstResult = service.apply(plan, generation: generation)
+        // Première disposition tuilée : aucune animation depuis le cadre choisi par l'app.
+        // Le registre commun reste l'unique mémoire d'écriture ; O(k) commandes.
+        let initialWindowIDs = Set(plan.commands.compactMap { command in
+            layoutWindowIDs.contains(command.window.id) && !command.preservesSize
+                && writtenFrames.entry(for: command.window.id.rawValue) == nil ? command.window.id : nil
+        })
+        let firstResult = service.apply(plan, generation: generation, immediateWindowIDs: initialWindowIDs)
         recordWrites(firstResult, before: before, generation: generation)
 
         // Les fenêtres qui refusent de grandir restent hors des réparations, comme du plan (A3).

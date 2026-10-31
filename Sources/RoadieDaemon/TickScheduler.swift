@@ -22,12 +22,15 @@ public final class TickScheduler {
         case externalChange
         /// Filet périodique : immédiat, n'ouvre pas d'épisode.
         case safetyNet
+        /// Fenêtre pas encore publiée après création/activation : reprise transitoire bornée.
+        case windowDiscovery
 
         var delay: TimeInterval {
             switch self {
             case .event: 0.015
             case .externalChange: 0.030
             case .safetyNet: 0
+            case .windowDiscovery: 0.050
             }
         }
     }
@@ -47,6 +50,7 @@ public final class TickScheduler {
         var coalescing: Coalescing
         /// Premier déclenchement retenu par une attente (bouton enfoncé, écrans), pour `live_tick`.
         var heldSince: Date?
+        var discoveryProbesRemaining: Int = 0
     }
 
     private let tick: @MainActor (String) -> MaintenanceTick
@@ -99,20 +103,23 @@ public final class TickScheduler {
             } else {
                 episodes.continue()
             }
-        case .externalChange:
+        case .externalChange, .windowDiscovery:
             if episodes.continue() == nil { episodes.begin(cause: cause) }
         case .safetyNet:
             break
         }
         let dueAt = date.addingTimeInterval(coalescing.delay)
+        let probes = cause == "ax:AXWindowCreated" || cause == "ax:didActivateApplication" ? 3 : 0
         if var current = pending {
             current.dueAt = min(current.dueAt, dueAt)
             if current.coalescing == .safetyNet, coalescing != .safetyNet {
                 current = Pending(cause: cause, dueAt: current.dueAt, requestedAt: date, coalescing: coalescing)
             }
+            current.discoveryProbesRemaining = max(current.discoveryProbesRemaining, probes)
             pending = current
         } else {
-            pending = Pending(cause: cause, dueAt: dueAt, requestedAt: date, coalescing: coalescing)
+            pending = Pending(cause: cause, dueAt: dueAt, requestedAt: date, coalescing: coalescing,
+                              discoveryProbesRemaining: probes)
         }
         arm()
     }
@@ -152,12 +159,27 @@ public final class TickScheduler {
         }
         if let current = pending, current.dueAt <= date {
             pending = nil
-            run(current.cause, requested: current, due: current.dueAt, requestedDelay: current.coalescing.delay, at: date)
+            if current.coalescing == .windowDiscovery { onObservationChange() }
+            let result = run(current.cause, requested: current, due: current.dueAt, requestedDelay: current.coalescing.delay, at: date)
+            // Une notification peut précéder la disponibilité AX. Pas de boucle au repos :
+            // trois reprises au plus, annulées dès qu'un placement a pu partir.
+            if result.commands == 0, !result.accessibilityDenied, current.discoveryProbesRemaining > 0 {
+                if pending == nil {
+                    let retryAt = now()
+                    pending = Pending(cause: "deadline:window_discovery",
+                        dueAt: retryAt.addingTimeInterval(Coalescing.windowDiscovery.delay), requestedAt: retryAt,
+                        coalescing: .windowDiscovery, discoveryProbesRemaining: current.discoveryProbesRemaining - 1)
+                } else if var next = pending {
+                    next.discoveryProbesRemaining = max(next.discoveryProbesRemaining,
+                                                        current.discoveryProbesRemaining - 1)
+                    pending = next
+                }
+            }
         } else if let deadline = armedDeadline, deadline.due <= date {
             // Échéance armée par l'épisode en cours (garde, refus, rafale) : il reste ouvert (A20).
             // Le maintainer la nomme (`deadline:<nom>`, contrat des événements).
             episodes.continue()
-            run("deadline", requested: nil, due: deadline.due, requestedDelay: deadline.due.timeIntervalSince(deadline.armedAt), at: date)
+            _ = run("deadline", requested: nil, due: deadline.due, requestedDelay: deadline.due.timeIntervalSince(deadline.armedAt), at: date)
         }
         arm()
     }
@@ -179,14 +201,14 @@ public final class TickScheduler {
     /// (T221) : délai demandé (regroupement ou échéance), retenue par une attente (bouton
     /// enfoncé), retard d'exécution après l'échéance (file principale). Une passe d'une seconde
     /// ou plus nomme les applications qui ont fait attendre ses appels AX (SPEC-086).
-    private func run(_ cause: String, requested: Pending?, due: Date, requestedDelay: TimeInterval, at start: Date) {
+    private func run(_ cause: String, requested: Pending?, due: Date, requestedDelay: TimeInterval, at start: Date) -> MaintenanceTick {
         AXCallTimings.shared.reset()
         let result = tick(cause)
-        guard let events else { return }
+        guard let events else { return result }
         let isEvent = requested.map { $0.coalescing != .safetyNet } ?? false
         let duration = now().timeIntervalSince(start)
         let slowApps = duration >= 1 ? AXCallTimings.shared.drainSlowest(minimumSeconds: 0.2, limit: 3) : ""
-        guard isEvent || result.commands > 0 || result.failed > 0 || !slowApps.isEmpty else { return }
+        guard isEvent || result.commands > 0 || result.failed > 0 || !slowApps.isEmpty else { return result }
         let ms = { (seconds: TimeInterval) in String(format: "%.1f", max(0, seconds) * 1000) }
         var details = [
             "notification": cause,
@@ -202,6 +224,7 @@ public final class TickScheduler {
         ]
         if !slowApps.isEmpty { details["axSlowApps"] = slowApps }
         events.append(RoadieEvent(type: "live_tick", details: details))
+        return result
     }
 
     /// Minuterie de production : file principale.

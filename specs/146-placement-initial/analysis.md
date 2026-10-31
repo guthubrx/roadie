@@ -1,0 +1,10 @@
+# Analyse et contrôle146
+Spec/plan/tâches/code comparés après lecture des propriétaires et du writer. Aucun nouveau service/état persistant. FR1 : applyPass choisit seulement les commandes layout sans écriture connue dans le registre ; schedule transmet la cible finale via dispatcher, sans tween de cette fenêtre. FR2 : Pending porte3reprises50ms après création/activation et passe sans commande ; arrêt au premier placement, au refus Accessibilité, et épuisement du compteur. Les autres notifications ne renouvellent pas le compteur. FR3 : test de voisine connue animée, mouse hold, annulation/génération et suite scheduler ; aucun changement TOML ni AXwriter. FR4 : relevés CG natifs avant, après à terminer.
+
+Tests rouges : premier placement a bien écrit des intermédiaires ; découverte bornée a échoué avant ajout du compteur. Une erreur Swift d’accès exclusif à Pending a été corrigée par copie locale ; la relance ciblée passe40tests/7suites. Pas deux corrections sur une hypothèse fonctionnelle échouée.
+
+Complexité : choix initial O(k), k=commandes ; O(1) d’état/scheduling supplémentaire. Au plus3relevés transitoires par création/activation sans placement, pas de minuteur nouveau ni polling permanent. Les stages et le registre restent les sources uniques. Coût réel de chaque scan inchangé ; aucune garantie de zéro première image native et aucun benchmark CPU/GPU revendiqués.
+
+Convergence du code : exigences FR1..FR3 rapprochées du code et des tests. Livraison et parcours FR4 restent des tâches distinctes à vérifier, aucun succès global anticipé.
+
+Convergence finale : FR4 vérifiée sur iTerm2 et AppKit avec ses limites explicites. CONVERGED pour le code et les essais ; aucune modification Sources/Tests depuis la suite complète et le build signé. Relecture locale finale : mémoire et reprise O(1), registre unique, writer/permissions/générations conservés ; pas de finding bloquant identifié dans ce périmètre. Revue indépendante indisponible et déclarée. La livraison Git reste suivie parT005.
