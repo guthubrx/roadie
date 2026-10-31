@@ -1,0 +1,163 @@
+[
+  {
+    "x": 650.0,
+    "y": 52.0,
+    "hit": {
+      "actions": [],
+      "actionsStatus": 0,
+      "children": [],
+      "kind": "hit",
+      "position": {
+        "x": 554,
+        "y": 40
+      },
+      "role": "AXGroup",
+      "size": {
+        "height": 41,
+        "width": 269
+      },
+      "status": 0,
+      "time": 431640.521976625
+    }
+  },
+  {
+    "x": 650.0,
+    "y": 66.0,
+    "hit": {
+      "actions": [],
+      "actionsStatus": 0,
+      "children": [],
+      "kind": "hit",
+      "position": {
+        "x": 554,
+        "y": 40
+      },
+      "role": "AXGroup",
+      "size": {
+        "height": 41,
+        "width": 269
+      },
+      "status": 0,
+      "time": 431640.714935125
+    }
+  },
+  {
+    "x": 650.0,
+    "y": 73.0,
+    "hit": {
+      "actions": [],
+      "actionsStatus": 0,
+      "children": [],
+      "kind": "hit",
+      "position": {
+        "x": 554,
+        "y": 40
+      },
+      "role": "AXGroup",
+      "size": {
+        "height": 41,
+        "width": 269
+      },
+      "status": 0,
+      "time": 431640.8638815834
+    }
+  },
+  {
+    "x": 650.0,
+    "y": 79.0,
+    "hit": {
+      "actions": [],
+      "actionsStatus": 0,
+      "children": [],
+      "kind": "hit",
+      "position": {
+        "x": 554,
+        "y": 40
+      },
+      "role": "AXGroup",
+      "size": {
+        "height": 41,
+        "width": 269
+      },
+      "status": 0,
+      "time": 431641.01532991667
+    }
+  },
+  {
+    "x": 550.0,
+    "y": 73.0,
+    "hit": {
+      "actions": [],
+      "actionsStatus": 0,
+      "children": [
+        {
+          "actions": [],
+          "actionsStatus": 0,
+          "position": {
+            "x": 242,
+            "y": 40
+          },
+          "role": "AXGroup",
+          "size": {
+            "height": 41,
+            "width": 28
+          }
+        },
+        {
+          "actions": [],
+          "actionsStatus": 0,
+          "position": {
+            "x": 264,
+            "y": 40
+          },
+          "role": "AXGroup",
+          "size": {
+            "height": 41,
+            "width": 256
+          }
+        },
+        {
+          "actions": [
+            "AXPress",
+            "AXShowMenu"
+          ],
+          "actionsStatus": 0,
+          "position": {
+            "x": 514,
+            "y": 40
+          },
+          "role": "AXButton",
+          "size": {
+            "height": 41,
+            "width": 28
+          }
+        },
+        {
+          "actions": [],
+          "actionsStatus": 0,
+          "position": {
+            "x": 554,
+            "y": 40
+          },
+          "role": "AXGroup",
+          "size": {
+            "height": 41,
+            "width": 269
+          }
+        }
+      ],
+      "kind": "hit",
+      "position": {
+        "x": 236,
+        "y": 40
+      },
+      "role": "AXGroup",
+      "size": {
+        "height": 41,
+        "width": 587
+      },
+      "status": 0,
+      "time": 431641.21780570835
+    }
+  }
+]

@@ -555,7 +555,7 @@ extension SnapshotService {
         let commandCause = cause.hasPrefix("command:") ? cause : "command:\(cause)"
         let episode = treeScopes.isEmpty ? nil : EpisodeContext.shared.begin(cause: commandCause)
         for scope in treeScopes { processState.noteTreeScopeApplied(scope, at: startedAt) }
-        let result = apply(plan, generation: generation)
+        let result = apply(plan, generation: generation, animation: cause.hasPrefix("stage.") ? .stage : .move)
         if let episode, let scope = treeScopes.first {
             events.append(RoadieEvent(type: "layout_apply", scope: scope, details: [
                 "cause": commandCause,
@@ -567,6 +567,7 @@ extension SnapshotService {
                 "layoutVersion": String(generation),
                 "commands": String(plan.commands.count),
                 "applied": String(result.applied),
+                "deferred": String(result.deferred),
                 "clamped": String(result.clamped),
                 "failed": String(result.failed),
                 "windowWrites": result.items.map { "\($0.windowID.rawValue):1" }.joined(separator: ",")

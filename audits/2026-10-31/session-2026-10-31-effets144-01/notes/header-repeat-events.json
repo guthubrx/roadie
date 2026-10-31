@@ -1,0 +1,212 @@
+[
+  {
+    "episodeId": "ep_1793451999695",
+    "timestamp": "2026-10-31T13:06:39Z",
+    "type": "drag.real_qualification",
+    "details": {
+      "accepted": "true",
+      "frameX": "150.0",
+      "decisionMade": "false",
+      "elapsedMS": "21.9",
+      "startX": "650.0",
+      "frameY": "40.0",
+      "startY": "52.0",
+      "windowID": "469459"
+    },
+    "tsMs": 1793451999739
+  },
+  {
+    "episodeId": "ep_1793451999695",
+    "timestamp": "2026-10-31T13:06:39Z",
+    "type": "drag.real_decision",
+    "details": {
+      "qualified": "true",
+      "elapsedMS": "144.6",
+      "ready": "true",
+      "windowID": "469459"
+    },
+    "tsMs": 1793451999835
+  },
+  {
+    "type": "drag.real_qualification",
+    "timestamp": "2026-10-31T13:06:43Z",
+    "details": {
+      "frameX": "150.0",
+      "windowID": "469459",
+      "startX": "650.0",
+      "frameY": "40.0",
+      "elapsedMS": "18.5",
+      "decisionMade": "false",
+      "startY": "66.0",
+      "accepted": "true"
+    },
+    "tsMs": 1793452003318
+  },
+  {
+    "type": "drag.real_decision",
+    "timestamp": "2026-10-31T13:06:43Z",
+    "details": {
+      "qualified": "true",
+      "windowID": "469459",
+      "elapsedMS": "139.2",
+      "ready": "true"
+    },
+    "tsMs": 1793452003422
+  },
+  {
+    "type": "drag.real_qualification",
+    "timestamp": "2026-10-31T13:06:46Z",
+    "details": {
+      "startX": "650.0",
+      "accepted": "true",
+      "frameX": "150.0",
+      "elapsedMS": "30.3",
+      "windowID": "469459",
+      "frameY": "40.0",
+      "decisionMade": "false",
+      "startY": "73.0"
+    },
+    "tsMs": 1793452006718
+  },
+  {
+    "type": "drag.real_decision",
+    "timestamp": "2026-10-31T13:06:46Z",
+    "details": {
+      "qualified": "true",
+      "elapsedMS": "128.4",
+      "ready": "true",
+      "windowID": "469459"
+    },
+    "tsMs": 1793452006816
+  },
+  {
+    "details": {
+      "startY": "79.0",
+      "accepted": "true",
+      "elapsedMS": "15.8",
+      "startX": "650.0",
+      "decisionMade": "false",
+      "frameY": "40.0",
+      "frameX": "150.0",
+      "windowID": "469459"
+    },
+    "type": "drag.real_qualification",
+    "timestamp": "2026-10-31T13:06:50Z",
+    "tsMs": 1793452010133
+  },
+  {
+    "details": {
+      "elapsedMS": "133.0",
+      "windowID": "469459",
+      "qualified": "true",
+      "ready": "true"
+    },
+    "type": "drag.real_decision",
+    "timestamp": "2026-10-31T13:06:50Z",
+    "tsMs": 1793452010215
+  },
+  {
+    "tsMs": 1793452013470,
+    "timestamp": "2026-10-31T13:06:53Z",
+    "type": "drag.real_qualification",
+    "details": {
+      "startY": "52.0",
+      "accepted": "true",
+      "elapsedMS": "11.1",
+      "startX": "650.0",
+      "decisionMade": "false",
+      "frameY": "40.0",
+      "frameX": "150.0",
+      "windowID": "469459"
+    }
+  },
+  {
+    "tsMs": 1793452013551,
+    "timestamp": "2026-10-31T13:06:53Z",
+    "type": "drag.real_decision",
+    "details": {
+      "ready": "true",
+      "windowID": "469459",
+      "elapsedMS": "109.5",
+      "qualified": "true"
+    }
+  },
+  {
+    "tsMs": 1793452016724,
+    "timestamp": "2026-10-31T13:06:56Z",
+    "type": "drag.real_qualification",
+    "details": {
+      "startX": "650.0",
+      "startY": "73.0",
+      "frameX": "150.0",
+      "windowID": "469459",
+      "accepted": "true",
+      "decisionMade": "false",
+      "frameY": "40.0",
+      "elapsedMS": "6.9"
+    }
+  },
+  {
+    "tsMs": 1793452016834,
+    "timestamp": "2026-10-31T13:06:56Z",
+    "type": "drag.real_decision",
+    "details": {
+      "ready": "true",
+      "windowID": "469459",
+      "qualified": "true",
+      "elapsedMS": "127.1"
+    }
+  },
+  {
+    "timestamp": "2026-10-31T13:07:00Z",
+    "details": {
+      "startX": "650.0",
+      "windowID": "469459",
+      "decisionMade": "true",
+      "frameY": "40.0",
+      "accepted": "true",
+      "elapsedMS": "12.1",
+      "frameX": "150.0",
+      "startY": "79.0"
+    },
+    "type": "drag.real_qualification",
+    "tsMs": 1793452020114
+  },
+  {
+    "timestamp": "2026-10-31T13:07:00Z",
+    "details": {
+      "ready": "true",
+      "windowID": "469459",
+      "qualified": "true",
+      "elapsedMS": "113.2"
+    },
+    "type": "drag.real_decision",
+    "tsMs": 1793452020215
+  },
+  {
+    "tsMs": 1793452023500,
+    "type": "drag.real_qualification",
+    "details": {
+      "accepted": "true",
+      "frameX": "150.0",
+      "decisionMade": "false",
+      "elapsedMS": "14.2",
+      "startX": "650.0",
+      "frameY": "40.0",
+      "startY": "66.0",
+      "windowID": "469459"
+    },
+    "timestamp": "2026-10-31T13:07:03Z"
+  },
+  {
+    "tsMs": 1793452023557,
+    "type": "drag.real_decision",
+    "details": {
+      "windowID": "469459",
+      "ready": "true",
+      "elapsedMS": "113.1",
+      "qualified": "true"
+    },
+    "timestamp": "2026-10-31T13:07:03Z"
+  }
+]

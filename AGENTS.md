@@ -333,7 +333,7 @@ photo) dans un profil du sélecteur `source = "zones"` (Option+Tab chez l'utilis
 retour et clic, aller-retour, bordure jaune sur l'application, photos reprises en quittant une fenêtre, 20 zones,
 24 h, 3 zones de clics par fenêtre ; icônes des cartes (× et sens interdit). Reçus : specs/135 à 137.
 Session 138 : 0.12.0 publiée (sessions 131 à 137). Reçu : specs/138-release-0120/validation.md.
-Current SpecKit feature: `143-glisser-direct`.
+Current SpecKit feature: `144-effets-reglables`.
 
 Contexte :
 - `specs/143-glisser-direct/spec.md`
@@ -373,3 +373,5 @@ dans Tuilage. 2 383 tests / 356 suites et 28 scripts réussis ; santé 5/5, cert
 conservés. Geste natif observé et usage confirmé par l’utilisateur. Preuves partielles :
 réglage et Échap non enregistrés en natif ; revue non admise par Bridget. Commit local.
 Reçu : specs/143-glisser-direct/validation.md.
+
+Session144 : effets réglables indépendants de macOS et aperçu réel de destination, code validé et chargé pour essais. Huit glissers Chrome normaux réussis, source stable et restauration8/8. Qualification de titre44 points, groupe racine Electron et bande Chrome sans action/enfant ; aucun geste natif repris tardivement. Suite2416 tests/360 suites et28 scripts réussis. Audit V15 révision1 pass/release_blocked=false ; revue indépendante non admise. Intégration/push/activation finale en cours ; aucune release implicite. Reçu : specs/144-effets-reglables/validation.md.

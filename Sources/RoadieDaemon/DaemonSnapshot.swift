@@ -1415,6 +1415,7 @@ public struct ApplyResult: Equatable, Codable, Sendable {
     public var clamped: Int
     public var failed: Int
     public var items: [ApplyResultItem]
+    public var deferred: Int { items.filter { $0.status == .deferred }.count }
 
     public init(attempted: Int, applied: Int, clamped: Int, failed: Int, items: [ApplyResultItem]) {
         self.attempted = attempted
@@ -1433,6 +1434,7 @@ public struct ApplyResultItem: Equatable, Codable, Sendable {
         case applied
         case clamped
         case failed
+        case deferred
     }
 
     public var windowID: WindowID
@@ -2150,7 +2152,16 @@ public extension SnapshotService {
     // O(n) - n = commandes.
     func apply(_ plan: ApplyPlan, generation: UInt64 = PlacementGeneration.shared.current,
                isCurrent: @Sendable () -> Bool = { true }, publish: Bool = true,
-               respectLastingRefusals: Bool = false) -> ApplyResult {
+               respectLastingRefusals: Bool = false, animation: AnimationAction = .move) -> ApplyResult {
+        // Les appels interactifs publish=false gardent leur contrat immédiat. Les commandes
+        // hors MainActor restent immédiates ; aucun transfert synchrone vers le fil principal.
+        if publish, Thread.isMainThread, effectiveConfig.fx.animations.enabled {
+            let deferred = MainActor.assumeIsolated {
+                let runtime = FrameTransitionRuntime.shared
+                return runtime.acceptsCommands ? runtime.schedule(plan, service: self, generation: generation, action: animation) : nil
+            }
+            if let deferred { return deferred }
+        }
         var items: [ApplyResultItem] = []
         let commands = plan.commands.filter { command in
             if respectLastingRefusals && frameRegistry.refusesLastingly(windowID: command.window.id.rawValue,
@@ -2191,6 +2202,7 @@ public extension SnapshotService {
             case .applied: applied += 1
             case .clamped: clamped += 1
             case .failed: failed += 1
+            case .deferred: break
             }
         }
         return ApplyResult(

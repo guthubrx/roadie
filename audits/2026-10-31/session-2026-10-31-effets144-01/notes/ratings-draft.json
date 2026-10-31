@@ -1,0 +1,158 @@
+{
+  "security.01": {
+    "level": 3,
+    "rationale": "Entrées TOML finies et bornées, identité CG ID/PID et qualification de surface ; Semgrep générique et compilateur, sans analyse Swift inter-fichiers."
+  },
+  "security.02": {
+    "level": 3,
+    "rationale": "Scan de fichiers exigé sur copie SHA hors du worktree ignoré ; aucune valeur secrète ajoutée dans les sources examinées. À compléter par reçu du scan."
+  },
+  "security.03": {
+    "level": 2,
+    "rationale": "Historique examiné seulement après v0.4.0, borne explicitement conservée ; ne qualifie pas les commits antérieurs."
+  },
+  "security.04": {
+    "level": 3,
+    "rationale": "Autorité locale AX déjà accordée ; pas de nouveau droit, SIP, injection ou compte ; fenêtres ciblées par identité stricte."
+  },
+  "security.05": {
+    "level": 3,
+    "rationale": "Une seule dépendance Swift verrouillée et inchangée ; contrôle OSV explicite du verrou requis. Pas de graphe atteignable complet."
+  },
+  "reliability.01": {
+    "level": 2,
+    "rationale": "Archive de rollback et quatre empreintes vérifiées ; politique de rotation générale inchangée, pas de qualification exhaustive de rétention."
+  },
+  "reliability.02": {
+    "level": 3,
+    "rationale": "Permis révoqués, génération externe prioritaire, restauration/annulation testées ; aucun rejeu persistant du geste."
+  },
+  "reliability.03": {
+    "level": 3,
+    "rationale": "Configuration héritée compatible, transitions bornées, montage synchrone sans owner ; signature et état conservés pendant les chargements observés."
+  },
+  "reliability.04": {
+    "level": 2,
+    "rationale": "Archives précédentes et état sauvegardés ; restauration complète après sinistre non exercée sur le poste utilisateur."
+  },
+  "tests.01": {
+    "level": 3,
+    "rationale": "Compilateur Swift6 et vérification Sendable sur les sources/tests, compilation et tests natifs ; quelques avertissements hérités conservés."
+  },
+  "tests.02": {
+    "level": 2,
+    "rationale": "Compilation, diff sans espace invalide et règles Semgrep ; pas de linter Swift de style dédié dans le projet."
+  },
+  "tests.03": {
+    "level": 3,
+    "rationale": "Tests ciblés red/green et scénarios temporels, cellules hors main et contrôles matériels injectés ; suite finale requise."
+  },
+  "tests.04": {
+    "level": 3,
+    "rationale": "Build signé chargé, UUID/PID et santé5/5 ; usage réel et limites doivent rester distingués des tests."
+  },
+  "tests.05": {
+    "level": 3,
+    "rationale": "Parcours natifs AppKit/éditeur/Finder/navigateur, rail et Échap ; captures fictives et métadonnées réelles, sans revue visuelle de tous les contrôles."
+  },
+  "performance.01": {
+    "level": 3,
+    "rationale": "Un lot actif et une cible en attente par PID ; dernière cible seulement, délai borné et autres applications indépendantes."
+  },
+  "performance.02": {
+    "level": 2,
+    "rationale": "RSS mesuré, état linéaire borné ; aucun profil de tas ni mesure de mémoire privée par application."
+  },
+  "performance.03": {
+    "level": 3,
+    "rationale": "Annulation au clic, fin/désactivation et notifications contexte ; tests slowAX et timer libéré ; appel AX engagé non interrompu de force."
+  },
+  "performance.04": {
+    "level": 2,
+    "rationale": "Mesures on/off natives mais BTT180ms inclus, caches/activité extérieure et GPU global empêchent une attribution précise."
+  },
+  "complexity.01": {
+    "level": 3,
+    "rationale": "Moteur O(k), dispatcher O(k+p), tap mouvements O(1) et clic O(w) mémoire ; le BSP quadratique hérité est nommé séparément."
+  },
+  "complexity.02": {
+    "level": 3,
+    "rationale": "Clés d’animation limitées aux surfaces actives, états retirés, une dernière cible/PID et tâches de qualification remplacées."
+  },
+  "complexity.03": {
+    "level": 3,
+    "rationale": "Pas de capture supplémentaire, aucune I/O dans le tap ; lecteurs/config/stages existants conservés hors callback."
+  },
+  "quality.01": {
+    "level": 3,
+    "rationale": "Repli contour explicite, taille refusée conservée, réglages et aides FR/EN ; diagnostics sans contenu personnel."
+  },
+  "quality.02": {
+    "level": 3,
+    "rationale": "Deferred distinct de résultat final, refus/budgets respectés, échec de persistance explicite ; aucune réussite inventée à la planification."
+  },
+  "quality.03": {
+    "level": 3,
+    "rationale": "Aperçu local, groupes repliés et valeurs héritées ; essais natifs, sans étude d’ergonomie multi-utilisateur."
+  },
+  "architecture.01": {
+    "level": 3,
+    "rationale": "Core calcul pur, AX qualification/writer, daemon coordination/UI ; pas de dépendance inversée ajoutée."
+  },
+  "architecture.02": {
+    "level": 3,
+    "rationale": "Imports du manifeste lus, aucune dépendance/package ajoutée ; absence de graphe automatique Swift explicitée."
+  },
+  "architecture.03": {
+    "level": 3,
+    "rationale": "Installer construit/signe, runtime n’active le writer animé que dans le composant tiler ; CLI sans owner reste synchrone."
+  },
+  "architecture.04": {
+    "level": 3,
+    "rationale": "Identités/générations et services existants réutilisés ; chargements natifs vérifiés, pas de plugin générique ou d’injection dynamique nouvelle."
+  },
+  "ai_hygiene.01": {
+    "level": 3,
+    "rationale": "ADR024, plan/reuse-audit et tests expliquent propriété, annulation, héritage et limites macOS."
+  },
+  "ai_hygiene.02": {
+    "level": 3,
+    "rationale": "Responsabilités séparées et recherche d’existant tracée ; charge nouvelle du moteur/adapter explicitement assumée."
+  },
+  "ai_hygiene.03": {
+    "level": 2,
+    "rationale": "Auto-relecture et protocole local réalisés ; revue indépendante demandée mais admission refusée, sans second avis inventé."
+  },
+  "minimalism.01": {
+    "level": 3,
+    "rationale": "Aucune dépendance ajoutée ; dispatcher, store, UI de paramètres et fixture existants étendus."
+  },
+  "minimalism.02": {
+    "level": 3,
+    "rationale": "Un moteur pour quatre consommateurs, ressources seulement actives ; mesures natives et limites de mémoire/GPU conservées."
+  },
+  "minimalism.03": {
+    "level": 2,
+    "rationale": "Revue locale des champs/helpers, ancien cubic et timer overview retirés ; pas d’outil Swift de code mort ni mesure exhaustive des lignes supprimables."
+  },
+  "business.01": {
+    "level": 3,
+    "rationale": "Cadres réels CG/AX, aucune photo étirée ; données de configuration validées et appartenance au scope vérifiée."
+  },
+  "business.02": {
+    "level": 3,
+    "rationale": "Pas de mutation pendant aperçu, persistance unique au dépôt, source incompatible rejetée ; configuration antérieure garde ses défauts."
+  },
+  "business.03": {
+    "level": 3,
+    "rationale": "Règles utilisateur/macOS indépendant conservées, modes et refus stricts ; limites multi-écrans explicites."
+  },
+  "traceability.01": {
+    "level": 3,
+    "rationale": "Constats, reprises et preuves brutes conservés avec SHA ; pas de verdict indépendant inventé."
+  },
+  "traceability.02": {
+    "level": 3,
+    "rationale": "FR/SC reliés aux sources/tests et à la matrice native ; réserves de terrain nommées, final à revalider après dernière correction."
+  }
+}

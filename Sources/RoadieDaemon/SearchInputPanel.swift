@@ -89,7 +89,8 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     func beginEditing() {
-        makeKeyAndOrderFront(nil)
+        EffectAnimator.shared.visibility(self, visible: true, action: .launcher)
+        makeKey()
         makeFirstResponder(field)
         if let editor = field.currentEditor() as? NSTextView {
             editor.allowsUndo = true
@@ -104,8 +105,10 @@ final class SearchInputPanel: NSPanel, NSTextFieldDelegate, NSWindowDelegate {
         onKey = nil
         onCancel = nil
         onFlags = nil
-        orderOut(nil)
-        close()
+        EffectAnimator.shared.visibility(self, visible: false, action: .launcher) { [self] in
+            orderOut(nil)
+            close()
+        }
     }
 
     func controlTextDidChange(_ notification: Notification) {

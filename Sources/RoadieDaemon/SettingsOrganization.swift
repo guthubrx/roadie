@@ -26,6 +26,19 @@ enum SettingsOrganization {
     static func title(for d: SettingDescriptor) -> String {
         let key = d.key, id = d.id
         switch d.category {
+        case .effets:
+            if d.id == "fx.drop_preview" || d.key == "drop_preview" { return tr("Pendant un glisser", "During a drag") }
+            let action = d.tablePath.split(separator: ".").last.map(String.init) ?? ""
+            switch action {
+            case "move": return tr("Déplacement et réorganisation", "Movement and rearrangement")
+            case "stage": return tr("Changement de stage", "Stage switch")
+            case "appearance": return tr("Apparition et disparition", "Show and hide")
+            case "rail": return tr("Rail", "Rail")
+            case "launcher": return tr("Lanceur", "Launcher")
+            case "switcher": return tr("Sélecteur", "Switcher")
+            case "overview": return tr("Vue d’ensemble", "Overview")
+            default: return tr("Activation et profil commun", "Enable and shared profile")
+            }
         case .general: return tr("Texte et lisibilité", "Text and readability")
         case .raccourcis:
             if ["search_hotkey", "actions_hotkey"].contains(key) || id == "overview.hotkey" { return tr("Raccourcis globaux de Roadie", "Roadie global shortcuts") }

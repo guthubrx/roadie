@@ -121,13 +121,16 @@ struct Spec058SettingsRenderingTests {
         hosting.layoutSubtreeIfNeeded()
         defer { window.close() }
         func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
-        var labels = Set(SettingsCatalog.descriptors(in: category).filter {
-            guard $0.collection == nil, case .choice = $0.kind else { return false }; return true
-        }.map(\.label))
+        let choiceDescriptors = SettingsCatalog.descriptors(in: category).filter {
+            guard $0.collection == nil, case .choice = $0.kind else { return false }
+            // Surcharges par action repliées : leur contenu se construit à l'ouverture.
+            return category != .effets || !$0.tablePath.hasPrefix("fx.animations.")
+        }
+        var labels = Set(choiceDescriptors.map(\.label))
         // Session 108 : le gestionnaire du raccourci se règle dans Raccourcis, avec la liste des commandes.
         if category == .selecteur { labels.formUnion(["Au relâchement", "Champ de recherche", "Menu Actions"]) }
         let menus = descendants(hosting).compactMap { $0 as? NSPopUpButton }.filter { labels.contains($0.accessibilityLabel() ?? "") }
-        #expect(menus.count == labels.count)
+        #expect(menus.count == choiceDescriptors.count + (category == .selecteur ? 3 : 0))
         let frames = menus.map { $0.convert($0.bounds, to: hosting) }
         #expect(menus.allSatisfy { menu in
             let font = menu.font ?? NSFont.systemFont(ofSize: 16)

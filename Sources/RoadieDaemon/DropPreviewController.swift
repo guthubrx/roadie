@@ -21,12 +21,13 @@ final class DropPreviewController {
         lastCandidate
     }
     var isHoldingLayout: Bool { live.isActive }
+    var requestsRealSource: Bool { engine.service.effectiveConfig.fx.dropPreview == "real" }
 
     /// Fige le snapshot utilise pendant tout le drag (SPEC-016 FR-025) : un seul snapshot au lieu d'un par mouvement.
     /// Un contexte deja pris par l'appelant peut etre transmis pour eviter un second snapshot.
-    func beginDrag(context: DropPreviewContext? = nil) {
+    func beginDrag(context: DropPreviewContext? = nil, sourceGestureOwned: Bool = false) {
         dragContext = context ?? engine.makeContext()
-        if let dragContext { live.begin(dragContext) }
+        if let dragContext { live.begin(dragContext, sourceGestureOwned: sourceGestureOwned) }
     }
 
     func endDrag(then action: (@MainActor () -> Void)? = nil) {
@@ -37,11 +38,22 @@ final class DropPreviewController {
     }
 
     func invalidate() { live.invalidate(); dragContext = nil; lastCandidate = nil; overlay.hide() }
-    func refreshLivePreview() { live.update(lastCandidate) }
+    func refreshLivePreview() {
+        live.update(lastCandidate)
+        if let lastCandidate {
+            if live.showsRealSource { overlay.hide() } else { overlay.show(lastCandidate) }
+        }
+    }
 
     /// Snapshot de depart d'un drag de fenetre, partage avec la recherche de la fenetre source.
     func makeContext() -> DropPreviewContext {
         engine.makeContext()
+    }
+
+    /// Frontière du tap : relevé déjà publié uniquement, jamais de snapshot AX/disque.
+    func cachedDragSource(atAXPoint point: CGPoint) -> WindowSnapshot? {
+        guard let snapshot = engine.service.cachedGestureSnapshot() else { return nil }
+        return WindowDragReorderController.dragSourceWindow(atAXPoint: point, in: snapshot)?.window
     }
 
     @discardableResult
@@ -61,7 +73,7 @@ final class DropPreviewController {
         }
         lastCandidate = candidate
         live.update(candidate)
-        overlay.show(candidate)
+        if live.showsRealSource { overlay.hide() } else { overlay.show(candidate) }
         return candidate
     }
 
@@ -542,6 +554,128 @@ final class WindowDragReorderController {
     private let userInput: UserInputActivity
     private let dragActivity: WindowDragActivity
     private var pending: PendingWindowDrag?
+    private var qualification: Task<Void, Never>?
+    private var qualificationState: WindowDragQualification?
+    private var nativeMovementPassed = false
+    private var decisionMade = false
+    private var owned = false
+    private var draining = false
+    private var initialAXPoint: CGPoint?
+    private var dragPrimaryHeight: CGFloat = 0
+    private var physicalRelease: CGPoint?
+    private var queuedDragPoint: CGPoint?
+    private var dragDeliveryScheduled = false
+    private var mouseTap: CFMachPort?
+    private var mouseTapSource: CFRunLoopSource?
+    var routeOwnedDrag: ((CGPoint) -> Void)?
+
+    /// Installer uniquement pour le mode réel ; l'échec ne change jamais les permissions.
+    func configureMouseCapture() {
+        guard preview.requestsRealSource else {
+            if !owned && !draining { removeMouseCapture() }
+            return
+        }
+        guard mouseTap == nil else { return }
+        let mask: CGEventMask = [CGEventType.leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown].reduce(0) { $0 | (1 << $1.rawValue) }
+        let callback: CGEventTapCallBack = { _, type, event, refcon in
+            guard let refcon else { return Unmanaged.passUnretained(event) }
+            let controller = Unmanaged<WindowDragReorderController>.fromOpaque(refcon).takeUnretainedValue()
+            let consumed = MainActor.assumeIsolated { controller.capture(type, event: event) }
+            return consumed ? nil : Unmanaged.passUnretained(event)
+        }
+        guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
+            options: .defaultTap, eventsOfInterest: mask, callback: callback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()) else {
+            events.append(RoadieEvent(type: "drag.real_unavailable", details: ["reason": "mouse_tap_denied"]))
+            return
+        }
+        mouseTap = tap
+        mouseTapSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), mouseTapSource, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
+    func stopMouseCapture() { cancelPendingDrag(); removeMouseCapture() }
+    private func removeMouseCapture() {
+        if let mouseTap { CGEvent.tapEnable(tap: mouseTap, enable: false) }
+        if let mouseTapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), mouseTapSource, .commonModes) }
+        mouseTapSource = nil; mouseTap = nil
+        qualification?.cancel(); qualification = nil
+        qualificationState = nil
+    }
+
+    /// Mouvements O(1), clic O(w) sur le relevé publié : aucune lecture AX/disque dans le tap.
+    private func capture(_ type: CGEventType, event: CGEvent) -> Bool {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            Task { @MainActor [weak self] in self?.cancelPendingDrag() }
+            if let mouseTap { CGEvent.tapEnable(tap: mouseTap, enable: true) }
+            return false
+        }
+        if type == .leftMouseDown {
+            nativeMovementPassed = false
+            initialAXPoint = event.location
+            if let window = preview.cachedDragSource(atAXPoint: event.location) {
+                beginQualification(window: window, point: event.location)
+            } else {
+                qualification?.cancel(); qualification = nil; qualificationState = nil
+            }
+            return false
+        }
+        if type == .keyDown, event.getIntegerValueField(.keyboardEventKeycode) == 53, owned {
+            draining = true
+            Task { @MainActor [weak self] in self?.cancelPendingDrag() }
+            return true
+        }
+        if type == .leftMouseDragged {
+            if draining { return true }
+            guard let initialAXPoint,
+                  hypot(event.location.x - initialAXPoint.x, event.location.y - initialAXPoint.y) > 8 else {
+                return false
+            }
+            guard pending != nil else { nativeMovementPassed = true; return false }
+            if !decisionMade {
+                decisionMade = true
+                let accepted = qualificationState?.result
+                owned = accepted == true && mouseTap != nil && !nativeMovementPassed
+                let details = ["windowID": pending.map { String($0.windowID.rawValue) } ?? "none",
+                    "qualified": String(accepted == true), "ready": String(accepted != nil),
+                    "elapsedMS": String(format: "%.1f", (ProcessInfo.processInfo.systemUptime - (qualificationState?.started ?? ProcessInfo.processInfo.systemUptime)) * 1000)]
+                let events = events
+                // Journal différé : le callback de capture ne fait aucune écriture disque.
+                Task { @MainActor in events.append(RoadieEvent(type: "drag.real_decision", details: details)) }
+                if owned { userInput.claimExplicitResize() }
+            }
+            guard owned else { return false }
+            let point = CGPoint(x: event.location.x, y: dragPrimaryHeight - event.location.y)
+            // Router existant du rail : les dépôts sur miniature restent traités une seule fois.
+            queuedDragPoint = point
+            if !dragDeliveryScheduled {
+                dragDeliveryScheduled = true
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.dragDeliveryScheduled = false
+                    guard self.pending != nil, !self.draining, let point = self.queuedDragPoint else { return }
+                    self.queuedDragPoint = nil
+                    self.routeOwnedDrag?(point)
+                }
+            }
+            return true
+        }
+        if type == .leftMouseUp, owned || draining {
+            physicalRelease = CGPoint(x: event.location.x, y: dragPrimaryHeight - event.location.y)
+            if let initialAXPoint { event.location = initialAXPoint }
+            event.setIntegerValueField(.mouseEventDeltaX, value: 0)
+            event.setIntegerValueField(.mouseEventDeltaY, value: 0)
+            owned = false; draining = false
+        }
+        return false
+    }
+
+    func releasePoint(or observed: CGPoint) -> CGPoint {
+        let point = physicalRelease ?? observed
+        physicalRelease = nil
+        return point
+    }
 
     init(
         preview: DropPreviewController,
@@ -567,6 +701,8 @@ final class WindowDragReorderController {
     }
 
     func cancelPendingDrag(then action: (@MainActor () -> Void)? = nil) {
+        qualification?.cancel(); qualification = nil
+        if owned { draining = true }
         pending = nil
         dragActivity.release()
         preview.endDrag(then: action)
@@ -575,11 +711,17 @@ final class WindowDragReorderController {
     /// Clic sans bande de titre gérée possible (SPEC-051 C-05) : même effet qu'un clic sans
     /// source de glisser, sans construire de contexte ni de relevé.
     func handleMouseDownOutsideTitleBands() {
+        qualification?.cancel(); qualification = nil
+        qualificationState = nil
+        owned = false; draining = false; physicalRelease = nil
         preview.invalidate()
         pending = nil
     }
 
     func handleMouseDown(at point: CGPoint) {
+        decisionMade = nativeMovementPassed; owned = false; draining = false; physicalRelease = nil
+        initialAXPoint = ScreenCoordinate.nsPointToAX(point)
+        dragPrimaryHeight = point.y + (initialAXPoint?.y ?? 0)
         preview.invalidate()
         let context = preview.makeContext()
         guard let source = sourceWindowForDragStart(at: point, in: context.snapshot) else {
@@ -593,6 +735,36 @@ final class WindowDragReorderController {
             didDrag: false,
             context: context
         )
+        guard preview.requestsRealSource, mouseTap != nil, let initialAXPoint else { return }
+        let window = source.window
+        if qualificationState?.matches(window: window, point: initialAXPoint) != true {
+            beginQualification(window: window, point: initialAXPoint)
+        }
+    }
+
+    private func beginQualification(window: WindowSnapshot, point: CGPoint) {
+        qualification?.cancel()
+        let state = WindowDragQualification(window: window, point: point)
+        qualificationState = state
+        let worker = Task.detached(priority: .userInitiated) {
+            guard !Task.isCancelled else { return }
+            let accepted = WindowTitleDragAccess.accepts(window: window, at: point)
+            guard !Task.isCancelled else { return }
+            // Publication sans détour par MainActor : un snapshot en préparation ne retarde pas le résultat.
+            state.complete(accepted)
+        }
+        qualification = worker
+        Task { [weak self] in
+            await worker.value
+            guard let self, self.qualificationState === state, let accepted = state.result else { return }
+            self.events.append(RoadieEvent(type: "drag.real_qualification", details: [
+                "windowID": String(window.id.rawValue), "accepted": String(accepted),
+                "decisionMade": String(self.decisionMade),
+                "elapsedMS": String(format: "%.1f", ((state.completedAt ?? ProcessInfo.processInfo.systemUptime) - state.started) * 1000),
+                "startX": String(Double(point.x)), "startY": String(Double(point.y)),
+                "frameX": String(window.frame.x), "frameY": String(window.frame.y)
+            ]))
+        }
     }
 
     func handleMouseDragged(to point: CGPoint) {
@@ -600,7 +772,7 @@ final class WindowDragReorderController {
         guard hypot(point.x - drag.startPoint.x, point.y - drag.startPoint.y) > 8 else { return }
         if !drag.didDrag {
             // Le snapshot pris au mouse-down sert pour tous les mouvements du drag.
-            preview.beginDrag(context: drag.context)
+            preview.beginDrag(context: drag.context, sourceGestureOwned: owned)
         }
         drag.didDrag = true
         dragActivity.markActive(windowID: drag.windowID)
@@ -660,6 +832,7 @@ final class WindowDragReorderController {
     nonisolated static func dragSourceWindow(atAXPoint axPoint: CGPoint, in snapshot: DaemonSnapshot) -> (window: WindowSnapshot, scope: StageScope)? {
         guard let entry = FocusFollowsMousePicker.frontWindow(at: axPoint, in: snapshot),
               let scope = entry.scope,
+              entry.pin == nil, entry.window.furniture?.isNativeFullscreen != true,
               snapshot.state.activeScope(on: scope.displayID) == scope,
               WindowDragReorderEligibility.accepts(entry.window),
               titleBarHitRect(for: entry.window.frame.cgRect).contains(axPoint)
@@ -668,7 +841,27 @@ final class WindowDragReorderController {
     }
 
     private nonisolated static func titleBarHitRect(for frame: CGRect) -> CGRect {
-        CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: min(44, frame.height))
+        CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: min(WindowTitleDragAccess.titleBarHeight, frame.height))
+    }
+}
+
+/// Résultat unique d'une lecture AX : producteur hors main, lecteur dans le tap. O(1).
+final class WindowDragQualification: @unchecked Sendable {
+    let window: WindowSnapshot
+    let point: CGPoint
+    let started = ProcessInfo.processInfo.systemUptime
+    private let lock = NSLock()
+    private var storedResult: Bool?
+    private var finishedAt: TimeInterval?
+    init(window: WindowSnapshot, point: CGPoint) { self.window = window; self.point = point }
+    var result: Bool? { lock.withLock { storedResult } }
+    var completedAt: TimeInterval? { lock.withLock { finishedAt } }
+    func complete(_ accepted: Bool) { lock.withLock { storedResult = accepted; finishedAt = ProcessInfo.processInfo.systemUptime } }
+    func matches(window other: WindowSnapshot, point otherPoint: CGPoint) -> Bool {
+        window.id == other.id && window.pid == other.pid
+            && hypot(point.x - otherPoint.x, point.y - otherPoint.y) <= 1
+            && abs(window.frame.x - other.frame.x) <= 8 && abs(window.frame.y - other.frame.y) <= 8
+            && abs(window.frame.width - other.frame.width) <= 1 && abs(window.frame.height - other.frame.height) <= 1
     }
 }
 

@@ -123,6 +123,7 @@ public final class UserInputActivity: @unchecked Sendable {
     private var gestureTarget: GestureTarget?
     private var releaseHandler: ReleaseHandler?
     private var dragStartHandler: (@MainActor (GestureSession) -> Void)?
+    private var pressHandler: (@MainActor () -> Void)?
 
     /// `monitoring: true` simule un moniteur actif (tests).
     public init(monitoring: Bool = false) {
@@ -157,10 +158,12 @@ public final class UserInputActivity: @unchecked Sendable {
     /// Branche la session de geste sur le tiler : `target` trouve la fenêtre sous le curseur au
     /// clic, `onRelease` reçoit chaque relâchement. Sans branchement, les sessions n'ont pas de cible.
     public func observeGestures(target: @escaping GestureTarget,
+                                onPress: (@MainActor () -> Void)? = nil,
                                 onDragStart: (@MainActor (GestureSession) -> Void)? = nil,
                                 onRelease: @escaping ReleaseHandler) {
         lock.withLock {
             gestureTarget = target
+            pressHandler = onPress
             dragStartHandler = onDragStart
             releaseHandler = onRelease
         }
@@ -193,6 +196,7 @@ public final class UserInputActivity: @unchecked Sendable {
     /// snapshot consulte aussi cet objet.
     @MainActor
     func mouseDown(at point: CGPoint, now: Date = Date()) {
+        lock.withLock { pressHandler }?()
         let target = lock.withLock { gestureTarget }?(point)
         lock.withLock {
             physicalReleaseObservedAt = nil

@@ -147,6 +147,7 @@ struct SettingsView: View {
                     if model.category == .general {
                         general
                     } else {
+                        if model.category == .effets { EffectsSettingsPreview(configPath: model.service.configPath) }
                         ForEach(model.sections) { grouped($0.descriptors) }
                     }
                 }
@@ -188,12 +189,17 @@ struct SettingsView: View {
 
     private func grouped(_ descriptors: [SettingDescriptor]) -> some View {
         ForEach(SettingsOrganization.groups(descriptors)) { group in
+            if group.descriptors.first?.category == .effets,
+               group.descriptors.first?.tablePath.hasPrefix("fx.animations.") == true {
+                SettingsDisclosureSection(group.title) { card(group.descriptors) }
+            } else {
             VStack(alignment: .leading, spacing: 10) {
                 if group.descriptors.count != 1 || group.descriptors.first?.collection == nil {
                     Text(group.title).font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 card(group.descriptors)
+            }
             }
         }
     }
@@ -542,5 +548,64 @@ struct SettingsDetailItem: Identifiable {
             }
         }
         return items
+    }
+}
+
+
+/// Démonstration locale : bouton explicite, jamais de boucle au repos ni de fenêtre tierce touchée.
+private struct EffectsSettingsPreview: View {
+    let configPath: String
+    @State private var progress = 0.0
+    @State private var action = AnimationAction.move
+    @State private var animationID = "settings-preview-\(UUID().uuidString)"
+    @State private var reverse = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(tr("Aperçu local", "Local preview")).font(.headline)
+                Spacer()
+                Picker(tr("Action", "Action"), selection: $action) {
+                    ForEach(AnimationAction.allCases, id: \.self) { item in
+                        Text(label(item)).tag(item)
+                    }
+                }.frame(maxWidth: 250)
+                Button(tr("Rejouer", "Replay")) { replay() }
+            }
+            GeometryReader { proxy in
+                RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08))
+                RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.22))
+                    .overlay(Text(tr("Fenêtre de test", "Test window")).font(.caption))
+                    .frame(width: 120, height: 56)
+                    .offset(x: max(0, proxy.size.width - 120) * progress, y: 10)
+            }.frame(height: 76)
+            Text(tr("Cette démonstration utilise les mêmes courbes. Elle ne déplace aucune application. Les champs vides héritent du profil commun.",
+                    "This preview uses the same motion curves. It does not move any app. Empty fields inherit the shared profile."))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .onDisappear { EffectAnimator.shared.cancel(animationID) }
+    }
+
+    private func replay() {
+        let config = (try? RoadieConfigLoader.load(from: configPath)) ?? RoadieConfig()
+        let policy = config.fx.animations.policy(for: action, usesAppearanceDefaults: action == .launcher || action == .switcher)
+        reverse.toggle()
+        EffectAnimator.shared.animate(id: animationID, from: [progress], to: [reverse ? 1 : 0], policy: policy) {
+            progress = $0[0]
+        }
+    }
+
+    private func label(_ action: AnimationAction) -> String {
+        switch action {
+        case .move: tr("Déplacement", "Movement")
+        case .stage: tr("Changement de stage", "Stage switch")
+        case .appearance: tr("Apparition et disparition", "Show and hide")
+        case .rail: "Rail"
+        case .launcher: tr("Lanceur", "Launcher")
+        case .switcher: tr("Sélecteur", "Switcher")
+        case .overview: tr("Vue d’ensemble", "Overview")
+        }
     }
 }

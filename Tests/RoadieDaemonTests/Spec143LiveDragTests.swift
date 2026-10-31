@@ -7,7 +7,7 @@ import RoadieTiler
 import Testing
 @testable import RoadieDaemon
 
-private final class Drag143Backend: SystemSnapshotProviding, WindowFrameWriting, @unchecked Sendable {
+final class Drag143Backend: SystemSnapshotProviding, WindowFrameWriting, @unchecked Sendable {
     let screen: DisplaySnapshot
     private let lock = NSLock()
     private var entries: [WindowSnapshot]
@@ -30,7 +30,7 @@ private final class Drag143Backend: SystemSnapshotProviding, WindowFrameWriting,
     func frame(_ id: WindowID) -> CGRect? { lock.withLock { entries.first { $0.id == id }?.frame.cgRect } }
 }
 
-@MainActor private final class Drag143Fixture {
+@MainActor final class Drag143Fixture {
     let directory: URL
     let store: StageStore
     let backend: Drag143Backend

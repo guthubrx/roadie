@@ -1062,7 +1062,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         NSApplication.shared.setActivationPolicy(.accessory)
         // Une fenêtre par écran : la barre reste sur l'écran du pointeur choisi à l'ouverture.
         windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: style) }
-        windows.forEach { $0.orderFrontRegardless() }
+        windows.forEach { EffectAnimator.shared.visibility($0, visible: true, action: .launcher, ignoresMouseEvents: true) }
         let input = SearchInputPanel()
         let layout = TargetSearchHotkey.currentLayoutTable()
         input.viewCycle = SearchInputPanel.cycleKey(launcher.viewCycleKey, layout: layout)
@@ -3095,8 +3095,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         eventTap = nil
         for window in windows {
-            window.orderOut(nil)
-            window.close()
+            EffectAnimator.shared.visibility(window, visible: false, action: .launcher) {
+                window.orderOut(nil)
+                window.close()
+            }
         }
         windows = []
         NSApplication.shared.updateWindows()

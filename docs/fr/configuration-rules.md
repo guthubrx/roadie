@@ -343,3 +343,54 @@ roadie rules explain --app Firefox --title "Roadie Documentation" --stage docs -
 ```
 
 Utilise `explain` avant d'ajouter une rule en production locale. C'est l'equivalent d'un dry-run : Roadie montre quelle rule matcherait et quelles actions seraient appliquees.
+
+## Effets et destination du glisser
+
+**Paramètres > Effets** règle les animations et la représentation de la destination.
+« Contour » conserve le rectangle. « Aperçu réel » déplace temporairement la vraie
+fenêtre dans la zone visée. Son contenu refait sa mise en page. Le pointeur reste
+libre de choisir une autre destination. Échap restaure les cadres initiaux.
+Le suivi des voisines, dans Tuilage, reste indépendant.
+
+Le mode réel exige un titre reconnu et une capture du geste disponible. Les
+boutons, onglets et contenus gardent leurs gestes habituels. Si Roadie ne peut
+pas prendre ce geste, le contour reste affiché. Les dépôts internes aux cartes
+du rail et de la vue d’ensemble gardent leurs miniatures.
+
+Les animations sont désactivées par défaut. Les profils Aucun, Sobre, Souple et
+Expressif fournissent une base. Chaque action peut ensuite remplacer la courbe,
+la durée ou l’intensité. Un champ vide hérite de la valeur commune puis du profil.
+Le ressort utilise la raideur et l’amortissement ; la durée ne fixe pas sa fin.
+L’aperçu local de la page ne déplace aucune application.
+
+```toml
+[fx]
+drop_preview = "real" # "contour" par défaut, indépendant des animations
+
+[fx.animations]
+enabled = true
+profile = "subtle" # none, subtle, smooth, expressive
+
+[fx.animations.move]
+curve = "ease_out" # inherit, linear, ease_out, ease_in_out, spring
+duration_ms = 180.0
+intensity = 0.5
+
+[fx.animations.stage]
+enabled = false
+```
+
+Les actions sont `move`, `stage`, `appearance`, `rail`, `launcher`, `switcher`
+et `overview`. Les bornes sont : durée 0–1000 ms, intensité 0–1, raideur 50–1500,
+amortissement 0,3–2. Les valeurs invalides sont refusées avant application.
+La durée existante du rail reste héritée si aucune nouvelle durée ne la remplace.
+Le réglage « Réduire les animations » de macOS ne change pas les effets de Roadie.
+L’interrupteur et les profils Roadie décident seuls, sans modifier macOS.
+
+Les fenêtres d’application suivent leurs vrais cadres. Les fondus concernent
+les panneaux Roadie. Roadie ne modifie pas l’opacité des fenêtres tierces et ne
+recrée pas un contenu fermé. Aucun changement de protection système n’est requis.
+Une vraie remise en page sollicite l’application ; son coût dépend du document.
+La taille de l’aperçu réel n’est demandée qu’au changement de destination.
+
+Sur une destination d’un autre écran, Roadie conserve le contour et garde la source à son origine : macOS peut masquer son contenu pendant un glisser capturé entre Spaces. Le dépôt reste disponible.

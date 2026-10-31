@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": false,
+    "decision": "pass"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [],
+  "suppressed": []
+}

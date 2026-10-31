@@ -1,0 +1,140 @@
+[0/1] Planning build
+Building for debugging...
+[0/8] Write sources
+[2/8] Write swift-version--58304C5D6DBC2206.txt
+[4/11] Compiling RoadieDaemon SettingsLiveApplyController.swift
+[5/11] Emitting module RoadieDaemon
+/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Sources/RoadieDaemon/DaemonSnapshot.swift:2450:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2448 |     }
+2449 | 
+2450 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2451 |         railSettings ?? RailSettings.load(path: configService.state.activePath ?? RoadieConfigLoader.defaultConfigPath())
+2452 |     }
+[6/11] Compiling RoadieDaemon EffectAnimator.swift
+[7/18] Compiling RoadieDaemon SearchInputPanel.swift
+[8/18] Compiling RoadieDaemon FrameTransitionRuntime.swift
+[9/18] Compiling RoadieDaemon RailPanel.swift
+[10/18] Compiling RoadieDaemon SettingsView.swift
+[11/18] Compiling RoadieDaemon TargetOverlayPresenter.swift
+[12/18] Compiling RoadieDaemon OverviewPanel.swift
+[13/18] Compiling RoadieDaemon WindowSwitcherPanel.swift
+[14/24] Compiling roadie main.swift
+[15/24] Emitting module roadie
+[15/24] Write Objects.LinkFileList
+[17/24] Emitting module roadied
+[17/24] Write Objects.LinkFileList
+[18/27] Linking roadie
+[19/27] Applying roadie
+[20/27] Linking roadied
+[21/27] Applying roadied
+[23/27] Emitting module RoadieDaemonTests
+[24/27] Compiling RoadieDaemonTests Spec144EffectsTests.swift
+[25/27] Compiling RoadieDaemonTests Spec061OverviewTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability/Tests/RoadieDaemonTests/Spec061OverviewTests.swift:225:17: warning: initialization of immutable value 'desktop' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+223 |             let baseline = OverviewLayout.make(model: model, viewport: size, config: OverviewConfig(presentation: presentation, loupe: false))
+224 |             let target = try #require(baseline.cards.first)
+225 |             let desktop = try #require(model.displays.flatMap(\.desktops).first { $0.entries.contains { $0.id == target.entry.id } })
+    |                 `- warning: initialization of immutable value 'desktop' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+226 |             let plan = OverviewLayout.make(model: model, viewport: size, config: config, window: target.entry.id)
+227 |             let enlarged = try #require(plan.cards.first { $0.entry.id == target.entry.id })
+[25/27] Write Objects.LinkFileList
+[26/27] Linking roadiePackageTests
+Build complete! (29.22s)
+Test Suite 'Selected tests' started at 2026-10-31 12:58:44.023.
+Test Suite 'roadiePackageTests.xctest' started at 2026-10-31 12:58:44.035.
+Test Suite 'roadiePackageTests.xctest' passed at 2026-10-31 12:58:44.035.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-31 12:58:44.035.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.012) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Suite "Spec061 Rendu natif" started.
+􀟈  Test escapeClosesTheOverlayWithoutCreatingASpace() started.
+􁁛  Test escapeClosesTheOverlayWithoutCreatingASpace() passed after 0.434 seconds.
+􀟈  Test nativeCanvasKeepsAllCardsAndDrawsBothLayouts() started.
+􁁛  Test nativeCanvasKeepsAllCardsAndDrawsBothLayouts() passed after 0.188 seconds.
+􀟈  Test nativeMouseMovementChangesLoupeWithoutActivationOrOscillation() started.
+􁁛  Test nativeMouseMovementChangesLoupeWithoutActivationOrOscillation() passed after 0.570 seconds.
+􀟈  Test pointerMagnifiesTheActualWindowInBothPresentations() started.
+􁁛  Test pointerMagnifiesTheActualWindowInBothPresentations() passed after 0.583 seconds.
+􀟈  Test nativePanelRendersApprovedReference() started.
+􁁛  Test nativePanelRendersApprovedReference() passed after 0.867 seconds.
+􀟈  Test nativePanelRendersScreenCase() started.
+􁁛  Test nativePanelRendersScreenCase() passed after 0.700 seconds.
+􀟈  Test nativePanelRendersRealExport() started.
+􁁛  Test nativePanelRendersRealExport() passed after 0.001 seconds.
+􀟈  Test receiverAvailabilityFollowsLifecycle() started.
+􁁛  Test receiverAvailabilityFollowsLifecycle() passed after 0.006 seconds.
+􀟈  Test shortcutSignaturesDoNotConsumeEachOther() started.
+􁁛  Test shortcutSignaturesDoNotConsumeEachOther() passed after 0.001 seconds.
+􁁛  Suite "Spec061 Rendu natif" passed after 3.353 seconds.
+􀟈  Suite Spec144EffectsTests started.
+􀟈  Test oldConfigurationKeepsContourAndEffectsOff() started.
+􁁛  Test oldConfigurationKeepsContourAndEffectsOff() passed after 0.001 seconds.
+􀟈  Test profilesAndActionOverridesAreIndependent() started.
+􁁛  Test profilesAndActionOverridesAreIndependent() passed after 0.001 seconds.
+􀟈  Test invalidValuesAreRejectedBeforeRuntime() started.
+􁁛  Test invalidValuesAreRejectedBeforeRuntime() passed after 0.003 seconds.
+􀟈  Test temporalCurvesHaveExactEndsAndAreMonotone() started.
+􁁛  Test temporalCurvesHaveExactEndsAndAreMonotone() passed after 0.001 seconds.
+􀟈  Test springRetargetPreservesVelocityAndConverges() started.
+􁁛  Test springRetargetPreservesVelocityAndConverges() passed after 0.001 seconds.
+􀟈  Test springIsFiniteAcrossDampingRange() started.
+􁁛  Test springIsFiniteAcrossDampingRange() passed after 0.001 seconds.
+􀟈  Test appearanceValuesApplyToFadesAndSpecificActionStillWins() started.
+􁁛  Test appearanceValuesApplyToFadesAndSpecificActionStillWins() passed after 0.001 seconds.
+􁁛  Suite Spec144EffectsTests passed after 0.005 seconds.
+􀟈  Suite Spec144AnimatorTests started.
+􀟈  Test finishesExactlyWithoutLeavingTimerOrCallback() started.
+􁁛  Test finishesExactlyWithoutLeavingTimerOrCallback() passed after 0.001 seconds.
+􀟈  Test retargetStartsAtShownValueAndDoesNotRunOldCompletion() started.
+􁁛  Test retargetStartsAtShownValueAndDoesNotRunOldCompletion() passed after 0.001 seconds.
+􀟈  Test disabledReplacesRunningTransitionWithExactDestination() started.
+􁁛  Test disabledReplacesRunningTransitionWithExactDestination() passed after 0.001 seconds.
+􀟈  Test roadieAloneControlsAnimations() started.
+􁁛  Test roadieAloneControlsAnimations() passed after 0.001 seconds.
+􀟈  Test realTimerIsReleasedAfterCompletion() started.
+􁁛  Test realTimerIsReleasedAfterCompletion() passed after 0.084 seconds.
+􀟈  Test durationIsIndependentOfIntensityAndAnUnchangedTargetCreatesNoTimer() started.
+􁁛  Test durationIsIndependentOfIntensityAndAnUnchangedTargetCreatesNoTimer() passed after 0.001 seconds.
+􀟈  Test decorativePanelKeepsPassingClicksThroughDuringEffects() started.
+􁁛  Test decorativePanelKeepsPassingClicksThroughDuringEffects() passed after 0.026 seconds.
+􀟈  Test turningEffectsOffFinishesActiveTargetsWithoutRetiling() started.
+􁁛  Test turningEffectsOffFinishesActiveTargetsWithoutRetiling() passed after 0.044 seconds.
+􁁛  Suite Spec144AnimatorTests passed after 0.160 seconds.
+􀟈  Suite Spec144FrameTransitionTests started.
+􀟈  Test queuedWorkIsNotReportedAsAppliedAndEndsAtRealFrame() started.
+􁁛  Test queuedWorkIsNotReportedAsAppliedAndEndsAtRealFrame() passed after 0.122 seconds.
+􀟈  Test cancellationRevokesAllFurtherAnimationWrites() started.
+􁁛  Test cancellationRevokesAllFurtherAnimationWrites() passed after 0.175 seconds.
+􀟈  Test slowAppDoesNotBlockNeighborAndExternalGenerationCancelsQueuedFinal() started.
+􁁛  Test slowAppDoesNotBlockNeighborAndExternalGenerationCancelsQueuedFinal() passed after 0.215 seconds.
+􀟈  Test pressingMouseCancelsTransitionBeforeNextGestureStarts() started.
+􁁛  Test pressingMouseCancelsTransitionBeforeNextGestureStarts() passed after 0.192 seconds.
+􀟈  Test localCommandWithoutRunningAnimationOwnerStillWritesSynchronously() started.
+􁁛  Test localCommandWithoutRunningAnimationOwnerStillWritesSynchronously() passed after 0.005 seconds.
+􀟈  Test newGenerationRetargetsWithoutApplyingTheOldFinalTarget() started.
+􁁛  Test newGenerationRetargetsWithoutApplyingTheOldFinalTarget() passed after 0.890 seconds.
+􁁛  Suite Spec144FrameTransitionTests passed after 1.602 seconds.
+􀟈  Suite Spec144RealDropTests started.
+􀟈  Test realSourceAndNeighborsAreIndependent(neighbors:) started.
+􀟈  Test case passing 1 argument neighbors → false to realSourceAndNeighborsAreIndependent(neighbors:) started.
+􀟈  Test case passing 1 argument neighbors → true to realSourceAndNeighborsAreIndependent(neighbors:) started.
+􁁛  Test realSourceAndNeighborsAreIndependent(neighbors:) with 2 test cases passed after 0.093 seconds.
+􀟈  Test realSettingCannotWriteNativeSourceWithoutOwnership() started.
+􁁛  Test realSettingCannotWriteNativeSourceWithoutOwnership() passed after 0.018 seconds.
+􀟈  Test leavingDestinationRestoresSourceAndNoOldTargetReturns() started.
+􁁛  Test leavingDestinationRestoresSourceAndNoOldTargetReturns() passed after 0.043 seconds.
+􀟈  Test changedContextPreventsCommitOfRealSource(change:) started.
+􀟈  Test case passing 1 argument change → "pin" to changedContextPreventsCommitOfRealSource(change:) started.
+􀟈  Test case passing 1 argument change → "closed" to changedContextPreventsCommitOfRealSource(change:) started.
+􀟈  Test case passing 1 argument change → "mode" to changedContextPreventsCommitOfRealSource(change:) started.
+􁁛  Test changedContextPreventsCommitOfRealSource(change:) with 3 test cases passed after 0.074 seconds.
+􀟈  Test changingRealPreviewSettingRestoresSourceWhileKeepingLiveNeighbors() started.
+􁁛  Test changingRealPreviewSettingRestoresSourceWhileKeepingLiveNeighbors() passed after 0.120 seconds.
+􀟈  Test anotherDisplayKeepsOutlineAndRestoresAnEarlierLocalPreview() started.
+􁁛  Test anotherDisplayKeepsOutlineAndRestoresAnEarlierLocalPreview() passed after 0.027 seconds.
+􁁛  Suite Spec144RealDropTests passed after 0.378 seconds.
+􁁛  Test run with 36 tests in 5 suites passed after 5.500 seconds.

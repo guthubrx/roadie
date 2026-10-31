@@ -569,7 +569,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
 
     func present(on screen: NSScreen) {
         layout(in: screen.visibleFrame)
-        orderFrontRegardless()
+        EffectAnimator.shared.visibility(self, visible: true, action: .switcher)
         makeKey()
         makeFirstResponder(field.isHidden ? gridContainer : field)
         acceptsMouseMovedEvents = true
@@ -593,8 +593,10 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         if let hoverMonitor { NSEvent.removeMonitor(hoverMonitor) }
         hoverMonitor = nil
         previousMouse = nil
-        super.orderOut(sender)
+        EffectAnimator.shared.visibility(self, visible: false, action: .switcher) { [weak self] in self?.finishHiding(sender) }
     }
+
+    private func finishHiding(_ sender: Any?) { super.orderOut(sender) }
 
     func controlTextDidChange(_ notification: Notification) {
         isSearchEditing = true

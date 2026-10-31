@@ -85,6 +85,7 @@ public final class SettingsLiveApplyController {
             || config.rules != previousConfig.rules
             || config.focus.stageFollowsFocus != previousConfig.focus.stageFollowsFocus
         let bordersChanged = config.fx.borders != previousConfig.fx.borders
+        let animationsChanged = config.fx.animations != previousConfig.fx.animations
         var appliedConfig = config
         do {
             try stageStore.applyConfiguredStageNameChanges(
@@ -100,6 +101,7 @@ public final class SettingsLiveApplyController {
         }
         previousConfig = appliedConfig
         previousRail = rail
+        if animationsChanged { EffectAnimator.shared.finishAll() }
         if layoutChanged { onLayoutChange(geometryChanged) }
         if bordersChanged { onBorderChange() }
     }

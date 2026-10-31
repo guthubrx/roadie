@@ -1,0 +1,28 @@
+{
+  "protocol": "15.0.0",
+  "grade": "A",
+  "score": 100,
+  "date": "2026-10-31",
+  "spec": "specs/144-effets-reglables/spec.md",
+  "scope": "Session 144 : effets réglables et aperçu réel ; diff et contrats partagés",
+  "decision": "pass",
+  "release_blocked": false,
+  "coverage_percent": 100.0,
+  "controls_verified": 13,
+  "controls_applicable": 13,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [],
+  "source_drift": [],
+  "input_sha256": "f53a7532b784ea2676b3fab17c2d15fc3b02d87d563885d1aef571b6655e53c9",
+  "manifest_sha256": "4a622c47f97ce964055c08e143cf79cd363c546716da9896abd763738f119af7",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

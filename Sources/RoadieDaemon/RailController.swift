@@ -58,7 +58,11 @@ public final class RailController {
     private var dragGhost: RailDragGhostWindow?
     private lazy var dropPreview = DropPreviewController(engine: DropPreviewEngine(service: snapshotService))
     private var stageMenuTargets: [NSObject] = []
-    private lazy var windowDragController = WindowDragReorderController(preview: dropPreview)
+    private lazy var windowDragController: WindowDragReorderController = {
+        let controller = WindowDragReorderController(preview: dropPreview, commandService: commandService)
+        controller.routeOwnedDrag = { [weak self] point in self?.handleMouseDragged(to: point) }
+        return controller
+    }()
     private var focusedWindowID: WindowID?
     private var protectedBlurredWindows: [WindowID: Date] = [:]
 
@@ -78,6 +82,7 @@ public final class RailController {
         NSApplication.shared.setActivationPolicy(.accessory)
         rebuildPanels(reason: "start")
         startClickMonitors()
+        windowDragController.configureMouseCapture()
         startHoverTimer()
         startWatchers()
         startSettingsObserver()
@@ -115,6 +120,7 @@ public final class RailController {
     /// Arrete tout ce que `start()` a mis en place : timers, surveillances de fichiers, moniteurs souris,
     /// observateur d'ecran et panneaux. Appelable plusieurs fois ; `start()` peut ensuite etre rappele.
     public func stop() {
+        windowDragController.stopMouseCapture()
         rebuildTask?.cancel()
         rebuildTask = nil
         pendingRebuild = nil
@@ -197,6 +203,7 @@ public final class RailController {
     /// Notification des réglages et événement vnode portent la même écriture : un seul cycle.
     private func refreshPanelsForConfigChange(reason: String) {
         dropPreview.refreshLivePreview()
+        windowDragController.configureMouseCapture()
         let path = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
         let stamp = fileModificationStamp(path)
         guard path != lastConfigRefreshPath || stamp != lastConfigRefreshStamp else { return }
@@ -380,13 +387,14 @@ public final class RailController {
         case .leftMouseDragged:
             handleMouseDragged(to: screenPoint)
         case .leftMouseUp:
-            handleMouseUp(at: screenPoint)
+            handleMouseUp(at: windowDragController.releasePoint(or: screenPoint))
         default:
             break
         }
     }
 
     private func handleMouseDown(at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {
+        FrameTransitionRuntime.shared.cancel()
         // Un nouveau clic invalide tout drag precedent reste en suspens.
         pendingDrag = nil
         dragGhost?.hide()
@@ -883,7 +891,7 @@ public final class RailController {
                 }
                 dragGhost?.show(image: thumbnails.cachedImage(for: drag.windowID), at: screenPoint, grabUnit: drag.grabUnit)
                 // Un seul snapshot pour tout le drag (SPEC-016 FR-025).
-                dropPreview.beginDrag()
+                dropPreview.beginDrag(sourceGestureOwned: true)
             } else {
                 dragGhost?.move(to: screenPoint, grabUnit: drag.grabUnit)
             }

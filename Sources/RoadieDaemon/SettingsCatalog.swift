@@ -16,6 +16,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
     case recherche
     case rail
     case bordures
+    case effets
     case focus
     case selecteur
     case overview
@@ -32,6 +33,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
         case .grille: return tr("Grille", "Grid")
         case .recherche: return tr("Recherche", "Search")
         case .rail: return "Rail"
+        case .effets: return tr("Effets", "Effects")
         case .bordures: return tr("Bordures", "Borders")
         case .focus: return tr("Focus et souris", "Focus and mouse")
         case .overview: return tr("Vue d’ensemble", "Overview")
@@ -52,6 +54,7 @@ public enum SettingCategory: String, CaseIterable, Sendable {
         case .grille: return "square.grid.3x3"
         case .recherche: return "magnifyingglass"
         case .rail: return "sidebar.left"
+        case .effets: return "sparkles"
         case .bordures: return "square.dashed"
         case .focus: return "cursorarrow.click"
         case .overview: return "rectangle.3.group"
@@ -105,6 +108,22 @@ public struct SettingDescriptor: Equatable, Sendable {
         if id == "target_mode.theme" || id == "target_mode.theme_dark" {
             if value.isEmpty { return tr("Comme le thème clair", "Same as the light theme") }
             return LauncherThemeCatalog.all().first { $0.id == value }?.name ?? value
+        }
+        if category == .effets {
+            switch value {
+            case "none": return tr("Aucun", "None")
+            case "subtle": return tr("Sobre", "Subtle")
+            case "smooth": return tr("Souple", "Smooth")
+            case "expressive": return tr("Expressif", "Expressive")
+            case "inherit": return tr("Comme le profil", "Use the profile")
+            case "linear": return tr("Linéaire", "Linear")
+            case "ease_out": return tr("Ralentir à l’arrivée", "Slow at the end")
+            case "ease_in_out": return tr("Accélérer puis ralentir", "Speed up then slow down")
+            case "spring": return tr("Ressort", "Spring")
+            case "contour": return tr("Contour", "Outline")
+            case "real": return tr("Aperçu réel", "Real preview")
+            default: break
+            }
         }
         let label: String
         switch (id, value) {
@@ -200,7 +219,7 @@ public enum SettingsCatalog {
         interfaceDescriptors + tilingDescriptors + stageDescriptors + focusDescriptors + borderDescriptors
         + targetModeDescriptors + appTargetDescriptors + targetGridDescriptors
         + advancedDescriptors + ruleDescriptors + railDescriptors + fontFamilyDescriptors + switcherDescriptors + overviewDescriptors
-        + shortcutDescriptors
+        + shortcutDescriptors + effectsDescriptors
 
     /// Texte de recherche normalisé de chaque réglage, calculé une fois (même ordre que `all`) :
     /// nom, libellé, aide, catégorie et groupe affiché (session 107 : « raccourci » trouve tout un groupe).
@@ -213,7 +232,7 @@ public enum SettingsCatalog {
 
     /// Nom d'un réglage : chemin de la table sans `experimental.` ni `fx.`, puis la clé.
     public static func id(tablePath: String, key: String) -> String {
-        var table = tablePath
+        var table = tablePath == "fx" ? "" : tablePath
         for prefix in hiddenPrefixes where table.hasPrefix(prefix) {
             table.removeFirst(prefix.count)
         }

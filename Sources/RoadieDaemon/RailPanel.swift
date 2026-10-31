@@ -260,17 +260,13 @@ final class RailPanel: NSPanel {
         }
         persistVisibleWidth()
         guard animated, animationDuration > 0 else {
+            EffectAnimator.shared.cancel("frame-\(windowNumber)")
             setFrame(target, display: true)
             stack.isHidden = autoHide && isCollapsed
             return
         }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = animationDuration
-            animator().setFrame(target, display: true)
-        } completionHandler: { [weak self] in
-            Task { @MainActor in
-                self?.finishAutoHideFrame()
-            }
+        EffectAnimator.shared.frame(self, to: target, action: .rail, legacyDuration: animationDuration) { [weak self] in
+            self?.finishAutoHideFrame()
         }
     }
 

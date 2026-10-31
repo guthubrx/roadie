@@ -500,19 +500,34 @@ public struct WindowPlacementConfig: Equatable, Codable, Sendable {
 
 public struct EffectsConfig: Equatable, Codable, Sendable {
     public var borders: BorderConfig
+    public var animations: AnimationsConfig
+    public var dropPreview: String
 
     public init(borders: BorderConfig = BorderConfig()) {
         self.borders = borders
+        self.animations = AnimationsConfig()
+        self.dropPreview = "contour"
+    }
+
+    public init(borders: BorderConfig = BorderConfig(), animations: AnimationsConfig, dropPreview: String = "contour") {
+        self.borders = borders
+        self.animations = animations
+        self.dropPreview = dropPreview
     }
 
     // `borders` est facultatif : `[fx.rail]` seul est une configuration valide.
     enum CodingKeys: String, CodingKey {
-        case borders
+        case borders, animations, dropPreview = "drop_preview"
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.borders = try c.decodeIfPresent(BorderConfig.self, forKey: .borders) ?? BorderConfig()
+        self.animations = try c.decodeIfPresent(AnimationsConfig.self, forKey: .animations) ?? AnimationsConfig()
+        self.dropPreview = try c.decodeIfPresent(String.self, forKey: .dropPreview) ?? "contour"
+        guard ["contour", "real"].contains(dropPreview) else {
+            throw DecodingError.dataCorruptedError(forKey: .dropPreview, in: c, debugDescription: "unknown drop preview")
+        }
     }
 }
 
@@ -1619,6 +1634,7 @@ public enum RoadieConfigLoader {
         "tiling": ["display_overrides", "smart_gaps_solo_sides", "allowed_subroles"],
         "stage_manager": ["workspaces"],
         "exclusions": ["floating_bundles", "floating_windows"],
+        "fx.animations": ["move", "stage", "appearance", "rail", "launcher", "switcher", "overview"],
         "fx.borders": ["stage_overrides"],
         "width_adjustment": ["presets"],
         "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"],
@@ -1776,6 +1792,14 @@ private enum ConfigValidationRules {
         "exclusions",
         "exclusions.floating_windows",
         "fx",
+        "fx.animations",
+        "fx.animations.move",
+        "fx.animations.stage",
+        "fx.animations.appearance",
+        "fx.animations.rail",
+        "fx.animations.launcher",
+        "fx.animations.switcher",
+        "fx.animations.overview",
         "fx.borders",
         "fx.borders.stage_overrides",
         // Tables lues par RailSettings (Sources/RoadieDaemon/RailSettings.swift).
@@ -1816,7 +1840,6 @@ private enum ConfigValidationRules {
         "sticky",
         "signals",
         "signals.hooks",
-        "fx.animations",
         "fx.opacity",
         "fx.opacity.stage_hide"
     ]
@@ -1828,7 +1851,16 @@ private enum ConfigValidationRules {
         let gapKeys: Set<String> = ["gaps_outer", "gaps_outer_top", "gaps_outer_right", "gaps_outer_bottom", "gaps_outer_left"]
         return [
             "": [],
-            "fx": [],
+            "fx": ["drop_preview"],
+            "fx.animations": ["enabled", "profile", "curve", "duration_ms", "intensity", "stiffness", "damping", "move", "stage", "appearance", "rail", "launcher", "switcher", "overview"],
+            "fx.animations.move": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
+            "fx.animations.stage": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
+            "fx.animations.appearance": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
+            "fx.animations.rail": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
+            "fx.animations.launcher": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
+            "fx.animations.switcher": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
+            "fx.animations.overview": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
+
             "interface": ["settings_text_font_size", "settings_help_font_size", "settings_title_font_size", "language"],
             "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "live_drag_preview", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter"]),
             "tiling.display_overrides": gapKeys.union(["display_id", "display_name"]),

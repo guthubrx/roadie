@@ -338,3 +338,52 @@ roadie rules explain --app Firefox --title "Roadie Documentation" --stage docs -
 ```
 
 Use `explain` before adding a rule to your local production setup. It is a dry run: Roadie shows which rule would match and which actions would be applied.
+
+## Effects and drag destination
+
+**Settings > Effects** controls animations and the drag destination.
+“Outline” keeps the destination rectangle. “Real preview” temporarily moves the
+actual window into that destination. Its content lays out at the new size.
+The pointer remains free to choose another target. Escape restores the original
+frames. Live neighbors in Tiling remains an independent choice.
+
+Real preview needs a recognized window title and an available gesture capture.
+Buttons, tabs and content retain their normal gestures. If Roadie cannot own
+that gesture, it keeps the outline. Drops inside rail and overview cards retain
+their thumbnail previews.
+
+Animations are off by default. None, Subtle, Smooth and Expressive provide shared
+presets. Each action can override the curve, duration and intensity. Empty
+fields inherit shared values, then the profile. Springs use stiffness and
+damping; duration does not set their end. The local settings preview moves no app.
+
+```toml
+[fx]
+drop_preview = "real" # default: "contour", independent of animations
+
+[fx.animations]
+enabled = true
+profile = "subtle" # none, subtle, smooth, expressive
+
+[fx.animations.move]
+curve = "ease_out" # inherit, linear, ease_out, ease_in_out, spring
+duration_ms = 180.0
+intensity = 0.5
+
+[fx.animations.stage]
+enabled = false
+```
+
+Actions: `move`, `stage`, `appearance`, `rail`, `launcher`, `switcher`, `overview`.
+Limits: duration 0–1000 ms, intensity 0–1, stiffness 50–1500, damping 0.3–2.
+Invalid values are rejected before application. Existing rail timing is inherited
+unless a new duration overrides it. macOS Reduce Motion does not change Roadie
+effects. Roadie’s own switch and profiles alone decide, without changing macOS.
+
+App windows use their actual frames. Fades apply to Roadie panels. Roadie does
+not alter third-party window opacity or recreate closed content. No system
+protection change is required. Real layout work uses resources in the target
+app; cost depends on its content. Real preview requests a size only when the
+destination changes.
+
+For a destination on another display, Roadie keeps the outline and leaves the source at its origin: macOS may hide its contents during a captured drag across Spaces. Dropping still works.

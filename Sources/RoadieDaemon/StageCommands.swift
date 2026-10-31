@@ -1031,7 +1031,7 @@ public struct StageCommandService {
         ))
         return StageCommandResult.changedOrFailed(
             "stage place: window=\(windowID.rawValue) commands=\(applyPlan.commands.count + sourceRelayout.plan.commands.count + isolated) applied=\(result.applied + sourceRelayout.result.applied + isolated) clamped=\(result.clamped + sourceRelayout.result.clamped) failed=\(result.failed + sourceRelayout.result.failed)",
-            changed: result.failed < result.attempted
+            changed: result.deferred > 0 || sourceRelayout.result.deferred > 0 || result.failed < result.attempted
                 || sourceRelayout.result.failed < sourceRelayout.result.attempted
                 || applyPlan.commands.isEmpty
         )
@@ -1108,6 +1108,7 @@ public struct StageCommandService {
                 "treeMutation": String(treeMutation != nil),
                 "commands": String(plan.commands.count),
                 "applied": String(result.applied),
+                "deferred": String(result.deferred),
                 "clamped": String(result.clamped),
                 "failed": String(result.failed)
             ]

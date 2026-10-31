@@ -1,0 +1,24 @@
+[0/1] Planning build
+Building for debugging...
+[0/7] Write sources
+[1/7] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Emitting module RoadieDaemonTests
+[4/5] Compiling RoadieDaemonTests Spec144EffectsTests.swift
+[4/6] Write Objects.LinkFileList
+[5/6] Linking roadiePackageTests
+Build complete! (15.75s)
+Test Suite 'Selected tests' started at 2026-10-31 12:56:58.555.
+Test Suite 'roadiePackageTests.xctest' started at 2026-10-31 12:56:58.564.
+Test Suite 'roadiePackageTests.xctest' passed at 2026-10-31 12:56:58.564.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-31 12:56:58.564.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.008) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Suite Spec144AnimatorTests started.
+􀟈  Test turningEffectsOffFinishesActiveTargetsWithoutRetiling() started.
+􀢄  Test turningEffectsOffFinishesActiveTargetsWithoutRetiling() recorded an issue at Spec144EffectsTests.swift:199:9: Expectation failed: (shown == 100 && EffectAnimator.shared.activeCount == 0 → false) && (!EffectAnimator.shared.hasTimer → <not evaluated>)
+􀢄  Test turningEffectsOffFinishesActiveTargetsWithoutRetiling() failed after 0.017 seconds with 1 issue.
+􀢄  Suite Spec144AnimatorTests failed after 0.017 seconds with 1 issue.
+􀢄  Test run with 1 test in 1 suite failed after 0.017 seconds with 1 issue.

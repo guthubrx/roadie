@@ -23,9 +23,9 @@ struct SettingsCatalogTests {
         // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
         // terminal, signets, tri, apprentissage, confirmation). Session 108 : douze touches de la barre.
         // Session 110 : Calculette ouverte par un calcul. Session 111 : ordre appris des verbes. Session 113 : mots-clés in et tags. Session 114 : historique web. Session 115 : réglages dans la barre et touche ⌘,. Session 119 : cinq réglages simples de la barre. Session 121 : icône du sélecteur et sa taille. Session 127 : langue de l'interface. Session 131 : trois modificateurs de Retour et style des fenêtres de workflow. Session 132 : fenêtres flottantes hors du rail. Session 133 : raccourci de la recherche à l'écran. Session 134 : fautes de frappe rattrapées, éléments à l'écran dans le lanceur. Session 136 : trois réglages des zones (le raccourci de la 135 retiré).
-        #expect(simple.count == 258)
+        #expect(simple.count == 308)
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 178)
+        #expect(simple.count - railSimple.count == 228)
     }
 
     @Test
@@ -141,7 +141,7 @@ struct SettingsCatalogTests {
                 #expect(isHexColor(value), "couleur invalide : \(id)")
             case (.double, .unset):
                 // Marges facultatives : absentes du fichier par défaut.
-                #expect(id.hasPrefix("tiling.gaps_outer_"), "défaut absent inattendu : \(id)")
+                #expect(id.hasPrefix("tiling.gaps_outer_") || id.hasPrefix("animations."), "défaut absent inattendu : \(id)")
             default:
                 Issue.record("type et défaut incohérents : \(id)")
             }
@@ -168,7 +168,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 258)
+        #expect(expected.count == 308)
     }
 
     // MARK: - Défauts
@@ -248,6 +248,18 @@ struct SettingsCatalogTests {
             case .double(let range?): bounds = (range.lowerBound, range.upperBound)
             default: continue
             }
+            if descriptor.category == .effets {
+                // Les effets refusent les valeurs invalides au décodage, avant application.
+                for value in [bounds.low - 1, bounds.high + 1] {
+                    #expect(throws: (any Error).self) { try loadWithValue(descriptor, value, path: path) }
+                }
+                for value in [bounds.low, bounds.high] {
+                    let outcome = try loadWithValue(descriptor, value, path: path)
+                    #expect(outcome.loaded == value && !outcome.errorOnKey)
+                }
+                checked += 1
+                continue
+            }
             // La durée par défaut est bornée par la durée maximale : sa borne haute n'est pas fixe.
             let checkHigh = descriptor.id != "target_record.default_duration_seconds"
             let sides: [(value: Double, expected: Double, side: String)] =
@@ -269,7 +281,7 @@ struct SettingsCatalogTests {
         // 37 réglages hors rail ont une plage (session 121 : taille de l'icône du sélecteur ; session 096 : deux nombres de lignes de la barre vide ;
         // session 101 : nombre de résultats montrés ; session 114 : jours d'historique web ; session 134 : fautes de frappe ;
         // session 136 : trois réglages des zones).
-        #expect(checked == 41)
+        #expect(checked == 73)
     }
 
     // MARK: - Recherche

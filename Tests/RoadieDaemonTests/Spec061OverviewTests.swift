@@ -255,7 +255,7 @@ struct Spec061OverviewGeometryTests {
 @Suite("Spec061 Rendu natif", .serialized)
 @MainActor
 struct Spec061OverviewNativeTests {
-    @Test func escapeClosesTheOverlayWithoutCreatingASpace() throws {
+    @Test func escapeClosesTheOverlayWithoutCreatingASpace() async throws {
         let panel = OverviewPanel(events: EventLog(path: NSTemporaryDirectory() + "roadie-061-escape-events"))
         panel.setFrame(CGRect(x: -10000, y: -10000, width: 1440, height: 900), display: false)
         panel.orderFront(nil)
@@ -267,6 +267,9 @@ struct Spec061OverviewNativeTests {
             windowNumber: panel.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
         panel.sendEvent(event)
         #expect(closed)
+        #expect(!panel.isKeyWindow)
+        // Le clavier est rendu immédiatement ; la surface peut finir un fondu borné.
+        for _ in 0..<75 where panel.isVisible { try await Task.sleep(for: .milliseconds(20)) }
         #expect(!panel.isVisible)
         #expect(!panel.styleMask.contains(.fullScreen))
         #expect(panel.level == .statusBar)

@@ -12,6 +12,7 @@ final class LiveDropPreview {
         var windows: [WindowID: WindowSnapshot]
         var touched: Set<WindowID> = []
         var scopes: Set<StageScope> = []
+        let sourceGestureOwned: Bool
         var source: WindowID?
         var dispatcher: InteractiveFrameDispatcher!
         var ending = false
@@ -20,7 +21,8 @@ final class LiveDropPreview {
         let stages: [StageScope: PersistentStage]
         var lastPlacements: [WindowID: Rect] = [:]
         var lastCandidate: DropPreviewCandidate?
-        init(context: DropPreviewContext, state: PersistentStageState, generations: PlacementGeneration, config: TilingConfig) {
+        init(context: DropPreviewContext, state: PersistentStageState, generations: PlacementGeneration, config: TilingConfig, sourceGestureOwned: Bool) {
+            self.sourceGestureOwned = sourceGestureOwned
             self.config = config
             stages = LiveDropPreview.stageIndex(state)
             permit = InteractiveWritePermit(generations: generations)
@@ -38,19 +40,27 @@ final class LiveDropPreview {
     private var timer: Timer?
     private var superseded = false
     var isActive: Bool { session != nil }
+    var showsRealSource: Bool {
+        guard let current = session, current.sourceGestureOwned,
+              service.effectiveConfig.fx.dropPreview == "real", let candidate = current.lastCandidate,
+              let original = current.originals[candidate.sourceWindowID]?.scope else { return false }
+        // Une capture de glisser AppKit peut masquer la surface sur un autre écran/Space.
+        // Ne jamais faire disparaître la source : le contour conserve alors la destination.
+        return original.displayID == candidate.displayID
+    }
 
     init(service: SnapshotService, generations: PlacementGeneration = .shared,
          activity: WindowDragActivity = .shared) {
         self.service = service; self.generations = generations; self.activity = activity
     }
 
-    func begin(_ context: DropPreviewContext) {
+    func begin(_ context: DropPreviewContext, sourceGestureOwned: Bool = false) {
         invalidate()
         superseded = false
         // L'acquisition du contexte peut réconcilier une destruction ancienne.
         // La visée garde l'arbre d'avant, la garde compare l'état APRES acquisition.
         let current = Session(context: context, state: service.effectiveStageStore.state(),
-                              generations: generations, config: service.effectiveConfig.tiling)
+                              generations: generations, config: service.effectiveConfig.tiling, sourceGestureOwned: sourceGestureOwned)
         session = current
         current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak current] result in
             guard let current else { return }
@@ -71,8 +81,13 @@ final class LiveDropPreview {
     /// O(w + s) par cible : commandes indexées, un seul dernier lot par PID.
     func update(_ candidate: DropPreviewCandidate?) {
         guard let current = session, !current.ending else { return }
-        if !service.effectiveConfig.tiling.liveDragPreview && current.touched.isEmpty {
-            current.lastCandidate = candidate
+        if let candidate, current.sourceGestureOwned, service.effectiveConfig.fx.dropPreview == "real",
+           current.originals[candidate.sourceWindowID]?.scope?.displayID != candidate.displayID,
+           current.lastCandidate?.displayID != candidate.displayID {
+            EventLog().append(RoadieEvent(type: "drag.real_fallback", details: ["reason": "other_display"]))
+        }
+        current.lastCandidate = candidate
+        if !service.effectiveConfig.tiling.liveDragPreview && !showsRealSource && current.touched.isEmpty {
             return
         }
         if let candidate {
@@ -83,8 +98,9 @@ final class LiveDropPreview {
             current.scopes.formUnion([sourceScope, candidate.scope])
         }
         guard valid(current) else { invalidate(); return }
-        current.lastCandidate = candidate
-        let placements = service.effectiveConfig.tiling.liveDragPreview ? candidate?.placements ?? [:] : [:]
+        var placements = service.effectiveConfig.tiling.liveDragPreview ? candidate?.placements ?? [:] : [:]
+        if showsRealSource, let candidate { placements[candidate.sourceWindowID] = candidate.placements[candidate.sourceWindowID] ?? Rect(candidate.frame) }
+        else if let source = current.source { placements.removeValue(forKey: source) }
         guard placements != current.lastPlacements else { return }
         current.lastPlacements = placements
         submit(placements, current: current)
@@ -133,7 +149,7 @@ final class LiveDropPreview {
 
     private func submit(_ placements: [WindowID: Rect], current: Session) {
         let eligible = placements.filter { id, _ in
-            id != current.source && current.originals[id] != nil
+            (id != current.source || current.sourceGestureOwned) && current.originals[id] != nil
         }
         current.touched.formUnion(eligible.keys)
         let commands = current.touched.compactMap { id -> ApplyCommand? in

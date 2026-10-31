@@ -748,7 +748,7 @@ public final class LayoutMaintainer {
                 generation: generation,
                 startedAt: startedAt
             )
-            let successfulTargets = Dictionary(application.result.items.filter { $0.status != .failed }
+            let successfulTargets = Dictionary(application.result.items.filter { $0.status != .failed && $0.status != .deferred }
                 .map { ($0.windowID, $0.requested.cgRect) }, uniquingKeysWith: { _, last in last })
             if !successfulTargets.isEmpty {
                 armStabilityCheck(targets: successfulTargets, startedAt: tickNow, writeEnd: writeEnd)
@@ -1513,7 +1513,7 @@ public final class LayoutMaintainer {
     /// l'écrivain ne l'a pas fait lui-même (doubles de test, génération non transmise). O(k).
     private func recordWrites(_ result: ApplyResult, before: [UInt32: WrittenFrame?], generation: UInt64) {
         let date = now()
-        for item in result.items {
+        for item in result.items where item.status != .deferred {
             let id = item.windowID.rawValue
             let used = writeCounts[id].flatMap { $0.generation == generation ? $0.count : nil } ?? 0
             writeCounts[id] = (generation, used + 1)
@@ -3151,6 +3151,7 @@ public final class LayoutMaintainer {
         }
         for item in result.items {
             switch item.status {
+            case .deferred: continue
             case .clamped:
                 if let actual = item.actual {
                     let id = item.windowID.rawValue
@@ -3213,6 +3214,7 @@ public final class LayoutMaintainer {
     private func appendItemEvents(_ result: ApplyResult, generation: UInt64) {
         for item in result.items {
             switch item.status {
+            case .deferred: continue
             case .clamped:
                 events.append(RoadieEvent(type: "layout_clamped", details: [
                     "windowID": String(item.windowID.rawValue),
@@ -3746,7 +3748,7 @@ public final class LayoutMaintainer {
     private func framesAfterApplying(_ result: ApplyResult, fallback: [UInt32: Rect]) -> [UInt32: Rect] {
         var frames = fallback
         for item in result.items {
-            guard item.status != .failed else { continue }
+            guard item.status != .failed && item.status != .deferred else { continue }
             frames[item.windowID.rawValue] = item.actual ?? item.requested
         }
         return frames
@@ -4321,7 +4323,7 @@ private extension ApplyResult {
     static func filtering(_ result: ApplyResult, _ isIncluded: (ApplyResultItem) -> Bool) -> ApplyResult {
         let items = result.items.filter(isIncluded)
         return ApplyResult(
-            attempted: items.count,
+            attempted: items.filter { $0.status != .deferred }.count,
             applied: items.filter { $0.status == .applied }.count,
             clamped: items.filter { $0.status == .clamped }.count,
             failed: items.filter { $0.status == .failed }.count,

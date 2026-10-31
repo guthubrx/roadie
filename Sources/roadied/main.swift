@@ -302,6 +302,7 @@ func installDisplayChangeObserver(displaySettleSeconds: Double, onHealed: @escap
     ) { _ in
         Task { @MainActor in
             nativeResizeRuntime?.cancel(reason: "display_changed")
+            FrameTransitionRuntime.shared.cancel()
             displaySettlingUntil = Date().addingTimeInterval(displaySettleSeconds)
             pendingDisplayHeal?.cancel()
             pendingDisplayHeal = Task { @MainActor in
@@ -332,6 +333,7 @@ func installPowerObservers(reconcile: @escaping @MainActor () -> Void) {
                 pendingWakeReconcile?.cancel()
                 pendingWakeReconcile = nil
                 nativeResizeRuntime?.cancel(reason: "sleep")
+                FrameTransitionRuntime.shared.cancel()
                 tickSuspendedUntil = .distantFuture
             }
         })
@@ -369,6 +371,7 @@ func installWorkspaceObservers(maintainer: LayoutMaintainer, scheduler: TickSche
     workspaceObservers.append(center.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
         MainActor.assumeIsolated {
             nativeResizeRuntime?.cancel(reason: "space_changed")
+            FrameTransitionRuntime.shared.cancel()
             spaceDidChange()
             scheduler.request(cause: "ax:activeSpaceDidChange")
             events.append(RoadieEvent(type: "space_did_change"))
@@ -395,12 +398,13 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     ShutdownRegistry.register { WindowSwitcherRuntimeBridge.setFocusPublishing(false) }
     UserInputActivity.shared.startMonitoring()
 
+    FrameTransitionRuntime.shared.start()
     let maintainer = LayoutMaintainer()
     let nativeResize = NativeResizeRuntime(service: service, minimums: { scope, snapshot in
         maintainer.dividerMinimums(for: scope, in: snapshot)
     })
     nativeResizeRuntime = nativeResize
-    ShutdownRegistry.register { nativeResize.cancel(reason: "shutdown") }
+    ShutdownRegistry.register { nativeResize.cancel(reason: "shutdown"); FrameTransitionRuntime.shared.stop() }
     // Les poignées appartiennent au processus écrivain, y compris en mode modulaire.
     let dividers = DividerResizeRuntime(service: service, minimums: { scope, snapshot in
         maintainer.dividerMinimums(for: scope, in: snapshot)
@@ -433,6 +437,7 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
             let now = Date()
             return UserInputActivity.shared.blocksLayout(mouseButtonsPressed: NSEvent.pressedMouseButtons != 0)
                 || nativeResize.isHoldingLayout
+                || FrameTransitionRuntime.shared.isHoldingLayout
                 || now < displaySettlingUntil || now < tickSuspendedUntil
         },
         onObservationChange: { service.noteObservationChange() }
@@ -496,6 +501,7 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
             let target = FocusFollowsMousePicker.gestureTargetWindow(at: point, in: snapshot)
             return target.map { ($0.window.id.rawValue, $0.window.frame.cgRect) }
         },
+        onPress: { FrameTransitionRuntime.shared.cancel() },
         onDragStart: { gesture in
             if let snapshot = service.cachedGestureSnapshot(), nativeResize.begin(gesture, snapshot: snapshot) {
                 // Le suivi natif n'a pas besoin d'un inventaire AX complet au premier mouvement.

@@ -49,7 +49,7 @@ final class OverviewPanel: NSPanel, NSWindowDelegate {
         appliedBlur = nil
         syncControls()
         layoutContent()
-        orderFrontRegardless()
+        EffectAnimator.shared.visibility(self, visible: true, action: .overview)
         makeKey()
         makeFirstResponder(canvas)
         if escapeMonitor == nil {
@@ -95,7 +95,8 @@ final class OverviewPanel: NSPanel, NSWindowDelegate {
 
     /// Retire l’overlay et son écoute clavier avant une activation ou une fermeture.
     func dismiss(completion: () -> Void = {}) {
-        orderOut(nil)
+        canvas.stopAnimations()
+        EffectAnimator.shared.visibility(self, visible: false, action: .overview) { [weak self] in self?.orderOut(nil) }
         if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }; escapeMonitor = nil
         completion()
     }
@@ -150,12 +151,10 @@ final class OverviewCanvas: NSView {
     private var preview: Preview?
     /// Disposition affichée une fois l’animation terminée : celle que le pointeur vise.
     var displayedPlan: OverviewLayout { preview?.plan ?? plan }
-    /// Glissement doux de 0,15 s des cadres affichés vers ceux de l’aperçu (ou du plan au retour).
+    /// Cadres courants du mouvement commun, réglé par la politique de la vue d’ensemble.
     private enum FrameKey: Hashable { case display(DisplayID), desktop(OverviewDesktopID), card(WindowID) }
-    private var animationFrom: [FrameKey: CGRect] = [:]
-    private var animationStart: TimeInterval = 0
-    private var animationTimer: Timer?
-    private static let animationDuration: TimeInterval = 0.15
+    private var animationFrames: [FrameKey: CGRect] = [:]
+    private var animationIDs: Set<String> = []
     private var tracking: NSTrackingArea?
     private var hover = OverviewHoverState()
     private var hoverWork: DispatchWorkItem?
@@ -473,35 +472,42 @@ final class OverviewCanvas: NSView {
     }
 
     private func startAnimation(from frames: [FrameKey: CGRect]) {
-        animationFrom = frames
-        animationStart = ProcessInfo.processInfo.systemUptime
-        animationTimer?.invalidate()
-        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.needsDisplay = true
-                if self.animationProgress >= 1 { self.animationTimer?.invalidate(); self.animationTimer = nil }
+        let target = preview?.plan ?? plan
+        var targets: [FrameKey: CGRect] = [:]
+        for entry in target.displays { targets[.display(entry.display.id)] = entry.frame }
+        for entry in target.desktops { targets[.desktop(entry.desktop.id)] = entry.frame }
+        for entry in target.cards { targets[.card(entry.entry.id)] = entry.frame }
+        let policy = EffectAnimator.policy(.overview)
+        var currentIDs: Set<String> = []
+        for (key, to) in targets {
+            let id = "overview-\(ObjectIdentifier(self))-\(key)"
+            currentIDs.insert(id)
+            let from = frames[key] ?? to
+            EffectAnimator.shared.animate(id: id, from: [from.minX, from.minY, from.width, from.height],
+                to: [to.minX, to.minY, to.width, to.height], policy: policy) { [weak self] values in
+                self?.animationFrames[key] = CGRect(x: values[0], y: values[1], width: max(1, values[2]), height: max(1, values[3]))
+                self?.needsDisplay = true
+            } completion: { [weak self] in
+                self?.animationFrames.removeValue(forKey: key)
+                self?.animationIDs.remove(id)
+                self?.needsDisplay = true
             }
         }
+        for id in animationIDs.subtracting(currentIDs) { EffectAnimator.shared.cancel(id) }
+        animationIDs = policy.enabled ? currentIDs : []
+        animationFrames = animationFrames.filter { targets[$0.key] != nil }
         needsDisplay = true
     }
 
-    private var animationProgress: CGFloat {
-        CGFloat(min(1, (ProcessInfo.processInfo.systemUptime - animationStart) / Self.animationDuration))
+    func stopAnimations() {
+        for id in animationIDs { EffectAnimator.shared.cancel(id) }
+        animationIDs.removeAll(); animationFrames.removeAll()
     }
 
-    /// Disposition affichée : celle visée (aperçu ou plan), chaque cadre glissant depuis sa position
-    /// précédente selon une courbe qui ralentit à l’arrivée. Un élément nouveau apparaît en place. O(w + b).
+    /// O(w + b), positions courantes du moteur commun, visée conservée sur le plan final.
     private func shownPlan() -> OverviewLayout {
         var target = preview?.plan ?? plan
-        let t = animationProgress
-        guard t < 1, !animationFrom.isEmpty else { return target }
-        let eased = 1 - pow(1 - t, 3)
-        func mix(_ key: FrameKey, _ to: CGRect) -> CGRect {
-            guard let from = animationFrom[key] else { return to }
-            return CGRect(x: from.minX + (to.minX - from.minX) * eased, y: from.minY + (to.minY - from.minY) * eased,
-                          width: from.width + (to.width - from.width) * eased, height: from.height + (to.height - from.height) * eased)
-        }
+        func mix(_ key: FrameKey, _ to: CGRect) -> CGRect { animationFrames[key] ?? to }
         target.displays = target.displays.map { .init(display: $0.display, frame: mix(.display($0.display.id), $0.frame)) }
         target.desktops = target.desktops.map { .init(desktop: $0.desktop, frame: mix(.desktop($0.desktop.id), $0.frame)) }
         target.cards = target.cards.map { .init(entry: $0.entry, stageName: $0.stageName, frame: mix(.card($0.entry.id), $0.frame)) }
