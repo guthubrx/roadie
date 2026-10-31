@@ -1,6 +1,6 @@
 # Tâches — Session 144
 
-Statut : In Progress. Exécution séquentielle ; aucun parallélisme de fichiers.
+Statut : Implemented — pipeline livré. Exécution séquentielle ; aucun parallélisme de fichiers.
 
 ## Cadrage et fondations
 - [x] T001 Conserver le cadrage, résoudre le prototype de propriété souris et écrire les artefacts de conception dans specs/144-effets-reglables/. Vérifié : frame AX 450×800, reflow visible, mouvements et mouseUp neutralisés ; limites conservées.
@@ -36,9 +36,9 @@ Statut : In Progress. Exécution séquentielle ; aucun parallélisme de fichiers
 - [x] T023 Rejouer la matrice native Finder/navigateur/éditeur/taille imposée, titre/rail, deux écrans, contenu statique/vidéo, annulation et réglages ; mesurer off/on Roadie+WindowServer+app (CPU/RSS/latence, GPU si outil accessible). Résultat : mesures brutes et limites dans specs/144-effets-reglables/validation.md ; aucune estimation inventée.
 - [x] T024 Produire et vérifier preuves-corrections/2026-10-31-144-effets/preuves.html selon compétence ; conserver originaux hors Git. Résultat : étapes/cliqués réellement observés, images vérifiées, limites visibles.
 - [x] T025 Exécuter l’audit V15 du code final et lire grade.json. Résultat : decision pass et release_blocked=false ; sinon livraison bloquée nommée.
-- [ ] T026 Figer le manifeste, vérifier gates puis committer/intégrer les socles 142/143 et la feature144 sur la cible autorisée. Résultat : SHA, ascendance, tests d’intégration et travail préexistant préservés.
-- [ ] T027 Pousser sans force et comparer git ls-remote à la cible locale. Construire/signer/installer avec procédure existante, activer et vérifier le code chargé (UUID/PID) et santé 5/5. Résultat : Git, disque et runtime prouvés distinctement ; aucune release implicite.
-- [ ] T028 Nettoyer uniquement les ressources éligibles du scope après sauvegarde des preuves ; conserver le worktree attaché si nécessaire. Compléter reçu et état SpecKit. Résultat : ressources retirées/conservées et raisons, aucun fichier préexistant perdu.
+- [x] T026 Figer le manifeste, vérifier gates puis committer/intégrer les socles 142/143 et la feature144 sur la cible autorisée. Résultat : SHA, ascendance, tests d’intégration et travail préexistant préservés.
+- [x] T027 Pousser sans force et comparer git ls-remote à la cible locale. Construire/signer/installer avec procédure existante, activer et vérifier le code chargé (UUID/PID) et santé 5/5. Résultat : Git, disque et runtime prouvés distinctement ; aucune release implicite.
+- [x] T028 Nettoyer uniquement les ressources éligibles du scope après sauvegarde des preuves ; conserver le worktree attaché si nécessaire. Compléter reçu et état SpecKit. Résultat : ressources retirées/conservées et raisons, aucun fichier préexistant perdu.
 
 ## Convergence
 - [x] T029 Passage 1 : arrêter la transition AX dès un nouveau clic, avant la qualification du prochain geste. Écart FR-005/US3 : FrameTransitionRuntime.pulse valide la génération, mais aucun branchement mouseDown ne révoque son permis. Réutiliser UserInputActivity.observeGestures avec un callback de pression, le relier dans main.swift et tester le clic pendant une transition. Résultat : aucune ancienne cible après clic, sans consommation de takeGesture.
@@ -49,4 +49,4 @@ Statut : In Progress. Exécution séquentielle ; aucun parallélisme de fichiers
 - [x] T034 Essai utilisateur : contour vert encore présent avec drop_preview=real sur le même écran. Relever la qualification et la décision du propriétaire du geste, sans I/O dans le callback, reproduire sur l’application concernée et corriger la cause. Préserver les profils et courbes choisis par l’utilisateur pendant la validation.
 - [x] T035 Isoler la frontière matérielle dans les tests du runtime : lecture native des boutons conservée par défaut en production, état injecté dans les tests. Cause observée : nil de schedule pendant les glissers de l’utilisateur, malgré génération et politique correctes. Tester aussi le refus d’animation pendant un bouton enfoncé.
 
-Clôture technique T034 : causes observées puis corrigées ; huit glissers Chrome natifs réussis avec annulation. Retour général utilisateur après dernier chargement non reçu. Converge final : troisième passage, aucune tâche ajoutée.
+Clôture technique T034 : causes observées puis corrigées ; huit glissers Chrome natifs réussis avec annulation. Stabilité Firefox confirmée par l’utilisateur après chargement, y compris bas du titre et glisser rapide. Repli entre écrans également observé et expliqué. Converge final : troisième passage, aucune tâche ajoutée.

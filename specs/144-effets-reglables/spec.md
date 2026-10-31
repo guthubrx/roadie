@@ -1,6 +1,6 @@
 # Session 144 — Effets réglables et aperçu réel de destination
 
-Date : 2026-10-31. Statut : In Progress. Branche : session-144-effets-reglables.
+Date : 2026-10-31. Statut : Implemented — livré le 2026-10-31. Branche : session-144-effets-reglables.
 Dépendances : 142 (writer interactif), 143 (voisines pendant le glisser), 061/071 (vue d’ensemble), 078 (aperçu réversible), 023/057 (paramètres).
 
 ## Demande initiale et cadrage conservé

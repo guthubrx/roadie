@@ -1,6 +1,6 @@
 # Validation — Session 144
 
-État : code en validation finale ; Git et activation intégrée restent à prouver. Réglages retenus au moment des mesures : animations Roadie activées, profil Sobre hérité, destination réelle, voisines activées. L’utilisateur a ensuite choisi smooth, ease_out et move.ease_in_out ; ces choix sont conservés. macOS reduceMotion=1 inchangé ; aucune dépendance à ce réglage dans la politique Roadie. Les surcharges de durée utilisées pendant les démonstrations ont été retirées.
+État : livré sur main, poussé, installé et activé. Réglages retenus au moment des mesures : animations Roadie activées, profil Sobre hérité, destination réelle, voisines activées. L’utilisateur a ensuite choisi smooth, ease_out et move.ease_in_out ; ces choix sont conservés. macOS reduceMotion=1 inchangé ; aucune dépendance à ce réglage dans la politique Roadie. Les surcharges de durée utilisées pendant les démonstrations ont été retirées.
 
 ## Matrice native
 
@@ -51,20 +51,24 @@ GPU : `ioreg -r -c AGXAccelerator -a`, champs Device/Renderer/Tiler Utilization.
 
 ## Tests et limites
 
-Tests ciblés finaux : 34 tests dans 5 suites, succès. Suite complète et 28 tests de scripts à relancer dans le runner V15 sur le code figé. La suite est exécutée séquentiellement : les tests UI MainActor en concurrence affament des contrôles à échéance. Un ancien cache Swift incompatible avec le layout d’une structure publique a été nettoyé ; le crash a été diagnostiqué par LLDB, puis a disparu après reconstruction complète.
+Tests ciblés :42 tests dans5 suites réussis. Suite complète2416 tests/360 suites et28 scripts réussis dans le runner V15 sur le code figé. La suite est exécutée séquentiellement : les tests UI MainActor en concurrence affament des contrôles à échéance. Un ancien cache Swift incompatible avec le layout d’une structure publique a été nettoyé ; le crash a été diagnostiqué par LLDB, puis a disparu après reconstruction complète.
 
 Revues indépendantes du plan et du code : admission Bridget refusée, aucune tâche admise, aucun verdict favorable. Le refus et ses limites sont conservés dans les deux rapports de contre-revue. L’audit local reste non indépendant.
 
-Données natives, originaux, profils de test et journaux : /Users/moi/.local/state/roadies/validation/2026-10-31-144/. Les résultats des premiers essais restent valides pour les mécanismes inchangés ; les modifications ultérieures portent sur les interruptions, le repli inter-écrans et l’héritage des surcharges de fondu. Un dernier chargement et contrôle de santé est requis après intégration.
+Données natives, originaux, profils de test et journaux : /Users/moi/.local/state/roadies/validation/2026-10-31-144/. Les résultats des premiers essais restent valides pour les mécanismes inchangés ; les modifications ultérieures portent sur les interruptions, le repli inter-écrans et l’héritage des surcharges de fondu. Le dernier chargement et le contrôle de santé ont été effectués après intégration.
 
 ## Compléments issus de l’usage pendant la validation
 
 L’utilisateur a modifié ses profils pendant les essais : smooth, courbe commune ease_out et surcharge move ease_in_out. Ces choix sont conservés. Les captures précédentes montrent l’état au moment de leur prise, pas un profil imposé.
-Le glisser réel est encore en qualification sur les applications de l’utilisateur. T3 expose sa bande vide comme un groupe racine sans action, et non comme AXWindow ; cette variante a été observée puis ajoutée. Firefox expose AXWindow : le délai de qualification est instrumenté pour comprendre l’alternance avec le contour. Aucun résultat de test sur les fenêtres fictives n’est utilisé comme preuve que ce parcours utilisateur est déjà réglé.
+Le glisser réel a été qualifié sur les cas observés, puis confirmé stable sur Firefox par l’utilisateur. T3 expose sa bande vide comme un groupe racine sans action, et non comme AXWindow ; cette variante a été observée puis ajoutée. Firefox expose AXWindow : bande et délai de qualification corrigés. La stabilité sur un même écran est maintenant confirmée par l’utilisateur, indépendamment des fenêtres fictives.
 La suite ciblée a aussi subi les boutons physiques de l’utilisateur, que schedule observe pour protéger ses gestes. La frontière matérielle est maintenant injectée dans les tests ; la lecture NSEvent reste la valeur native par défaut en production.
 
 ## Dernière correction du parcours utilisateur
 
-Bande de titre44 commune au détecteur et à la qualification, publication AX hors MainActor dèsCGdown, revalidation identité/point/cadre, AXGroup racine Electron et bande vide Chrome sans action/enfant. Version chargée PID53939, santé5/5. Chrome normal fictif469459, application PID71200 dédiée :8/8 glissers réels et stables,8/8 annulations complètes, offsets12/26/33/39. Aucun délai volontaire après mouseDown ; transportBTT inclus. Stage de test supprimée et stage interne9 rétablie ; processus propres arrêtés. Aucune confirmation générale utilisateur après cette installation, donc aucune garantie sur toutes les applications. Une qualification indisponible/tardive garde le natif et le contour ; aucune capture tardive du geste.
+Bande de titre44 commune au détecteur et à la qualification, publication AX hors MainActor dèsCGdown, revalidation identité/point/cadre, AXGroup racine Electron et bande vide Chrome sans action/enfant. Version chargée PID53939, santé5/5. Chrome normal fictif469459, application PID71200 dédiée :8/8 glissers réels et stables,8/8 annulations complètes, offsets12/26/33/39. Aucun délai volontaire après mouseDown ; transportBTT inclus. Stage de test supprimée et stage interne9 rétablie ; processus propres arrêtés. Stabilité Firefox confirmée par l’utilisateur après cette installation, y compris bas du titre et glisser rapide. L’utilisateur confirme aussi le repli contour entre écrans ; aucune garantie sur toutes les applications n’est déduite de ce seul essai. Une qualification indisponible/tardive garde le natif et le contour ; aucune capture tardive du geste.
 
 Tests finaux :2416/360 suites PASS, puis même total dans runner V15 ; scripts28 PASS. Audit révision1 PASS/release_blocked=false et validation du recalcul réussie. Semgrep29 fichiersSwift sans candidat, Gitleaks fichiers13,27Mo sans candidat sur copie SHA identique hors chemin ignoré, historique borné aprèsv0.4.0, OSV verrouTOMLKit0.6.0 sans vulnérabilité signalée. Les erreurs de la révision0 sont conservées. Qualité par axe63–75/100 sur les critères examinés ; la note indicative de défautsA ne représente pas une qualité parfaite. Rapport détaillé dans le dossier d’audit.
+
+## Activation intégrée
+
+Code fe63993caa507b9a9e8f96b824a344850d485b4d intégré à main par avance rapide, socles142/143 inclus ; push origin/main vérifié. Build Release depuis le checkout main :199,22s pour roadied et2,11s pour roadie. UUID compilé, installé et chargé :76B3E44F-DB41-3DF5-BECE-7849353D4880, PID30412. Certificat78a75e8032f190a20072eb91cc2919aac344ef78 conservé, codesign strict réussi, santé5/5. Configuration SHA identique avant/après et28 affectations identiques. Reçu détaillé : livraison.md.

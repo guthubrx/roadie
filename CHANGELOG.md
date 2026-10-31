@@ -5,6 +5,13 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Effets réglables dans Paramètres > Effets : profils, courbes, durée, intensité et
+  ressort, avec aperçu local. Les réglages Roadie sont indépendants de macOS.
+- Destination de glisser au choix : contour ou vraie fenêtre avec remise en page
+  réelle du contenu. Le suivi des voisines reste indépendant. Échap restaure.
+  Qualification des titres Firefox, Electron et Chrome renforcée ; entre écrans,
+  contour de destination conservé pour éviter une surface masquée par macOS.
+
 - Les voisines prennent leur future place pendant un glisser sur le bureau depuis
   un titre ou le rail. Réglage immédiat dans Tuilage : `live_drag_preview`, activé
   par défaut ; désactivé, conserve le fantôme seul. Annuler restaure les voisines.
