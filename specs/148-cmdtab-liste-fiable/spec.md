@@ -1,5 +1,5 @@
 #148 — Cmd+Tab sans fausse liste vide
-Statut : In Progress. Base389b3f59f1510b7ac4ad24d78472b6a50236a645.
+Statut : Implemented. Base389b3f59f1510b7ac4ad24d78472b6a50236a645.
 
 Utilisateur : Cmd+Tab affiche régulièrement « No windows here » malgré des fenêtres visibles ; pattern inconnu. Capture fournie.
 FR1 : distinguer relevé indisponible et liste réellement vide.
