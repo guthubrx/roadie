@@ -193,3 +193,61 @@ extension Spec149ProducerTests {
         #expect(FileManager.default.fileExists(atPath: path))
     }
 }
+
+@Suite @MainActor struct Spec149ReviewTests {
+    @Test func missionControlPausesWithoutScanningAndKeepsItsPauseEvents() async throws {
+        let provider = ReaderProvider042()
+        let service = SnapshotService(provider: provider, config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("mission149")), persistStateChanges: false)
+        var active = true
+        let clock = OSAllocatedUnfairLock(initialState: Date(timeIntervalSince1970: 1000))
+        let path = tempPath("mission-events149")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: path),
+            missionControlActive: { active }, now: { clock.withLock { $0 } })
+        for _ in 0..<5 {
+            #expect(await maintainer.prepareTick())
+            #expect(maintainer.tick().commands == 0)
+        }
+        #expect(provider.state.withLock { $0.scans } == 0)
+        active = false
+        clock.withLock { $0.addTimeInterval(0.1) }
+        #expect(await maintainer.prepareTick())
+        _ = maintainer.tick()
+        #expect(provider.state.withLock { $0.scans } == 0)
+        clock.withLock { $0.addTimeInterval(1) }
+        #expect(await maintainer.prepareTick())
+        _ = maintainer.tick()
+        #expect(provider.state.withLock { $0.scans } == 1)
+        let events = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(events.contains("layout_paused_mission_control"))
+        #expect(events.contains("layout_resumed_mission_control"))
+    }
+
+    @Test func anObservationChangeDuringProducerAcquisitionRequiresAFreshScan() async {
+        let provider = ReaderProvider042()
+        let service = SnapshotService(provider: provider, config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("producer-event149")), persistStateChanges: false)
+        provider.duringScan.withLock { $0 = { service.noteObservationChange() } }
+        #expect(await service.readerSnapshot(producerCycle: 0.5) == nil)
+        provider.duringScan.withLock { $0 = nil }
+        #expect(await service.readerSnapshot(producerCycle: 0.5) != nil)
+        #expect(provider.state.withLock { $0.scans } == 2)
+    }
+}
+
+extension Spec149ReviewTests {
+    @Test func missionControlEndingBetweenPreparationAndTickStillSettlesWithoutAX() async {
+        let provider = ReaderProvider042()
+        let service = SnapshotService(provider: provider, config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("mission-ending149")), persistStateChanges: false)
+        var checks = 0
+        let maintainer = LayoutMaintainer(service: service, missionControlActive: {
+            checks += 1
+            return checks == 1
+        }, now: { Date(timeIntervalSince1970: 1000) })
+        #expect(await maintainer.prepareTick())
+        _ = maintainer.tick()
+        #expect(provider.state.withLock { $0.scans } == 0)
+    }
+}

@@ -256,6 +256,7 @@ public struct SnapshotService: Sendable {
     @MainActor
     func readerSnapshot(followFocus: Bool = true, producerCycle: TimeInterval? = nil,
                         isCurrent: @MainActor () -> Bool = { true }) async -> DaemonSnapshot? {
+        guard !Task.isCancelled, isCurrent() else { return nil }
         func recent() -> DaemonSnapshot? {
             processState.recentSnapshot(followFocus: followFocus, now: clock(),
                                        stateStamp: fileModificationStamp(stageStore.fileURL.path), config: config,
@@ -289,6 +290,7 @@ public struct SnapshotService: Sendable {
         // Un autre lecteur ou le producteur peut avoir publié pendant l'attente.
         if producerCycle == nil, let snapshot = recent() { return snapshot }
         guard processState.publicationRevision == acquisition.revision,
+              producerCycle == nil || processState.observationGeneration == acquisition.observation,
               acquisition.config == config, acquisition.stateStamp == fileModificationStamp(stageStore.fileURL.path),
               acquisition.displays == provider.displays(),
               clock().timeIntervalSince(observation.completedAt) < SnapshotProcessState.sharedSnapshotMaxAge

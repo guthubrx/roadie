@@ -289,6 +289,14 @@ public final class LayoutMaintainer {
     /// ou commande de placement ne quitte le fil principal.
     @MainActor public func prepareTick() async -> Bool {
         preparedTickSnapshot = nil
+        let date = now()
+        if missionControlActive() { missionControlLastSeen = date }
+        if previewHold.isHeld(at: date)
+            || missionControlLastSeen.map({ date.timeIntervalSince($0) < Self.missionControlSettle }) == true {
+            // La passe courte conserve les événements de pause et leur échéance,
+            // sans relever ni réconcilier les cadres transitoires de Mission Control.
+            return true
+        }
         let generation = generations.current
         guard let snapshot = await service.readerSnapshot(followFocus: true, producerCycle: intervalSeconds, isCurrent: {
             generation == self.generations.current && !self.mouseButtonsPressed()
