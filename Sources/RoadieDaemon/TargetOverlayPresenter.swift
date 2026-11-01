@@ -355,6 +355,7 @@ extension KeyEventTapSession {
                 return Unmanaged.passUnretained(event)
             }
             Task { @MainActor in
+                guard !session.finished else { return }
                 session.handle(input)
             }
             return nil

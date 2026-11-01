@@ -7,6 +7,7 @@ Un crash natif SIGTRAP dans swift_unknownObjectRetain provient du callback commu
 
 ## Décision
 Le contexte devient un identifiant monotone opaque. Un registre sous verrou associe cet identifiant à un propriétaire faible. Le callback cherche le propriétaire sans déréférencer le contexte. La fermeture retire d’abord l’identifiant, désactive et invalide le port Mach puis invalide sa source. Les trois types de session réutilisent le même nettoyage.
+Les tâches clavier déjà en file revérifient aussi la fermeture avant de transmettre la touche. Elles ne peuvent donc pas réafficher une grille fermée entre le callback et son traitement.
 
 ## Conséquences
 Un événement tardif retrouve nil et passe sans effet. Un ancien identifiant ne cible pas une nouvelle session, même si le système réutilise une adresse d’objet. Le registre ne prolonge pas la vie d’une session et garde une entrée par capture active. Un petit registre partagé remplace l’emprunt de pointeur et réduit le nettoyage dupliqué. Les tests couvrent retrait, libération du propriétaire et non-réutilisation du contexte. Aucun nouveau droit système.

@@ -15,3 +15,19 @@ Task555234cc-c2b0-43e1-a847-3bb6a4e97ee3, requestb74e6949-7bb6-434a-9e5b-4251c13
 Deux régressions rouges dans Spec149ReviewTests, puis47tests ciblés verts. Une nouvelle ronde relira les deux corrections et ces décisions ; aucun verdict favorable indépendant inventé.
 
 Un troisième test rouge reproduit la fermeture de Mission Control entre la préparation et la passe : une lecture AX partait encore. La préparation mémorise maintenant son observation de Mission Control avant de rendre la main ; la grâce de stabilisation reste donc active même si le second contrôle voit déjà Mission Control fermé. Cette correction accompagne les deux constats confirmés.
+
+
+## Ronde 2 — reprises et échéances
+Source a5be1985f4eb904a7c09ba3437bd45771dbf42f7. Request95f1c082-efc6-4fa6-a6c9-27635070e769, taskd81efce2-1989-4c5f-9a93-e246d6e7641a, child4375aab4-8940-4eed-970c-2f18d19aff81, message308a3792-0f78-48c5-8888-d237df65966b. Résultat11241octets reçu et acquitté. Lecture seule, sans exécution de tests.
+- Les protections Mission Control et observation périmée sont confirmées.
+- Deux constats confirmés en rouge : reprises non espacées après invalidation et échéance perdue. Correction dans970cdab : délai progressif plafonné à2s, demande conservée et journalisation bornée. Les tests contrôlent moins de15lectures en10s et la reprise.
+- Un appel AX déjà lancé reste non interruptible. Son résultat annulé est rejeté. Aucun arrêt forcé du système.
+
+## Ronde 3 — capture clavier et source corrigée
+Source970cdab59ff1d97bb5885942ab8986ab1a767fe5. Request6cbe528a-8ef2-449b-9628-bb2a2696c749, taskfd13cdc0-62d2-4542-a38c-242562c09f7a, child0a4a30e9-25e3-4435-9929-e8246cf13a06, message3cb3b6d8-2f54-4a65-9c76-0856b5125ee0. Résultat6158octets reçu et acquitté. Confirmation bornée sans défaut bloquant, sans shell ni tests exécutés par l’enfant.
+- Reprises bornées, révocation des contextes et nettoyage commun des trois captures confirmés.
+- Une tâche clavier déjà en file peut conserver la session fermée. Constat confirmé à la lecture : la grille appelait show sans vérifier finished. Le callback commun revérifie désormais finished juste avant handle, sur MainActor.
+- L’attente maximale de2s après rejets répétés est documentée dans ADR025. Le daemon continue à observer à fréquence réduite si le contexte reste instable ; cette continuité est voulue.
+- Une entrée faible abandonnée renvoie nil sans retenir son propriétaire. Les sessions normales appellent le nettoyage commun.
+
+Les trois revues emploient des worktrees discovery exacts et propres. Les trois résultats sont acquittés, continuable=false. Les worktrees distants restent conservés avec retention=review_required ; aucun outil de retrait de ces dossiers n’est exposé. Aucune suppression forcée ni nouvelle mission créée pour contourner cette garde.
