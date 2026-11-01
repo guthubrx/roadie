@@ -8,5 +8,8 @@ Demande : corriger tous les problèmes confirmés par les journaux du 1 novembre
 - La barre recherche utilise l’acquisition asynchrone commune, sans transformer une acquisition invalidée en liste vide. Annuler ou ouvrir une autre commande pendant l’attente empêche toute ouverture tardive.
 - Les réglages, gestes, proportions, premiers placements directs et restauration de focus restent conservés.
 
+- Une fermeture de barre ou de grille invalide sa capture système. Un événement tardif ne peut pas accéder à une session détruite, ni cibler la session suivante.
+- Les relevés rejetés ont une fréquence bornée et un diagnostic. Une échéance rejetée reste en attente.
+
 ## Validation
 Tests de régression avec attente simulée et événements concurrents ; suite Swift séquentielle ; parcours natifs et mesures avant/après, limites déclarées. Aucun contenu privé des logs dans Git.

@@ -539,3 +539,46 @@ extension Spec149SchedulerTests {
         #expect(ticks == 0 && timer.armedCount == 0)
     }
 }
+
+extension Spec149SchedulerTests {
+    @Test func repeatedRejectedAcquisitionsHaveABoundedRateAndRemainPending() async {
+        let timer = ManualTimer()
+        var reads = 0, ticks = 0, ready = false
+        let scheduler = TickScheduler(tick: { _ in
+            ticks += 1
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }, nextDeadline: { _ in nil }, isBlocked: { false }, now: { timer.clock.now },
+            schedule: timer.schedule, events: nil, prepare: { reads += 1; return ready })
+        scheduler.request(cause: "ax:AXWindowMoved")
+        for _ in 0..<200 {
+            timer.advance(by: 0.05)
+            for _ in 0..<4 { await Task.yield() }
+        }
+        #expect(reads < 15)
+        #expect(ticks == 0)
+        ready = true
+        timer.advance(by: 2.1)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(ticks == 1)
+        scheduler.stop()
+    }
+
+    @Test func rejectedDeadlineIsRetriedEvenWithoutAnExternalRequest() async {
+        let timer = ManualTimer()
+        let due = timer.clock.now.addingTimeInterval(0.05)
+        var reads = 0, ticks = 0
+        let scheduler = TickScheduler(tick: { _ in
+            ticks += 1
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }, nextDeadline: { now in due > now ? due : nil }, isBlocked: { false }, now: { timer.clock.now },
+            schedule: timer.schedule, events: nil, prepare: { reads += 1; return reads > 1 })
+        scheduler.rearm()
+        for _ in 0..<10 {
+            timer.advance(by: 0.1)
+            for _ in 0..<4 { await Task.yield() }
+        }
+        #expect(reads == 2)
+        #expect(ticks == 1)
+        scheduler.stop()
+    }
+}

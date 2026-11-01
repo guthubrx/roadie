@@ -288,6 +288,7 @@ public enum TargetOverlayPresenter {
 private protocol KeyEventTapSession: AnyObject {
     var eventTap: CFMachPort? { get set }
     var runLoopSource: CFRunLoopSource? { get set }
+    var eventTapContext: UnsafeMutableRawPointer? { get set }
     var finished: Bool { get }
     func handle(_ input: KeyInput)
 }
@@ -298,11 +299,26 @@ extension KeyEventTapSession {
         CGEvent.tapEnable(tap: eventTap, enable: true)
     }
 
+    func removeEventTap() {
+        if let eventTapContext { KeyEventTapOwners.shared.remove(eventTapContext) }
+        eventTapContext = nil
+        if let eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+            CFMachPortInvalidate(eventTap)
+        }
+        if let runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+            CFRunLoopSourceInvalidate(runLoopSource)
+        }
+        runLoopSource = nil
+        eventTap = nil
+    }
+
     func installEventTap() -> Bool {
         let mask = TargetSearchDismissal.eventMask(search: self is TargetSearchSession)
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon,
-                  let session = Unmanaged<AnyObject>.fromOpaque(refcon).takeUnretainedValue() as? any KeyEventTapSession
+                  let session = KeyEventTapOwners.shared.owner(for: refcon) as? any KeyEventTapSession
             else { return Unmanaged.passUnretained(event) }
             // macOS desactive le tap s'il repond trop lentement ou sur saisie utilisateur : on le reactive.
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
@@ -343,16 +359,19 @@ extension KeyEventTapSession {
             }
             return nil
         }
+        let context = KeyEventTapOwners.shared.register(self)
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: mask,
             callback: callback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
+            userInfo: context
         ) else {
+            KeyEventTapOwners.shared.remove(context)
             return false
         }
+        eventTapContext = context
         eventTap = tap
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         runLoopSource = source
@@ -377,6 +396,7 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle, KeyEve
     private(set) var finished = false
     var eventTap: CFMachPort?
     var runLoopSource: CFRunLoopSource?
+    var eventTapContext: UnsafeMutableRawPointer?
     private var timer: Timer?
     private var windows: [TargetOverlayWindow] = []
 
@@ -520,14 +540,7 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle, KeyEve
     private func cleanup() {
         timer?.invalidate()
         timer = nil
-        if let runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-        }
-        runLoopSource = nil
-        if let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: false)
-        }
-        eventTap = nil
+        removeEventTap()
         hideOverlayNow()
     }
 }
@@ -551,6 +564,7 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle, Ke
     private(set) var finished = false
     var eventTap: CFMachPort?
     var runLoopSource: CFRunLoopSource?
+    var eventTapContext: UnsafeMutableRawPointer?
     private var timer: Timer?
     private var windows: [TargetOverlayWindow] = []
     private var lastActivityAt = Date()
@@ -848,14 +862,7 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle, Ke
     private func cleanup() {
         timer?.invalidate()
         timer = nil
-        if let runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-        }
-        runLoopSource = nil
-        if let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: false)
-        }
-        eventTap = nil
+        removeEventTap()
         hideOverlayNow()
     }
 }
@@ -907,6 +914,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private(set) var finished = false
     var eventTap: CFMachPort?
     var runLoopSource: CFRunLoopSource?
+    var eventTapContext: UnsafeMutableRawPointer?
     private var timer: Timer?
     private var windows: [TargetOverlayWindow] = []
     private var searchBarLayout: SearchBarLayout?
@@ -3086,14 +3094,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         timer = nil
         inputPanel?.endEditing()
         inputPanel = nil
-        if let runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-        }
-        runLoopSource = nil
-        if let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: false)
-        }
-        eventTap = nil
+        removeEventTap()
         for window in windows {
             EffectAnimator.shared.visibility(window, visible: false, action: .launcher) {
                 window.orderOut(nil)

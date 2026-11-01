@@ -59,6 +59,8 @@ public final class TickScheduler {
     private var preparationStartedAt: Date?
     private var preparationTask: Task<Void, Never>?
     private var stopped = false
+    private var preparationFailures = 0
+    private var preparationRetryAt: Date?
     private let nextDeadline: @MainActor (Date) -> Date?
     private let isBlocked: @MainActor () -> Bool
     private let now: @MainActor () -> Date
@@ -174,6 +176,7 @@ public final class TickScheduler {
             if pending?.heldSince == nil { pending?.heldSince = date }
             return
         }
+        if let retry = preparationRetryAt, date < retry { arm(); return }
         if let prepare, !prepared {
             guard preparationTask == nil else { return }
             preparationTask = Task { [weak self] in
@@ -185,13 +188,40 @@ public final class TickScheduler {
                 self.preparationTask = nil
                 guard !self.stopped else { return }
                 self.preparationMs = Date().timeIntervalSince(start) * 1000
-                if ready { self.fire(prepared: true) }
+                if ready {
+                    if self.preparationFailures > 0 {
+                        self.events?.append(RoadieEvent(type: "layout.preparation", details: [
+                            "state": "ready", "rejections": String(self.preparationFailures)
+                        ]))
+                    }
+                    self.preparationFailures = 0
+                    self.preparationRetryAt = nil
+                    self.fire(prepared: true)
+                }
                 else {
                     // Une commande arrivée pendant le relevé invalide celui-ci.
-                    // Garder la demande et reprendre sans boucle immédiate.
+                    // Reprises rapides bornées, puis au plus une acquisition toutes
+                    // les deux secondes. La dernière demande reste en attente.
+                    self.preparationFailures += 1
+                    let delay = min(2, 0.05 * pow(2, Double(min(6, self.preparationFailures - 1))))
+                    let retry = self.now().addingTimeInterval(delay)
+                    self.preparationRetryAt = retry
+                    let count = self.preparationFailures
+                    if count <= 4 || count & (count - 1) == 0 {
+                        self.events?.append(RoadieEvent(type: "layout.preparation", details: [
+                            "state": delay >= 0.4 ? "backoff" : "retry",
+                            "reason": "snapshot_unavailable_or_invalidated",
+                            "rejections": String(count),
+                            "retryDelayMs": String(Int(delay * 1000)),
+                            "observationMs": String(format: "%.1f", self.preparationMs)
+                        ]))
+                    }
                     if var pending = self.pending {
-                        pending.dueAt = max(pending.dueAt, self.now().addingTimeInterval(0.05))
+                        pending.dueAt = max(pending.dueAt, retry)
                         self.pending = pending
+                    } else {
+                        self.pending = Pending(cause: "deadline", dueAt: retry,
+                            requestedAt: self.now(), coalescing: .safetyNet)
                     }
                     self.arm()
                 }
@@ -235,7 +265,8 @@ public final class TickScheduler {
         armedDeadline = nextDeadline(date).map { ($0, date) }
         let floored = armedDeadline.map { max($0.due, date.addingTimeInterval(Self.minimumDeadlineDelay)) }
         guard let due = [pending?.dueAt, floored].compactMap({ $0 }).min() else { return }
-        cancelTimer = schedule(max(0, due.timeIntervalSince(date))) { [weak self] in self?.fire() }
+        let retryDue = max(due, preparationRetryAt ?? due)
+        cancelTimer = schedule(max(0, retryDue.timeIntervalSince(date))) { [weak self] in self?.fire() }
     }
 
     /// Passe, puis trace `live_tick` (latence depuis la demande, durée) comme avant la SPEC-017,
