@@ -567,6 +567,18 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         relayout()
     }
 
+    func showAcquisitionError() {
+        // Ne pas effacer les cartes déjà connues si une relecture échoue.
+        let message = tr("Lecture des fenêtres indisponible. Tab pour réessayer, Échap pour fermer.",
+                         "Windows are unavailable. Tab to retry, Escape to close.")
+        if renderedEntries.isEmpty { setStatus(message) }
+        else {
+            selectionLabel.stringValue = message
+            selectionLabel.textColor = .systemOrange
+        }
+        relayout()
+    }
+
     func present(on screen: NSScreen) {
         layout(in: screen.visibleFrame)
         EffectAnimator.shared.visibility(self, visible: true, action: .switcher)

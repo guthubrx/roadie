@@ -28,7 +28,29 @@ struct WindowSwitcherService {
 
     @MainActor
     func load() async -> (entries: [WindowSwitcherEntry], context: WindowSwitcherContext, snapshot: DaemonSnapshot?, persisted: PersistentStageState) {
-        guard let snapshot = await service.readerSnapshot(followFocus: false) else {
+        // Une acquisition invalidée n'est pas une liste vide. Même reprise bornée pour
+        // l'ouverture et le rechargement ; aucune lecture AX sur le fil principal.
+        var acquired: DaemonSnapshot?
+        var attempts = 0
+        for attempt in 0...3 {
+            guard !Task.isCancelled else { break }
+            attempts += 1
+            acquired = await service.readerSnapshot(followFocus: false)
+            if acquired != nil || Task.isCancelled { break }
+            service.effectiveEvents.append(RoadieEvent(type: "switcher.acquisition", details: [
+                "state": "retry", "attempt": String(attempts)
+            ]))
+            if attempt < 3 {
+                do { try await Task.sleep(for: .milliseconds(100)) }
+                catch { break }
+            }
+        }
+        guard !Task.isCancelled, let snapshot = acquired else {
+            if !Task.isCancelled {
+                service.effectiveEvents.append(RoadieEvent(type: "switcher.acquisition", details: [
+                    "state": "unavailable", "attempts": String(attempts)
+                ]))
+            }
             return ([], WindowSwitcherContext(), nil, PersistentStageState())
         }
         let persisted = service.effectiveStageStore.state()
@@ -52,6 +74,11 @@ struct WindowSwitcherService {
                 visibilityKnown: window.isOnScreen || ax?.visibilityKnown == true
             )
         }
+        guard !Task.isCancelled else { return ([], WindowSwitcherContext(), nil, PersistentStageState()) }
+        service.effectiveEvents.append(RoadieEvent(type: "switcher.acquisition", details: [
+            "state": "ready", "attempts": String(attempts),
+            "observed": String(snapshot.windows.count), "entries": String(entries.count)
+        ]))
         // Fenêtre réellement au premier plan selon macOS : le relevé sans suivi du focus retient celle de
         // la stage active du premier écran, pas forcément celle où l’utilisateur travaille.
         return (entries, context(snapshot: snapshot, systemFocusedID: service.focusedWindowID()), snapshot, persisted)

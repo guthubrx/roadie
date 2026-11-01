@@ -5,6 +5,10 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Cmd+Tab : une acquisition temporairement indisponible ne produit plus une fausse
+  liste vide. Ouverture et rechargement partagent les mêmes reprises bornées ;
+  en cas d’échec durable, un message distinct propose Tab pour réessayer.
+
 - Premier placement des nouvelles fenêtres tuilées : rejoindre la destination
   avant d'ajuster la taille, pour éviter un agrandissement sur l'écran d'origine.
   Vérifié sur dix ouvertures iTerm2 ; la première surface créée par macOS et de

@@ -1,0 +1,5 @@
+# Plan148
+Lire WindowSwitcherController, WindowSwitcherService et readerSnapshot. Profil all vérifié dans TOML réel : scope all et trois include vrais. Inventaire initial contient14 fenêtres. Une absence de snapshot renvoie actuellement des entrées vides ; beginSession les présente immédiatement, tandis que reload fait trois reprises. Hypothèse : invalidation concurrente du relevé. Ajouter diagnostic de session sans titres ni contenus, reproduire avant de corriger.
+Réutiliser les propriétaires et tests existants ; aucun pipeline ni cache global parallèle. Réunir la politique bornée d’acquisition initiale et de rechargement et traiter explicitement l’indisponibilité persistante.
+
+Décision après diagnostic : quatre tentatives communes dans WindowSwitcherService.load, pauses100ms seulement après un nil. Le controller conserve son modèle nil si indisponible et affiche un statut distinct. Si une relecture échoue, les cartes précédentes restent. Une nouvelle toucheTab relance une acquisition bornée. Les tâches annulées ne transmettent aucun résultat au panneau. Les filtres et la machine de session restent identiques.

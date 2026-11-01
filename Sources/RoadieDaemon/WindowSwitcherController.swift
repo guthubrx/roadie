@@ -122,6 +122,7 @@ private final class WindowSwitcherSession {
     let startedAt = Date()
     var state: WindowSwitcherSessionState
     var model: WindowSwitcherModel?
+    var acquisitionUnavailable = false
     var panel: WindowSwitcherPanel?
     var panelVisible = false
     var thumbnailVersion = -1
@@ -302,17 +303,22 @@ public final class WindowSwitcherController {
         newSession.loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let loaded = await self.switcher.load()
-            self.acquired(sessionID: sessionID, entries: loaded.entries, context: loaded.context)
+            guard !Task.isCancelled else { return }
+            self.acquired(sessionID: sessionID, entries: loaded.entries, context: loaded.context,
+                          available: loaded.snapshot != nil)
         }
         newSession.timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
     }
 
-    private func acquired(sessionID: Int, entries: [WindowSwitcherEntry], context: WindowSwitcherContext) {
+    private func acquired(sessionID: Int, entries: [WindowSwitcherEntry], context: WindowSwitcherContext, available: Bool) {
         guard let session, session.id == sessionID else { return }
-        thumbnails.prune(keeping: Set(entries.map(\.id)), owner: "switcher")
-        session.model = makeModel(entries: entries, context: context, session: session)
+        session.acquisitionUnavailable = !available
+        if available {
+            thumbnails.prune(keeping: Set(entries.map(\.id)), owner: "switcher")
+            session.model = makeModel(entries: entries, context: context, session: session)
+        }
         if session.state.initialBackwards { session.model?.selectInitialBackwards() }
         guard let ready = session.state.ready() else { return }
         switch ready {
@@ -411,7 +417,8 @@ public final class WindowSwitcherController {
     private func refresh(_ session: WindowSwitcherSession) {
         guard session.panelVisible, let panel = session.panel else { return }
         guard let model = session.model else {
-            panel.showLoading()
+            if session.acquisitionUnavailable { panel.showAcquisitionError() }
+            else { panel.showLoading() }
             return
         }
         let entries = model.matches
@@ -451,6 +458,7 @@ public final class WindowSwitcherController {
             )
         }
         if session.actionFailed { panel.showActionError() }
+        if session.acquisitionUnavailable { panel.showAcquisitionError() }
     }
 
     private func queryChanged(_ query: String) {
@@ -465,6 +473,7 @@ public final class WindowSwitcherController {
         guard let session else { return }
         session.shiftTap.noteStep()
         guard session.state.step(backwards: backwards) else { return }
+        if session.acquisitionUnavailable { reload(sessionID: session.id); return }
         session.actionFailed = false
         session.model?.next(backwards: backwards)
         guard let model = session.model else { return }
@@ -522,14 +531,10 @@ public final class WindowSwitcherController {
         let query = session.model?.query ?? ""
         session.loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            // Un relevé absent (état modifié pendant la lecture, par exemple par l'annulation d'un échec)
-            // n'est pas une liste vide : relire, au plus trois fois (session 106).
-            var loaded = await self.switcher.load()
-            for _ in 0..<3 where loaded.snapshot == nil && !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-                loaded = await self.switcher.load()
-            }
+            let loaded = await self.switcher.load()
             guard !Task.isCancelled, let current = self.session, current.id == sessionID, current.loadRevision == revision else { return }
+            current.acquisitionUnavailable = loaded.snapshot == nil
+            guard loaded.snapshot != nil else { self.refresh(current); return }
             var model = self.makeModel(entries: loaded.entries, context: loaded.context, session: current)
             model.search(query)
             if let previous { model.select(id: previous) }
