@@ -60,7 +60,7 @@ final class LiveDropPreview {
         let current = Session(context: context, state: service.effectiveStageStore.state(),
                               generations: generations, config: service.effectiveConfig.tiling, sourceGestureOwned: sourceGestureOwned)
         session = current
-        current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak current] result in
+        current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak current] result, _ in
             guard let current else { return }
             for item in result.items {
                 if let actual = item.actual { current.windows[item.windowID]?.frame = actual }

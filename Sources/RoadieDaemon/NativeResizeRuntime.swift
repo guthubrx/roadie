@@ -95,7 +95,7 @@ public final class NativeResizeRuntime: NSObject {
             permit: InteractiveWritePermit(generations: generations))
         session = current
         let id = current.id
-        current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak self] result in
+        current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak self] result, _ in
             guard let self, let live = self.session, live.id == id else { return }
             for item in result.items {
                 if let actual = item.actual { live.windows[item.windowID]?.frame = actual }

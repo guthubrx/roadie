@@ -71,7 +71,7 @@ public struct RestoreSafetyService {
     /// prend la frame de son membre de stage (ou celle du snapshot précédent) : le snapshot ne
     /// contient jamais de position masquée. Aucune écriture si le contenu n'a pas changé.
     // O(n + m), n = fenêtres live, m = membres de stage.
-    public func writeSnapshot() throws -> RestoreSafetySnapshot {
+    public func writeSnapshot(snapshot supplied: DaemonSnapshot? = nil) throws -> RestoreSafetySnapshot {
         let previous: RestoreSafetySnapshot?
         switch loadSnapshotResult() {
         case .loaded(let loaded): previous = loaded
@@ -81,7 +81,7 @@ public struct RestoreSafetyService {
         // SPEC-062 : pendant Mission Control, les fenêtres masquées paraissent visibles et réduites ;
         // les enregistrer comme « dernière frame visible » les rétrécirait à la restauration.
         if let previous, service.isMissionControlActive() { return previous }
-        let snapshot = service.snapshot()
+        let snapshot = supplied ?? service.snapshot()
         let memberFrames = Self.visibleMemberFrames(service.effectiveStageStore.state(), displays: snapshot.displays)
         let previousFrames = Self.visibleFrames(of: previous, displays: snapshot.displays)
         let windows = snapshot.windows
@@ -122,6 +122,15 @@ public struct RestoreSafetyService {
             ]
         ))
         return restore
+    }
+
+    /// Sauvegarde périodique : partager l'acquisition des lecteurs sans retenir
+    /// l'interface. Une annulation ne remplace jamais le dernier retour arrière.
+    @MainActor public func writeSnapshotAsync() async throws -> RestoreSafetySnapshot? {
+        guard !service.isMissionControlActive(),
+              let snapshot = await service.readerSnapshot(), !Task.isCancelled,
+              !service.isMissionControlActive() else { return nil }
+        return try writeSnapshot(snapshot: snapshot)
     }
 
     /// Ramène chaque fenêtre masquée à sa dernière frame visible connue : union des membres de

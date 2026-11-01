@@ -177,6 +177,20 @@ public final class TargetModeRuntimeController: NSObject {
     private let ruleAffinity: WindowRuleAffinityService
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
+    private(set) var searchOpening: Task<Void, Never>?
+    private var searchEscapeMonitors: [Any] = []
+
+    private func cancelSearchOpening() {
+        if searchOpening != nil {
+            LauncherBTTPause.shared.barClosed()
+            LauncherOpenClock.current?.finish(events: events)
+        }
+        searchOpening?.cancel()
+        searchOpening = nil
+        searchEscapeMonitors.forEach(NSEvent.removeMonitor)
+        searchEscapeMonitors.removeAll()
+    }
+
     private var currentCommand: String?
     /// Grille d'un workflow à montrer à la prochaine ouverture de la barre (SPEC-092).
     private var pendingGrid: AlfredGridView?
@@ -276,6 +290,7 @@ public final class TargetModeRuntimeController: NSObject {
         }
         observer = nil
         stopStyleUpdates()
+        cancelSearchOpening()
         currentSession?.cancel()
         currentSession = nil
         events.append(RoadieEvent(type: "target_mode.runtime_stopped"))
@@ -347,9 +362,10 @@ public final class TargetModeRuntimeController: NSObject {
             break
         }
         // Raccourci de recherche maintenu ou répété : la recherche ouverte reste ouverte.
-        if command.name == "targets.search" || command.name == "targets.screen", currentCommand == command.name, currentSession != nil {
+        if command.name == "targets.search" || command.name == "targets.screen", currentCommand == command.name, (currentSession != nil || searchOpening != nil) {
             return
         }
+        cancelSearchOpening()
         currentSession?.cancel()
         currentSession = nil
         currentCommand = command.name
@@ -469,6 +485,42 @@ public final class TargetModeRuntimeController: NSObject {
         clock.mark("focus_capture")
         LauncherBTTPause.shared.barOpened(pauseKeys: config.bttPauseKeys)
         clock.mark("btt_pause")
+        let escape: (NSEvent) -> Void = { [weak self] event in
+            guard event.keyCode == 53, let self, self.searchOpening != nil else { return }
+            self.cancelSearchOpening()
+            self.finish(TargetActionResult(changed: false, message: "target_search_escaped", error: "cancelled"), command: command.name)
+        }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { event in
+            escape(event)
+            return event.keyCode == 53 ? nil : event
+        }) { searchEscapeMonitors.append(monitor) }
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: escape) {
+            searchEscapeMonitors.append(monitor)
+        }
+        searchOpening = Task { [weak self] in
+            guard let self else { return }
+            var snapshot: DaemonSnapshot?
+            for attempt in 0..<4 {
+                guard !Task.isCancelled else { return }
+                snapshot = await self.service.readerSnapshot(followFocus: false)
+                if snapshot != nil { break }
+                if attempt < 3 { try? await Task.sleep(for: .milliseconds(100)) }
+            }
+            guard !Task.isCancelled, self.currentCommand == command.name else { return }
+            self.searchEscapeMonitors.forEach(NSEvent.removeMonitor)
+            self.searchEscapeMonitors.removeAll()
+            self.searchOpening = nil
+            guard let snapshot else {
+                clock.finish(events: self.events)
+                self.finish(TargetActionResult(changed: false, message: "snapshot_unavailable", error: "snapshot_unavailable"), command: command.name)
+                return
+            }
+            self.showTargetsSearch(command, snapshot: snapshot, clock: clock)
+        }
+    }
+
+    private func showTargetsSearch(_ command: TargetModeRuntimeCommand, snapshot: DaemonSnapshot, clock: LauncherOpenClock) {
+        let config = service.effectiveConfig.experimental.targetMode
         // Barre immédiate (FR-009) : cibles Roadie tout de suite, puis toutes les fenêtres visibles, lues
         // en arrière-plan, chacune affichée dès qu'elle est lue. 2 s par fenêtre au moins : la barre
         // n'attend plus la plus lente, une page chargée peut donc être lue en entier.
@@ -477,8 +529,6 @@ public final class TargetModeRuntimeController: NSObject {
         appTargets.timeoutMs = max(appTargets.timeoutMs, 2000)
         let scanConfig = appTargets
         let targets = TargetHintService(service: service, appTargetsConfig: appTargets)
-        // Un seul relevé des fenêtres pour les cibles et le contexte de la barre (session 123).
-        let snapshot = service.snapshot(followFocus: false)
         clock.mark("snapshot")
         let roadieTargets = targets.list(TargetQueryOptions(source: .roadie, maxResults: TargetSearchModel.maxTargets), snapshot: snapshot).targets
         clock.mark("roadie_targets")
@@ -2397,6 +2447,7 @@ public final class TargetModeRuntimeController: NSObject {
     }
 
     private func finish(_ result: TargetActionResult, command: String) {
+        cancelSearchOpening()
         stopStyleUpdates()
         currentSession = nil
         currentCommand = nil

@@ -32,6 +32,8 @@ public final class FrameTransitionRuntime {
     private let isMouseDown: () -> Bool
     private var session: Session?
     private var timer: Timer?
+    /// Résultats finaux seulement : les images intermédiaires ne sont pas des placements.
+    public var onFinalResult: ((ApplyResult, ApplyPlan, UInt64) -> Void)?
     private(set) var acceptsCommands = false
     public func start() { acceptsCommands = true }
     public var isHoldingLayout: Bool { session.map { $0.permit.isCurrent && ProcessInfo.processInfo.systemUptime - $0.started < 1.5 } ?? false }
@@ -67,13 +69,22 @@ public final class FrameTransitionRuntime {
             current = Session(service: service, generation: generation, generations: generations)
             session = current
             events.append(RoadieEvent(type: "effects.frames_started", details: ["generation": String(generation), "action": action.rawValue]))
-            current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak current] result in
+            current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak self, weak current] result, generation in
                 guard let current else { return }
+                var final: [ApplyResultItem] = []
                 for item in result.items {
                     if let frame = item.actual { current.windows[item.windowID]?.frame = frame }
-                    if current.finalSubmitted, item.requested == current.commands[item.windowID]?.frame {
+                    if current.finalSubmitted, generation == current.generation, item.requested == current.commands[item.windowID]?.frame {
                         current.finalResults[item.windowID] = item
+                        final.append(item)
                     }
+                }
+                if !final.isEmpty {
+                    let result = ApplyResult(attempted: final.count,
+                        applied: final.filter { $0.status == .applied }.count,
+                        clamped: final.filter { $0.status == .clamped }.count,
+                        failed: final.filter { $0.status == .failed }.count, items: final)
+                    self?.onFinalResult?(result, ApplyPlan(commands: Array(current.commands.values)), current.generation)
                 }
             }
             let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in

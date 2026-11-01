@@ -54,6 +54,11 @@ public final class TickScheduler {
     }
 
     private let tick: @MainActor (String) -> MaintenanceTick
+    private let prepare: (@MainActor () async -> Bool)?
+    private var preparationMs: Double = 0
+    private var preparationStartedAt: Date?
+    private var preparationTask: Task<Void, Never>?
+    private var stopped = false
     private let nextDeadline: @MainActor (Date) -> Date?
     private let isBlocked: @MainActor () -> Bool
     private let now: @MainActor () -> Date
@@ -77,8 +82,10 @@ public final class TickScheduler {
         schedule: @escaping Schedule = TickScheduler.dispatchAfter,
         episodes: EpisodeContext = .shared,
         events: EventLog? = EventLog(),
-        onObservationChange: @escaping @MainActor () -> Void = {}
+        onObservationChange: @escaping @MainActor () -> Void = {},
+        prepare: (@MainActor () async -> Bool)? = nil
     ) {
+        self.prepare = prepare
         self.onObservationChange = onObservationChange
         self.tick = tick
         self.nextDeadline = nextDeadline
@@ -94,6 +101,7 @@ public final class TickScheduler {
     /// d'une application à notre écriture (A12). La cause gardée est la première de la demande,
     /// sauf une cause du filet, remplacée par un événement. O(1) hors `nextDeadline`.
     public func request(cause: String, delay coalescing: Coalescing = .event) {
+        guard !stopped else { return }
         if coalescing != .safetyNet { onObservationChange() }
         let date = now()
         switch coalescing {
@@ -147,14 +155,47 @@ public final class TickScheduler {
         arm()
     }
 
+    public func stop() {
+        stopped = true
+        cancelTimer?()
+        cancelTimer = nil
+        preparationTask?.cancel()
+        preparationTask = nil
+    }
+
     /// Minuteur échu : une passe pour la demande échue, sinon pour l'échéance interne armée si
     /// elle est échue (T211). Bloqué, il garde tout en attente et ne réarme pas (pas de boucle) :
     /// le déblocage réarme.
-    private func fire() {
+    private func fire(prepared: Bool = false) {
+        guard !stopped else { return }
         cancelTimer = nil
         let date = now()
         guard !isBlocked() else {
             if pending?.heldSince == nil { pending?.heldSince = date }
+            return
+        }
+        if let prepare, !prepared {
+            guard preparationTask == nil else { return }
+            preparationTask = Task { [weak self] in
+                let start = Date()
+                self?.preparationStartedAt = self?.now()
+                AXCallTimings.shared.reset()
+                let ready = await prepare()
+                guard let self else { return }
+                self.preparationTask = nil
+                guard !self.stopped else { return }
+                self.preparationMs = Date().timeIntervalSince(start) * 1000
+                if ready { self.fire(prepared: true) }
+                else {
+                    // Une commande arrivée pendant le relevé invalide celui-ci.
+                    // Garder la demande et reprendre sans boucle immédiate.
+                    if var pending = self.pending {
+                        pending.dueAt = max(pending.dueAt, self.now().addingTimeInterval(0.05))
+                        self.pending = pending
+                    }
+                    self.arm()
+                }
+            }
             return
         }
         if let current = pending, current.dueAt <= date {
@@ -189,6 +230,7 @@ public final class TickScheduler {
     private func arm() {
         cancelTimer?()
         cancelTimer = nil
+        guard preparationTask == nil, !stopped else { return }
         let date = now()
         armedDeadline = nextDeadline(date).map { ($0, date) }
         let floored = armedDeadline.map { max($0.due, date.addingTimeInterval(Self.minimumDeadlineDelay)) }
@@ -202,22 +244,24 @@ public final class TickScheduler {
     /// enfoncé), retard d'exécution après l'échéance (file principale). Une passe d'une seconde
     /// ou plus nomme les applications qui ont fait attendre ses appels AX (SPEC-086).
     private func run(_ cause: String, requested: Pending?, due: Date, requestedDelay: TimeInterval, at start: Date) -> MaintenanceTick {
-        AXCallTimings.shared.reset()
+        if prepare == nil { AXCallTimings.shared.reset() }
         let result = tick(cause)
         guard let events else { return result }
         let isEvent = requested.map { $0.coalescing != .safetyNet } ?? false
         let duration = now().timeIntervalSince(start)
-        let slowApps = duration >= 1 ? AXCallTimings.shared.drainSlowest(minimumSeconds: 0.2, limit: 3) : ""
+        let slowApps = duration + preparationMs / 1000 >= 1
+            ? AXCallTimings.shared.drainSlowest(minimumSeconds: 0.2, limit: 3) : ""
         guard isEvent || result.commands > 0 || result.failed > 0 || !slowApps.isEmpty else { return result }
         let ms = { (seconds: TimeInterval) in String(format: "%.1f", max(0, seconds) * 1000) }
         var details = [
             "notification": cause,
             "fast": String(requested?.coalescing == .event),
             "requestedDelayMs": ms(requestedDelay),
-            "dueLagMs": ms(start.timeIntervalSince(due)),
+            "dueLagMs": ms((preparationStartedAt ?? start).timeIntervalSince(due)),
             "heldByGestureMs": ms(requested?.heldSince.map { start.timeIntervalSince($0) } ?? 0),
             "latencyMs": ms(requested.map { start.timeIntervalSince($0.requestedAt) } ?? 0),
             "durationMs": ms(duration),
+            "observationMs": String(format: "%.1f", preparationMs),
             "commands": String(result.commands),
             "applied": String(result.applied),
             "failed": String(result.failed),

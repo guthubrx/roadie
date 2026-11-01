@@ -152,3 +152,31 @@ extension Spec144FrameTransitionTests {
         #expect(f.backend.frame(f.source) == f.target.cgRect)
     }
 }
+
+@Suite @MainActor struct Spec149TransitionTests {
+    @Test func onlyTheFinalResultReachesMaintenanceAndCancellationNeverDoes() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let path = try #require(f.configService.state.activePath)
+        try "[fx.animations]\nenabled=true\nduration_ms=120\n".write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
+        f.live.invalidate()
+        let window = try #require(f.context.snapshot.windows.first?.window)
+        let plan = ApplyPlan(commands: [ApplyCommand(window: window, frame: f.target)])
+        let runtime = FrameTransitionRuntime(generations: f.generations, isMouseDown: { false })
+        defer { runtime.cancel() }
+        var finals: [ApplyResult] = []
+        runtime.onFinalResult = { result, commands, generation in
+            #expect(generation == f.generations.current)
+            #expect(commands.commands.first?.frame == f.target)
+            finals.append(result)
+        }
+        _ = runtime.schedule(plan, service: f.service, generation: f.generations.current, action: .move)
+        #expect(await f.waitFor { !runtime.isHoldingLayout })
+        #expect(finals.count == 1)
+        #expect(finals.first?.applied == 1)
+        _ = runtime.schedule(plan, service: f.service, generation: f.generations.current, action: .move)
+        runtime.cancel()
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(finals.count == 1)
+    }
+}

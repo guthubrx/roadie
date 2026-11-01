@@ -479,3 +479,63 @@ extension TickSchedulerTests {
         #expect(h.ticks.count == 4)
     }
 }
+
+@Suite @MainActor struct Spec149SchedulerTests {
+    @Test func acquisitionIsSerializedAndRechecksMouseHold() async throws {
+        let timer = ManualTimer()
+        var release: CheckedContinuation<Bool, Never>?
+        var reads = 0
+        var ticks = 0
+        var blocked = false
+        let scheduler = TickScheduler(tick: { _ in
+            ticks += 1
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }, nextDeadline: { _ in nil }, isBlocked: { blocked }, now: { timer.clock.now },
+            schedule: timer.schedule, events: nil, prepare: {
+                reads += 1
+                return await withCheckedContinuation { release = $0 }
+            })
+        scheduler.request(cause: "first")
+        timer.advance(by: 0.02)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(reads == 1)
+        scheduler.request(cause: "second")
+        timer.advance(by: 1)
+        #expect(reads == 1 && ticks == 0)
+        blocked = true
+        release?.resume(returning: true)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(ticks == 0)
+        blocked = false
+        scheduler.buttonsReleased(gestureEnded: true)
+        timer.advance(by: 0.1)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(reads == 2)
+        release?.resume(returning: true)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(ticks == 1)
+    }
+}
+
+extension Spec149SchedulerTests {
+    @Test func stopRevokesAnAcquisitionAlreadyInFlight() async {
+        let timer = ManualTimer()
+        var release: CheckedContinuation<Bool, Never>?
+        var ticks = 0
+        let scheduler = TickScheduler(tick: { _ in
+            ticks += 1
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }, nextDeadline: { _ in nil }, isBlocked: { false }, now: { timer.clock.now }, schedule: timer.schedule,
+            events: nil, prepare: { await withCheckedContinuation { release = $0 } })
+        scheduler.request(cause: "first")
+        timer.advance(by: 0.1)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(release != nil)
+        scheduler.stop()
+        release?.resume(returning: true)
+        for _ in 0..<10 { await Task.yield() }
+        scheduler.request(cause: "after_stop")
+        timer.advance(by: 1)
+        #expect(ticks == 0 && timer.armedCount == 0)
+    }
+}

@@ -400,6 +400,9 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
 
     FrameTransitionRuntime.shared.start()
     let maintainer = LayoutMaintainer()
+    FrameTransitionRuntime.shared.onFinalResult = { [weak maintainer] result, plan, generation in
+        maintainer?.recordTransition(result, from: plan, generation: generation)
+    }
     let nativeResize = NativeResizeRuntime(service: service, minimums: { scope, snapshot in
         maintainer.dividerMinimums(for: scope, in: snapshot)
     })
@@ -440,8 +443,10 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
                 || FrameTransitionRuntime.shared.isHoldingLayout
                 || now < displaySettlingUntil || now < tickSuspendedUntil
         },
-        onObservationChange: { service.noteObservationChange() }
+        onObservationChange: { service.noteObservationChange() },
+        prepare: { await maintainer.prepareTick() }
     )
+    ShutdownRegistry.register { scheduler.stop() }
     nativeResize.setCompletion { scheduler.buttonsReleased(gestureEnded: true) }
 
     let settingsController = SettingsLiveApplyController(
@@ -674,6 +679,7 @@ final class RestoreSafetyRuntimeController {
     private let pid: Int32
     private var lastStageSignature: [String] = []
     private var lastSnapshotAt: Date = .distantPast
+    private var snapshotTask: Task<Void, Never>?
 
     init(service: RestoreSafetyService, stageStore: StageStore, pid: Int32) {
         self.service = service
@@ -693,6 +699,7 @@ final class RestoreSafetyRuntimeController {
         writeSnapshot()
         startWatcher()
         ShutdownRegistry.register { [self] in
+            snapshotTask?.cancel()
             writeSnapshot()
             let result = service.finishRun(pid: pid)
             print("restore-shutdown unhidden=\(result.applied) failed=\(result.failed)")
@@ -706,9 +713,20 @@ final class RestoreSafetyRuntimeController {
     }
 
     private func snapshotIfNeeded() {
+        guard snapshotTask == nil else { return }
         let changed = stageSignature() != lastStageSignature
         guard changed || Date().timeIntervalSince(lastSnapshotAt) >= Self.snapshotInterval else { return }
-        writeSnapshot()
+        let signature = stageSignature()
+        snapshotTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.snapshotTask = nil }
+            do {
+                if try await self.service.writeSnapshotAsync() != nil, !Task.isCancelled {
+                    self.lastStageSignature = signature
+                    self.lastSnapshotAt = Date()
+                }
+            } catch { fputs("roadied: restore snapshot failed: \(error)\n", stderr) }
+        }
     }
 
     /// Une entrée par scope : écran, desktop et stage active. O(s), s = nombre de scopes.

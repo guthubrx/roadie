@@ -5,6 +5,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Placement : les résultats finaux des animations alimentent les protections contre
+  les échecs répétés et les diagnostics par fenêtre. Le relevé périodique et celui
+  de la barre attendent les applications hors du fil de l’interface ; les demandes
+  et les annulations restent contrôlées à la reprise.
+
 - Cmd+Tab : une acquisition temporairement indisponible ne produit plus une fausse
   liste vide. Ouverture et rechargement partagent les mêmes reprises bornées ;
   en cas d’échec durable, un message distinct propose Tab pour réessayer.

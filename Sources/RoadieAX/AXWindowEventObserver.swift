@@ -43,6 +43,13 @@ public final class AXWindowEventObserver {
     private var watchedWindowIDs: [pid_t: [AXUIElement: CGWindowID]] = [:]
     private var workspaceTokens: [NSObjectProtocol] = []
     private var isStarted = false
+    private struct FrameRead: Sendable {
+        let event: AXWindowEvent
+        let generation: UInt64?
+        let read: @Sendable () -> CGRect?
+    }
+    private var pendingFrames: [UInt32: FrameRead] = [:]
+    private var frameTasks: [UInt32: Task<Void, Never>] = [:]
 
     /// Notifications AX surveillees au niveau application. Cf. yabai event_loop subscriptions.
     /// kAXTitleChangedNotification est volontairement omis : trop bruyant (browsers,
@@ -136,6 +143,9 @@ public final class AXWindowEventObserver {
     /// Arrete l'observation et libere les sources RunLoop.
     public func stop() {
         isStarted = false
+        for task in frameTasks.values { task.cancel() }
+        frameTasks.removeAll()
+        pendingFrames.removeAll()
         for pid in Array(observers.keys) {
             unsubscribe(pid: pid)
         }
@@ -150,8 +160,11 @@ public final class AXWindowEventObserver {
         var pid: pid_t = 0
         guard AXUIElementGetPid(element, &pid) == .success else { return }
         let isDestroyed = name == kAXUIElementDestroyedNotification as String
-        let windowID = (isDestroyed ? watchedWindowIDs[pid]?.removeValue(forKey: element) : nil)
-            ?? Self.windowID(of: element, pid: pid)
+        // L'identité déjà suivie est locale, même quand l'application ne répond plus.
+        // Un élément détruit ne doit jamais recevoir une nouvelle requête AX.
+        let knownID = watchedWindowIDs[pid]?[element]
+        let windowID = knownID ?? (isDestroyed ? nil : Self.windowID(of: element, pid: pid))
+        if isDestroyed { watchedWindowIDs[pid]?[element] = nil }
         if name == kAXWindowCreatedNotification as String {
             watchDestruction(of: element, id: windowID, observer: observer, pid: pid)
         }
@@ -160,13 +173,42 @@ public final class AXWindowEventObserver {
             AXWindowIndexCache.shared.invalidate(pid: pid)
         }
         let event = AXWindowEvent(name: name, pid: pid, windowID: windowID)
-        let observed = Self.frameNotifications.contains(name) && windowID != nil
+        let readsFrame = Self.frameNotifications.contains(name) && windowID != nil
             // Le filtrage d'écho est désactivé pendant l'appui. Cette lecture n'y servirait
             // donc à rien et ferait attendre le fil principal pendant le resize natif.
             && !mouseButtonsPressed()
             && !AXUnresponsiveApps.shared.isQuarantined(pid)
-            ? AXWindowFrameWriter().frame(of: element, pid: pid) : nil
-        dispatch(event, observedFrame: observed, now: Date())
+        if readsFrame {
+            nonisolated(unsafe) let reference = element
+            enqueueFrameRead(event) { AXWindowFrameWriter().frame(of: reference, pid: event.pid) }
+        } else { dispatch(event, observedFrame: nil, now: Date()) }
+    }
+
+    /// Une lecture active et la dernière notification par fenêtre. Les rafales restent
+    /// bornées et n'attendent jamais une application sur le fil de l'interface.
+    func enqueueFrameRead(_ event: AXWindowEvent, read: @escaping @Sendable () -> CGRect?) {
+        guard let id = event.windowID else { return }
+        pendingFrames[id] = FrameRead(event: event, generation: writtenFrames.entry(for: id)?.generation, read: read)
+        startFrameRead(id)
+    }
+
+    private func startFrameRead(_ id: UInt32) {
+        guard frameTasks[id] == nil, let pending = pendingFrames.removeValue(forKey: id) else { return }
+        let work = Task.detached(priority: .userInitiated) { (pending.read(), Date()) }
+        frameTasks[id] = Task { [weak self] in
+            let (frame, at) = await work.value
+            guard !Task.isCancelled, let self else { return }
+            self.frameTasks[id] = nil
+            // Une écriture plus récente ne peut pas être confirmée par une ancienne lecture.
+            let current = self.writtenFrames.entry(for: id)?.generation == pending.generation
+            self.dispatch(pending.event, observedFrame: current ? frame : nil, now: at)
+            self.startFrameRead(id)
+        }
+    }
+
+    private func cancelFrameRead(_ id: UInt32) {
+        frameTasks.removeValue(forKey: id)?.cancel()
+        pendingFrames[id] = nil
     }
 
     /// Transmet l'evenement, sauf un deplacement ou redimensionnement classe echo par le
@@ -176,6 +218,7 @@ public final class AXWindowEventObserver {
     /// transmettre la notification ne crée ici aucune intention ni génération. O(1).
     func dispatch(_ event: AXWindowEvent, observedFrame: CGRect?, now: Date) {
         if event.name == kAXUIElementDestroyedNotification as String, let windowID = event.windowID {
+            cancelFrameRead(windowID)
             writtenFrames.forget(windowID: windowID)
         }
         if Self.frameNotifications.contains(event.name), let windowID = event.windowID, let observedFrame,
@@ -270,6 +313,7 @@ public final class AXWindowEventObserver {
     private func unsubscribe(pid: pid_t) {
         registered[pid] = nil
         for id in (watchedWindowIDs.removeValue(forKey: pid) ?? [:]).values {
+            cancelFrameRead(id)
             writtenFrames.forget(windowID: id)
         }
         AXAttributeCache.shared.invalidate(pid: pid)

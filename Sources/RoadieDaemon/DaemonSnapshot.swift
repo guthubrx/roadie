@@ -254,19 +254,20 @@ public struct SnapshotService: Sendable {
     /// Acquisition des lecteurs graphiques : aucune attente AX sur MainActor.
     /// Les commandes gardent sharedSnapshot/snapshot et leur contrat synchrone.
     @MainActor
-    func readerSnapshot(followFocus: Bool = true) async -> DaemonSnapshot? {
+    func readerSnapshot(followFocus: Bool = true, producerCycle: TimeInterval? = nil,
+                        isCurrent: @MainActor () -> Bool = { true }) async -> DaemonSnapshot? {
         func recent() -> DaemonSnapshot? {
             processState.recentSnapshot(followFocus: followFocus, now: clock(),
                                        stateStamp: fileModificationStamp(stageStore.fileURL.path), config: config,
                                        allowQuietReuse: true)
         }
-        if let snapshot = recent() { return snapshot }
+        if producerCycle == nil, let snapshot = recent() { return snapshot }
         let expectedConfig = config
         let stamp = fileModificationStamp(stageStore.fileURL.path)
         let displays = provider.displays() // AppKit reste sur le fil principal.
         let permissions = provider.permissions(prompt: false)
         let acquisition: SnapshotProcessState.ReaderAcquisition
-        if let pending = processState.readerAcquisition {
+        if producerCycle == nil, let pending = processState.readerAcquisition {
             acquisition = pending
         } else {
             let provider = self.provider
@@ -280,13 +281,13 @@ public struct SnapshotService: Sendable {
                 return SnapshotWindowObservation(windows: windows, inventory: inventory,
                                                  focusedWindowID: readFocus(), completedAt: clock())
             })
-            processState.readerAcquisition = acquisition
+            if producerCycle == nil { processState.readerAcquisition = acquisition }
         }
         let observation = await acquisition.task.value
         if processState.readerAcquisition?.id == acquisition.id { processState.readerAcquisition = nil }
-        guard !Task.isCancelled else { return nil }
+        guard !Task.isCancelled, isCurrent() else { return nil }
         // Un autre lecteur ou le producteur peut avoir publié pendant l'attente.
-        if let snapshot = recent() { return snapshot }
+        if producerCycle == nil, let snapshot = recent() { return snapshot }
         guard processState.publicationRevision == acquisition.revision,
               acquisition.config == config, acquisition.stateStamp == fileModificationStamp(stageStore.fileURL.path),
               acquisition.displays == provider.displays(),
@@ -296,7 +297,9 @@ public struct SnapshotService: Sendable {
                                        observation: observation, mouseLocation: provider.mouseLocation(),
                                        observationGeneration: acquisition.observation)
         return snapshot(promptForPermissions: false, followFocus: followFocus,
-                        sharedMaxAge: SnapshotProcessState.sharedSnapshotMaxAge, producer: false, prepared: prepared)
+                        sharedMaxAge: producerCycle.map(SnapshotProcessState.producerMaxAge(cycle:))
+                            ?? SnapshotProcessState.sharedSnapshotMaxAge,
+                        producer: producerCycle != nil, prepared: prepared)
     }
 
     private struct PreparedSnapshot {

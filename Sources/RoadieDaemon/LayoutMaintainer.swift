@@ -283,7 +283,25 @@ public final class LayoutMaintainer {
     /// copie de travail rejoue ce relevé (R11, T210). `cause` suit le contrat des événements
     /// (`ax:<notification>`, `command:<nom>`, `drag`, `deadline`, `safety`) ; une échéance est nommée ici.
     // O(n · s) - n fenêtres, s scopes actifs.
+    private var preparedTickSnapshot: DaemonSnapshot?
+
+    /// Seule l'observation AX attend en arrière-plan. Aucune mutation de l'arbre
+    /// ou commande de placement ne quitte le fil principal.
+    @MainActor public func prepareTick() async -> Bool {
+        preparedTickSnapshot = nil
+        let generation = generations.current
+        guard let snapshot = await service.readerSnapshot(followFocus: true, producerCycle: intervalSeconds, isCurrent: {
+            generation == self.generations.current && !self.mouseButtonsPressed()
+                && !self.previewHold.isHeld(at: self.now()) && !self.missionControlActive()
+        }),
+              !Task.isCancelled, generation == generations.current else { return false }
+        preparedTickSnapshot = snapshot
+        return true
+    }
+
     public func tick(cause: String) -> MaintenanceTick {
+        let prepared = preparedTickSnapshot
+        preparedTickSnapshot = nil
         // La précision des paramètres n'est jamais conservée dans les autres appels du service.
         defer { service.exactLayoutScopes = [] }
         let startedAt = Date()
@@ -324,7 +342,7 @@ public final class LayoutMaintainer {
             ]))
         }
         var scans = 1
-        var snapshot = service.producerSnapshot(cycle: intervalSeconds)
+        var snapshot = prepared ?? service.producerSnapshot(cycle: intervalSeconds)
         globalSuspensionUntil = nil
         guard snapshot.permissions.accessibilityTrusted else {
             globalSuspensionUntil = .distantFuture
@@ -650,6 +668,7 @@ public final class LayoutMaintainer {
         restorativeIDs.formUnion(reanchoredZoomed.map(\.window.id))
         let writable = plan.entries.compactMap { command, priority -> ApplyCommand? in
             guard !defersFailedDrift(command.window, now: tickNow) else { return nil }
+            guard failedFrames[command.window.id.rawValue]?.matches(command: command) != true else { return nil }
             if restorativeIDs.contains(command.window.id), let failed = failedRestorations[command.window.id],
                failed.matches(command, scope: scopesByID[command.window.id])
                 || !failed.permits(command, scope: scopesByID[command.window.id]) { return nil }
@@ -3150,6 +3169,14 @@ public final class LayoutMaintainer {
             && abs(lhs.height - rhs.height) <= tolerance
     }
 
+    /// Le writer animé termine après la passe. Réutiliser sa mémoire et ses diagnostics,
+    /// seulement tant que le résultat appartient encore à la génération active.
+    public func recordTransition(_ result: ApplyResult, from plan: ApplyPlan, generation: UInt64) {
+        guard generation == generations.current else { return }
+        record(result, from: plan)
+        appendItemEvents(result, generation: generation)
+    }
+
     /// Mémoire des refus, des échecs et des annulations des modes sans arbre (FR-004, A3). O(k).
     private func record(_ result: ApplyResult, from plan: ApplyPlan) {
         let commandsByID = plan.commands.reduce(into: [WindowID: ApplyCommand]()) { result, command in
@@ -3234,11 +3261,13 @@ public final class LayoutMaintainer {
                 ]
                 if let entry = writtenFrames.entry(for: item.windowID.rawValue), entry.generation == generation,
                    Self.matches(entry.requested, item.requested.cgRect) {
+                    details["reason"] = "ax_write_or_readback_failed"
                     details["axWriteAttempts"] = String(entry.writesInGeneration)
                     details["axReadBack"] = entry.readBack.map { frameDescription(Rect($0)) } ?? "-"
                     details["axNativeFullscreenReading"] = entry.nativeFullscreenReading.map { String($0) } ?? "unknown"
                     for (phase, code) in entry.axResultCodes ?? [:] { details["ax.\(phase)"] = String(code) }
                 }
+                if details["reason"] == nil { details["reason"] = "ax_window_unavailable_or_quarantined" }
                 events.append(RoadieEvent(type: "layout_failed", details: details))
             case .applied:
                 break
@@ -4399,6 +4428,11 @@ public final class ReplayableSnapshotProvider: SystemSnapshotProviding, @uncheck
 
     public func focusedWindowID() -> WindowID? {
         served(\.focusedWindowID) ?? recorded(\.focusedWindowID, base.focusedWindowID())
+    }
+
+    @MainActor public func focusedWindowReader() -> @Sendable () -> WindowID? {
+        let read = base.focusedWindowReader()
+        return { self.recorded(\.focusedWindowID, read()) }
     }
 
     public func mouseLocation() -> CGPoint? {

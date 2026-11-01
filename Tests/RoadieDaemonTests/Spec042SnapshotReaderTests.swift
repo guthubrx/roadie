@@ -106,3 +106,90 @@ struct Spec042SnapshotReaderTests {
         #expect(provider.state.withLock { $0.scans } == 2)
     }
 }
+
+@Suite @MainActor struct Spec149ProducerTests {
+    @Test func slowProducerLeavesMainActorFreeAndDiscardsInvalidatedObservation() async throws {
+        let provider = ReaderProvider042()
+        let gate = DispatchSemaphore(value: 0)
+        provider.duringScan.withLock { $0 = { gate.wait() } }
+        let service = SnapshotService(provider: provider, config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("producer149")), persistStateChanges: false)
+        let task = Task { await service.readerSnapshot(producerCycle: 0.5) }
+        for _ in 0..<100 {
+            if provider.state.withLock({ $0.scans }) > 0 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(provider.state.withLock { $0.scans } == 1)
+        #expect(provider.state.withLock { $0.mainThreadScans } == 0)
+        service.invalidateSharedSnapshot()
+        gate.signal()
+        #expect(await task.value == nil)
+        provider.duringScan.withLock { $0 = nil }
+        #expect(await service.readerSnapshot(producerCycle: 0.5) != nil)
+        #expect(provider.state.withLock { $0.mainThreadScans } == 0)
+    }
+
+    @Test func preparedMaintainerDoesNotRepeatTheScanOnMain() async throws {
+        let provider = ReaderProvider042()
+        let service = SnapshotService(provider: provider, config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("maintainer149")), persistStateChanges: false)
+        let maintainer = LayoutMaintainer(service: service)
+        #expect(await maintainer.prepareTick())
+        _ = maintainer.tick()
+        #expect(provider.state.withLock { $0.scans } == 1)
+        #expect(provider.state.withLock { $0.mainThreadScans } == 0)
+    }
+}
+
+extension Spec149ProducerTests {
+    @Test func replayProviderPreparesFocusOnMainAndReadsItOutsideMain() async throws {
+        let base = ReaderProvider042()
+        let provider = ReplayableSnapshotProvider(base: base)
+        let service = SnapshotService(provider: provider, config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("focus-replay149")), persistStateChanges: false)
+        #expect(await service.readerSnapshot(producerCycle: 0.5) != nil)
+        #expect(base.state.withLock { $0.focusPreparedOnMain })
+        #expect(!base.state.withLock { $0.focusReadOnMain })
+        provider.replayLastScan()
+        _ = service.snapshot()
+        #expect(base.state.withLock { $0.scans } == 1)
+    }
+}
+
+extension Spec149ProducerTests {
+    @Test func cancelledRestoreReadKeepsTheExistingSnapshot() async throws {
+        let provider = ReaderProvider042(), gate = DispatchSemaphore(value: 0)
+        provider.duringScan.withLock { $0 = { gate.wait() } }
+        let service = SnapshotService(provider: provider, config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("restore-reader149")), persistStateChanges: false)
+        let path = tempPath("restore149")
+        let original = Data("retour arrière conservé".utf8)
+        try original.write(to: URL(fileURLWithPath: path))
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let restore = RestoreSafetyService(path: path, service: service)
+        let task = Task { try await restore.writeSnapshotAsync() }
+        for _ in 0..<100 {
+            if provider.state.withLock({ $0.scans }) > 0 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(provider.state.withLock { $0.mainThreadScans } == 0)
+        task.cancel()
+        gate.signal()
+        #expect(try await task.value == nil)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: path)) == original)
+    }
+
+    @Test func asyncRestorePersistsTheAcquiredFramesWithoutAnotherScan() async throws {
+        let provider = ReaderProvider042()
+        let service = SnapshotService(provider: provider, config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("restore-save-reader149")), persistStateChanges: false)
+        let path = tempPath("restore-save149")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let restore = RestoreSafetyService(path: path, service: service)
+        let saved = try #require(try await restore.writeSnapshotAsync())
+        #expect(saved.windows.count == 1)
+        #expect(provider.state.withLock { $0.scans } == 1)
+        #expect(provider.state.withLock { $0.mainThreadScans } == 0)
+        #expect(FileManager.default.fileExists(atPath: path))
+    }
+}

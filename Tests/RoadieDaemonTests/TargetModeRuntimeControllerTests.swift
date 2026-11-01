@@ -11,20 +11,22 @@ import RoadieStages
 struct TargetModeRuntimeControllerTests {
     /// Session 133 : Capslock + F ouvre la barre à l'écran, sans lanceur ; ⌘Espace garde le lanceur.
     @Test @MainActor
-    func screenSearchOpensTheBarWithoutTheLauncher() throws {
+    func screenSearchOpensTheBarWithoutTheLauncher() async throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-screen-search-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: sandbox) }
         let fixture = RuleChoiceFixture(sandbox: sandbox)
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.screen"))
+        await fixture.controller.searchOpening?.value
         #expect(fixture.presenter.searchScreenOnly == true)
         #expect(fixture.presenter.searchLauncher?.destinations.isEmpty == true)
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await fixture.controller.searchOpening?.value
         #expect(fixture.presenter.searchScreenOnly == false)
     }
 
     @Test(arguments: [RuleChoice.later, .never]) @MainActor
-    func ruleChoiceReportsCorruptMemoryInsteadOfSuccess(_ choice: RuleChoice) throws {
+    func ruleChoiceReportsCorruptMemoryInsteadOfSuccess(_ choice: RuleChoice) async throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-choice-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: sandbox) }
@@ -32,6 +34,7 @@ struct TargetModeRuntimeControllerTests {
         let invalid = Data("{mémoire abîmée".utf8)
         try invalid.write(to: fixture.memory.url)
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await fixture.controller.searchOpening?.value
         let launcher = try #require(fixture.presenter.searchLauncher)
 
         let result = launcher.ruleChoice(fixture.suggestion, choice)
@@ -46,7 +49,7 @@ struct TargetModeRuntimeControllerTests {
     }
 
     @Test(arguments: [RuleChoice.later, .never]) @MainActor
-    func ruleChoiceReportsAnInaccessibleMemoryLock(_ choice: RuleChoice) throws {
+    func ruleChoiceReportsAnInaccessibleMemoryLock(_ choice: RuleChoice) async throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-lock-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: sandbox) }
@@ -55,6 +58,7 @@ struct TargetModeRuntimeControllerTests {
         try original.write(to: fixture.memory.url)
         try FileManager.default.createDirectory(atPath: fixture.memory.url.path + ".lock", withIntermediateDirectories: false)
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await fixture.controller.searchOpening?.value
         let launcher = try #require(fixture.presenter.searchLauncher)
 
         let result = launcher.ruleChoice(fixture.suggestion, choice)
@@ -68,7 +72,7 @@ struct TargetModeRuntimeControllerTests {
     }
 
     @Test(.enabled(if: geteuid() != 0, "Requires a non-root account"), arguments: [RuleChoice.later, .never]) @MainActor
-    func ruleChoiceReportsAWriteFailureAfterAcquiringTheLock(_ choice: RuleChoice) throws {
+    func ruleChoiceReportsAWriteFailureAfterAcquiringTheLock(_ choice: RuleChoice) async throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-write-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: sandbox) }
@@ -87,6 +91,7 @@ struct TargetModeRuntimeControllerTests {
             #expect(error.description.contains("failed to persist"))
         }
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await fixture.controller.searchOpening?.value
         let launcher = try #require(fixture.presenter.searchLauncher)
 
         let result = launcher.ruleChoice(fixture.suggestion, choice)
@@ -100,12 +105,13 @@ struct TargetModeRuntimeControllerTests {
     }
 
     @Test(arguments: [RuleChoice.later, .never]) @MainActor
-    func ruleChoicePersistsBeforeReportingSuccess(_ choice: RuleChoice) throws {
+    func ruleChoicePersistsBeforeReportingSuccess(_ choice: RuleChoice) async throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-choice-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: sandbox) }
         let fixture = RuleChoiceFixture(sandbox: sandbox)
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await fixture.controller.searchOpening?.value
         let launcher = try #require(fixture.presenter.searchLauncher)
         let before = Date()
 
@@ -122,7 +128,7 @@ struct TargetModeRuntimeControllerTests {
     }
 
     @Test @MainActor
-    func createRuleStillChecksTheDisplayWhenMemoryIsCorrupt() throws {
+    func createRuleStillChecksTheDisplayWhenMemoryIsCorrupt() async throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-create-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: sandbox) }
@@ -130,6 +136,7 @@ struct TargetModeRuntimeControllerTests {
         let invalid = Data("{mémoire abîmée".utf8)
         try invalid.write(to: fixture.memory.url)
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await fixture.controller.searchOpening?.value
         let launcher = try #require(fixture.presenter.searchLauncher)
         let missing = StageScope(displayID: DisplayID(rawValue: "ecran-absent"), desktopID: DesktopID(rawValue: 1),
                                  stageID: StageID(rawValue: "1"))
@@ -148,7 +155,7 @@ struct TargetModeRuntimeControllerTests {
     }
 
     @Test @MainActor
-    func createRuleCanSucceedWhenMemoryIsCorrupt() throws {
+    func createRuleCanSucceedWhenMemoryIsCorrupt() async throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-create-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: sandbox) }
@@ -156,6 +163,7 @@ struct TargetModeRuntimeControllerTests {
         let invalid = Data("{mémoire abîmée".utf8)
         try invalid.write(to: fixture.memory.url)
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await fixture.controller.searchOpening?.value
         let launcher = try #require(fixture.presenter.searchLauncher)
 
         let result = launcher.ruleChoice(fixture.suggestion, .create)
@@ -170,7 +178,7 @@ struct TargetModeRuntimeControllerTests {
     }
 
     @Test @MainActor
-    func createRuleReportsWriteFailureAndKeepsPreviousDecline() throws {
+    func createRuleReportsWriteFailureAndKeepsPreviousDecline() async throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-create-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: sandbox) }
@@ -183,6 +191,7 @@ struct TargetModeRuntimeControllerTests {
         let original = try JSONEncoder().encode(memory)
         try original.write(to: fixture.memory.url)
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await fixture.controller.searchOpening?.value
         let launcher = try #require(fixture.presenter.searchLauncher)
 
         let result = launcher.ruleChoice(fixture.suggestion, .create)
@@ -198,7 +207,7 @@ struct TargetModeRuntimeControllerTests {
     }
 
     @Test @MainActor
-    func createRuleClearsPreviousDeclineOnlyAfterSaving() throws {
+    func createRuleClearsPreviousDeclineOnlyAfterSaving() async throws {
         let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-rule-create-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: sandbox) }
@@ -207,6 +216,7 @@ struct TargetModeRuntimeControllerTests {
         memory.declined[fixture.suggestion.declineKey] = .distantFuture
         try JSONEncoder().encode(memory).write(to: fixture.memory.url)
         fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await fixture.controller.searchOpening?.value
         let launcher = try #require(fixture.presenter.searchLauncher)
 
         let result = launcher.ruleChoice(fixture.suggestion, .create)
@@ -353,12 +363,13 @@ struct TargetModeRuntimeControllerTests {
 
     /// Fusion 022/023 : le présentateur injectable reçoit le style et les actions de la boîte.
     @Test @MainActor
-    func searchKeepsCommandBoxAndConfiguredLabelStyle() throws {
+    func searchKeepsCommandBoxAndConfiguredLabelStyle() async throws {
         let service = targetModeService(name: "search-command-box", displays: [powerDisplay()], labelFontSize: 20, searchLabelFontSize: 24)
         let presenter = SpyTargetModeOverlayPresenter()
         let controller = TargetModeRuntimeController(service: service, events: EventLog(), presenter: presenter)
 
         controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await controller.searchOpening?.value
 
         let style = try #require(presenter.searchStyle)
         #expect(service.effectiveConfig.experimental.targetMode.labelFontSize == 20)
@@ -371,7 +382,7 @@ struct TargetModeRuntimeControllerTests {
     }
 
     @Test @MainActor
-    func openSessionsReceiveOnlyTheirOwnConfiguredFonts() throws {
+    func openSessionsReceiveOnlyTheirOwnConfiguredFonts() async throws {
         let service = targetModeService(name: "live-fonts", displays: [powerDisplay()])
         let presenter = SpyTargetModeOverlayPresenter()
         let session = SpyFontSession()
@@ -388,6 +399,7 @@ struct TargetModeRuntimeControllerTests {
         config.experimental.targetGrid.labelFontSize = 28
         for (command, expected) in [("targets.interactive", CGFloat(18)), ("targets.search", CGFloat(24)), ("grid.interactive", CGFloat(28))] {
             controller.handle(TargetModeRuntimeCommand(name: command))
+            await controller.searchOpening?.value
             controller.refreshOverlayStyle(config: config)
             let style = try #require(session.styles.last)
             #expect(style.labelFontSize == expected)
@@ -645,4 +657,20 @@ private final class SpyFontSession: TargetOverlaySessionHandle {
     var styles: [TargetOverlayStyle] = []
     func cancel() {}
     func updateStyle(_ style: TargetOverlayStyle) { styles.append(style) }
+}
+
+extension TargetModeRuntimeControllerTests {
+    @Test @MainActor func spec149StopCancelsPendingOpeningAndFinishesItsClock() async throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-cancel149-\(UUID())")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fixture = RuleChoiceFixture(sandbox: sandbox)
+        fixture.controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        let pending = try #require(fixture.controller.searchOpening)
+        fixture.controller.stop()
+        await pending.value
+        #expect(fixture.presenter.searchStyle == nil)
+        #expect(LauncherOpenClock.current == nil)
+        #expect(try String(contentsOf: fixture.eventURL, encoding: .utf8).contains("launcher.timing"))
+    }
 }

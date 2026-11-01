@@ -36,12 +36,12 @@ final class InteractiveFrameDispatcher {
     }
     private let service: SnapshotService
     let permit: InteractiveWritePermit
-    private let completed: @MainActor (ApplyResult) -> Void
+    private let completed: @MainActor (ApplyResult, UInt64) -> Void
     private var active: [Int32: Set<WindowID>] = [:]
     private var pending: [Int32: Batch] = [:]
 
     init(service: SnapshotService, permit: InteractiveWritePermit,
-         completed: @escaping @MainActor (ApplyResult) -> Void) {
+         completed: @escaping @MainActor (ApplyResult, UInt64) -> Void) {
         self.service = service
         self.permit = permit
         self.completed = completed
@@ -83,7 +83,7 @@ final class InteractiveFrameDispatcher {
             self.active.removeValue(forKey: pid)
             if permit.isCurrent {
                 self.service.publishInteractive(result, commands: batch.plan.commands)
-                self.completed(result)
+                self.completed(result, batch.generation)
                 self.start(pid)
             } else {
                 self.pending.removeAll()

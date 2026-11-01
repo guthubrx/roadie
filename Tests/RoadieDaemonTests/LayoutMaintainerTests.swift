@@ -5521,3 +5521,35 @@ extension PlacementTransitionRegressionTests {
         #expect(details["requested"] != nil)
     }
 }
+
+@Suite struct Spec149FailureMemoryTests {
+    @Test func asynchronousFailureSuppressesTheSameTargetAndLogsTheWindow() throws {
+        let display = powerDisplay()
+        let initial = Rect(x: 80, y: 80, width: 320, height: 240)
+        let provider = SequenceProvider(display: display, windowFrames: [[initial]])
+        let writer = FailingWriter()
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0)))
+        let generations = PlacementGeneration()
+        let eventPath = tempPath("failure149")
+        defer { try? FileManager.default.removeItem(atPath: eventPath) }
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), generations: generations)
+        let snapshot = service.snapshot()
+        let plan = service.applyPlan(from: snapshot)
+        #expect(plan.commands.count == 1)
+        // Le résultat arrive après la passe qui ne voyait que « différé ».
+        let command = try #require(plan.commands.first)
+        let result = ApplyResult(attempted: 1, applied: 0, clamped: 0, failed: 1,
+            items: [ApplyResultItem(windowID: command.window.id, status: .failed, requested: command.frame, actual: nil)])
+        maintainer.recordTransition(result, from: plan, generation: generations.current)
+        #expect(maintainer.tick().commands == 0)
+        #expect(writer.attempts == 0)
+        let journal = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(journal.contains("layout_failed"))
+        #expect(journal.contains("windowID"))
+        // Un résultat devenu ancien ne doit pas réintroduire le refus.
+        let other = LayoutMaintainer(service: service, generations: generations)
+        other.recordTransition(result, from: plan, generation: generations.current &- 1)
+        #expect(other.tick().commands == 1)
+    }
+}
