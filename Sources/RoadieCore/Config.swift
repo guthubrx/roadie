@@ -152,6 +152,33 @@ public struct InterfaceConfig: Equatable, Codable, Sendable {
     }
 }
 
+public enum WindowGestureModifier: String, Codable, CaseIterable, Sendable {
+    case disabled = ""
+    case control, option, command, shift
+    case controlOption = "control+option"
+    case controlCommand = "control+command"
+    case optionCommand = "option+command"
+    case controlShift = "control+shift"
+    case optionShift = "option+shift"
+    case commandShift = "command+shift"
+    case controlOptionCommand = "control+option+command"
+    case controlOptionShift = "control+option+shift"
+    case controlCommandShift = "control+command+shift"
+    case optionCommandShift = "option+command+shift"
+    case all = "control+option+command+shift"
+
+    public var mask: UInt64 {
+        rawValue.split(separator: "+").reduce(0) { value, token in
+            value | ["control": UInt64(1 << 18), "option": 1 << 19,
+                     "command": 1 << 20, "shift": 1 << 17][String(token), default: 0]
+        }
+    }
+
+    public var symbols: String {
+        rawValue.split(separator: "+").map { ["control": "⌃", "option": "⌥", "command": "⌘", "shift": "⇧"][String($0)] ?? "" }.joined()
+    }
+}
+
 public struct TilingConfig: Equatable, Codable, Sendable {
     public var defaultStrategy: WindowManagementMode
     public var splitPolicy: String
@@ -159,6 +186,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     public var resizeHandles: Bool
     /// Déplace les voisines vers les places du dépôt pendant le glisser.
     public var liveDragPreview: Bool
+    public var dragMoveModifier: WindowGestureModifier
+    public var dragResizeModifier: WindowGestureModifier
     public var gapsOuter: Double
     public var gapsOuterTop: Double?
     public var gapsOuterRight: Double?
@@ -183,6 +212,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         splitPolicy: String = "largest_dim",
         resizeHandles: Bool = true,
         liveDragPreview: Bool = true,
+        dragMoveModifier: WindowGestureModifier = .control,
+        dragResizeModifier: WindowGestureModifier = .controlOption,
         gapsOuter: Double = 8,
         gapsOuterTop: Double? = nil,
         gapsOuterRight: Double? = nil,
@@ -200,6 +231,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.splitPolicy = splitPolicy
         self.resizeHandles = resizeHandles
         self.liveDragPreview = liveDragPreview
+        self.dragMoveModifier = dragMoveModifier
+        self.dragResizeModifier = dragResizeModifier
         self.gapsOuter = gapsOuter
         self.gapsOuterTop = gapsOuterTop
         self.gapsOuterRight = gapsOuterRight
@@ -219,6 +252,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         case splitPolicy = "split_policy"
         case resizeHandles = "resize_handles"
         case liveDragPreview = "live_drag_preview"
+        case dragMoveModifier = "drag_move_modifier"
+        case dragResizeModifier = "drag_resize_modifier"
         case gapsOuter = "gaps_outer"
         case gapsOuterTop = "gaps_outer_top"
         case gapsOuterRight = "gaps_outer_right"
@@ -248,6 +283,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.splitPolicy = try c.decodeIfPresent(String.self, forKey: .splitPolicy) ?? "largest_dim"
         self.resizeHandles = try c.decodeIfPresent(Bool.self, forKey: .resizeHandles) ?? true
         self.liveDragPreview = try c.decodeIfPresent(Bool.self, forKey: .liveDragPreview) ?? true
+        self.dragMoveModifier = try c.decodeIfPresent(WindowGestureModifier.self, forKey: .dragMoveModifier) ?? .control
+        self.dragResizeModifier = try c.decodeIfPresent(WindowGestureModifier.self, forKey: .dragResizeModifier) ?? .controlOption
         self.gapsOuter = try c.decodeFlexibleDouble(forKey: .gapsOuter) ?? 8
         self.gapsOuterTop = try c.decodeFlexibleDouble(forKey: .gapsOuterTop)
         self.gapsOuterRight = try c.decodeFlexibleDouble(forKey: .gapsOuterRight)
@@ -1862,7 +1899,7 @@ private enum ConfigValidationRules {
             "fx.animations.overview": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
 
             "interface": ["settings_text_font_size", "settings_help_font_size", "settings_title_font_size", "language"],
-            "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "live_drag_preview", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter"]),
+            "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "live_drag_preview", "drag_move_modifier", "drag_resize_modifier", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter"]),
             "tiling.display_overrides": gapKeys.union(["display_id", "display_name"]),
             "desktops": ["enabled", "count", "back_and_forth", "mode"],
             "stage_manager": ["enabled", "hide_strategy", "default_stage", "workspaces"],

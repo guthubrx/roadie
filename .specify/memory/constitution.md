@@ -1,3 +1,8 @@
+## Addenda Projet
+
+Ajouter ici uniquement les regles propres au projet. Ne pas dupliquer la constitution globale.
+
+<!-- SPECKIT-CONSTITUTION START -->
 # Constitution Projet
 
 <!-- Genere par ~/.speckit/scripts/sync-project.py. -->
@@ -14,7 +19,4 @@ Si ce fichier local et la constitution globale semblent diverger, la constitutio
 ## Standards Et References
 
 Lire `.specify/memory/standards.md` pour retrouver les standards globaux, references thematiques et baselines research.
-
-## Addenda Projet
-
-Ajouter ici uniquement les regles propres au projet. Ne pas dupliquer la constitution globale.
+<!-- SPECKIT-CONSTITUTION END -->

@@ -26,6 +26,9 @@ public struct BSPNativeResize: Sendable {
     private let gap: CGFloat
     private let controls: [Int: BSPEdge]
 
+    /// Bords pilotables par une séparation interne ; les limites du bureau restent fixes.
+    public var movableEdges: Set<BSPEdge> { Set(controls.values) }
+
     /// O(n + d), n feuilles, d profondeur. Les feuilles absentes restent dans l'arbre rendu.
     public init?(tree: BSPTree, windowID: WindowID, in container: CGRect,
                  innerGap: CGFloat = 0, excluding absent: Set<WindowID> = [],

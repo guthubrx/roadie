@@ -1185,3 +1185,20 @@ Cas d'usage :
 - cibler une zone non accessible via la Grille Ecran;
 - cibler un controle dans la fenetre focussee via la Grille Fenetre;
 - montrer une manipulation a un agent puis la rejouer ou l'analyser.
+
+
+### Gestes depuis le contenu d’une fenêtre
+
+Maintenez **Ctrl** et glissez avec le bouton gauche depuis n’importe où dans une fenêtre normale pour la déplacer. **Ctrl+Alt (⌃⌥)** redimensionne depuis le contenu ; le coin mobile le plus proche au départ suit la souris. Les voisines tuilées s’adaptent. Une fenêtre flottante se déplace et se redimensionne librement, dans les limites acceptées par son application.
+
+Les deux combinaisons se règlent dans **Paramètres > Tuilage**, sous « Déplacer depuis le contenu » et « Redimensionner depuis le contenu ». « Désactivé » coupe seulement l’action choisie. Le mode est fixé au début du geste ; relâcher les modificateurs avant le bouton ne le change pas. **Échap** annule. Un clic sans glisser conserve son action normale, notamment le menu contextuel Ctrl+clic ; il est transmis au relâchement du bouton.
+
+Une fenêtre tuilée seule n’a pas de séparation interne à réduire. Le plein écran natif et les menus sont exclus. Les applications peuvent imposer une taille minimale ou fixe.
+
+```toml
+[tiling]
+drag_move_modifier = "control"
+drag_resize_modifier = "control+option"
+```
+
+Valeurs : chaîne vide, `control`, `option`, `command`, `shift` ou une combinaison proposée dans les paramètres. Si les deux réglages sont identiques, le redimensionnement est prioritaire. Les gestes sont gérés par Roadie ; aucun raccourci BTT n’est nécessaire.

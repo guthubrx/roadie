@@ -1143,3 +1143,20 @@ Use cases:
 - target a non-accessible zone through Display Grid;
 - target a control inside the focused window through Window Grid;
 - show a manipulation to an agent, then replay or analyze it.
+
+
+### Move and resize from window content
+
+Hold **Control** and left-drag anywhere inside an ordinary window to move it. **Control+Option (⌃⌥)** resizes from its content: the nearest movable corner is chosen at the start. Tiled neighbors follow the resize. Floating windows move and resize freely within the limits accepted by their application.
+
+Choose either modifier combination in **Settings > Tiling**, under “Move from window content” and “Resize from window content”. “Disabled” turns off only that action. The mode is fixed at the start; releasing modifiers before the mouse button does not change it. **Escape** cancels. A click without dragging keeps its normal action, including the Control-click context menu; it is delivered when the button is released.
+
+A single tiled window has no internal divider to shrink. Native fullscreen windows and menus are excluded. Applications may impose minimum or fixed dimensions.
+
+```toml
+[tiling]
+drag_move_modifier = "control"
+drag_resize_modifier = "control+option"
+```
+
+Values: an empty string, `control`, `option`, `command`, `shift`, or a combination offered in settings. If both settings match, resizing takes priority. Roadie handles these gestures directly; no BTT shortcut is required.

@@ -265,6 +265,7 @@ public final class RailController {
         }) { clickMonitors.append(global) }
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
             guard !WindowDragNativeRelease.matches(event.cgEvent) else { return event }
+            guard event.cgEvent?.getIntegerValueField(.eventSourceUserData) != ModifierWindowGestureController.replayMarker else { return event }
             let screenPoint = RoadieScreenCoordinate.mouseEventPoint(event)
             if Self.isRightMouseEvent(event.type),
                self?.handleRightMouse(event.type, at: screenPoint) == true {
@@ -280,6 +281,7 @@ public final class RailController {
         // agir en plus de la fenetre qui a recu le clic.
         if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
             guard !WindowDragNativeRelease.matches(event.cgEvent) else { return }
+            guard event.cgEvent?.getIntegerValueField(.eventSourceUserData) != ModifierWindowGestureController.replayMarker else { return }
             let screenPoint = RoadieScreenCoordinate.mouseEventPoint(event)
             DispatchQueue.main.async {
                 if Self.isRightMouseEvent(event.type) {

@@ -22,6 +22,9 @@ final class DropPreviewController {
     }
     var isHoldingLayout: Bool { live.isActive }
     var requestsRealSource: Bool { engine.service.effectiveConfig.fx.dropPreview == "real" }
+    func isModifierPress(_ event: CGEvent) -> Bool {
+        ModifierWindowOperation.resolve(flags: event.flags, config: engine.service.publishedConfig.tiling) != nil
+    }
 
     /// Fige le snapshot utilise pendant tout le drag (SPEC-016 FR-025) : un seul snapshot au lieu d'un par mouvement.
     /// Un contexte deja pris par l'appelant peut etre transmis pour eviter un second snapshot.
@@ -614,6 +617,15 @@ final class WindowDragReorderController {
 
     /// Mouvements O(1), clic O(w) sur le relevé publié : aucune lecture AX/disque dans le tap.
     private func capture(_ type: CGEventType, event: CGEvent) -> Bool {
+        if event.getIntegerValueField(.eventSourceUserData) == ModifierWindowGestureController.replayMarker { return false }
+        if type == .leftMouseDown, preview.isModifierPress(event) {
+            pointerSequence &+= 1
+            qualification?.cancel(); qualification = nil; qualificationState = nil
+            pending = nil; owned = false; draining = false; decisionMade = false
+            dragDeliveryScheduled = false; queuedDragPoint = nil
+            preview.invalidate()
+            return false
+        }
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             pointerSequence &+= 1
             dragDeliveryScheduled = false; queuedDragPoint = nil
@@ -952,7 +964,7 @@ private struct PendingWindowDrag {
 }
 
 @MainActor
-private final class DropPreviewOverlayWindow: NSPanel {
+final class DropPreviewOverlayWindow: NSPanel {
     private let previewView = DropPreviewOverlayView()
 
     init() {
