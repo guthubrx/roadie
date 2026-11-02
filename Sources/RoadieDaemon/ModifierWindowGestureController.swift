@@ -29,6 +29,7 @@ public final class ModifierWindowGestureController {
     private var press: Press?
     private var draining = false
     private var preparing = false
+    private var sequence: UInt64 = 0
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var context: UnsafeMutableRawPointer?
@@ -103,6 +104,7 @@ public final class ModifierWindowGestureController {
             return false
         }
         if type == .leftMouseDown {
+            sequence &+= 1
             press = nil; draining = false
             lastPoint = nil; releasePending = false; preparing = false
             if !runtime.isActive { input.setCapturedPointerHeld(false) }
@@ -113,7 +115,7 @@ public final class ModifierWindowGestureController {
                 if runtime.isActive {
                     Task { @MainActor [weak self] in
                         guard let self, self.press == nil else { return }
-                        self.runtime.cancelImmediately(reason: "new_press")
+                        if !self.runtime.isEnding { self.runtime.cancelImmediately(reason: "new_press") }
                     }
                 }
                 return false
@@ -143,9 +145,22 @@ public final class ModifierWindowGestureController {
                 // La tâche est créée une seule fois ; les mouvements suivants remplacent le point.
                 Task { @MainActor [weak self] in
                     guard let self, let active = self.press, active.id == id else { return }
+                    var snapshot = active.snapshot
+                    var source = active.source
+                    if self.runtime.isEnding {
+                        // Le dépôt précédent doit sauver son arbre avant toute nouvelle génération.
+                        while self.runtime.isEnding {
+                            try? await Task.sleep(for: .milliseconds(10))
+                            guard self.press?.id == id else { return }
+                        }
+                        guard let fresh = await self.service.readerSnapshot(followFocus: false, isCurrent: { self.press?.id == id }),
+                              self.press?.id == id,
+                              let target = ModifierWindowRuntime.target(at: active.point, snapshot: fresh),
+                              target.window.id == active.source.window.id, target.window.pid == active.source.window.pid else { self.cancel(); return }
+                        snapshot = fresh; source = target
+                    } else { self.runtime.cancelImmediately(reason: "new_gesture") }
                     self.preparing = false
-                    self.runtime.cancelImmediately(reason: "new_gesture")
-                    guard self.runtime.begin(source: active.source, snapshot: active.snapshot, at: active.point, operation: active.operation) else {
+                    guard self.runtime.begin(source: source, snapshot: snapshot, at: active.point, operation: active.operation) else {
                         self.cancel(); return
                     }
                     if let point = self.lastPoint { self.runtime.update(at: point) }
@@ -163,25 +178,42 @@ public final class ModifierWindowGestureController {
             input.recordInput()
             if !current.dragging {
                 press = nil; input.setCapturedPointerHeld(false)
-                guard let latest = snapshotProvider(),
-                      ModifierWindowRuntime.target(at: current.point, snapshot: latest)?.window.id == current.source.window.id else { return true }
-                for original in [current.event, event] {
-                    if let copy = original.copy() { copy.setIntegerValueField(.eventSourceUserData, value: Self.replayMarker); replay(copy) }
-                }
-                Task { @MainActor in
-                    EventLog().append(RoadieEvent(type: "modifier_gesture.click_replayed", scope: current.source.scope,
-                        details: ["windowID": String(current.source.window.id.rawValue), "downType": String(current.event.type.rawValue),
-                                  "flags": String(current.event.flags.rawValue)]))
+                if let latest = snapshotProvider() {
+                    replayClick(current, up: event, snapshot: latest)
+                } else if let up = event.copy() {
+                    let sequence = self.sequence
+                    Task { @MainActor [weak self] in
+                        guard let self, let latest = await self.service.readerSnapshot(followFocus: false,
+                            isCurrent: { self.sequence == sequence }), self.sequence == sequence else { return }
+                        self.replayClick(current, up: up, snapshot: latest)
+                    }
                 }
             } else {
                 lastPoint = event.location; releasePending = true
                 runtime.update(at: event.location)
-                if runtime.isActive { finishDrag() }
+                if !preparing, runtime.isActive { finishDrag() }
                 else if !preparing { press = nil; releasePending = false; lastPoint = nil; input.setCapturedPointerHeld(false) }
             }
             return true
         }
         return false
+    }
+
+    private func replayClick(_ current: Press, up: CGEvent, snapshot: DaemonSnapshot) {
+        guard let target = ModifierWindowRuntime.target(at: current.point, snapshot: snapshot),
+              target.window.id == current.source.window.id, target.window.pid == current.source.window.pid else {
+            Task { @MainActor in EventLog().append(RoadieEvent(type: "modifier_gesture.click_discarded",
+                scope: current.source.scope, details: ["reason": "target_changed"])) }
+            return
+        }
+        for original in [current.event, up] {
+            if let copy = original.copy() { copy.setIntegerValueField(.eventSourceUserData, value: Self.replayMarker); replay(copy) }
+        }
+        Task { @MainActor in
+            EventLog().append(RoadieEvent(type: "modifier_gesture.click_replayed", scope: current.source.scope,
+                details: ["windowID": String(current.source.window.id.rawValue), "downType": String(current.event.type.rawValue),
+                          "flags": String(current.event.flags.rawValue)]))
+        }
     }
 
     private var lastPoint: CGPoint?
@@ -210,6 +242,7 @@ public final class ModifierWindowGestureController {
         if !runtime.isActive { input.setCapturedPointerHeld(false) }
     }
     public func stop() {
+        sequence &+= 1
         refreshTimer?.invalidate(); refreshTimer = nil
         runtime.cancelImmediately(reason: "shutdown")
         press = nil; draining = false; lastPoint = nil; releasePending = false; preparing = false

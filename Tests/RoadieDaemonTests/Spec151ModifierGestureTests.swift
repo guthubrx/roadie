@@ -168,6 +168,65 @@ import Testing
         #expect(f.backend.writes.isEmpty)
     }
 
+    @Test func renewingTheCacheDoesNotLoseAModifiedClick() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let input = UserInputActivity(), runtime = setup(f, input: input)
+        var available = true, replayed: [CGEvent] = []
+        let controller = ModifierWindowGestureController(service: f.service, runtime: runtime, input: input,
+            replay: { replayed.append($0) }, snapshotProvider: { available ? f.context.snapshot : nil })
+        defer { controller.stop() }
+        let frame = f.original(f.source), point = CGPoint(x: frame.midX, y: frame.midY)
+        func event(_ type: CGEventType) throws -> CGEvent {
+            let e = try #require(CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left))
+            e.flags = .maskControl; return e
+        }
+        #expect(controller.handle(.leftMouseDown, event: try event(.leftMouseDown)))
+        available = false
+        #expect(controller.handle(.leftMouseUp, event: try event(.leftMouseUp)))
+        #expect(await f.waitFor { replayed.count == 2 })
+        #expect(replayed.map(\.type) == [.leftMouseDown, .leftMouseUp])
+    }
+
+    @Test func theNextDragWaitsForThePreviousDropToSave() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let input = UserInputActivity(), runtime = setup(f, input: input)
+        let controller = ModifierWindowGestureController(service: f.service, runtime: runtime, input: input,
+            snapshotProvider: { f.context.snapshot })
+        defer { controller.stop() }
+        let entry = f.context.snapshot.windows[0], frame = f.original(f.source)
+        let point = CGPoint(x: frame.midX, y: frame.midY)
+        f.backend.blockedPID = entry.window.pid
+        #expect(runtime.begin(source: entry, snapshot: f.context.snapshot, at: point, operation: .resize))
+        runtime.update(at: CGPoint(x: point.x + 100, y: point.y)); runtime.end()
+        #expect(runtime.isEnding)
+        func event(_ type: CGEventType, dx: CGFloat) throws -> CGEvent {
+            let e = try #require(CGEvent(mouseEventSource: nil, mouseType: type,
+                mouseCursorPosition: CGPoint(x: point.x + dx, y: point.y), mouseButton: .left))
+            e.flags = [.maskControl, .maskAlternate]; return e
+        }
+        #expect(controller.handle(.leftMouseDown, event: try event(.leftMouseDown, dx: 0)))
+        #expect(controller.handle(.leftMouseDragged, event: try event(.leftMouseDragged, dx: 80)))
+        #expect(controller.handle(.leftMouseUp, event: try event(.leftMouseUp, dx: 80)))
+        await Task.yield()
+        #expect(runtime.isEnding)
+        f.backend.blockedPID = nil; f.backend.gate.signal()
+        #expect(await f.waitFor { !runtime.isActive && (f.backend.frame(f.source)?.width ?? 0) > frame.width + 150 })
+        #expect(f.store.state().bspTree(for: f.scope) != f.context.persistedStateBeforeSnapshot.bspTree(for: f.scope))
+    }
+
+    @Test func notificationCenterBackdropDoesNotHideTheApplication() throws {
+        let f = try Drag143Fixture(); defer { f.clean() }; f.live.invalidate()
+        var snapshot = f.context.snapshot, backdrop = snapshot.windows[0]
+        backdrop.window.id = WindowID(rawValue: 999); backdrop.window.bundleID = "com.apple.notificationcenterui"
+        backdrop.window.frame = snapshot.displays[0].frame
+        backdrop.window.isTileCandidate = false; backdrop.window.subrole = nil; backdrop.scope = nil
+        snapshot.windows.insert(backdrop, at: 0)
+        let frame = f.original(f.source), point = CGPoint(x: frame.midX, y: frame.midY)
+        #expect(ModifierWindowRuntime.target(at: point, snapshot: snapshot)?.window.id == f.source)
+        snapshot.windows[0].window.frame = Rect(CGRect(x: point.x - 50, y: point.y - 50, width: 100, height: 100))
+        #expect(ModifierWindowRuntime.target(at: point, snapshot: snapshot) == nil)
+    }
+
     @Test func frontmostIneligibleSurfaceProtectsTheWindowBehindIt() throws {
         let f = try Drag143Fixture(); defer { f.clean() }; f.live.invalidate()
         var snapshot = f.context.snapshot, panel = snapshot.windows[0]

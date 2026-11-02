@@ -16,6 +16,7 @@ public final class ModifierWindowRuntime {
         let permit = InteractiveWritePermit(generations: .shared)
         let startedAt = Date()
         var dispatcher: InteractiveFrameDispatcher!
+        let originals: [WindowID: Rect]
         var windows: [WindowID: WindowSnapshot]
         var touched: Set<WindowID> = []
         var point: CGPoint
@@ -29,6 +30,7 @@ public final class ModifierWindowRuntime {
              geometry: ModifierWindowGeometry, prepared: BSPNativeResize?) {
             self.source = source; self.context = context; self.config = config; self.geometry = geometry
             self.prepared = prepared; point = geometry.origin
+            originals = Dictionary(context.snapshot.windows.map { ($0.window.id, $0.window.frame) }, uniquingKeysWith: { a, _ in a })
             windows = Dictionary(context.snapshot.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { a, _ in a })
         }
     }
@@ -54,12 +56,17 @@ public final class ModifierWindowRuntime {
 
     var isActive: Bool { session != nil }
     var identifier: UUID? { session?.id }
+    var isEnding: Bool { session?.ending == true }
 
     /// Sélection stricte en Z : une surface opaque inéligible protège toutes celles de derrière.
     static func target(at point: CGPoint, snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
         guard snapshot.permissions.accessibilityTrusted,
-              let entry = snapshot.windows.first(where: { $0.window.isOnScreen
-                  && !$0.window.isKnownBorderDecoration && $0.window.frame.cgRect.contains(point) }),
+              let entry = snapshot.windows.first(where: { entry in entry.window.isOnScreen
+                  && !entry.window.isKnownBorderDecoration
+                  // Le conteneur transparent de Notification Center couvre tout l'écran (CG layer21).
+                  && !(entry.window.bundleID == "com.apple.notificationcenterui" && !entry.window.isTileCandidate
+                       && entry.window.subrole == nil && snapshot.displays.contains(where: { $0.frame == entry.window.frame }))
+                  && entry.window.frame.cgRect.contains(point) }),
               entry.window.pid != getpid(), entry.window.furniture?.isNativeFullscreen != true,
               entry.window.isTileCandidate || entry.window.subrole == "AXStandardWindow",
               entry.scope.map({ snapshot.state.activeScope(on: $0.displayID) == $0 }) ?? true else { return nil }
@@ -70,7 +77,7 @@ public final class ModifierWindowRuntime {
     func begin(source: ScopedWindowSnapshot, snapshot: DaemonSnapshot, at point: CGPoint,
                operation: ModifierWindowOperation) -> Bool {
         guard session == nil, Self.target(at: point, snapshot: snapshot)?.window.id == source.window.id else { return false }
-        let config = service.effectiveConfig.tiling
+        let config = service.publishedConfig.tiling
         let state = service.effectiveStageStore.state()
         let known = source.scope.map { minimums($0, snapshot) } ?? [:]
         var prepared: BSPNativeResize?
@@ -123,7 +130,8 @@ public final class ModifierWindowRuntime {
         guard let frame = current.geometry.target(at: current.point) else { return }
         var frames: [WindowID: Rect] = [:]
         if current.geometry.operation == .resize {
-            if let prepared = current.prepared, let result = prepared.layout(observedFrame: frame) {
+            if let prepared = current.prepared {
+                guard let result = prepared.layout(observedFrame: frame) else { return }
                 frames = result.frames.mapValues(Rect.init)
             } else { frames[current.source.window.id] = Rect(frame) }
         } else {
@@ -181,9 +189,8 @@ public final class ModifierWindowRuntime {
     private func submit(_ frames: [WindowID: Rect], current: Session) {
         let eligible = frames.filter { current.windows[$0.key] != nil }
         current.touched.formUnion(eligible.keys)
-        let originals = Dictionary(current.context.snapshot.windows.map { ($0.window.id, $0.window.frame) }, uniquingKeysWith: { a, _ in a })
         let commands = current.touched.compactMap { id -> ApplyCommand? in
-            guard let window = current.windows[id], let target = eligible[id] ?? originals[id],
+            guard let window = current.windows[id], let target = eligible[id] ?? current.originals[id],
                   !window.frame.cgRect.matchesFrame(target.cgRect) || current.dispatcher.mayChange(window) else { return nil }
             return ApplyCommand(window: window, frame: target)
         }
@@ -212,9 +219,9 @@ public final class ModifierWindowRuntime {
 
     private func commit(_ current: Session) -> Bool {
         do {
-            if let scope = current.source.scope, let prepared = current.prepared,
-               let actual = current.windows[current.source.window.id]?.frame,
-               let final = prepared.layout(observedFrame: actual.cgRect) {
+            if let scope = current.source.scope, let prepared = current.prepared {
+                guard let actual = current.windows[current.source.window.id]?.frame,
+                      let final = prepared.layout(observedFrame: actual.cgRect) else { return false }
                 return try service.effectiveStageStore.mutateChecked { state -> Bool in
                     guard contextMatches(current, state: state) else { return false }
                     state.setBSPTree(final.tree, for: scope); return true
