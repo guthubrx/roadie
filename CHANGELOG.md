@@ -5,6 +5,10 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Finder : ⌘E global dans la configuration BetterTouchTool du poste ouvre ou ramène
+  une fenêtre dans la stage sous la souris, même vide et avec le clavier sur un autre écran.
+  Commande réutilisable : `roadie launch /System/Library/CoreServices/Finder.app --here --mouse`.
+
 - Placement : les résultats finaux des animations alimentent les protections contre
   les échecs répétés et les diagnostics par fenêtre. Le relevé périodique et celui
   de la barre attendent les applications hors du fil de l’interface ; les demandes

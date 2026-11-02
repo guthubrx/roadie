@@ -337,12 +337,12 @@ photo) dans un profil du sélecteur `source = "zones"` (Option+Tab chez l'utilis
 retour et clic, aller-retour, bordure jaune sur l'application, photos reprises en quittant une fenêtre, 20 zones,
 24 h, 3 zones de clics par fenêtre ; icônes des cartes (× et sens interdit). Reçus : specs/135 à 137.
 Session 138 : 0.12.0 publiée (sessions 131 à 137). Reçu : specs/138-release-0120/validation.md.
-Current SpecKit feature: `149-placement-reactif`.
+Current SpecKit feature: `150-raccourci-finder`.
 
 Contexte :
-- `specs/149-placement-reactif/spec.md`
-- `specs/149-placement-reactif/plan.md`
-- `specs/149-placement-reactif/tasks.md`
+- `specs/150-raccourci-finder/spec.md`
+- `specs/150-raccourci-finder/plan.md`
+- `specs/150-raccourci-finder/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes
@@ -389,3 +389,5 @@ Session147 installée : intermittence iTerm2 reproduite malgré la politique dir
 Session148 installée : Cmd+Tab ne confond plus acquisition indisponible et liste vide ; quatre essais au plus partagés entre ouverture/rechargement, statut explicite et Tab pour reprendre.2438tests/365suites et28scripts verts ; seize acquisitions natives après chargement, toutes à12fenêtres. UUIDA7AED9D8-6D65-334C-A58F-8C4FE15EDDA9, PID73795, santé5/5. Source747e8122 intégrée/poussée, configuration/signature conservées. Revue distante refusée et incident signalé à bridge1016 (reçu de remise en cours). Ancienne branche147 et binaires/cache inutiles nettoyés. Reçu : specs/148-cmdtab-liste-fiable/livraison.md.
 
 Session149 installée et intégrée : résultats finaux des transitions réintégrés aux protections, relevés du producteur/barre et callbacks de cadre en arrière-plan, sauvegarde périodique asynchrone, reprises bornées et contexte clavier révoqué sans pointeur de session.2459tests/372suites et28scripts verts ; trois revues traitées. Trois essais natifs lents sur la dernière source : pauses63–83ms contre517–579ms avant ; limites conservées. Source901ed35d, UUID723B2205-C1F6-3EC2-9F63-E747FE9992CA, PID27444, santé5/5 ; configuration/signature conservées. Main publié ; ancienne branche148, build et binaires temporaires retirés. Worktree actif, retour arrière utile, originaux et dossiers de revue protégés conservés. Preuves partielles du clavier physique. Reçu : specs/149-placement-reactif/livraison.md.
+
+Session150 installée et intégrée : ⌘E global BTT ouvre ou ramène Finder dans la stage sous la souris, indépendamment du focus, via launch --here --mouse. Destination native explicite, y compris sans fenêtre et vers une stage vide.2461tests/373suites verts, revue traitée ; quatre parcours API BTT et cadre réel vérifiés, clavier physique non enregistré. Source459d653f, UUIDDA4F188C-6530-3377-8E48-651BC315E227, PID12688, santé5/5 ; configuration/signature conservées. Un seul ⌘E actif, ancien déclencheur et adaptateur retirés. Branche149 locale/distante et build supprimés, worktree actif/retour arrière/symboles/preuves conservés. Reçu : specs/150-raccourci-finder/livraison.md.
