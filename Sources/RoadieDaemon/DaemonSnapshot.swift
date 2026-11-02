@@ -178,6 +178,9 @@ public struct SnapshotService: Sendable {
         config
     }
 
+    /// Valeur déjà publiée : aucun stat de fichier dans les callbacks de saisie.
+    public var publishedConfig: RoadieConfig { fixedConfig ?? configService.activeConfig }
+
     public var effectiveIntentStore: LayoutIntentStore {
         intentStore
     }

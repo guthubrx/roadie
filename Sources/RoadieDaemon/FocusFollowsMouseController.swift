@@ -176,6 +176,10 @@ public final class UserInputActivity: @unchecked Sendable {
     @MainActor
     func handle(_ event: NSEvent, recordsInput: Bool) {
         guard !WindowDragNativeRelease.matches(event.cgEvent) else { return }
+        if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == ModifierWindowGestureController.replayMarker {
+            if recordsInput { recordInput() }
+            return
+        }
         switch event.type {
         case .leftMouseDown:
             if let point = event.cgEvent?.location ?? CGEvent(source: nil)?.location {
@@ -267,6 +271,11 @@ public final class UserInputActivity: @unchecked Sendable {
                   finishedGesture?.startedAt == session.startedAt else { return }
             finishedGesture = nil
         }
+    }
+
+    /// Fin d'un geste explicite dans un mode qui conserve le traitement historique du maintainer.
+    public func recordCompletedGesture(_ session: GestureSession) {
+        lock.withLock { finishedGesture = session }
     }
 
     /// L'état physique peut précéder mouseUp : attendre son callback 300 ms au plus après

@@ -101,6 +101,10 @@ public struct SettingDescriptor: Equatable, Sendable {
 
     /// Libellé de présentation seulement : le menu conserve la valeur brute comme tag. O(1).
     public func choiceLabel(_ value: String) -> String {
+        if ["tiling.drag_move_modifier", "tiling.drag_resize_modifier"].contains(id),
+           let modifier = WindowGestureModifier(rawValue: value) {
+            return modifier == .disabled ? tr("Désactivé", "Disabled") : modifier.symbols
+        }
         if id == "switcher.presentation", let presentation = WindowSwitcherPresentation(rawValue: value) {
             return presentation.label
         }
@@ -366,6 +370,12 @@ extension SettingsCatalog {
         entry(.tuilage, "tiling", "live_drag_preview", tr("Réorganiser les fenêtres pendant le glisser", "Rearrange windows while dragging"),
               tr("Les fenêtres voisines prennent leur future place avant le dépôt. Désactivez pour afficher seulement le fantôme. Annuler restaure les voisines. Sans effet sur le redimensionnement par les bords.", "Neighboring windows take their future positions before the drop. Turn off to show only the ghost. Canceling restores the neighbors. Does not affect resizing by window edges."),
               .bool, .bool(true)),
+        entry(.tuilage, "tiling", "drag_move_modifier", tr("Déplacer depuis le contenu", "Move from window content"),
+              tr("Maintenir ces touches et glisser avec le bouton gauche n’importe où dans la fenêtre. Un clic sans glisser reste un clic normal. Vide : désactivé.", "Hold these keys and left-drag anywhere inside a window. A click without dragging remains a normal click. Empty: disabled."),
+              .choice(WindowGestureModifier.allCases.map(\.rawValue)), .string("control")),
+        entry(.tuilage, "tiling", "drag_resize_modifier", tr("Redimensionner depuis le contenu", "Resize from window content"),
+              tr("Maintenir ces touches et glisser gauche. Le coin mobile le plus proche suit la souris ; les voisines tuilées s’adaptent. Prioritaire si les deux réglages sont identiques. Vide : désactivé.", "Hold these keys and left-drag. The nearest movable corner follows the pointer; tiled neighbors adapt. Takes priority if both settings match. Empty: disabled."),
+              .choice(WindowGestureModifier.allCases.map(\.rawValue)), .string("control+option")),
         entry(.tuilage, "tiling", "resize_handles", tr("Poignées de redimensionnement", "Resize handles"),
               tr("Permet de tirer les séparations entre les fenêtres en mode Arbre persistant. Le redimensionnement par les bords des fenêtres reste disponible.", "Lets you drag the dividers between windows in Persistent tree mode. Resizing by window edges stays available."),
               .bool, .bool(true)),

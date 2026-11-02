@@ -11,3 +11,12 @@
 ## Contrôles
 Tests de choix/priorité des modificateurs, seuil, clic non glissé, annulation et désactivation ; géométrie/minimums/cadres restaurés ; génération périmée, fermeture et file occupée. Suite Swift séquentielle puis construction signée. Revue indépendante du plan et du code, essais sur application fictive, preuves avec limites explicites, installation/push et nettoyage.
 Outil Sequential Thinking non exposé dans le catalogue de cette session : les choix et alternatives sont consignés ici avant le code. Une capture supplémentaire dans chaque composant et un writer parallèle à l’aperçu existant sont écartés pour éviter doubles prises de souris et conflits de générations.
+
+
+## Ajustements après revue du plan
+- Le tap de titre existant ignore les combinaisons destinées aux gestes explicites, indépendamment de leur ordre d’installation. La capture nouvelle ne dépend pas du style d’aperçu. Les paires rejouées portent un marqueur commun ; UserInputActivity et les moniteurs du rail les ignorent pour les gestes, tout en gardant la trace d’entrée utilisateur.
+- Le callback de début de geste natif dans main refuse une souris déjà revendiquée. Le nouveau runtime ne lance pas NativeResizeRuntime ni LiveDropPreview : il utilise directement la géométrie pure et la file partagée.
+- StageCommandService.place reçoit un chemin optionnel deferGeometryUsing et une validation transactionnelle. Avec ce chemin, le snapshot est fourni et seuls l’affectation, l’ordre, l’arbre et l’intention sont enregistrés ; aucune acquisition ou écriture AX au relâchement. Le comportement existant reste identique si cette option est absente. La passe normale reprend ensuite les écarts résiduels.
+- Flottant : déplacement/redimensionnement libres avec sauvegarde de lastFrame pour un pin ; pour les règles hors stage, FloatingPlacement existant reprend son observation à la passe suivante.
+- Combinaisons exactes, Capslock ignoré. Ctrl+Alt redimensionne ; si les choix sont identiques, le resize est prioritaire, comme annoncé dans l’aide. Seuil8points partagé avec les gestes existants.
+- La géométrie et les lectures d’état sont préparées hors du callback. Le point est simplement remplacé pendant le mouvement, puis traité au plus à60Hz. Les lectures JSON de validation sont limitées à4Hz, avec contrôle final imposé. Les lectures de type CG nécessaires à une mesure native ne sont pas remplacées par des hypothèses.

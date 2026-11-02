@@ -449,6 +449,15 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     ShutdownRegistry.register { scheduler.stop() }
     nativeResize.setCompletion { scheduler.buttonsReleased(gestureEnded: true) }
 
+    // Un seul capteur pour les gestes depuis le contenu : uniquement dans le processus écrivain.
+    let modifierRuntime = ModifierWindowRuntime(service: service, minimums: { scope, snapshot in
+        maintainer.dividerMinimums(for: scope, in: snapshot)
+    }, completed: { scheduler.buttonsReleased(gestureEnded: true) })
+    let modifierGestures = ModifierWindowGestureController(service: service, runtime: modifierRuntime,
+        onPress: { nativeResize.cancel(reason: "modifier_press") })
+    if enableLiveEvents { modifierGestures.start() }
+    ShutdownRegistry.register { modifierGestures.stop() }
+
     let settingsController = SettingsLiveApplyController(
         stageStore: service.effectiveStageStore,
         onLayoutChange: { invalidateIntents in
@@ -508,6 +517,7 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
         },
         onPress: { FrameTransitionRuntime.shared.cancel() },
         onDragStart: { gesture in
+            guard !UserInputActivity.shared.isCapturedPointerHeld else { return }
             if let snapshot = service.cachedGestureSnapshot(), nativeResize.begin(gesture, snapshot: snapshot) {
                 // Le suivi natif n'a pas besoin d'un inventaire AX complet au premier mouvement.
             } else {

@@ -4,10 +4,10 @@
 ## Fiche Synthèse
 Spec: 151-gestes-modificateurs
 Titre: Déplacer et redimensionner depuis le contenu d’une fenêtre
-Statut: Ready
+Statut: In Progress
 Priorité: P1
-Tâches: 0/5 (0%)
-Tests: 0/0 (0%)
+Tâches: 3/5 (60%)
+Tests: 16/16 (100%)
 Résumé:
 - Contexte: déplacement natif limité au titre et redimensionnement aux bords.
 - Objectif: Ctrl+glisser gauche pour déplacer ; Ctrl+Alt+glisser gauche pour redimensionner.

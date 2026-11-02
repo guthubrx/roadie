@@ -953,15 +953,18 @@ public struct StageCommandService {
         displayID: DisplayID,
         orderedWindowIDs: [WindowID],
         placements providedPlacements: [WindowID: Rect] = [:],
-        treeMutation: ((BSPTree) -> BSPTree)? = nil
+        treeMutation: ((BSPTree) -> BSPTree)? = nil,
+        deferGeometryUsing suppliedSnapshot: DaemonSnapshot? = nil,
+        validating stateCheck: ((PersistentStageState) -> Bool)? = nil
     ) -> StageCommandResult {
         if activeStageMode(displayID: displayID).usesTreeEngine {
-            return placeInTree(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs, treeMutation: treeMutation)
+            return placeInTree(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs,
+                               treeMutation: treeMutation, suppliedSnapshot: suppliedSnapshot, stateCheck: stateCheck)
         }
         beginLayoutCommand("stage.place_window")
         defer { finishLayoutCommand("stage.place_window") }
         let generation = PlacementGeneration.shared.next()
-        let snapshot = service.snapshot()
+        let snapshot = suppliedSnapshot ?? service.snapshot()
         guard let sourceEntry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
             return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false, outcome: .failed)
         }
@@ -973,6 +976,7 @@ public struct StageCommandService {
             // Affectation écrite puis intents retirés ; si ce retrait échoue, l'affectation revient
             // (REL-021) : le refus annoncé ne laisse rien.
             scope = try service.commitStageTransfer(in: store, { state -> StageScope in
+                guard stateCheck?(state) != false else { throw JSONPersistence.PersistenceError(description: "stage place: context changed") }
                 for scopeIndex in state.scopes.indices {
                     state.scopes[scopeIndex].remove(windowID: windowID)
                 }
@@ -985,6 +989,17 @@ public struct StageCommandService {
             }, clearingIntentsOf: { [$0, sourceScope].compactMap { $0 } })
         } catch {
             return .persistenceFailure("stage place \(windowID.rawValue)", error)
+        }
+        if suppliedSnapshot != nil {
+            if Set(providedPlacements.keys) == Set(orderedWindowIDs) {
+                do {
+                    try intentStore.saveChecked(LayoutIntent(scope: scope, windowIDs: orderedWindowIDs,
+                        placements: providedPlacements, source: .command))
+                } catch { return .partial(JSONPersistence.commandFailureMessage("stage place intent", error)) }
+            }
+            events.append(RoadieEvent(type: "stage_place_window", scope: scope,
+                details: ["windowID": String(windowID.rawValue), "geometry": "deferred"]))
+            return StageCommandResult(message: "stage place: persisted, geometry deferred", changed: true)
         }
         let updated = service.snapshot(followFocus: false)
         let sourceRelayout = relayoutActiveSourceScopes(
@@ -1047,17 +1062,21 @@ public struct StageCommandService {
         windowID: WindowID,
         displayID: DisplayID,
         orderedWindowIDs: [WindowID],
-        treeMutation: ((BSPTree) -> BSPTree)?
+        treeMutation: ((BSPTree) -> BSPTree)?,
+        suppliedSnapshot: DaemonSnapshot? = nil,
+        stateCheck: ((PersistentStageState) -> Bool)? = nil
     ) -> StageCommandResult {
         let generation = PlacementGeneration.shared.next()
         let requestedAt = service.clock()
-        let snapshot = service.snapshot()
+        let snapshot = suppliedSnapshot ?? service.snapshot()
         guard let sourceEntry = snapshot.windows.first(where: { $0.window.id == windowID }),
               let display = snapshot.displays.first(where: { $0.id == displayID })
         else {
             return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false, outcome: .failed)
         }
-        service.confirmLiveWindowPlacement(windowID, in: snapshot, requestedAt: requestedAt)
+        if suppliedSnapshot == nil {
+            service.confirmLiveWindowPlacement(windowID, in: snapshot, requestedAt: requestedAt)
+        }
         let window = sourceEntry.window
         let sourceScope = sourceEntry.scope
         var current = store.state()
@@ -1069,6 +1088,7 @@ public struct StageCommandService {
             // Affectation et arbres écrits puis intents retirés ; si ce retrait échoue, l'état
             // revient (REL-021) : le refus annoncé ne laisse rien.
             scope = try service.commitStageTransfer(in: store, { state -> StageScope in
+                guard stateCheck?(state) != false else { throw JSONPersistence.PersistenceError(description: "stage place: context changed") }
                 state.remove(windowID: windowID)
                 var persistentScope = activeScope(displayID: displayID, in: &state)
                 let stageID = persistentScope.activeStageID
@@ -1089,6 +1109,11 @@ public struct StageCommandService {
             }, clearingIntentsOf: { [$0, sourceScope].compactMap { $0 } })
         } catch {
             return .persistenceFailure("stage place \(windowID.rawValue)", error)
+        }
+        if suppliedSnapshot != nil {
+            events.append(RoadieEvent(type: "stage_place_window", scope: scope,
+                details: ["windowID": String(windowID.rawValue), "strategy": "tree", "geometry": "deferred"]))
+            return StageCommandResult(message: "stage place: tree persisted, geometry deferred", changed: true)
         }
         // Plan unique (A15, T212) : scope d'origine et scope cible disposés dans une seule écriture
         // groupée, puis le focus.
