@@ -153,8 +153,10 @@ import Testing
             replay: { replayed.append($0) }, snapshotProvider: { f.context.snapshot })
         defer { controller.stop() }
         let frame = f.original(f.source), point = CGPoint(x: frame.midX, y: frame.midY)
+        let originalSource = try #require(CGEventSource(stateID: .privateState))
+        originalSource.userData = 151209
         func event(_ type: CGEventType, x: CGFloat = 0) throws -> CGEvent {
-            let e = try #require(CGEvent(mouseEventSource: nil, mouseType: type,
+            let e = try #require(CGEvent(mouseEventSource: originalSource, mouseType: type,
                 mouseCursorPosition: CGPoint(x: point.x + x, y: point.y), mouseButton: .left))
             e.flags = .maskControl; return e
         }
@@ -164,6 +166,8 @@ import Testing
         #expect(!runtime.isActive && !input.isCapturedPointerHeld)
         #expect(replayed.map(\.type) == [.leftMouseDown, .leftMouseUp])
         #expect(replayed.allSatisfy { $0.getIntegerValueField(.eventSourceUserData) == ModifierWindowGestureController.replayMarker && $0.flags.contains(.maskControl) })
+        #expect(replayed.allSatisfy { CGEventSource(event: $0)?.userData == ModifierWindowGestureController.replayMarker })
+        #expect(originalSource.userData == 151209)
         #expect(!controller.handle(.leftMouseDown, event: replayed[0]))
         #expect(f.backend.writes.isEmpty)
     }

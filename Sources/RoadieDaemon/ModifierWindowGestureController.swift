@@ -21,6 +21,7 @@ public final class ModifierWindowGestureController {
     private let runtime: ModifierWindowRuntime
     private let input: UserInputActivity
     private let replay: (CGEvent) -> Void
+    private let replaySource: CGEventSource?
     private let snapshotProvider: () -> DaemonSnapshot?
     private let clock: () -> Date
     private let physicalLeftPressed: () -> Bool
@@ -44,6 +45,9 @@ public final class ModifierWindowGestureController {
          physicalLeftPressed: @escaping () -> Bool = { CGEventSource.buttonState(.hidSystemState, button: .left) },
          onPress: @escaping () -> Void = {}) {
         self.service = service; self.runtime = runtime; self.input = input; self.replay = replay
+        let source = CGEventSource(stateID: .privateState)
+        source?.userData = Self.replayMarker
+        replaySource = source
         config = service.effectiveConfig.tiling
         self.snapshotProvider = snapshotProvider ?? { service.cachedGestureSnapshot() }
         self.clock = clock; self.physicalLeftPressed = physicalLeftPressed; self.onPress = onPress
@@ -206,8 +210,13 @@ public final class ModifierWindowGestureController {
                 scope: current.source.scope, details: ["reason": "target_changed"])) }
             return
         }
-        for original in [current.event, up] {
-            if let copy = original.copy() { copy.setIntegerValueField(.eventSourceUserData, value: Self.replayMarker); replay(copy) }
+        guard let source = replaySource, let down = current.event.copy(), let up = up.copy() else { return }
+        for copy in [down, up] {
+            // Au post, macOS reprend userData de la source : modifier le champ seul ne suffit pas.
+            let flags = copy.flags
+            copy.setSource(source); copy.flags = flags
+            copy.setIntegerValueField(.eventSourceUserData, value: Self.replayMarker)
+            replay(copy)
         }
         Task { @MainActor in
             EventLog().append(RoadieEvent(type: "modifier_gesture.click_replayed", scope: current.source.scope,
