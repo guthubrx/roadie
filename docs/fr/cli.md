@@ -271,6 +271,7 @@ roadie project list --json
 roadie project delete Perso
 roadie launch ~/Documents/rapport.pdf --stage Perso
 roadie launch /Applications/Firefox.app --new-stage
+roadie launch /System/Library/CoreServices/Finder.app --here --mouse
 roadie targets show --json --labels-only
 roadie targets hide
 ```
@@ -380,3 +381,5 @@ Roadie intègre le raccourci de recherche `search_hotkey` (voir `[experimental.t
 Les deux fichiers appellent `~/.local/bin/roadie`. Ils couvrent le focus, le déplacement de fenêtre, le changement de stage et de desktop, le mode de layout et le rééquilibrage. Avec BetterTouchTool, crée un déclencheur de type « Execute Terminal Command » avec les mêmes commandes.
 
 Comme le daemon exécute les commandes, ces outils n'ont pas besoin de la permission Accessibilité pour `roadie` (voir [Permissions](../../README.fr.md#permissions)).
+
+`launch CHEMIN --here --mouse` ramène la fenêtre existante dans la stage active du bureau affiché sous la souris, ou ouvre l’application dans cette destination. Le focus clavier peut rester sur un autre écran. `--mouse` exige `--here`.

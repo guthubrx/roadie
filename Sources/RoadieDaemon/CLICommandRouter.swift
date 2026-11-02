@@ -235,7 +235,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "workflow run ID OBJECT [ARGUMENT] [--var NAME=VALUE] | trigger ID TRIGGER [ARGUMENT] [--var NAME=VALUE] | tasks update"),
         CLICommandSpec(usage: "workflow alfred search TEXT | trigger WORKFLOW NAME [ARGUMENT] | set WORKFLOW KEY VALUE | remove WORKFLOW KEY | reload WORKFLOW | reveal WORKFLOW"),
         CLICommandSpec(usage: "launch --open-items [--tabs]"),
-        CLICommandSpec(usage: "launch PATH [--stage NAME | --here | --new-stage] [--position left|right|full|float] [--preview-only]"),
+        CLICommandSpec(usage: "launch PATH [--stage NAME | --here [--mouse] | --new-stage] [--position left|right|full|float] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
         CLICommandSpec(usage: "record start NAME [--duration S] [--stop-file PATH]"),
@@ -690,6 +690,10 @@ public final class CLICommandRouter {
             }
             // SPEC-077 : fichier, dossier ou application ouvert comme Retour dans la barre.
             guard args.count >= 2, !args[1].hasPrefix("--") else { return usageError() }
+            if args.contains("--mouse"),
+               !args.contains("--here") || args.contains("--stage") || args.contains("--new-stage") {
+                return usageError()
+            }
             let expanded = NSString(string: args[1]).expandingTildeInPath
             let path = URL(fileURLWithPath: expanded, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
                 .standardizedFileURL.path
@@ -701,6 +705,7 @@ public final class CLICommandRouter {
             if let stage = value(after: "--stage", in: args) { payload["stage"] = stage }
             if args.contains("--new-stage") { payload["newStage"] = "true" }
             if args.contains("--here") { payload["here"] = "true" }
+            if args.contains("--mouse") { payload["mouse"] = "true" }
             if let position = value(after: "--position", in: args) {
                 guard ["left", "right", "full", "float"].contains(position) else { return usageError() }
                 payload["position"] = position

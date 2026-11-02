@@ -1324,7 +1324,7 @@ public final class TargetModeRuntimeController: NSObject {
             let loaded = await switcher.load()
             guard let entry = LauncherPlacement.preferredWindow(loaded.entries.filter { $0.window.bundleID == app.bundleID },
                                                                 state: loaded.persisted) else {
-                _ = self.launch(app)
+                self.openWindow(app, into: scope)
                 return
             }
             if entry.scope != scope {
@@ -1960,7 +1960,15 @@ public final class TargetModeRuntimeController: NSObject {
             }
             destination = LauncherDestination(kind: .stage(scope), title: name, detail: "")
         } else if command.bool("here") {
-            guard let scope = activeStageScope() else { _ = refused("launcher launch", "stage"); return }
+            let here: StageScope?
+            if command.bool("mouse") {
+                here = CGEvent(source: nil).flatMap {
+                    LauncherPlacement.stageUnderPointer($0.location, displays: LiveSystemSnapshotProvider().displays(), state: state)
+                }
+            } else {
+                here = activeStageScope()
+            }
+            guard let scope = here else { _ = refused("launcher launch", "stage"); return }
             destination = LauncherDestination(kind: .stage(scope), title: tr("Stage active", "Active stage"), detail: "")
         } else if command.bool("newStage") {
             let display = state.activeDisplayID ?? service.snapshot(followFocus: false).displays.first?.id ?? DisplayID(rawValue: "none")

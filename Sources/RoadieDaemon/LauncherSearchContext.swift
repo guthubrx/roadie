@@ -151,6 +151,15 @@ struct LauncherSearchContext {
 
 /// Décisions du lanceur sur l'état de Roadie, sans effet de bord.
 enum LauncherPlacement {
+    /// Destination explicite sous la souris, indépendante du focus clavier. Aucun relevé AX.
+    static func stageUnderPointer(_ point: CGPoint, displays: [DisplaySnapshot], state: PersistentStageState) -> StageScope? {
+        guard let display = displays.first(where: { CGRect(x: $0.frame.x, y: $0.frame.y,
+                                                          width: $0.frame.width, height: $0.frame.height).contains(point) }),
+              let scope = state.scopes.first(where: { $0.displayID == display.id
+                  && $0.desktopID == state.currentDesktopID(for: display.id) }) else { return nil }
+        return StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: scope.activeStageID)
+    }
+
     /// Fenêtre à rejoindre pour une application déjà ouverte : celle qui a le focus dans une stage
     /// affichée, puis une fenêtre d'une stage affichée, puis la fenêtre qui avait le focus dans sa
     /// stage, puis la première. O(w), w fenêtres de l'application.

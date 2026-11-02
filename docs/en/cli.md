@@ -271,6 +271,7 @@ roadie project list --json
 roadie project delete Perso
 roadie launch ~/Documents/report.pdf --stage Perso
 roadie launch /Applications/Firefox.app --new-stage
+roadie launch /System/Library/CoreServices/Finder.app --here --mouse
 roadie targets show --json --labels-only
 roadie targets hide
 ```
@@ -377,3 +378,5 @@ Roadie provides `search_hotkey` for search (see `[experimental.target_mode]`) an
 Both files call `~/.local/bin/roadie`. They cover focus, window move, stage and desktop switching, layout mode, and rebalance. With BetterTouchTool, create a trigger of type "Execute Terminal Command" with the same commands.
 
 Because the daemon runs the commands, these tools need no Accessibility permission for `roadie` (see [Permissions](../../README.md#permissions)).
+
+`launch PATH --here --mouse` brings an existing window to the active stage on the screen under the pointer, or opens the application in that destination. Keyboard focus may be on another screen. `--mouse` requires `--here`.
