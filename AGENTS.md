@@ -337,12 +337,12 @@ photo) dans un profil du sélecteur `source = "zones"` (Option+Tab chez l'utilis
 retour et clic, aller-retour, bordure jaune sur l'application, photos reprises en quittant une fenêtre, 20 zones,
 24 h, 3 zones de clics par fenêtre ; icônes des cartes (× et sens interdit). Reçus : specs/135 à 137.
 Session 138 : 0.12.0 publiée (sessions 131 à 137). Reçu : specs/138-release-0120/validation.md.
-Current SpecKit feature: `151-gestes-modificateurs`.
+Current SpecKit feature: `152-sens-animations-stages`.
 
 Contexte :
-- `specs/151-gestes-modificateurs/spec.md`
-- `specs/151-gestes-modificateurs/plan.md`
-- `specs/151-gestes-modificateurs/tasks.md`
+- `specs/152-sens-animations-stages/spec.md`
+- `specs/152-sens-animations-stages/plan.md`
+- `specs/152-sens-animations-stages/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes
@@ -393,3 +393,9 @@ Session149 installée et intégrée : résultats finaux des transitions réinté
 Session150 installée et intégrée : ⌘E global BTT ouvre ou ramène Finder dans la stage sous la souris, indépendamment du focus, via launch --here --mouse. Destination native explicite, y compris sans fenêtre et vers une stage vide.2461tests/373suites verts, revue traitée ; quatre parcours API BTT et cadre réel vérifiés, clavier physique non enregistré. Source459d653f, UUIDDA4F188C-6530-3377-8E48-651BC315E227, PID12688, santé5/5 ; configuration/signature conservées. Un seul ⌘E actif, ancien déclencheur et adaptateur retirés. Branche149 locale/distante et build supprimés, worktree actif/retour arrière/symboles/preuves conservés. Reçu : specs/150-raccourci-finder/livraison.md.
 
 Session151 installée : Ctrl + glisser gauche déplace depuis tout le contenu ; Ctrl + Alt + glisser gauche redimensionne, deux réglages dans Tuilage. Source et voisines via écrivain unique, clic sans glisser rejoué avec une source CG privée ; conteneur Notification Center filtré.2480tests/375suites et28scripts verts, revues traitées et cinq parcours natifs sur fenêtres fictives. UUID1D14C437-8C8B-357A-BB20-50B016B79EBF, PID29631, santé5/5. Configuration/signature conservées ; appuis physiques, réglages et menu contextuel non enregistrés. Reçu : specs/151-gestes-modificateurs/livraison.md.
+
+Session152 installée : sens des transitions selon le rail, deux captures temporaires bornées,
+placement final unique, focus après mouvement.2497tests /378suites et25ciblés verts.
+Neuf animations sur dix mesurées :294–356ms ; une bascule directe sous dépassement.
+UUID D4E23DD7-5D40-3E0B-AB46-FB88A8AA0318, santé5/5, certificat/configuration conservés.
+Preuves natives au clavier vérifiées ; GPU non mesuré. Reçu : specs/152-sens-animations-stages/validation.md.

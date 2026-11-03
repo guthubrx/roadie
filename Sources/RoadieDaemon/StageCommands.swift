@@ -1203,7 +1203,7 @@ public struct StageCommandService {
         } catch {
             return .persistenceFailure("stage \(direction.rawValue)", error)
         }
-        return switchDisplay(display, to: nextStageID, snapshot: snapshot)
+        return switchDisplay(display, to: nextStageID, snapshot: snapshot, navigation: direction)
     }
 
     public func switchVisible(_ direction: StageCycleDirection) -> StageCommandResult {
@@ -1225,7 +1225,7 @@ public struct StageCommandService {
         case .prev:
             nextIndex = currentIndex.map { ($0 - 1 + ordered.count) % ordered.count } ?? (ordered.count - 1)
         }
-        return switchDisplay(display, to: ordered[nextIndex], snapshot: snapshot)
+        return switchDisplay(display, to: ordered[nextIndex], snapshot: snapshot, navigation: direction)
     }
 
     public func setMode(_ mode: WindowManagementMode) -> StageCommandResult {
@@ -1287,6 +1287,16 @@ public struct StageCommandService {
         var hiddenWindowIDs: Set<WindowID>
         var targetMissing: Bool
         var nativeFullscreenMember: PersistentStageMember?
+        var direction: Direction?
+    }
+
+    /// L'ordre affiché prime sur les numéros ; next/prev gardent leur sens au bouclage.
+    static func transitionDirection(from previous: StageID, to target: StageID,
+                                    ordered: [StageID], navigation: StageCycleDirection? = nil) -> Direction? {
+        guard previous != target else { return nil }
+        if let navigation { return navigation == .prev ? .up : .down }
+        guard let from = ordered.firstIndex(of: previous), let to = ordered.firstIndex(of: target) else { return nil }
+        return to < from ? .up : .down
     }
 
     /// `generation` : celle de la commande, ouverte à son entrée et passée à toutes ses écritures
@@ -1295,7 +1305,8 @@ public struct StageCommandService {
         _ display: DisplaySnapshot,
         to stageID: StageID,
         snapshot: DaemonSnapshot,
-        generation: UInt64 = PlacementGeneration.shared.next()
+        generation: UInt64 = PlacementGeneration.shared.next(),
+        navigation: StageCycleDirection? = nil
     ) -> StageCommandResult {
         let startedAt = Date()
         // Lecture pour décider du cas « déjà active » ; les écritures passent par `mutate`.
@@ -1497,7 +1508,9 @@ public struct StageCommandService {
                     targetFocusedWindowID: targetFocusedWindowID,
                     hiddenWindowIDs: hiddenWindowIDs,
                     targetMissing: targetMissing,
-                    nativeFullscreenMember: nativeFullscreenMember
+                    nativeFullscreenMember: nativeFullscreenMember,
+                    direction: Self.transitionDirection(from: previousID, to: stageID,
+                        ordered: scope.stages.map(\.id), navigation: navigation)
                 )
             }
         } catch {
@@ -1517,7 +1530,7 @@ public struct StageCommandService {
             } else {
                 let hiding = hiddenFrames(transition.hiddenWindowIDs, windowsByID: windowsByID, display: display, displays: snapshot.displays)
                 let result = service.applyCommandPlacement(
-                    CommandPlacement(hiding: hiding),
+                    CommandPlacement(hiding: hiding, transitionDirection: transition.direction),
                     snapshot: snapshot,
                     cause: "stage.switch.missing_target",
                     generation: generation,
@@ -1563,7 +1576,8 @@ public struct StageCommandService {
 
         // Plan unique (A15, T212) : masquage de la stage quittée et disposition de la stage cible
         // dans une seule écriture groupée, puis le focus.
-        var placement = CommandPlacement(hiding: hiddenFrames(transition.hiddenWindowIDs, windowsByID: windowsByID, display: display, displays: snapshot.displays))
+        var placement = CommandPlacement(hiding: hiddenFrames(transition.hiddenWindowIDs, windowsByID: windowsByID, display: display, displays: snapshot.displays),
+                                         transitionDirection: transition.direction)
         if targetUsesTree, fullscreenMemberID == nil {
             // Mode arbre (A11, T094) : frames finales de l'arbre, sans restaurer les frames mémorisées.
             placement.layoutScopes = [targetScope]
@@ -1594,7 +1608,11 @@ public struct StageCommandService {
         let focusStartedAt = Date()
         if let focusedID = transition.targetFocusedWindowID,
            let focusedWindow = windowsByID[focusedID] {
-            _ = service.focus(focusedWindow)
+            let focusService = service
+            let deferred = Thread.isMainThread && MainActor.assumeIsolated {
+                FrameTransitionRuntime.shared.deferStageFocus(generation: generation) { _ = focusService.focus(focusedWindow) }
+            }
+            if !deferred { _ = service.focus(focusedWindow) }
         }
         let focusMs = elapsedMs(since: focusStartedAt)
         let totalMs = elapsedMs(since: startedAt)

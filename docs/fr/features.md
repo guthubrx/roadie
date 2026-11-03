@@ -1202,3 +1202,7 @@ drag_resize_modifier = "control+option"
 ```
 
 Valeurs : chaîne vide, `control`, `option`, `command`, `shift` ou une combinaison proposée dans les paramètres. Si les deux réglages sont identiques, le redimensionnement est prioritaire. Les gestes sont gérés par Roadie ; aucun raccourci BTT n’est nécessaire.
+
+### Sens des animations entre stages
+
+En remontant vers une stage précédente, ses fenêtres arrivent du bas et montent vers leur place. En descendant, elles arrivent du haut et descendent. L'ordre du rail décide du sens lors d'un saut direct ; Suivante et Précédente conservent leur sens au bouclage. La position de rangement hors écran ne détermine pas le trajet visible. Une capture temporaire montre le mouvement pendant la courte transition, puis laisse place aux vraies fenêtres déjà positionnées. Les réglages d'animation existants restent applicables. Si la capture tarde ou n'est pas disponible, la bascule reste directe.

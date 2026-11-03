@@ -19,6 +19,8 @@ public final class FrameTransitionRuntime {
         var frames: [WindowID: Rect] = [:]
         var finished: Set<WindowID> = []
         var ids: Set<String> = []
+        var focusAfterScenePlacement: (() -> Void)?
+        var scene: StageSceneTransition?
         var finalSubmitted = false
         var finalResults: [WindowID: ApplyResultItem] = [:]
         init(service: SnapshotService, generation: UInt64, generations: PlacementGeneration) {
@@ -30,6 +32,9 @@ public final class FrameTransitionRuntime {
     private let generations: PlacementGeneration
     private let events: EventLog
     private let isMouseDown: () -> Bool
+    private let sceneCapture: @MainActor (StageSceneContext) async -> CGImage?
+    private let presentsScenes: Bool
+    var isAnimatingScene: Bool { session?.scene?.phase == .animating }
     private var session: Session?
     private var timer: Timer?
     /// Résultats finaux seulement : les images intermédiaires ne sont pas des placements.
@@ -39,26 +44,31 @@ public final class FrameTransitionRuntime {
     public var isHoldingLayout: Bool { session.map { $0.permit.isCurrent && ProcessInfo.processInfo.systemUptime - $0.started < 1.5 } ?? false }
 
     init(generations: PlacementGeneration = .shared, events: EventLog = EventLog(),
+         presentsScenes: Bool = true,
+         sceneCapture: @escaping @MainActor (StageSceneContext) async -> CGImage? = { await RailThumbnailStore.shared.captureScene($0) },
          isMouseDown: @escaping () -> Bool = {
              UserInputActivity.shared.isCapturedPointerHeld || NSEvent.pressedMouseButtons != 0
          }) {
         self.generations = generations; self.events = events; self.isMouseDown = isMouseDown
+        self.sceneCapture = sceneCapture; self.presentsScenes = presentsScenes
     }
 
     func schedule(_ plan: ApplyPlan, service: SnapshotService, generation: UInt64, action: AnimationAction,
-                  immediateWindowIDs: Set<WindowID> = []) -> ApplyResult? {
+                  immediateWindowIDs: Set<WindowID> = [], transitionDirection: Direction? = nil,
+                  displays: [DisplaySnapshot]? = nil, stageScene: StageSceneContext? = nil) -> ApplyResult? {
         let policy = service.effectiveConfig.fx.animations.policy(for: action)
         guard policy.enabled, !plan.commands.isEmpty, generation == generations.current,
               generation != PlacementGeneration.outsideBudget, !isMouseDown() else { return nil }
         events.append(RoadieEvent(type: "effects.frames_policy", details: [
             "generation": String(generation), "action": action.rawValue,
+            "direction": transitionDirection?.rawValue ?? "none",
             "directWindowIDs": immediateWindowIDs.sorted().map { String($0.rawValue) }.joined(separator: ","),
             "frames": plan.commands.map { command in
                 let from = command.window.frame, to = command.frame
                 return "\(command.window.id.rawValue):\(from.x),\(from.y),\(from.width),\(from.height)->\(to.x),\(to.y),\(to.width),\(to.height);preservesSize=\(command.preservesSize)"
             }.joined(separator: "|")
         ]))
-        if session?.generation != generation || session?.finalSubmitted == true {
+        if session?.generation != generation || session?.finalSubmitted == true || session?.scene != nil {
             let retained = Set(plan.commands.map { "ax-\(ObjectIdentifier(self))-\($0.window.pid)-\($0.window.id.rawValue)" })
             // Révoquer les anciens lots sans perdre la vitesse des fenêtres reprises.
             cancel(preserving: retained)
@@ -92,7 +102,34 @@ public final class FrameTransitionRuntime {
             }
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
         }
-        let displays = service.cachedGestureSnapshot()?.displays ?? []
+        if let stageScene, let transitionDirection, action == .stage {
+            // Un changement de stage utilise uniquement les cadres finaux sous deux images.
+            // Aucun aller-retour AX pour produire une image d'animation.
+            current.commands = Dictionary(plan.commands.map { original in
+                var command = original
+                if immediateWindowIDs.contains(command.window.id) { command.positionsBeforeResizing = true }
+                return (command.window.id, command)
+            }, uniquingKeysWith: { _, last in last })
+            current.windows = Dictionary(plan.commands.map { ($0.window.id, $0.window) }, uniquingKeysWith: { _, last in last })
+            let scene = StageSceneTransition(context: stageScene, direction: transitionDirection, policy: policy,
+                events: events, valid: { [weak current] in current?.permit.isCurrent == true }, submit: { [weak current] in
+                    guard let current, current.permit.isCurrent else { return }
+                    current.finalSubmitted = true
+                    current.dispatcher.submit(Array(current.commands.values), generation: current.generation)
+                }, presents: presentsScenes, capture: sceneCapture)
+            current.scene = scene; scene.start()
+            return ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0,
+                items: plan.commands.map { ApplyResultItem(windowID: $0.window.id, status: .deferred, requested: $0.frame, actual: nil) })
+        }
+        let animationDisplays = displays ?? service.cachedGestureSnapshot()?.displays ?? []
+        let distance = 40 * policy.intensity
+        // Repère AX : y croît vers le bas. Hors navigation, garder le déplacement gauche historique.
+        let motion: CGSize = switch transitionDirection ?? .left {
+        case .left: CGSize(width: -distance, height: 0)
+        case .right: CGSize(width: distance, height: 0)
+        case .up: CGSize(width: 0, height: -distance)
+        case .down: CGSize(width: 0, height: distance)
+        }
         for original in plan.commands {
             var command = original
             if immediateWindowIDs.contains(command.window.id) { command.positionsBeforeResizing = true }
@@ -114,15 +151,17 @@ public final class FrameTransitionRuntime {
             // Ne jamais réexposer une fenêtre déjà rangée pendant son masquage.
             if command.preservesSize && (!window.isOnScreen
                 || window.frame.cgRect.matchesFrame(to)
-                || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: displays)) {
+                || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: animationDisplays)) {
                 EffectAnimator.shared.cancel(animationID)
                 current.frames[id] = command.frame
                 current.finished.insert(id)
                 continue
             }
             // Le parking n'est pas une destination visuelle : courte sortie puis parking final.
-            if command.preservesSize { to = from.offsetBy(dx: -40 * policy.intensity, dy: 0) }
-            else if !window.isOnScreen { from = to.offsetBy(dx: 40 * policy.intensity, dy: 0) }
+            if command.preservesSize { to = from.offsetBy(dx: motion.width, dy: motion.height) }
+            else if !window.isOnScreen || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: animationDisplays) {
+                from = to.offsetBy(dx: -motion.width, dy: -motion.height)
+            }
             EffectAnimator.shared.animate(id: animationID, from: [from.minX, from.minY, from.width, from.height],
                 to: [to.minX, to.minY, to.width, to.height], policy: policy) { [weak current] values in
                 current?.frames[id] = Rect(x: values[0], y: values[1], width: max(1, values[2]), height: max(1, values[3]))
@@ -134,12 +173,37 @@ public final class FrameTransitionRuntime {
             items: plan.commands.map { ApplyResultItem(windowID: $0.window.id, status: .deferred, requested: $0.frame, actual: nil) })
     }
 
+    /// Ne pas activer une fenêtre encore au parking pendant la capture source.
+    func deferStageFocus(generation: UInt64, _ focus: @escaping () -> Void) -> Bool {
+        guard let current = session, current.generation == generation, current.scene != nil else { return false }
+        current.focusAfterScenePlacement = focus
+        return true
+    }
+
     private func pulse() {
         guard let current = session else { return }
         guard current.permit.isCurrent else { cancel(); return }
         let needsImmediateEnd = current.config != current.service.effectiveConfig.fx.animations
         let elapsed = ProcessInfo.processInfo.systemUptime - current.started
         guard elapsed < 1.5 else { cancel(); return }
+        if let scene = current.scene {
+            if needsImmediateEnd { scene.cancel(); if !current.finalSubmitted {
+                current.finalSubmitted = true
+                current.dispatcher.submit(Array(current.commands.values), generation: current.generation)
+            } }
+            let applied = current.finalSubmitted && current.dispatcher.isIdle
+            scene.pulse(applied: applied)
+            if scene.phase == .finished, applied {
+                // AXRaise peut attendre l'application. Le faire après les images évite
+                // de bloquer leur horloge et de consommer le budget de capture cible.
+                if let focus = current.focusAfterScenePlacement {
+                    current.focusAfterScenePlacement = nil
+                    focus()
+                }
+                cancel(completed: true)
+            }
+            return
+        }
         if current.finalSubmitted {
             if current.dispatcher.isIdle { cancel(completed: true) }
             return
@@ -176,6 +240,7 @@ public final class FrameTransitionRuntime {
                 "clamped": String(current.finalResults.values.filter { $0.status == .clamped }.count),
                 "failed": String(current.finalResults.values.filter { $0.status == .failed }.count)
             ]))
+            current.scene?.cancel()
             current.dispatcher?.invalidate()
             for id in current.ids.subtracting(preserving) { EffectAnimator.shared.cancel(id) }
         }
