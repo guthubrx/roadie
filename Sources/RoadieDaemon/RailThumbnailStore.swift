@@ -1,3 +1,4 @@
+import RoadieAX
 import AppKit
 import CoreGraphics
 import Foundation
@@ -40,6 +41,7 @@ final class RailThumbnailStore {
     private var sceneDisplays: [SCDisplay] = []
     private var sceneApplications: [SCRunningApplication] = []
     private var sceneCaptureBusy = false
+    private var dragCaptureBusy = false
     private var sceneMetadataBusy = false
     private var absentUntil: [WindowID: Date] = [:]
     private let absentRetryInterval: TimeInterval = 5
@@ -248,6 +250,29 @@ final class RailThumbnailStore {
         let excluded = sceneApplications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
         let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
         return try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+    }
+
+    /// Une image initiale par glisser : le ratio du viewport est conservé, même si
+    /// le SCWindow en cache porte une ancienne géométrie. Identité CG/PID exacte.
+    func captureDragSource(_ source: WindowSnapshot) async -> CGImage? {
+        guard !dragCaptureBusy, CGPreflightScreenCaptureAccess(),
+              source.frame.width.isFinite, source.frame.height.isFinite,
+              source.frame.width > 0, source.frame.height > 0 else { return nil }
+        dragCaptureBusy = true
+        defer { dragCaptureBusy = false }
+        if shareableWindows[source.id]?.owningApplication?.processID != source.pid {
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else { return nil }
+            shareableWindows = Dictionary(content.windows.map { (WindowID(rawValue: $0.windowID), $0) }, uniquingKeysWith: { a, _ in a })
+        }
+        guard let window = shareableWindows[source.id], window.owningApplication?.processID == source.pid,
+              source.frame.width > 0, source.frame.height > 0 else { return nil }
+        let size = source.frame.cgRect.size
+        let scale = min(2, sqrt(2_000_000 / (size.width * size.height)))
+        let config = SCStreamConfiguration()
+        config.width = max(1, Int(size.width * scale)); config.height = max(1, Int(size.height * scale))
+        config.showsCursor = false; config.scalesToFit = true; config.preservesAspectRatio = true
+        config.ignoreShadowsSingleWindow = true
+        return try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config)
     }
 
     private func screenshot(of window: SCWindow, size: CGSize, displayWidth: CGFloat) async -> CGImage? {

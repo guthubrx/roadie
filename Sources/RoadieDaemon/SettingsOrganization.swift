@@ -27,7 +27,7 @@ enum SettingsOrganization {
         let key = d.key, id = d.id
         switch d.category {
         case .effets:
-            if d.id == "fx.drop_preview" || d.key == "drop_preview" { return tr("Pendant un glisser", "During a drag") }
+            if d.key == "drop_preview" || d.key.hasPrefix("drag_preview") { return tr("Pendant un glisser", "During a drag") }
             let action = d.tablePath.split(separator: ".").last.map(String.init) ?? ""
             switch action {
             case "move": return tr("Déplacement et réorganisation", "Movement and rearrangement")

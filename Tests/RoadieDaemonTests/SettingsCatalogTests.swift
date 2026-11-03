@@ -17,15 +17,15 @@ struct SettingsCatalogTests {
     }
 
     @Test
-    func catalogHas195SimpleSettings() {
+    func catalogHasTheExpectedSimpleSettings() {
         // Spec056 : 7 réglages du sélecteur ; les listes du sélecteur sont des collections.
         // Spec075 : raccourci des verbes et recherche web. Spec088 : deux réglages des workflows. Session 096 : quatre réglages de la barre vide.
         // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
         // terminal, signets, tri, apprentissage, confirmation). Session 108 : douze touches de la barre.
         // Session 110 : Calculette ouverte par un calcul. Session 111 : ordre appris des verbes. Session 113 : mots-clés in et tags. Session 114 : historique web. Session 115 : réglages dans la barre et touche ⌘,. Session 119 : cinq réglages simples de la barre. Session 121 : icône du sélecteur et sa taille. Session 127 : langue de l'interface. Session 131 : trois modificateurs de Retour et style des fenêtres de workflow. Session 132 : fenêtres flottantes hors du rail. Session 133 : raccourci de la recherche à l'écran. Session 134 : fautes de frappe rattrapées, éléments à l'écran dans le lanceur. Session 136 : trois réglages des zones (le raccourci de la 135 retiré).
-        #expect(simple.count == 310) // Session151 : deux modificateurs de glisser.
+        #expect(simple.count == 313) // Session151 : deux modificateurs de glisser.
         #expect(railSimple.count == 80)
-        #expect(simple.count - railSimple.count == 230)
+        #expect(simple.count - railSimple.count == 233)
     }
 
     @Test
@@ -168,7 +168,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 310)
+        #expect(expected.count == 313)
     }
 
     // MARK: - Défauts
@@ -281,7 +281,7 @@ struct SettingsCatalogTests {
         // 37 réglages hors rail ont une plage (session 121 : taille de l'icône du sélecteur ; session 096 : deux nombres de lignes de la barre vide ;
         // session 101 : nombre de résultats montrés ; session 114 : jours d'historique web ; session 134 : fautes de frappe ;
         // session 136 : trois réglages des zones).
-        #expect(checked == 73)
+        #expect(checked == 75)
     }
 
     // MARK: - Recherche
@@ -308,7 +308,7 @@ struct SettingsCatalogTests {
     func searchMatchesNameLabelAndHelp() {
         #expect(SettingsCatalog.search("target_grid.rows").map(\.id) == ["target_grid.rows"])
         #expect(SettingsCatalog.search("Nombre de colonnes").map(\.id) == ["target_grid.columns"])
-        #expect(SettingsCatalog.search("sous le pointeur").map(\.id) == ["focus.focus_follows_mouse"])
+        #expect(SettingsCatalog.search("sous le pointeur").map(\.id) == ["focus.focus_follows_mouse", "drag_preview", "drag_preview_opacity_percent", "drag_preview_scale_percent"])
         #expect(SettingsCatalog.search("").isEmpty)
         #expect(SettingsCatalog.search("zzzzzz").isEmpty)
     }

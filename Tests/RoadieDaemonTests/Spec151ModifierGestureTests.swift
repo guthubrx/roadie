@@ -56,6 +56,9 @@ import Testing
 @Suite(.serialized) @MainActor struct Spec151ModifierRuntimeTests {
     private func setup(_ f: Drag143Fixture, input: UserInputActivity) -> ModifierWindowRuntime {
         f.live.invalidate()
+        let path = f.configService.state.activePath!
+        try! (String(contentsOfFile: path, encoding: .utf8) + "\n[fx]\ndrag_preview='none'\n").write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
         return ModifierWindowRuntime(service: f.service, input: input,
             events: EventLog(path: f.directory.appendingPathComponent("modifier.jsonl").path), automaticCadence: false)
     }

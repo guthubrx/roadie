@@ -11,6 +11,7 @@ public final class ModifierWindowRuntime {
         let source: ScopedWindowSnapshot
         let context: DropPreviewContext
         let config: TilingConfig
+        let effects: EffectsConfig
         let geometry: ModifierWindowGeometry
         let prepared: BSPNativeResize?
         let permit = InteractiveWritePermit(generations: .shared)
@@ -27,9 +28,9 @@ public final class ModifierWindowRuntime {
         var ending = false
 
         init(source: ScopedWindowSnapshot, context: DropPreviewContext, config: TilingConfig,
-             geometry: ModifierWindowGeometry, prepared: BSPNativeResize?) {
+             geometry: ModifierWindowGeometry, prepared: BSPNativeResize?, effects: EffectsConfig) {
             self.source = source; self.context = context; self.config = config; self.geometry = geometry
-            self.prepared = prepared; point = geometry.origin
+            self.prepared = prepared; self.effects = effects; point = geometry.origin
             originals = Dictionary(context.snapshot.windows.map { ($0.window.id, $0.window.frame) }, uniquingKeysWith: { a, _ in a })
             windows = Dictionary(context.snapshot.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { a, _ in a })
         }
@@ -45,6 +46,7 @@ public final class ModifierWindowRuntime {
     private var timer: Timer?
     private let engine: DropPreviewEngine
     private let overlay = DropPreviewOverlayWindow()
+    var pointerPreview = DragPointerPreview()
 
     public init(service: SnapshotService, input: UserInputActivity = .shared, events: EventLog = EventLog(),
          minimums: @escaping (StageScope, DaemonSnapshot) -> [WindowID: CGSize] = { _, _ in [:] },
@@ -96,7 +98,7 @@ public final class ModifierWindowRuntime {
             available: prepared?.movableEdges ?? [.left, .right, .up, .down],
             minimum: known[source.window.id] ?? CGSize(width: 80, height: 80))
         let current = Session(source: source, context: DropPreviewContext(snapshot: snapshot, persistedStateBeforeSnapshot: state),
-                              config: config, geometry: geometry, prepared: prepared)
+                              config: config, geometry: geometry, prepared: prepared, effects: service.publishedConfig.fx)
         current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak current] result, _ in
             guard let current else { return }
             for item in result.items { if let frame = item.actual { current.windows[item.windowID]?.frame = frame } }
@@ -104,6 +106,15 @@ public final class ModifierWindowRuntime {
         input.claimExplicitResize()
         input.setCapturedPointerHeld(true)
         session = current
+        if operation == .move {
+            pointerPreview.onPrepared = { [weak self, weak current] in
+                guard let self, let current, self.session === current, !current.ending else { return }
+                current.lastProcessedPoint = nil
+                self.flush()
+            }
+            pointerPreview.prepare(window: source.window, anchor: point, config: current.effects)
+            pointerPreview.show(at: point)
+        }
         if automaticCadence {
             let timer = Timer(timeInterval: 1 / 60, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.flush() }
@@ -125,6 +136,10 @@ public final class ModifierWindowRuntime {
         if Date().timeIntervalSince(current.renewedAt) > 0.4 {
             current.renewedAt = Date(); WindowDragActivity.shared.markActive(windowID: current.source.window.id)
         }
+        if current.geometry.operation == .move, current.effects.dragPreview != "none" {
+            pointerPreview.update(at: current.point)
+            guard pointerPreview.isReady || pointerPreview.failed else { return }
+        }
         guard current.lastProcessedPoint != current.point else { return }
         current.lastProcessedPoint = current.point
         guard let frame = current.geometry.target(at: current.point) else { return }
@@ -144,11 +159,19 @@ public final class ModifierWindowRuntime {
             }
             if let candidate = current.candidate {
                 if service.publishedConfig.tiling.liveDragPreview { frames = candidate.placements }
-                if service.publishedConfig.fx.dropPreview == "real" {
+                if current.effects.dropPreview == "real" && !pointerPreview.failed {
                     frames[current.source.window.id] = candidate.placements[current.source.window.id] ?? Rect(candidate.frame)
                     overlay.hide()
-                } else { frames[current.source.window.id] = Rect(frame); overlay.show(candidate) }
-            } else { frames[current.source.window.id] = Rect(frame); overlay.hide() }
+                } else {
+                    frames[current.source.window.id] = current.effects.dragPreview != "none" && !pointerPreview.failed
+                        ? current.source.window.frame : Rect(frame)
+                    overlay.show(candidate)
+                }
+            } else {
+                frames[current.source.window.id] = current.effects.dragPreview != "none" && !pointerPreview.failed
+                    ? current.source.window.frame : Rect(frame)
+                overlay.hide()
+            }
         }
         submit(frames, current: current)
     }
@@ -205,6 +228,14 @@ public final class ModifierWindowRuntime {
         guard session === current, valid(current, force: true) else { abandon(current, reason: "context_changed"); return }
         current.ending = true; timer?.invalidate(); timer = nil; overlay.hide()
         if cancelled { submit([:], current: current) }
+        else if current.geometry.operation == .move,
+                current.candidate == nil || current.effects.dropPreview != "real" || pointerPreview.failed,
+                let frame = current.geometry.target(at: current.point) {
+            // Le cadre final libre passe par le même écrivain avant la sauvegarde.
+            var frames = current.candidate?.placements ?? [:]
+            frames[current.source.window.id] = current.candidate.map { $0.placements[current.source.window.id] ?? Rect($0.frame) } ?? Rect(frame)
+            submit(frames, current: current)
+        }
         Task { [weak self, current] in
             let deadline = Date().addingTimeInterval(2)
             while !current.dispatcher.isIdle, current.permit.isCurrent, Date() < deadline {
@@ -253,6 +284,7 @@ public final class ModifierWindowRuntime {
 
     private func abandon(_ current: Session, reason: String) {
         guard session === current else { return }
+        pointerPreview.end()
         current.dispatcher.invalidate(); timer?.invalidate(); timer = nil; overlay.hide(); session = nil
         WindowDragActivity.shared.release(); input.setCapturedPointerHeld(false)
         events.append(RoadieEvent(type: "modifier_gesture.ended", scope: current.source.scope,

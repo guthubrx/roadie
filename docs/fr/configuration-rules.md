@@ -366,6 +366,9 @@ L’aperçu local de la page ne déplace aucune application.
 ```toml
 [fx]
 drop_preview = "real" # "contour" par défaut, indépendant des animations
+drag_preview = "content" # content, outline, none
+drag_preview_opacity_percent = 85.0 # 10–100
+drag_preview_scale_percent = 50.0 # 25–100
 
 [fx.animations]
 enabled = true
@@ -393,4 +396,6 @@ recrée pas un contenu fermé. Aucun changement de protection système n’est r
 Une vraie remise en page sollicite l’application ; son coût dépend du document.
 La taille de l’aperçu réel n’est demandée qu’au changement de destination.
 
-Sur une destination d’un autre écran, Roadie conserve le contour et garde la source à son origine : macOS peut masquer son contenu pendant un glisser capturé entre Spaces. Le dépôt reste disponible.
+Pendant le glisser, une copie figée suit le pointeur. Son contenu, sa visibilité et sa taille se règlent dans Effets > Pendant un glisser. Le défaut est une copie à 50 % de la taille initiale et 85 % de visibilité. 100 % de visibilité la rend opaque. Le ratio reste conservé. Le relâchement retire la copie et garde la vraie fenêtre. Le redimensionnement avec Ctrl+Alt reste inchangé.
+
+La destination garde son réglage indépendant : contour ou vraie fenêtre avec remise en page. Cela vaut aussi entre écrans. La capture initiale précède la remise en page ; aucune capture ne se répète à chaque mouvement. Si la capture manque, la vraie fenêtre garde son déplacement visible. Aucune nouvelle permission n’est demandée pendant le geste.

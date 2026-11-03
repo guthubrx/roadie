@@ -115,6 +115,8 @@ public struct SettingDescriptor: Equatable, Sendable {
         }
         if category == .effets {
             switch value {
+            case "content": return tr("Contenu de la fenêtre", "Window contents")
+            case "outline": return tr("Contour mobile", "Moving outline")
             case "none": return tr("Aucun", "None")
             case "subtle": return tr("Sobre", "Subtle")
             case "smooth": return tr("Souple", "Smooth")

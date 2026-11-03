@@ -539,6 +539,9 @@ public struct EffectsConfig: Equatable, Codable, Sendable {
     public var borders: BorderConfig
     public var animations: AnimationsConfig
     public var dropPreview: String
+    public var dragPreview: String = "content"
+    public var dragPreviewOpacityPercent: Double = 85
+    public var dragPreviewScalePercent: Double = 50
 
     public init(borders: BorderConfig = BorderConfig()) {
         self.borders = borders
@@ -555,6 +558,9 @@ public struct EffectsConfig: Equatable, Codable, Sendable {
     // `borders` est facultatif : `[fx.rail]` seul est une configuration valide.
     enum CodingKeys: String, CodingKey {
         case borders, animations, dropPreview = "drop_preview"
+        case dragPreview = "drag_preview"
+        case dragPreviewOpacityPercent = "drag_preview_opacity_percent"
+        case dragPreviewScalePercent = "drag_preview_scale_percent"
     }
 
     public init(from decoder: Decoder) throws {
@@ -562,6 +568,14 @@ public struct EffectsConfig: Equatable, Codable, Sendable {
         self.borders = try c.decodeIfPresent(BorderConfig.self, forKey: .borders) ?? BorderConfig()
         self.animations = try c.decodeIfPresent(AnimationsConfig.self, forKey: .animations) ?? AnimationsConfig()
         self.dropPreview = try c.decodeIfPresent(String.self, forKey: .dropPreview) ?? "contour"
+        dragPreview = try c.decodeIfPresent(String.self, forKey: .dragPreview) ?? "content"
+        dragPreviewOpacityPercent = try c.decodeIfPresent(Double.self, forKey: .dragPreviewOpacityPercent) ?? 85
+        dragPreviewScalePercent = try c.decodeIfPresent(Double.self, forKey: .dragPreviewScalePercent) ?? 50
+        guard ["content", "outline", "none"].contains(dragPreview),
+              dragPreviewOpacityPercent.isFinite, (10...100).contains(dragPreviewOpacityPercent),
+              dragPreviewScalePercent.isFinite, (25...100).contains(dragPreviewScalePercent) else {
+            throw DecodingError.dataCorruptedError(forKey: .dragPreview, in: c, debugDescription: "invalid pointer preview")
+        }
         guard ["contour", "real"].contains(dropPreview) else {
             throw DecodingError.dataCorruptedError(forKey: .dropPreview, in: c, debugDescription: "unknown drop preview")
         }
@@ -1888,7 +1902,7 @@ private enum ConfigValidationRules {
         let gapKeys: Set<String> = ["gaps_outer", "gaps_outer_top", "gaps_outer_right", "gaps_outer_bottom", "gaps_outer_left"]
         return [
             "": [],
-            "fx": ["drop_preview"],
+            "fx": ["drop_preview", "drag_preview", "drag_preview_opacity_percent", "drag_preview_scale_percent"],
             "fx.animations": ["enabled", "profile", "curve", "duration_ms", "intensity", "stiffness", "damping", "move", "stage", "appearance", "rail", "launcher", "switcher", "overview"],
             "fx.animations.move": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
             "fx.animations.stage": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],

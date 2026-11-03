@@ -13,6 +13,7 @@ final class LiveDropPreview {
         var touched: Set<WindowID> = []
         var scopes: Set<StageScope> = []
         let sourceGestureOwned: Bool
+        let keepSourceAtOrigin: Bool
         var source: WindowID?
         var dispatcher: InteractiveFrameDispatcher!
         var ending = false
@@ -21,8 +22,9 @@ final class LiveDropPreview {
         let stages: [StageScope: PersistentStage]
         var lastPlacements: [WindowID: Rect] = [:]
         var lastCandidate: DropPreviewCandidate?
-        init(context: DropPreviewContext, state: PersistentStageState, generations: PlacementGeneration, config: TilingConfig, sourceGestureOwned: Bool) {
+        init(context: DropPreviewContext, state: PersistentStageState, generations: PlacementGeneration, config: TilingConfig, sourceGestureOwned: Bool, sourceWindowID: WindowID?, sourceObservedFrame: Rect?, keepSourceAtOrigin: Bool) {
             self.sourceGestureOwned = sourceGestureOwned
+            self.keepSourceAtOrigin = keepSourceAtOrigin
             self.config = config
             stages = LiveDropPreview.stageIndex(state)
             permit = InteractiveWritePermit(generations: generations)
@@ -31,6 +33,9 @@ final class LiveDropPreview {
                     && $0.window.furniture?.isNativeFullscreen != true
             }.map { ($0.window.id, $0) }, uniquingKeysWith: { a, _ in a })
             windows = originals.mapValues(\.window)
+            source = sourceWindowID
+            if let sourceWindowID, let sourceObservedFrame { windows[sourceWindowID]?.frame = sourceObservedFrame }
+            if let sourceWindowID, let scope = originals[sourceWindowID]?.scope { scopes.insert(scope) }
         }
     }
     private let service: SnapshotService
@@ -52,13 +57,15 @@ final class LiveDropPreview {
         self.service = service; self.generations = generations; self.activity = activity
     }
 
-    func begin(_ context: DropPreviewContext, sourceGestureOwned: Bool = false) {
+    func begin(_ context: DropPreviewContext, sourceGestureOwned: Bool = false,
+               sourceWindowID: WindowID? = nil, sourceObservedFrame: Rect? = nil, keepSourceAtOrigin: Bool = false) {
         invalidate()
         superseded = false
         // L'acquisition du contexte peut réconcilier une destruction ancienne.
         // La visée garde l'arbre d'avant, la garde compare l'état APRES acquisition.
         let current = Session(context: context, state: service.effectiveStageStore.state(),
-                              generations: generations, config: service.effectiveConfig.tiling, sourceGestureOwned: sourceGestureOwned)
+                              generations: generations, config: service.effectiveConfig.tiling, sourceGestureOwned: sourceGestureOwned,
+                              sourceWindowID: sourceWindowID, sourceObservedFrame: sourceObservedFrame, keepSourceAtOrigin: keepSourceAtOrigin)
         session = current
         current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak current] result, _ in
             guard let current else { return }
@@ -93,7 +100,10 @@ final class LiveDropPreview {
         guard valid(current) else { invalidate(); return }
         var placements = service.effectiveConfig.tiling.liveDragPreview ? candidate?.placements ?? [:] : [:]
         if showsRealSource, let candidate { placements[candidate.sourceWindowID] = candidate.placements[candidate.sourceWindowID] ?? Rect(candidate.frame) }
-        else if let source = current.source { placements.removeValue(forKey: source) }
+        else if let source = current.source {
+            if current.sourceGestureOwned && current.keepSourceAtOrigin { placements[source] = current.originals[source]?.window.frame }
+            else { placements.removeValue(forKey: source) }
+        }
         guard placements != current.lastPlacements else { return }
         current.lastPlacements = placements
         submit(placements, current: current)

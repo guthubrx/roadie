@@ -5,6 +5,8 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Copie du contenu sous le pointeur pendant le glisser, avec visibilité et taille réglables. Reprise du glisser réel après une qualification tardive.
+
 - Transitions de stages : sens vertical cohérent avec la navigation et l'ordre du rail.
   Deux captures temporaires rendent le mouvement complet malgré le bord supérieur macOS.
   Les vraies fenêtres sont placées une fois ; le focus attend la fin du mouvement.

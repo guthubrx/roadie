@@ -360,6 +360,9 @@ damping; duration does not set their end. The local settings preview moves no ap
 ```toml
 [fx]
 drop_preview = "real" # default: "contour", independent of animations
+drag_preview = "content" # content, outline, none
+drag_preview_opacity_percent = 85.0 # 10–100
+drag_preview_scale_percent = 50.0 # 25–100
 
 [fx.animations]
 enabled = true
@@ -386,4 +389,6 @@ protection change is required. Real layout work uses resources in the target
 app; cost depends on its content. Real preview requests a size only when the
 destination changes.
 
-For a destination on another display, Roadie keeps the outline and leaves the source at its origin: macOS may hide its contents during a captured drag across Spaces. Dropping still works.
+A frozen copy follows the pointer during dragging. Effects > During a drag controls its content, visibility and size. Defaults are 50% of the initial size and 85% visibility; 100% visibility is opaque. Aspect ratio is preserved. Releasing removes the copy and leaves the actual window. Ctrl+Alt resizing is unchanged.
+
+The destination separately offers an outline or the actual window with live layout, including across displays. Capture occurs before layout and does not repeat per movement. If capture is unavailable, the actual window keeps moving visibly. No new permission is requested during a gesture.
