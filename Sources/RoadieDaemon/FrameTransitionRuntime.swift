@@ -19,6 +19,7 @@ public final class FrameTransitionRuntime {
         var frames: [WindowID: Rect] = [:]
         var finished: Set<WindowID> = []
         var ids: Set<String> = []
+        var focusAfterScenePlacement: (() -> Void)?
         var scene: StageSceneTransition?
         var finalSubmitted = false
         var finalResults: [WindowID: ApplyResultItem] = [:]
@@ -31,6 +32,9 @@ public final class FrameTransitionRuntime {
     private let generations: PlacementGeneration
     private let events: EventLog
     private let isMouseDown: () -> Bool
+    private let sceneCapture: @MainActor (StageSceneContext) async -> CGImage?
+    private let presentsScenes: Bool
+    var isAnimatingScene: Bool { session?.scene?.phase == .animating }
     private var session: Session?
     private var timer: Timer?
     /// Résultats finaux seulement : les images intermédiaires ne sont pas des placements.
@@ -40,10 +44,13 @@ public final class FrameTransitionRuntime {
     public var isHoldingLayout: Bool { session.map { $0.permit.isCurrent && ProcessInfo.processInfo.systemUptime - $0.started < 1.5 } ?? false }
 
     init(generations: PlacementGeneration = .shared, events: EventLog = EventLog(),
+         presentsScenes: Bool = true,
+         sceneCapture: @escaping @MainActor (StageSceneContext) async -> CGImage? = { await RailThumbnailStore.shared.captureScene($0) },
          isMouseDown: @escaping () -> Bool = {
              UserInputActivity.shared.isCapturedPointerHeld || NSEvent.pressedMouseButtons != 0
          }) {
         self.generations = generations; self.events = events; self.isMouseDown = isMouseDown
+        self.sceneCapture = sceneCapture; self.presentsScenes = presentsScenes
     }
 
     func schedule(_ plan: ApplyPlan, service: SnapshotService, generation: UInt64, action: AnimationAction,
@@ -98,14 +105,18 @@ public final class FrameTransitionRuntime {
         if let stageScene, let transitionDirection, action == .stage {
             // Un changement de stage utilise uniquement les cadres finaux sous deux images.
             // Aucun aller-retour AX pour produire une image d'animation.
-            current.commands = Dictionary(plan.commands.map { ($0.window.id, $0) }, uniquingKeysWith: { _, last in last })
+            current.commands = Dictionary(plan.commands.map { original in
+                var command = original
+                if immediateWindowIDs.contains(command.window.id) { command.positionsBeforeResizing = true }
+                return (command.window.id, command)
+            }, uniquingKeysWith: { _, last in last })
             current.windows = Dictionary(plan.commands.map { ($0.window.id, $0.window) }, uniquingKeysWith: { _, last in last })
             let scene = StageSceneTransition(context: stageScene, direction: transitionDirection, policy: policy,
                 events: events, valid: { [weak current] in current?.permit.isCurrent == true }, submit: { [weak current] in
                     guard let current, current.permit.isCurrent else { return }
                     current.finalSubmitted = true
                     current.dispatcher.submit(Array(current.commands.values), generation: current.generation)
-                })
+                }, presents: presentsScenes, capture: sceneCapture)
             current.scene = scene; scene.start()
             return ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0,
                 items: plan.commands.map { ApplyResultItem(windowID: $0.window.id, status: .deferred, requested: $0.frame, actual: nil) })
@@ -162,6 +173,13 @@ public final class FrameTransitionRuntime {
             items: plan.commands.map { ApplyResultItem(windowID: $0.window.id, status: .deferred, requested: $0.frame, actual: nil) })
     }
 
+    /// Ne pas activer une fenêtre encore au parking pendant la capture source.
+    func deferStageFocus(generation: UInt64, _ focus: @escaping () -> Void) -> Bool {
+        guard let current = session, current.generation == generation, current.scene != nil else { return false }
+        current.focusAfterScenePlacement = focus
+        return true
+    }
+
     private func pulse() {
         guard let current = session else { return }
         guard current.permit.isCurrent else { cancel(); return }
@@ -173,8 +191,17 @@ public final class FrameTransitionRuntime {
                 current.finalSubmitted = true
                 current.dispatcher.submit(Array(current.commands.values), generation: current.generation)
             } }
-            scene.pulse(applied: current.finalSubmitted && current.dispatcher.isIdle)
-            if scene.phase == .finished, current.finalSubmitted, current.dispatcher.isIdle { cancel(completed: true) }
+            let applied = current.finalSubmitted && current.dispatcher.isIdle
+            scene.pulse(applied: applied)
+            if scene.phase == .finished, applied {
+                // AXRaise peut attendre l'application. Le faire après les images évite
+                // de bloquer leur horloge et de consommer le budget de capture cible.
+                if let focus = current.focusAfterScenePlacement {
+                    current.focusAfterScenePlacement = nil
+                    focus()
+                }
+                cancel(completed: true)
+            }
             return
         }
         if current.finalSubmitted {

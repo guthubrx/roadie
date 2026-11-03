@@ -5,6 +5,11 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Transitions de stages : sens vertical cohérent avec la navigation et l'ordre du rail.
+  Deux captures temporaires rendent le mouvement complet malgré le bord supérieur macOS.
+  Les vraies fenêtres sont placées une fois ; le focus attend la fin du mouvement.
+  Les délais de capture sont bornés, avec bascule directe en cas d'attente.
+
 - Finder : ⌘E global dans la configuration BetterTouchTool du poste ouvre ou ramène
   une fenêtre dans la stage sous la souris, même vide et avec le clavier sur un autre écran.
   Commande réutilisable : `roadie launch /System/Library/CoreServices/Finder.app --here --mouse`.

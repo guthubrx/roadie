@@ -1206,5 +1206,3 @@ Valeurs : chaîne vide, `control`, `option`, `command`, `shift` ou une combinais
 ### Sens des animations entre stages
 
 En remontant vers une stage précédente, ses fenêtres arrivent du bas et montent vers leur place. En descendant, elles arrivent du haut et descendent. L'ordre du rail décide du sens lors d'un saut direct ; Suivante et Précédente conservent leur sens au bouclage. La position de rangement hors écran ne détermine pas le trajet visible. Une capture temporaire montre le mouvement pendant la courte transition, puis laisse place aux vraies fenêtres déjà positionnées. Les réglages d'animation existants restent applicables. Si la capture tarde ou n'est pas disponible, la bascule reste directe.
-
-macOS peut bloquer une fenêtre au bord supérieur de son écran. Dans ce cas, le trajet demandé au-dessus de ce bord peut être remplacé par une arrivée directe.

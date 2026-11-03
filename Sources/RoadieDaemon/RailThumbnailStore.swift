@@ -40,6 +40,7 @@ final class RailThumbnailStore {
     private var sceneDisplays: [SCDisplay] = []
     private var sceneApplications: [SCRunningApplication] = []
     private var sceneCaptureBusy = false
+    private var sceneMetadataBusy = false
     private var absentUntil: [WindowID: Date] = [:]
     private let absentRetryInterval: TimeInterval = 5
     private var didLogMissingPermission = false
@@ -210,14 +211,29 @@ final class RailThumbnailStore {
         revisions[id] = version
     }
 
+    /// Appelé hors bascule, au démarrage et après changement d'écrans.
+    func refreshSceneMetadata() async {
+        sceneDisplays = []
+        guard !sceneMetadataBusy, CGPreflightScreenCaptureAccess() else { return }
+        sceneMetadataBusy = true
+        defer { sceneMetadataBusy = false }
+        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else { return }
+        sceneDisplays = content.displays; sceneApplications = content.applications
+    }
+
     /// Métadonnées réchauffées par le rail. Pas d'énumération système sur le chemin de bascule.
     /// Un appel SDK encore en vol empêche toute nouvelle capture, même après annulation.
     func captureScene(_ context: StageSceneContext) async -> CGImage? {
-        guard !sceneCaptureBusy, CGPreflightScreenCaptureAccess(),
-              let display = sceneDisplays.first(where: {
+        func unavailable(_ reason: String) -> CGImage? {
+            EventLog().append(RoadieEvent(type: "effects.scene_capture_unavailable", details: ["reason": reason]))
+            return nil
+        }
+        guard !sceneCaptureBusy else { return unavailable("busy") }
+        guard CGPreflightScreenCaptureAccess() else { return unavailable("permission") }
+        guard let display = sceneDisplays.first(where: {
                   guard let uuid = CGDisplayCreateUUIDFromDisplayID($0.displayID)?.takeRetainedValue() else { return false }
                   return (CFUUIDCreateString(nil, uuid) as String).caseInsensitiveCompare(context.display.id.rawValue) == .orderedSame
-              }) else { return nil }
+              }) else { return unavailable("metadata") }
         sceneCaptureBusy = true
         defer { sceneCaptureBusy = false }
         let frame = context.frame
@@ -226,7 +242,8 @@ final class RailThumbnailStore {
         let config = SCStreamConfiguration()
         config.width = max(1, Int(frame.width * scale))
         config.height = max(1, Int(frame.height * scale))
-        config.sourceRect = frame.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY)
+        let bounds = CGDisplayBounds(display.displayID)
+        config.sourceRect = frame.offsetBy(dx: -bounds.minX, dy: -bounds.minY)
         config.showsCursor = false; config.scalesToFit = true
         let excluded = sceneApplications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
         let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])

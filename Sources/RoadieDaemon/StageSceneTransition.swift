@@ -8,6 +8,18 @@ public struct StageSceneContext: Sendable {
     let display: DisplaySnapshot
     let frame: CGRect
     let stationary: [CGRect]
+
+    /// Soustractions successives : les trous qui se chevauchent ne se remplissent pas.
+    func maskPath() -> CGPath {
+        var path = CGPath(rect: CGRect(origin: .zero, size: frame.size), transform: nil)
+        for stationaryFrame in stationary {
+            let rect = stationaryFrame.intersection(frame)
+            guard !rect.isNull, !rect.isEmpty else { continue }
+            path = path.subtracting(CGPath(rect: CGRect(x: rect.minX - frame.minX,
+                y: frame.maxY - rect.maxY, width: rect.width, height: rect.height), transform: nil))
+        }
+        return path
+    }
 }
 
 /// Deux captures au maximum, jamais une capture par image. Le writer commun applique
@@ -27,9 +39,9 @@ final class StageSceneTransition {
     private let presents: Bool
     private var deadline: Double
     private var panel: StageScenePanel?
-    private var source: CGImage?
     private let animationID = "stage-scene-\(UUID().uuidString)"
     private var submitted = false
+    private var progress = 0.0
     private var began: Double
 
     init(context: StageSceneContext, direction: Direction, policy: MotionPolicy,
@@ -41,20 +53,23 @@ final class StageSceneTransition {
         self.context = context; self.direction = direction; self.policy = policy
         self.events = events; self.valid = valid; self.submit = submit
         self.presents = presents; self.clock = clock; self.capture = capture
-        began = clock(); deadline = began + 0.04
+        began = clock(); deadline = began + 0.12
     }
 
     func start() {
         Task { [weak self] in
-            guard let self else { return }
+            guard let self, phase == .source, valid() else { return }
+            guard clock() <= deadline else { fallback("source_late"); return }
             let image = await capture(context)
+            log("capture_source", milliseconds: (clock() - began) * 1000)
             guard phase == .source, valid() else { return }
-            guard clock() <= deadline, let image else { fallback("source_unavailable"); return }
-            source = image
+            guard clock() <= deadline else { fallback("source_late"); return }
+            guard let image else { fallback("source_nil"); return }
             if presents { panel = StageScenePanel(context: context, source: image) }
             phase = .applying; deadline = clock() + 0.2
             log("source", milliseconds: (clock() - began) * 1000)
             submitOnce()
+            beginAnimation()
         }
     }
 
@@ -73,19 +88,26 @@ final class StageSceneTransition {
             guard phase == .target, valid() else { return }
             let started = clock()
             let target = await capture(context)
+            log("capture_target", milliseconds: (clock() - started) * 1000)
             guard phase == .target, valid() else { return }
-            guard clock() <= deadline, let target else { fallback("target_unavailable"); return }
+            guard clock() <= deadline else { fallback("target_late"); return }
+            guard let target else { fallback("target_nil"); return }
             log("target", milliseconds: (clock() - started) * 1000)
             phase = .animating
             panel?.setTarget(target)
-            EffectAnimator.shared.animate(id: animationID, from: [0], to: [1], policy: policy) { [weak self] values in
-                guard let self, valid() else { self?.cancel(); return }
-                panel?.update(progress: values[0], direction: direction, distance: 40 * policy.intensity)
-            } completion: { [weak self] in
-                guard let self else { return }
-                log("completed", milliseconds: (clock() - began) * 1000)
-                close()
-            }
+            panel?.update(progress: progress, direction: direction, distance: 40 * policy.intensity)
+        }
+    }
+
+    private func beginAnimation() {
+        EffectAnimator.shared.animate(id: animationID, from: [0], to: [1], policy: policy) { [weak self] values in
+            guard let self, valid() else { self?.cancel(); return }
+            progress = values[0]
+            panel?.update(progress: progress, direction: direction, distance: 40 * policy.intensity)
+        } completion: { [weak self] in
+            guard let self else { return }
+            log("completed", milliseconds: (clock() - began) * 1000)
+            close()
         }
     }
 
@@ -95,7 +117,7 @@ final class StageSceneTransition {
     }
     private func fallback(_ reason: String) {
         events.append(RoadieEvent(type: "effects.scene_direct", details: ["reason": reason]))
-        close()
+        cancel()
         if valid() { submitOnce() }
     }
     private func submitOnce() {
@@ -104,7 +126,7 @@ final class StageSceneTransition {
     }
     private func close() {
         phase = .finished
-        panel?.orderOut(nil); panel?.contentView = nil; panel = nil; source = nil
+        panel?.releaseImages(); panel?.orderOut(nil); panel?.contentView = nil; panel = nil
     }
     private func log(_ stage: String, milliseconds: Double) {
         events.append(RoadieEvent(type: "effects.scene_\(stage)", details: [
@@ -136,16 +158,10 @@ private final class StageScenePanel: NSPanel {
         incoming.frame = view.bounds; incoming.opacity = 0; incoming.contentsGravity = .resize
         root.addSublayer(outgoing); root.addSublayer(incoming)
         // Les fenêtres épinglées ou non déplacées restent réelles, sans translation.
-        var path = CGPath(rect: view.bounds, transform: nil)
-        for frame in context.stationary {
-            let rect = frame.intersection(context.frame)
-            guard !rect.isNull, !rect.isEmpty else { continue }
-            path = path.subtracting(CGPath(rect: CGRect(x: rect.minX - context.frame.minX,
-                y: context.frame.maxY - rect.maxY, width: rect.width, height: rect.height), transform: nil))
-        }
-        let mask = CAShapeLayer(); mask.path = path; mask.fillRule = .nonZero; root.mask = mask
+        let mask = CAShapeLayer(); mask.path = context.maskPath(); mask.fillRule = .nonZero; root.mask = mask
         orderFrontRegardless()
     }
+    func releaseImages() { outgoing.contents = nil; incoming.contents = nil }
     func setTarget(_ image: CGImage) { incoming.contents = image }
     func update(progress: Double, direction: Direction, distance: Double) {
         let p = min(1, max(0, progress))

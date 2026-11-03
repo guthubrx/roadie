@@ -81,6 +81,7 @@ public final class RailController {
 
     public func start() {
         NSApplication.shared.setActivationPolicy(.accessory)
+        Task { await RailThumbnailStore.shared.refreshSceneMetadata() }
         rebuildPanels(reason: "start")
         startClickMonitors()
         windowDragController.configureMouseCapture()
@@ -104,6 +105,7 @@ public final class RailController {
             Task { @MainActor in
                 self?.dropPreview.invalidate()
                 self?.cancelRailDrags()
+                await RailThumbnailStore.shared.refreshSceneMetadata()
                 self?.rebuildPanels(reason: "screen")
             }
         }

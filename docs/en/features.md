@@ -1163,6 +1163,4 @@ Values: an empty string, `control`, `option`, `command`, `shift`, or a combinati
 
 ### Stage transition direction
 
-When moving up to a previous stage, its windows enter from below and move upward into place. When moving down, they enter from above and move downward. Direct jumps follow the rail order; Next and Previous retain their direction when wrapping. Offscreen storage does not determine the visible path. Existing animation settings still apply.
-
-macOS can keep a window at the upper screen edge. When this happens, a requested path above that edge may become a direct appearance.
+When moving up to a previous stage, its windows enter from below and move upward into place. When moving down, they enter from above and move downward. Direct jumps follow the rail order; Next and Previous retain their direction when wrapping. Offscreen storage does not determine the visible path. Temporary screenshots show the short transition while the real windows are placed underneath. Existing animation settings still apply. When capture is late or unavailable, the stage switches directly.

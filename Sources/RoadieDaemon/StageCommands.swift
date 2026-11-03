@@ -1608,7 +1608,11 @@ public struct StageCommandService {
         let focusStartedAt = Date()
         if let focusedID = transition.targetFocusedWindowID,
            let focusedWindow = windowsByID[focusedID] {
-            _ = service.focus(focusedWindow)
+            let focusService = service
+            let deferred = Thread.isMainThread && MainActor.assumeIsolated {
+                FrameTransitionRuntime.shared.deferStageFocus(generation: generation) { _ = focusService.focus(focusedWindow) }
+            }
+            if !deferred { _ = service.focus(focusedWindow) }
         }
         let focusMs = elapsedMs(since: focusStartedAt)
         let totalMs = elapsedMs(since: startedAt)

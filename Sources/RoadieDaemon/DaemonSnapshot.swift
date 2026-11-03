@@ -2172,9 +2172,10 @@ public extension SnapshotService {
         if publish, Thread.isMainThread, effectiveConfig.fx.animations.enabled {
             let deferred = MainActor.assumeIsolated {
                 let runtime = FrameTransitionRuntime.shared
+                guard runtime.acceptsCommands else { return nil as ApplyResult? }
                 let displays = animationDisplays ?? cachedGestureSnapshot()?.displays ?? provider.displays()
-                return runtime.acceptsCommands ? runtime.schedule(plan, service: self, generation: generation, action: animation,
-                    immediateWindowIDs: immediateWindowIDs, transitionDirection: transitionDirection, displays: displays, stageScene: stageScene) : nil
+                return runtime.schedule(plan, service: self, generation: generation, action: animation,
+                    immediateWindowIDs: immediateWindowIDs, transitionDirection: transitionDirection, displays: displays, stageScene: stageScene)
             }
             if let deferred { return deferred }
         }

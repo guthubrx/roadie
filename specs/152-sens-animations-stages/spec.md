@@ -1,6 +1,6 @@
 # Correction152 — Sens des animations de stage
 
-Statut: In Progress. Priorité:P1. Tâches:2/5.
+Statut: Validé et actif ; intégration Git en cours. Priorité:P1. Tâches:4/5.
 
 Le 3 novembre2026, l'utilisateur constate que les fenêtres arrivent de droite, indépendamment du déplacement entre stages. Sens confirmé : remonter vers une stage précédente fait arriver ses fenêtres du bas, avec un mouvement montant ; descendre les fait arriver du haut, avec un mouvement descendant. Les fenêtres quittées sortent dans le même sens que les entrantes.
 
