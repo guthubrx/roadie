@@ -34,3 +34,13 @@ La fin immédiate du visuel, le délai300ms et le rejet de sa capture tardive pa
 UUID89D4F279-C3AC-3320-9CD3-2F8E138E1B6D, PID73065, santé5/5 avant intégration.80tests ciblés puis2512tests /380suites verts en160,280s après les derniers gardes. Le coût de cette suite inclut la charge du poste, sans comparaison de vitesse revendiquée. Les captures du diaporama restent celles de la versionB755B94B, avant ces deux gardes ; leur légende le précise. Les deux essais tardifs de changement de stage pendant le geste sont exclus : les points injectés n'ont pas atteint la fenêtre fictive attendue. Aucun défaut produit ni succès natif n'en est déduit.
 
 Le client fictif final est arrêté. La stage validation153final contient désormais Finder21825 ; elle est conservée pour ne pas déplacer ou retirer une fenêtre utilisateur. La stage interne6 reste active et les autres stages de validation vides ont été supprimées. La configuration reste identique à la copie d'avant153. Les originaux exclus restent privés.
+
+
+## LivraisonGit et nettoyage
+Sources intégrées et poussées surmain à072e628a84db5f5a91755eac4e6a1b7b4b5da9a5.539 empreintesSources/Tests identiques avant et après intégration. Configuration utilisateur inchangée à l’octet près, certificat conservé. Santé5/5 après suppression du build.
+
+Branche153 locale et distante supprimée. Les deux tâches de revue sont terminées, leurs résultats lus et accusés. Leurs worktrees6abac5e3 et7727b969 sont retirés après contrôle : aucun changement, aucun fichier ignoré, aucun processus utilisateur, commits intégrés dansorigin/main. Les branches de revue sont retirées avec contrôle duSHA attendu ; aucun checkout partagé déplacé.
+
+Build supprimé :1444796Kio, environ1,38Gio. Six exécutables de validation et deux applications fictives retirés après arrêt de leurs processus. Le worktree de conversation actif est conservé, détaché surmain, ainsi que l’installation, le retour arrière152 et les originaux/manifestes/reçus privés. La stage validation153final contenantFinder21825 est conservée. Aucun fichier de preuve brute ni configuration privée ajouté àGit.
+
+Le commit final de clôture ajoute uniquement cette documentation et les statuts, sans changement de code. Les limites de validation native et des réglages restent celles indiquées ci-dessus.

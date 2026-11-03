@@ -1,6 +1,6 @@
 # Correction153 — Aperçu réel et transparence du glisser
 
-Statut : In Progress. Priorité P1. Le3novembre2026.
+Statut : Completed. Priorité P1. Le3novembre2026.
 
 ## Demande et cadrage
 L'utilisateur observe le retour des aplats verts lors d'un glisser, malgré l'aperçu réel auparavant confirmé. Il demande un contenu de fenêtre légèrement transparent, avec visibilité réglable et choix d'une fenêtre opaque ou d'un aplat. Le paramètre existant fx.drop_preview vaut toujours real et les permissions sont présentes ; ne pas prétendre qu'un redémarrage est prouvé comme cause.

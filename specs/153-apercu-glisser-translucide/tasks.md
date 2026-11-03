@@ -4,4 +4,4 @@
 - [x] T3 Ajouter la visibilité réglable, le rendu translucide borné et la restauration ; tests FR/EN et runtime.
 - [x] T4 Revue indépendante, suite complète et corrections des constats.
 - [x] T5 Installation signée, gestes natifs et diaporama. Réglages UI et GPU non mesurés : limites précisées.
-- [ ] T6 Documentation, intégration/main/push vérifié et nettoyage des éléments libérés.
+- [x] T6 Documentation, intégration/main/push vérifié et nettoyage des éléments libérés.
