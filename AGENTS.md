@@ -337,12 +337,12 @@ photo) dans un profil du sélecteur `source = "zones"` (Option+Tab chez l'utilis
 retour et clic, aller-retour, bordure jaune sur l'application, photos reprises en quittant une fenêtre, 20 zones,
 24 h, 3 zones de clics par fenêtre ; icônes des cartes (× et sens interdit). Reçus : specs/135 à 137.
 Session 138 : 0.12.0 publiée (sessions 131 à 137). Reçu : specs/138-release-0120/validation.md.
-Current SpecKit feature: `151-gestes-modificateurs`.
+Current SpecKit feature: `152-sens-animations-stages`.
 
 Contexte :
-- `specs/151-gestes-modificateurs/spec.md`
-- `specs/151-gestes-modificateurs/plan.md`
-- `specs/151-gestes-modificateurs/tasks.md`
+- `specs/152-sens-animations-stages/spec.md`
+- `specs/152-sens-animations-stages/plan.md`
+- `specs/152-sens-animations-stages/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes

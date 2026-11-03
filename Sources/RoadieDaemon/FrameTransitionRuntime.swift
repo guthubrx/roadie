@@ -46,12 +46,13 @@ public final class FrameTransitionRuntime {
     }
 
     func schedule(_ plan: ApplyPlan, service: SnapshotService, generation: UInt64, action: AnimationAction,
-                  immediateWindowIDs: Set<WindowID> = []) -> ApplyResult? {
+                  immediateWindowIDs: Set<WindowID> = [], transitionDirection: Direction? = nil) -> ApplyResult? {
         let policy = service.effectiveConfig.fx.animations.policy(for: action)
         guard policy.enabled, !plan.commands.isEmpty, generation == generations.current,
               generation != PlacementGeneration.outsideBudget, !isMouseDown() else { return nil }
         events.append(RoadieEvent(type: "effects.frames_policy", details: [
             "generation": String(generation), "action": action.rawValue,
+            "direction": transitionDirection?.rawValue ?? "none",
             "directWindowIDs": immediateWindowIDs.sorted().map { String($0.rawValue) }.joined(separator: ","),
             "frames": plan.commands.map { command in
                 let from = command.window.frame, to = command.frame
@@ -93,6 +94,13 @@ public final class FrameTransitionRuntime {
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
         }
         let displays = service.cachedGestureSnapshot()?.displays ?? []
+        let distance = 40 * policy.intensity
+        let motion: CGSize = switch transitionDirection ?? .left {
+        case .left: CGSize(width: -distance, height: 0)
+        case .right: CGSize(width: distance, height: 0)
+        case .up: CGSize(width: 0, height: -distance)
+        case .down: CGSize(width: 0, height: distance)
+        }
         for original in plan.commands {
             var command = original
             if immediateWindowIDs.contains(command.window.id) { command.positionsBeforeResizing = true }
@@ -121,8 +129,10 @@ public final class FrameTransitionRuntime {
                 continue
             }
             // Le parking n'est pas une destination visuelle : courte sortie puis parking final.
-            if command.preservesSize { to = from.offsetBy(dx: -40 * policy.intensity, dy: 0) }
-            else if !window.isOnScreen { from = to.offsetBy(dx: 40 * policy.intensity, dy: 0) }
+            if command.preservesSize { to = from.offsetBy(dx: motion.width, dy: motion.height) }
+            else if !window.isOnScreen || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: displays) {
+                from = to.offsetBy(dx: -motion.width, dy: -motion.height)
+            }
             EffectAnimator.shared.animate(id: animationID, from: [from.minX, from.minY, from.width, from.height],
                 to: [to.minX, to.minY, to.width, to.height], policy: policy) { [weak current] values in
                 current?.frames[id] = Rect(x: values[0], y: values[1], width: max(1, values[2]), height: max(1, values[3]))

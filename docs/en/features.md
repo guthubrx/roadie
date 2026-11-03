@@ -1160,3 +1160,9 @@ drag_resize_modifier = "control+option"
 ```
 
 Values: an empty string, `control`, `option`, `command`, `shift`, or a combination offered in settings. If both settings match, resizing takes priority. Roadie handles these gestures directly; no BTT shortcut is required.
+
+### Stage transition direction
+
+When moving up to a previous stage, its windows enter from below and move upward into place. When moving down, they enter from above and move downward. Direct jumps follow the rail order; Next and Previous retain their direction when wrapping. Offscreen storage does not determine the visible path. Existing animation settings still apply.
+
+macOS can keep a window at the upper screen edge. When this happens, a requested path above that edge may become a direct appearance.

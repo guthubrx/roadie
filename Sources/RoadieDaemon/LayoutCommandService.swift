@@ -444,6 +444,8 @@ struct CommandPlacement {
     var restoring: [WindowID: CGRect] = [:]
     /// Scopes à disposer ; seuls ceux actifs dans le snapshot du plan sont posés. nil : tous.
     var layoutScopes: Set<StageScope>? = []
+    /// Déplacement visible des fenêtres ; indépendant du parking hors écran.
+    var transitionDirection: Direction? = nil
 }
 
 /// Échec d'une commande dont le retour arrière a lui aussi échoué (REL-021) : une écriture reste.
@@ -555,7 +557,8 @@ extension SnapshotService {
         let commandCause = cause.hasPrefix("command:") ? cause : "command:\(cause)"
         let episode = treeScopes.isEmpty ? nil : EpisodeContext.shared.begin(cause: commandCause)
         for scope in treeScopes { processState.noteTreeScopeApplied(scope, at: startedAt) }
-        let result = apply(plan, generation: generation, animation: cause.hasPrefix("stage.") ? .stage : .move)
+        let result = apply(plan, generation: generation, animation: cause.hasPrefix("stage.") ? .stage : .move,
+                           transitionDirection: placement.transitionDirection)
         if let episode, let scope = treeScopes.first {
             events.append(RoadieEvent(type: "layout_apply", scope: scope, details: [
                 "cause": commandCause,
