@@ -557,8 +557,18 @@ extension SnapshotService {
         let commandCause = cause.hasPrefix("command:") ? cause : "command:\(cause)"
         let episode = treeScopes.isEmpty ? nil : EpisodeContext.shared.begin(cause: commandCause)
         for scope in treeScopes { processState.noteTreeScopeApplied(scope, at: startedAt) }
+        let sceneDisplays = observed.displays.filter { display in
+            placement.layoutScopes?.contains(where: { $0.displayID == display.id }) == true
+        }
+        let scene: StageSceneContext? = sceneDisplays.count == 1 && placement.transitionDirection != nil
+            ? maximizedFrame(on: sceneDisplays[0]).map { frame in
+                let moving = Set(plan.commands.map { $0.window.id })
+                return StageSceneContext(display: sceneDisplays[0], frame: frame,
+                    stationary: observed.windows.filter { !moving.contains($0.window.id) && $0.window.isOnScreen }
+                        .map { $0.window.frame.cgRect })
+            } : nil
         let result = apply(plan, generation: generation, animation: cause.hasPrefix("stage.") ? .stage : .move,
-                           transitionDirection: placement.transitionDirection, animationDisplays: observed.displays)
+                           transitionDirection: placement.transitionDirection, animationDisplays: observed.displays, stageScene: scene)
         if let episode, let scope = treeScopes.first {
             events.append(RoadieEvent(type: "layout_apply", scope: scope, details: [
                 "cause": commandCause,

@@ -37,6 +37,9 @@ final class RailThumbnailStore {
     /// système que si une fenêtre demandée manque. Une fenêtre absente n'est recherchée à nouveau
     /// qu'après `absentRetryInterval` (membres gardés 15 s après fermeture).
     private var shareableWindows: [WindowID: SCWindow] = [:]
+    private var sceneDisplays: [SCDisplay] = []
+    private var sceneApplications: [SCRunningApplication] = []
+    private var sceneCaptureBusy = false
     private var absentUntil: [WindowID: Date] = [:]
     private let absentRetryInterval: TimeInterval = 5
     private var didLogMissingPermission = false
@@ -170,6 +173,8 @@ final class RailThumbnailStore {
             guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else {
                 return
             }
+            sceneDisplays = content.displays
+            sceneApplications = content.applications
             shareableWindows = Dictionary(
                 content.windows.map { (WindowID(rawValue: $0.windowID), $0) },
                 uniquingKeysWith: { first, _ in first }
@@ -203,6 +208,29 @@ final class RailThumbnailStore {
         capturedAt[id] = Date()
         version += 1
         revisions[id] = version
+    }
+
+    /// Métadonnées réchauffées par le rail. Pas d'énumération système sur le chemin de bascule.
+    /// Un appel SDK encore en vol empêche toute nouvelle capture, même après annulation.
+    func captureScene(_ context: StageSceneContext) async -> CGImage? {
+        guard !sceneCaptureBusy, CGPreflightScreenCaptureAccess(),
+              let display = sceneDisplays.first(where: {
+                  guard let uuid = CGDisplayCreateUUIDFromDisplayID($0.displayID)?.takeRetainedValue() else { return false }
+                  return (CFUUIDCreateString(nil, uuid) as String).caseInsensitiveCompare(context.display.id.rawValue) == .orderedSame
+              }) else { return nil }
+        sceneCaptureBusy = true
+        defer { sceneCaptureBusy = false }
+        let frame = context.frame
+        guard frame.width > 0, frame.height > 0 else { return nil }
+        let scale = min(2, sqrt(2_000_000 / (frame.width * frame.height)))
+        let config = SCStreamConfiguration()
+        config.width = max(1, Int(frame.width * scale))
+        config.height = max(1, Int(frame.height * scale))
+        config.sourceRect = frame.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY)
+        config.showsCursor = false; config.scalesToFit = true
+        let excluded = sceneApplications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+        let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
+        return try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
     }
 
     private func screenshot(of window: SCWindow, size: CGSize, displayWidth: CGFloat) async -> CGImage? {

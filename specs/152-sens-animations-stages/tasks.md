@@ -3,3 +3,4 @@
 - [x] T2 Tests direction, ordre et bouclage ; tests de transition et suite complète.
 - [ ] T3 Revue indépendante, installation signée et essais natifs avant/après.
 - [ ] T4 Preuves, documentation, main/push et nettoyage.
+- [ ] T5 Capture de scène bornée, tests d’annulation et de délai, mesures natives et revue.

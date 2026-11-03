@@ -76,7 +76,7 @@ import Testing
         let frames = f.backend.writes.dropFirst(before).filter { $0.0 == incoming.id }.map(\.1)
         let first = try #require(frames.first)
         #expect(abs(first.minX - incoming.frame.x) <= 1)
-        #expect(first.minY < incoming.frame.y - 5) // Next : arrivée depuis le haut, mouvement descendant.
+        #expect(first == incoming.frame.cgRect) // Métadonnées de capture absentes : placement direct, aucun trajet AX.
         #expect(frames.last == incoming.frame.cgRect)
     }
 
@@ -129,7 +129,8 @@ import Testing
         #expect(await f.waitFor { !FrameTransitionRuntime.shared.isHoldingLayout })
         let frames = f.backend.writes.dropFirst(before).filter { $0.0 == incoming.id }.map(\.1)
         let first = try #require(frames.first)
-        #expect(navigation == .next ? first.minY < incoming.frame.y - 5 : first.minY > incoming.frame.y + 5)
+        #expect(first == incoming.frame.cgRect) // Capture indisponible : bouclage conservé, placement direct.
+        #expect(f.store.state().scopes[0].activeStageID == target)
         #expect(frames.last == incoming.frame.cgRect)
     }
 

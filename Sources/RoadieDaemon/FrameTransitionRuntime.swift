@@ -19,6 +19,7 @@ public final class FrameTransitionRuntime {
         var frames: [WindowID: Rect] = [:]
         var finished: Set<WindowID> = []
         var ids: Set<String> = []
+        var scene: StageSceneTransition?
         var finalSubmitted = false
         var finalResults: [WindowID: ApplyResultItem] = [:]
         init(service: SnapshotService, generation: UInt64, generations: PlacementGeneration) {
@@ -47,7 +48,7 @@ public final class FrameTransitionRuntime {
 
     func schedule(_ plan: ApplyPlan, service: SnapshotService, generation: UInt64, action: AnimationAction,
                   immediateWindowIDs: Set<WindowID> = [], transitionDirection: Direction? = nil,
-                  displays: [DisplaySnapshot]? = nil) -> ApplyResult? {
+                  displays: [DisplaySnapshot]? = nil, stageScene: StageSceneContext? = nil) -> ApplyResult? {
         let policy = service.effectiveConfig.fx.animations.policy(for: action)
         guard policy.enabled, !plan.commands.isEmpty, generation == generations.current,
               generation != PlacementGeneration.outsideBudget, !isMouseDown() else { return nil }
@@ -60,7 +61,7 @@ public final class FrameTransitionRuntime {
                 return "\(command.window.id.rawValue):\(from.x),\(from.y),\(from.width),\(from.height)->\(to.x),\(to.y),\(to.width),\(to.height);preservesSize=\(command.preservesSize)"
             }.joined(separator: "|")
         ]))
-        if session?.generation != generation || session?.finalSubmitted == true {
+        if session?.generation != generation || session?.finalSubmitted == true || session?.scene != nil {
             let retained = Set(plan.commands.map { "ax-\(ObjectIdentifier(self))-\($0.window.pid)-\($0.window.id.rawValue)" })
             // Révoquer les anciens lots sans perdre la vitesse des fenêtres reprises.
             cancel(preserving: retained)
@@ -93,6 +94,21 @@ public final class FrameTransitionRuntime {
                 MainActor.assumeIsolated { self?.pulse() }
             }
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
+        }
+        if let stageScene, let transitionDirection, action == .stage {
+            // Un changement de stage utilise uniquement les cadres finaux sous deux images.
+            // Aucun aller-retour AX pour produire une image d'animation.
+            current.commands = Dictionary(plan.commands.map { ($0.window.id, $0) }, uniquingKeysWith: { _, last in last })
+            current.windows = Dictionary(plan.commands.map { ($0.window.id, $0.window) }, uniquingKeysWith: { _, last in last })
+            let scene = StageSceneTransition(context: stageScene, direction: transitionDirection, policy: policy,
+                events: events, valid: { [weak current] in current?.permit.isCurrent == true }, submit: { [weak current] in
+                    guard let current, current.permit.isCurrent else { return }
+                    current.finalSubmitted = true
+                    current.dispatcher.submit(Array(current.commands.values), generation: current.generation)
+                })
+            current.scene = scene; scene.start()
+            return ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0,
+                items: plan.commands.map { ApplyResultItem(windowID: $0.window.id, status: .deferred, requested: $0.frame, actual: nil) })
         }
         let animationDisplays = displays ?? service.cachedGestureSnapshot()?.displays ?? []
         let distance = 40 * policy.intensity
@@ -152,6 +168,15 @@ public final class FrameTransitionRuntime {
         let needsImmediateEnd = current.config != current.service.effectiveConfig.fx.animations
         let elapsed = ProcessInfo.processInfo.systemUptime - current.started
         guard elapsed < 1.5 else { cancel(); return }
+        if let scene = current.scene {
+            if needsImmediateEnd { scene.cancel(); if !current.finalSubmitted {
+                current.finalSubmitted = true
+                current.dispatcher.submit(Array(current.commands.values), generation: current.generation)
+            } }
+            scene.pulse(applied: current.finalSubmitted && current.dispatcher.isIdle)
+            if scene.phase == .finished, current.finalSubmitted, current.dispatcher.isIdle { cancel(completed: true) }
+            return
+        }
         if current.finalSubmitted {
             if current.dispatcher.isIdle { cancel(completed: true) }
             return
@@ -188,6 +213,7 @@ public final class FrameTransitionRuntime {
                 "clamped": String(current.finalResults.values.filter { $0.status == .clamped }.count),
                 "failed": String(current.finalResults.values.filter { $0.status == .failed }.count)
             ]))
+            current.scene?.cancel()
             current.dispatcher?.invalidate()
             for id in current.ids.subtracting(preserving) { EffectAnimator.shared.cancel(id) }
         }
