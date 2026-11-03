@@ -55,9 +55,9 @@ import Testing
         for _ in 0..<100 { if predicate() { return true }; try? await Task.sleep(for: .milliseconds(3)) }
         return predicate()
     }
-    private func configure(_ f: Drag143Fixture, pointer: String = "content", destination: String = "real") throws {
+    private func configure(_ f: Drag143Fixture, pointer: String = "content", destination: String = "real", live: Bool = true) throws {
         let path = try #require(f.configService.state.activePath)
-        try "[tiling]\nlive_drag_preview=true\n[fx]\ndrag_preview='\(pointer)'\ndrop_preview='\(destination)'\n".write(toFile: path, atomically: true, encoding: .utf8)
+        try "[tiling]\nlive_drag_preview=\(live)\n[fx]\ndrag_preview='\(pointer)'\ndrop_preview='\(destination)'\n".write(toFile: path, atomically: true, encoding: .utf8)
         _ = f.configService.reload(path: path)
     }
     @Test func aDuplicatedAppKitPressPreparesOneGestureButTheNextClickStillWorks() throws {
@@ -194,8 +194,8 @@ import Testing
         runtime.update(at: CGPoint(x: point.x + 80, y: point.y + 40)); runtime.flush()
         #expect(await f.waitFor { f.backend.frame(f.source) == f.original(f.source).offsetBy(dx: 80, dy: 40) })
     }
-    @Test func lateNativeAdoptionRestoresSourceInOutlineMode() async throws {
-        let f = try Drag143Fixture(); defer { f.clean() }; try configure(f, destination: "contour")
+    @Test(arguments: [true, false]) func lateNativeAdoptionRestoresSourceInOutlineMode(live: Bool) async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }; try configure(f, destination: "contour", live: live)
         let source = f.context.snapshot.windows[0].window, observed = source.frame.cgRect.offsetBy(dx: 100, dy: 40)
         _ = f.backend.setFrame(observed, of: source)
         f.live.begin(f.context, sourceGestureOwned: true, sourceWindowID: f.source, sourceObservedFrame: Rect(observed), keepSourceAtOrigin: true)

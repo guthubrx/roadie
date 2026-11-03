@@ -87,7 +87,8 @@ final class LiveDropPreview {
     func update(_ candidate: DropPreviewCandidate?) {
         guard let current = session, !current.ending else { return }
         current.lastCandidate = candidate
-        if !service.effectiveConfig.tiling.liveDragPreview && !showsRealSource && current.touched.isEmpty {
+        if !service.effectiveConfig.tiling.liveDragPreview && !showsRealSource && current.touched.isEmpty
+            && !(current.sourceGestureOwned && current.keepSourceAtOrigin) {
             return
         }
         if let candidate {

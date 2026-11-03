@@ -765,7 +765,11 @@ final class WindowDragReorderController {
     /// Le bail partagé protège aussi le tiler d'un autre processus pendant un arrêt du pointeur.
     /// Appelé par le minuteur du rail, jamais depuis le callback de capture.
     func renewOwnedDrag(now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
-        guard owned, let pending, pending.didDrag, now - lastActivityRenewal >= 0.5 else { return }
+        guard owned, let pending, pending.didDrag else { return }
+        // Le minuteur existant du writer invalide les générations/portées périmées.
+        // Retirer aussi la copie, sans attendre un nouveau mouvement de souris.
+        guard preview.isHoldingLayout else { cancelPendingDrag(); return }
+        guard now - lastActivityRenewal >= 0.5 else { return }
         lastActivityRenewal = now
         dragActivity.markActive(windowID: pending.windowID)
     }

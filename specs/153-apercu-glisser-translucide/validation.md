@@ -28,3 +28,9 @@ Les deux clients fictifs sont arrêtés. Les stages validation153a et validation
 
 ## Validation après revue
 La fin immédiate du visuel, le délai300ms et le rejet de sa capture tardive passent les72 tests ciblés. Suite finale :2512 tests /380 suites réussis en68,050s. Version finale chargée : UUID B755B94B-02A3-3709-8885-D7C3E9018F38, PID23423, santé5/5. Glisser natif etCtrl+glisser rejoués sur cette version : copiealpha0,85 présente pendant le mouvement, absente au relâchement. Les six images du diaporama proviennent de cette dernière version. Configuration utilisateur toujours identique à la copie d’avant153. La première revue est traitée dans revue.md ; une seconde lecture ciblée des corrections sera demandée.
+
+
+## Activation définitive
+UUID89D4F279-C3AC-3320-9CD3-2F8E138E1B6D, PID73065, santé5/5 avant intégration.80tests ciblés puis2512tests /380suites verts en160,280s après les derniers gardes. Le coût de cette suite inclut la charge du poste, sans comparaison de vitesse revendiquée. Les captures du diaporama restent celles de la versionB755B94B, avant ces deux gardes ; leur légende le précise. Les deux essais tardifs de changement de stage pendant le geste sont exclus : les points injectés n'ont pas atteint la fenêtre fictive attendue. Aucun défaut produit ni succès natif n'en est déduit.
+
+Le client fictif final est arrêté. La stage validation153final contient désormais Finder21825 ; elle est conservée pour ne pas déplacer ou retirer une fenêtre utilisateur. La stage interne6 reste active et les autres stages de validation vides ont été supprimées. La configuration reste identique à la copie d'avant153. Les originaux exclus restent privés.

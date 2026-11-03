@@ -340,9 +340,9 @@ Session 138 : 0.12.0 publiée (sessions 131 à 137). Reçu : specs/138-release-0
 Current SpecKit feature: `153-apercu-glisser-translucide`.
 
 Contexte :
-- `specs/152-sens-animations-stages/spec.md`
-- `specs/152-sens-animations-stages/plan.md`
-- `specs/152-sens-animations-stages/tasks.md`
+- `specs/153-apercu-glisser-translucide/spec.md`
+- `specs/153-apercu-glisser-translucide/plan.md`
+- `specs/153-apercu-glisser-translucide/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes
@@ -402,3 +402,5 @@ Preuves natives au clavier vérifiées ; GPU non mesuré. Reçu : specs/152-sens
 Intégration152 : source71dc794d, main4ba9ec6f poussé ; branche152 et deux worktrees de revue supprimés, build1,39Gio et exécutables de test retirés. Worktree actif détaché, retour arrière et originaux conservés ; santé5/5 après nettoyage.
 
 Session153 installée : copie figée sous le pointeur pendant le glisser natif ouCtrl+glisser, visibilité85% ettaille50% par défaut, rendu/visibilité/taille dansEffets. Capture unique bornée, préparation300ms puis repli visible, fin du visuel immédiate etpreuveCG/PID du mouvement.2512tests /380suites verts ; première revue traitée. UUIDB755B94B-02A3-3709-8885-D7C3E9018F38, PID23423, santé5/5, certificat/configuration conservés. Gestes natifs et passage entre écrans vérifiés sur fenêtres fictives ; réglagesUI non capturés. Preuves à sixétapes vérifiées. Reçu : specs/153-apercu-glisser-translucide/validation.md. Intégration et nettoyage en cours.
+
+Dernier contrôle153 : UUID89D4F279-C3AC-3320-9CD3-2F8E138E1B6D, PID73065, santé5/5.2512tests /380suites verts après les derniers gardes ; deux revues traitées. La stage validation153final est conservée car Finder21825 y est présent. Les essais tardifs concurrents sont exclus des preuves. Aucune troisième revue des derniers gardes n'est revendiquée.
