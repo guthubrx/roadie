@@ -25,6 +25,8 @@ import Testing
         try "[fx.animations]\nenabled=true\nduration_ms=300\ncurve='linear'\n".write(toFile: path, atomically: true, encoding: .utf8)
         _ = f.configService.reload(path: path)
         _ = f.service.sharedSnapshot(followFocus: false)
+        f.service.invalidateSharedSnapshot()
+        #expect(f.service.cachedGestureSnapshot() == nil)
         let runtime = FrameTransitionRuntime(generations: f.generations, isMouseDown: { false })
         defer { runtime.cancel() }
         var incoming = f.context.snapshot.windows[0].window
@@ -35,7 +37,7 @@ import Testing
         let plan = ApplyPlan(commands: [ApplyCommand(window: incoming, frame: f.target),
             ApplyCommand(window: leaving, frame: parking, preservesSize: true)])
         #expect(runtime.schedule(plan, service: f.service, generation: f.generations.current,
-                                 action: .stage, transitionDirection: direction)?.deferred == 2)
+                                 action: .stage, transitionDirection: direction, displays: [f.backend.screen])?.deferred == 2)
         #expect(await f.waitFor { !runtime.isHoldingLayout })
         let enteringFrames = f.backend.writes.filter { $0.0 == incoming.id }.map(\.1)
         let leavingFrames = f.backend.writes.filter { $0.0 == leaving.id }.map(\.1)
@@ -75,6 +77,59 @@ import Testing
         let first = try #require(frames.first)
         #expect(abs(first.minX - incoming.frame.x) <= 1)
         #expect(first.minY < incoming.frame.y - 5) // Next : arrivée depuis le haut, mouvement descendant.
+        #expect(frames.last == incoming.frame.cgRect)
+    }
+
+    @Test func aRapidOppositeTransitionKeepsOnlyTheNewFinalTarget() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }; f.live.invalidate()
+        let path = try #require(f.configService.state.activePath)
+        try "[fx.animations]\nenabled=true\nduration_ms=300\n".write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
+        let runtime = FrameTransitionRuntime(generations: f.generations, isMouseDown: { false })
+        defer { runtime.cancel() }
+        var window = f.context.snapshot.windows[0].window
+        window.frame = Rect(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: f.backend.screen, among: [f.backend.screen]))
+        _ = runtime.schedule(ApplyPlan(commands: [ApplyCommand(window: window, frame: f.target)]),
+            service: f.service, generation: f.generations.current, action: .stage, transitionDirection: .up, displays: [f.backend.screen])
+        #expect(await f.waitFor { !f.backend.writes.isEmpty })
+        window.frame = Rect(try #require(f.backend.frame(window.id)))
+        let before = f.backend.writes.count
+        let target = Rect(x: f.target.x, y: 140, width: f.target.width, height: f.target.height)
+        _ = runtime.schedule(ApplyPlan(commands: [ApplyCommand(window: window, frame: target)]),
+            service: f.service, generation: f.generations.next(), action: .stage, transitionDirection: .down, displays: [f.backend.screen])
+        #expect(await f.waitFor { !runtime.isHoldingLayout })
+        #expect(f.backend.frame(window.id) == target.cgRect)
+        #expect(!f.backend.writes.dropFirst(before).contains { $0.1 == f.target.cgRect })
+    }
+
+    @Test(arguments: [StageCycleDirection.next, .prev])
+    func cyclingAcrossTheEndPassesItsExplicitDirection(_ navigation: StageCycleDirection) async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }; f.live.invalidate()
+        let path = try #require(f.configService.state.activePath)
+        try "[fx.animations]\nenabled=true\nduration_ms=300\ncurve='linear'\n".write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
+        let source = f.context.snapshot.windows[0].window, incoming = f.context.snapshot.windows[1].window
+        let start = StageID(rawValue: navigation == .next ? "6" : "1")
+        let target = StageID(rawValue: navigation == .next ? "1" : "6")
+        try f.store.mutateChecked { state in
+            let template = state.scopes[0].stages[0]
+            state.scopes[0].activeStageID = start
+            state.scopes[0].stages = (1...6).map { number in
+                var stage = template; stage.id = StageID(rawValue: String(number)); stage.mode = .float; stage.bspTree = nil
+                stage.members = stage.id == start ? template.members.filter { $0.windowID == source.id }
+                    : stage.id == target ? template.members.filter { $0.windowID == incoming.id } : []
+                return stage
+            }
+        }
+        _ = f.backend.setFrame(HiddenWindowPlacement.frame(for: incoming.frame.cgRect, on: f.backend.screen, among: [f.backend.screen]), of: incoming)
+        let before = f.backend.writes.count
+        FrameTransitionRuntime.shared.start(); defer { FrameTransitionRuntime.shared.stop() }
+        let result = StageCommandService(service: f.service, store: f.store).cycle(navigation)
+        #expect(result.changed)
+        #expect(await f.waitFor { !FrameTransitionRuntime.shared.isHoldingLayout })
+        let frames = f.backend.writes.dropFirst(before).filter { $0.0 == incoming.id }.map(\.1)
+        let first = try #require(frames.first)
+        #expect(navigation == .next ? first.minY < incoming.frame.y - 5 : first.minY > incoming.frame.y + 5)
         #expect(frames.last == incoming.frame.cgRect)
     }
 

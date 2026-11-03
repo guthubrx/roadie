@@ -46,7 +46,8 @@ public final class FrameTransitionRuntime {
     }
 
     func schedule(_ plan: ApplyPlan, service: SnapshotService, generation: UInt64, action: AnimationAction,
-                  immediateWindowIDs: Set<WindowID> = [], transitionDirection: Direction? = nil) -> ApplyResult? {
+                  immediateWindowIDs: Set<WindowID> = [], transitionDirection: Direction? = nil,
+                  displays: [DisplaySnapshot]? = nil) -> ApplyResult? {
         let policy = service.effectiveConfig.fx.animations.policy(for: action)
         guard policy.enabled, !plan.commands.isEmpty, generation == generations.current,
               generation != PlacementGeneration.outsideBudget, !isMouseDown() else { return nil }
@@ -93,8 +94,9 @@ public final class FrameTransitionRuntime {
             }
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
         }
-        let displays = service.cachedGestureSnapshot()?.displays ?? []
+        let animationDisplays = displays ?? service.cachedGestureSnapshot()?.displays ?? []
         let distance = 40 * policy.intensity
+        // Repère AX : y croît vers le bas. Hors navigation, garder le déplacement gauche historique.
         let motion: CGSize = switch transitionDirection ?? .left {
         case .left: CGSize(width: -distance, height: 0)
         case .right: CGSize(width: distance, height: 0)
@@ -122,7 +124,7 @@ public final class FrameTransitionRuntime {
             // Ne jamais réexposer une fenêtre déjà rangée pendant son masquage.
             if command.preservesSize && (!window.isOnScreen
                 || window.frame.cgRect.matchesFrame(to)
-                || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: displays)) {
+                || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: animationDisplays)) {
                 EffectAnimator.shared.cancel(animationID)
                 current.frames[id] = command.frame
                 current.finished.insert(id)
@@ -130,7 +132,7 @@ public final class FrameTransitionRuntime {
             }
             // Le parking n'est pas une destination visuelle : courte sortie puis parking final.
             if command.preservesSize { to = from.offsetBy(dx: motion.width, dy: motion.height) }
-            else if !window.isOnScreen || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: displays) {
+            else if !window.isOnScreen || HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: animationDisplays) {
                 from = to.offsetBy(dx: -motion.width, dy: -motion.height)
             }
             EffectAnimator.shared.animate(id: animationID, from: [from.minX, from.minY, from.width, from.height],

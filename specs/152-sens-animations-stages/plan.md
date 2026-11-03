@@ -7,3 +7,5 @@ Réutiliser le pipeline CommandPlacement → SnapshotService.apply → FrameTran
 Dans le runtime : sortie courte dans la direction ; entrée depuis la cible décalée dans le sens inverse. Reconnaître le parking même si isOnScreen=true. Hors navigation, garder le comportement de déplacement ordinaire et une arrivée courte à droite quand aucune direction n'est connue. Ne jamais afficher une fenêtre déjà parkée pour une sortie. Les nouvelles fenêtres à placement direct restent directes. Effets désactivés : même écriture finale qu'avant.
 
 Pas d'AX supplémentaire, ni de lecture par frame ajoutée. Complexité inchangée O(k) pour k fenêtres et O(s) pour les positions de stages, une fois par commande. Réutiliser Direction, les permis et l'ordonnanceur existants. Pas de dépendance. Revue indépendante sur le commit publié, puis tests Swift séquentiels et essai sur le Mac signé.
+
+Complément de revue : transmettre les écrans du relevé de commande au runtime pour rendre la reconnaissance du parking indépendante du cache de geste. Aucun état persistant ajouté. Les appels sans relevé explicite peuvent lire NSScreen via le fournisseur existant, sans inventaire AX.
