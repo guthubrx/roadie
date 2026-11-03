@@ -399,3 +399,4 @@ placement final unique, focus après mouvement.2497tests /378suites et25ciblés 
 Neuf animations sur dix mesurées :294–356ms ; une bascule directe sous dépassement.
 UUID D4E23DD7-5D40-3E0B-AB46-FB88A8AA0318, santé5/5, certificat/configuration conservés.
 Preuves natives au clavier vérifiées ; GPU non mesuré. Reçu : specs/152-sens-animations-stages/validation.md.
+Intégration152 : source71dc794d, main4ba9ec6f poussé ; branche152 et deux worktrees de revue supprimés, build1,39Gio et exécutables de test retirés. Worktree actif détaché, retour arrière et originaux conservés ; santé5/5 après nettoyage.

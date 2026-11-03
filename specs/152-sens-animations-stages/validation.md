@@ -28,4 +28,10 @@ Une fenêtre non gérée absente du relevé peut apparaître figée dans la scè
 
 Preuves : diaporama vérifié, navigation, lecture/pause, zoom et dernière étape contrôlés par html_preview. Original des captures, manifestes, empreintes, journaux et reçus hors Git : /Users/moi/.local/state/roadies/validation/2026-11-03-152. Diaporama autonome : preuves-corrections/2026-11-03-152-sens-animations-stages/preuves.html.
 
-Intégration et nettoyage Git : à consigner après vérification du commit distant.
+## Intégration et nettoyage
+
+Source 71dc794de91e8ab7e6b463e5fe2b5dad42d35d6d, intégrée par 4ba9ec6f26222ab13a8824e86d2138fca4283606, main distant vérifié identique après push. La branche152 locale et distante est supprimée. Le worktree de conversation reste actif, détaché sur main. Deux worktrees de revue distants (f57e6cdc,141d79bd) et leurs branches sont retirés après clôture des gardes, vérification des commits intégrés, absence de changement, de fichier ignoré et de processus utilisateur. Aucun checkout partagé distant déplacé.
+
+Build local supprimé :1453552Kio, environ1,39Gio. Deux applications fictives et quatre exécutables de validation retirés après arrêt. Santé5/5 relue après nettoyage. Les binaires installés, le retour arrière151, les originaux de preuve et leurs reçus sont conservés. Les autres dossiers de revue historiques, hors de cette tâche et sans provenance qualifiée ici, restent conservés.
+
+Diaporama vérifié par html_preview : ouverture en pause, navigation avant/arrière, lecture/pause, zoom et dernière étape. Les captures sont fictives et ne contiennent pas les fenêtres utilisateur exclues des essais. Réglages et certificat inchangés. Aucune activation restante.
