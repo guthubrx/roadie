@@ -236,6 +236,9 @@ public final class ModifierWindowRuntime {
             frames[current.source.window.id] = current.candidate.map { $0.placements[current.source.window.id] ?? Rect($0.frame) } ?? Rect(frame)
             submit(frames, current: current)
         }
+        // Le visuel cesse au relâchement, sans attendre une application lente.
+        // Conserver failed jusqu'au calcul des dernières cibles ci-dessus.
+        pointerPreview.end()
         Task { [weak self, current] in
             let deadline = Date().addingTimeInterval(2)
             while !current.dispatcher.isIdle, current.permit.isCurrent, Date() < deadline {

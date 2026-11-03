@@ -337,7 +337,7 @@ photo) dans un profil du sélecteur `source = "zones"` (Option+Tab chez l'utilis
 retour et clic, aller-retour, bordure jaune sur l'application, photos reprises en quittant une fenêtre, 20 zones,
 24 h, 3 zones de clics par fenêtre ; icônes des cartes (× et sens interdit). Reçus : specs/135 à 137.
 Session 138 : 0.12.0 publiée (sessions 131 à 137). Reçu : specs/138-release-0120/validation.md.
-Current SpecKit feature: `152-sens-animations-stages`.
+Current SpecKit feature: `153-apercu-glisser-translucide`.
 
 Contexte :
 - `specs/152-sens-animations-stages/spec.md`
@@ -400,3 +400,5 @@ Neuf animations sur dix mesurées :294–356ms ; une bascule directe sous dépas
 UUID D4E23DD7-5D40-3E0B-AB46-FB88A8AA0318, santé5/5, certificat/configuration conservés.
 Preuves natives au clavier vérifiées ; GPU non mesuré. Reçu : specs/152-sens-animations-stages/validation.md.
 Intégration152 : source71dc794d, main4ba9ec6f poussé ; branche152 et deux worktrees de revue supprimés, build1,39Gio et exécutables de test retirés. Worktree actif détaché, retour arrière et originaux conservés ; santé5/5 après nettoyage.
+
+Session153 installée : copie figée sous le pointeur pendant le glisser natif ouCtrl+glisser, visibilité85% ettaille50% par défaut, rendu/visibilité/taille dansEffets. Capture unique bornée, préparation300ms puis repli visible, fin du visuel immédiate etpreuveCG/PID du mouvement.2512tests /380suites verts ; première revue traitée. UUIDB755B94B-02A3-3709-8885-D7C3E9018F38, PID23423, santé5/5, certificat/configuration conservés. Gestes natifs et passage entre écrans vérifiés sur fenêtres fictives ; réglagesUI non capturés. Preuves à sixétapes vérifiées. Reçu : specs/153-apercu-glisser-translucide/validation.md. Intégration et nettoyage en cours.

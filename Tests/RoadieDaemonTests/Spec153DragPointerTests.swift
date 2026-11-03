@@ -93,6 +93,39 @@ import Testing
         #expect(preview.visibleFrame?.minX == start.x + 99)
         preview.end(); #expect(preview.visibleFrame == nil && !preview.isReady)
     }
+    @Test func aCaptureDeadlineReleasesTheGestureAndIgnoresTheLateImage() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        var pending: CheckedContinuation<CGImage?, Never>?, notifications = 0
+        let preview = DragPointerPreview(presents: false, captureTimeout: .milliseconds(25),
+            capture: { _ in await withCheckedContinuation { pending = $0 } })
+        preview.onPrepared = { notifications += 1 }
+        preview.prepare(window: f.context.snapshot.windows[0].window, anchor: .zero, config: EffectsConfig())
+        preview.show(at: .zero)
+        #expect(await wait { pending != nil })
+        #expect(await wait { preview.failed })
+        #expect(notifications == 1 && preview.visibleFrame == nil)
+        pending?.resume(returning: image()); await Task.yield()
+        #expect(preview.failed && !preview.isReady && notifications == 1)
+        preview.end()
+    }
+    @Test(arguments: [false, true]) func releaseHidesTheCopyBeforeAnOutstandingWriteFinishes(cancelled: Bool) async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }; f.live.invalidate(); try configure(f)
+        let runtime = ModifierWindowRuntime(service: f.service, input: UserInputActivity(), automaticCadence: false)
+        runtime.pointerPreview = DragPointerPreview(presents: false, capture: { _ in image() })
+        defer { runtime.cancelImmediately(reason: "test") }
+        let source = f.context.snapshot.windows[0], point = CGPoint(x: source.window.frame.x + 50, y: source.window.frame.y + 50)
+        f.backend.blockedPID = source.window.pid
+        #expect(runtime.begin(source: source, snapshot: f.context.snapshot, at: point, operation: .move))
+        #expect(await wait { runtime.pointerPreview.isReady })
+        let target = f.original(f.neighbor)
+        runtime.update(at: CGPoint(x: target.maxX - 15, y: target.midY)); runtime.flush()
+        #expect(await f.waitFor { !f.backend.frameUpdates.isEmpty })
+        #expect(runtime.pointerPreview.visibleFrame != nil)
+        runtime.end(cancelled: cancelled)
+        #expect(runtime.isActive && runtime.pointerPreview.visibleFrame == nil)
+        f.backend.blockedPID = nil; f.backend.gate.signal()
+        #expect(await f.waitFor { !runtime.isActive })
+    }
     @Test func lateCaptureCannotReopenACancelledCopy() async throws {
         let f = try Drag143Fixture(); defer { f.clean() }
         var continuation: CheckedContinuation<CGImage?, Never>?

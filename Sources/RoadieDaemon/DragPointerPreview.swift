@@ -10,6 +10,8 @@ final class DragPointerPreview {
     private let capture: Capture
     private let presents: Bool
     private var task: Task<Void, Never>?
+    private var deadlineTask: Task<Void, Never>?
+    private let captureTimeout: Duration
     private var sequence = UUID()
     private var image: CGImage?
     private var panel: DragPointerPanel?
@@ -24,8 +26,8 @@ final class DragPointerPreview {
     var enabled: Bool { config.dragPreview != "none" }
     var visibleFrame: CGRect? { visible && isReady && enabled ? Self.frame(initial: initialFrame, anchor: anchor, point: point, scale: config.dragPreviewScalePercent / 100) : nil }
 
-    init(presents: Bool = true, capture: @escaping Capture = { await RailThumbnailStore.shared.captureDragSource($0) }) {
-        self.presents = presents; self.capture = capture
+    init(presents: Bool = true, captureTimeout: Duration = .milliseconds(300), capture: @escaping Capture = { await RailThumbnailStore.shared.captureDragSource($0) }) {
+        self.presents = presents; self.capture = capture; self.captureTimeout = captureTimeout
     }
 
     func prepare(window: WindowSnapshot, anchor: CGPoint, config: EffectsConfig) {
@@ -33,14 +35,23 @@ final class DragPointerPreview {
         self.config = config; self.anchor = anchor; point = anchor; initialFrame = window.frame.cgRect
         let sequence = self.sequence
         let began = ProcessInfo.processInfo.systemUptime
-        guard config.dragPreview == "content" else { isReady = true; onPrepared?(); return }
+        guard config.dragPreview == "content" else { isReady = true; return }
         task = Task { [weak self, capture] in
             let result = await capture(window)
             guard let self, self.sequence == sequence, !Task.isCancelled else { return }
+            deadlineTask?.cancel(); deadlineTask = nil
             image = result; isReady = result != nil; failed = result == nil
             EventLog().append(RoadieEvent(type: "drag.pointer_prepared", details: [
                 "windowID": String(window.id.rawValue), "ready": String(isReady),
                 "captureMs": String((ProcessInfo.processInfo.systemUptime - began) * 1000)]))
+            onPrepared?()
+        }
+        deadlineTask = Task { [weak self, captureTimeout] in
+            try? await Task.sleep(for: captureTimeout)
+            guard let self, !Task.isCancelled, self.sequence == sequence, !isReady, !failed else { return }
+            failed = true; task?.cancel()
+            EventLog().append(RoadieEvent(type: "drag.pointer_unavailable", details: [
+                "reason": "capture_timeout", "windowID": String(window.id.rawValue)]))
             onPrepared?()
         }
     }
@@ -53,7 +64,7 @@ final class DragPointerPreview {
         panel?.show(image: image, frame: frame, opacity: config.dragPreviewOpacityPercent / 100)
     }
     func end() {
-        sequence = UUID(); task?.cancel(); task = nil
+        sequence = UUID(); task?.cancel(); task = nil; deadlineTask?.cancel(); deadlineTask = nil
         panel?.releaseImage(); panel?.orderOut(nil); panel = nil
         image = nil; visible = false; isReady = false; failed = false
     }
@@ -95,7 +106,7 @@ private final class DragPointerPanel: NSPanel {
         alphaValue = min(1, max(0.1, opacity))
         setFrame(RoadieScreenCoordinate.axRectToNS(frame), display: false)
         contentView?.frame = bounds
-        orderFrontRegardless()
+        if !isVisible { orderFrontRegardless() }
     }
     func releaseImage() { imageLayer.contents = nil }
 }

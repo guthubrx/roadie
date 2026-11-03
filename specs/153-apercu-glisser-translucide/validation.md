@@ -18,3 +18,13 @@ Deux défauts supplémentaires identifiés en natif : clic AppKit livré deux fo
 Diaporama autonome à six étapes, deux appuis observés, images fictives originales intactes horsGit. Première annotation orange vérifiée ; contrôles avant/arrière, dernière étape, lecture/pause et zoom vérifiés. Les premières captures qui contenaient d'autres fenêtres sont exclues. RéglagesFR/EN, bornes et migration couverts par tests. Le parcours automatisé n'a pas obtenu la fenêtre des paramètres : aucun changement de valeur via cette interface n'est revendiqué. Aucun changement de protections macOS.
 
 Bridget a refusé la publication du diff non commité (publication_refused). Signalement conservé horsGit : aucun spécialiste de maintenance visible dans les recherches du catalogue, donc aucun envoi à un ancien identifiant. Revue sur commit publié à demander. Ne pas transformer les tests du parent en validation indépendante.
+
+
+## Charge observée
+Deux gestesCtrl+glisser :0,37sCPU sur4,66s, soit7,95% d’un cœur pour le processus roadied entier. Repos adjacent :0,05s sur2,01s, soit2,48%. Activité normale du daemon incluse ; ce n’est pas une attribution exclusive à la copie. RSS132544→133792Kio : série courte, sans conclusion sur une fuite. GPU etWindowServer non mesurés. Le reçu BTT a annoncé une échéance alors que le fichier durable benchmark.json confirmait la fin ; aucune relance du même essai n’a été faite.
+
+Les deux clients fictifs sont arrêtés. Les stages validation153a et validation153b ont été retirées après vérification qu’elles ne contenaient que ces clients. La stage interne6 est restaurée, puis l’écran externe refocalisé. Aucun stage externe choisi par l’utilisateur n’a été remplacé.
+
+
+## Validation après revue
+La fin immédiate du visuel, le délai300ms et le rejet de sa capture tardive passent les72 tests ciblés. Suite finale :2512 tests /380 suites réussis en68,050s. Version finale chargée : UUID B755B94B-02A3-3709-8885-D7C3E9018F38, PID23423, santé5/5. Glisser natif etCtrl+glisser rejoués sur cette version : copiealpha0,85 présente pendant le mouvement, absente au relâchement. Les six images du diaporama proviennent de cette dernière version. Configuration utilisateur toujours identique à la copie d’avant153. La première revue est traitée dans revue.md ; une seconde lecture ciblée des corrections sera demandée.
