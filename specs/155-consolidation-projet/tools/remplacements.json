@@ -1,0 +1,386 @@
+{
+  "version": 1,
+  "copies": [
+    {
+      "tache": "T001",
+      "source": "gabarits/baseline.md",
+      "destination": "specs/155-consolidation-projet/validation/baseline.md",
+      "executable": false
+    },
+    {
+      "tache": "T006",
+      "source": "gabarits/Spec155BuildIdentityTests.swift",
+      "destination": "Tests/RoadieDaemonTests/Spec155BuildIdentityTests.swift",
+      "executable": false
+    },
+    {
+      "tache": "T014",
+      "source": "gabarits/Spec155ConfigGuardTests.swift",
+      "destination": "Tests/RoadieDaemonTests/Spec155ConfigGuardTests.swift",
+      "executable": false
+    },
+    {
+      "tache": "T015",
+      "source": "gabarits/ajouter-un-reglage.md",
+      "destination": "docs/dev/ajouter-un-reglage.md",
+      "executable": false
+    },
+    {
+      "tache": "T025",
+      "source": "gabarits/Spec155ShellCompletionTests.swift",
+      "destination": "Tests/RoadieDaemonTests/Spec155ShellCompletionTests.swift",
+      "executable": false
+    },
+    {
+      "tache": "T026",
+      "source": "gabarits/ShellCompletion.swift",
+      "destination": "Sources/RoadieDaemon/ShellCompletion.swift",
+      "executable": false
+    },
+    {
+      "tache": "T028",
+      "source": "gabarits/coverage",
+      "destination": "scripts/coverage",
+      "executable": true
+    },
+    {
+      "tache": "T031",
+      "source": "gabarits/tests.yml",
+      "destination": ".github/workflows/tests.yml",
+      "executable": false
+    },
+    {
+      "tache": "T035",
+      "source": "gabarits/031-premier-appel-reseau.md",
+      "destination": "docs/decisions/031-premier-appel-reseau.md",
+      "executable": false
+    },
+    {
+      "tache": "T036",
+      "source": "gabarits/Spec155ReleaseCheckTests.swift",
+      "destination": "Tests/RoadieDaemonTests/Spec155ReleaseCheckTests.swift",
+      "executable": false
+    },
+    {
+      "tache": "T037",
+      "source": "gabarits/ReleaseCheck.swift",
+      "destination": "Sources/RoadieDaemon/ReleaseCheck.swift",
+      "executable": false
+    },
+    {
+      "tache": "T044",
+      "source": "gabarits/validation.md",
+      "destination": "specs/155-consolidation-projet/validation.md",
+      "executable": false
+    }
+  ],
+  "remplacements": [
+    {
+      "id": "T002a",
+      "tache": "T002",
+      "fichier": "README.fr.md",
+      "avant": "installe la commande dans `/Users/moi/.local/bin`,",
+      "apres": "installe la commande dans `~/.local/bin`,"
+    },
+    {
+      "id": "T002b",
+      "tache": "T002",
+      "fichier": "README.fr.md",
+      "avant": "crée `/Users/moi/Library/LaunchAgents/com.roadie.roadied.plist`,",
+      "apres": "crée `~/Library/LaunchAgents/com.roadie.roadied.plist`,"
+    },
+    {
+      "id": "T003a",
+      "tache": "T003",
+      "fichier": "docs/decisions/030-native-command-input.md",
+      "avant": "# 013 — Champ natif dans la boîte de commandes\n",
+      "apres": "# 030 - Champ natif dans la boîte de commandes\n"
+    },
+    {
+      "id": "T004a",
+      "tache": "T004",
+      "fichier": ".gitignore",
+      "avant": "/.specify/memory/user-layer.json\n",
+      "apres": "/.specify/memory/user-layer.json\n/.specify/memory/*.bak-*\n"
+    },
+    {
+      "id": "T007a",
+      "tache": "T007",
+      "fichier": "Sources/RoadieDaemon/DaemonHealth.swift",
+      "avant": "public enum RoadieVersion {\n    public static let current = \"0.13.0\"\n}\n",
+      "apres": "public enum RoadieVersion {\n    public static let current = \"0.13.0\"\n\n    /// Commit du build, lu une fois dans `Roadie.app/Contents/Info.plist` (clé `RoadieBuildCommit`).\n    /// `nil` hors de l'application. Le chemin part de l'exécutable réel : `Bundle.main` rend `nil`\n    /// quand `roadied` est lancé par le lien `~/.local/bin/roadied`.\n    public static let buildCommit: String? = {\n        guard let executable = Bundle.main.executableURL?.resolvingSymlinksInPath() else { return nil }\n        let infoPlist = executable.deletingLastPathComponent().deletingLastPathComponent()\n            .appendingPathComponent(\"Info.plist\")\n        return buildCommit(infoPlist: infoPlist)\n    }()\n\n    static func buildCommit(infoPlist url: URL) -> String? {\n        guard let data = try? Data(contentsOf: url),\n              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],\n              let commit = plist[\"RoadieBuildCommit\"] as? String,\n              !commit.isEmpty\n        else { return nil }\n        return commit\n    }\n\n    /// Version affichée : `0.13.0 (0b7de36b)` avec un commit connu, `0.13.0` sinon.\n    public static func display(commit: String? = buildCommit) -> String {\n        commit.map { \"\\(current) (\\($0))\" } ?? current\n    }\n}\n"
+    },
+    {
+      "id": "T007b",
+      "tache": "T007",
+      "fichier": "Sources/RoadieDaemon/DaemonHealth.swift",
+      "avant": "    public var socketPath: String\n\n    public init(\n        pid: Int32,",
+      "apres": "    public var socketPath: String\n    /// Commit du build. Absent du fichier quand il est inconnu.\n    public var buildCommit: String?\n\n    public init(\n        pid: Int32,"
+    },
+    {
+      "id": "T007c",
+      "tache": "T007",
+      "fichier": "Sources/RoadieDaemon/DaemonHealth.swift",
+      "avant": "        roadieVersion: String = RoadieVersion.current\n    ) {",
+      "apres": "        roadieVersion: String = RoadieVersion.current,\n        buildCommit: String? = RoadieVersion.buildCommit\n    ) {"
+    },
+    {
+      "id": "T007d",
+      "tache": "T007",
+      "fichier": "Sources/RoadieDaemon/DaemonHealth.swift",
+      "avant": "        self.socketPath = socketPath\n    }\n\n    /// Vrai si le process vit et que le battement a moins de 90 s.",
+      "apres": "        self.socketPath = socketPath\n        self.buildCommit = buildCommit\n    }\n\n    /// Vrai si le process vit et que le battement a moins de 90 s."
+    },
+    {
+      "id": "T008",
+      "tache": "T008",
+      "fichier": "Sources/roadied/main.swift",
+      "avant": "    print(\"roadied \\(RoadieVersion.current)\")",
+      "apres": "    print(\"roadied \\(RoadieVersion.display())\")"
+    },
+    {
+      "id": "T009a",
+      "tache": "T009",
+      "fichier": "scripts/build-app-bundle",
+      "avant": "# Usage : scripts/build-app-bundle <binaire-roadied> <chemin/Roadie.app> <version>\n",
+      "apres": "# Usage : scripts/build-app-bundle <binaire-roadied> <chemin/Roadie.app> <version> [commit]\n# Le commit, facultatif, est écrit dans Info.plist (clé RoadieBuildCommit).\n"
+    },
+    {
+      "id": "T009b",
+      "tache": "T009",
+      "fichier": "scripts/build-app-bundle",
+      "avant": "if [[ $# -ne 3 ]]; then\n  echo \"Usage : $0 <binaire-roadied> <chemin/Roadie.app> <version>\" >&2\n  exit 64\nfi\nroadied_binary=\"$1\"\napp_bundle=\"$2\"\napp_version=\"$3\"\n",
+      "apres": "if [[ $# -lt 3 || $# -gt 4 ]]; then\n  echo \"Usage : $0 <binaire-roadied> <chemin/Roadie.app> <version> [commit]\" >&2\n  exit 64\nfi\nroadied_binary=\"$1\"\napp_bundle=\"$2\"\napp_version=\"$3\"\nbuild_commit=\"${4:-}\"\n"
+    },
+    {
+      "id": "T009c",
+      "tache": "T009",
+      "fichier": "scripts/build-app-bundle",
+      "avant": "</dict>\n</plist>\nPLIST\n",
+      "apres": "</dict>\n</plist>\nPLIST\n\nif [[ -n \"$build_commit\" ]]; then\n  plutil -insert RoadieBuildCommit -string \"$build_commit\" \"$app_bundle/Contents/Info.plist\"\nfi\n"
+    },
+    {
+      "id": "T010a",
+      "tache": "T010",
+      "fichier": "scripts/install",
+      "avant": "  version=\"$(sed -n 's/.*static let current = \"\\(.*\\)\".*/\\1/p' \"$script_dir/../Sources/RoadieDaemon/DaemonHealth.swift\")\"\n  \"$script_dir/build-app-bundle\" \"$build_roadied\" \"$tmp_bundle\" \"${version:-0.0.0}\"\n",
+      "apres": "  version=\"$(sed -n 's/.*static let current = \"\\(.*\\)\".*/\\1/p' \"$script_dir/../Sources/RoadieDaemon/DaemonHealth.swift\")\"\n  # Commit du build, vide hors d'un dépôt Git ; « -dirty » si l'arbre de travail diffère de HEAD.\n  local build_commit\n  build_commit=\"$(git -C \"$script_dir/..\" rev-parse --short=8 HEAD 2>/dev/null || true)\"\n  if [[ -n \"$build_commit\" ]] && ! git -C \"$script_dir/..\" diff --quiet HEAD 2>/dev/null; then\n    build_commit=\"$build_commit-dirty\"\n  fi\n  \"$script_dir/build-app-bundle\" \"$build_roadied\" \"$tmp_bundle\" \"${version:-0.0.0}\" \"$build_commit\"\n"
+    },
+    {
+      "id": "T010b",
+      "tache": "T010",
+      "fichier": "scripts/package-dmg",
+      "avant": "app_version=\"${ROADIE_VERSION:-0.13.0}\"\n",
+      "apres": "source_version=\"$(sed -n 's/.*static let current = \"\\(.*\\)\".*/\\1/p' \"$repo_root/Sources/RoadieDaemon/DaemonHealth.swift\")\"\napp_version=\"${ROADIE_VERSION:-${source_version:-0.0.0}}\"\n# Commit du build, vide hors d'un dépôt Git ; « -dirty » si l'arbre de travail diffère de HEAD.\nbuild_commit=\"$(git -C \"$repo_root\" rev-parse --short=8 HEAD 2>/dev/null || true)\"\nif [[ -n \"$build_commit\" ]] && ! git -C \"$repo_root\" diff --quiet HEAD 2>/dev/null; then\n  build_commit=\"$build_commit-dirty\"\nfi\n"
+    },
+    {
+      "id": "T010c",
+      "tache": "T010",
+      "fichier": "scripts/package-dmg",
+      "avant": "\"$script_dir/build-app-bundle\" \"$bin_dir/roadied\" \"$app_bundle\" \"$app_version\"\n",
+      "apres": "\"$script_dir/build-app-bundle\" \"$bin_dir/roadied\" \"$app_bundle\" \"$app_version\" \"$build_commit\"\n"
+    },
+    {
+      "id": "T011a",
+      "tache": "T011",
+      "fichier": "specs/016-roadie-stabilization/contracts/daemon-status.md",
+      "avant": "  \"socketPath\": \"~/.roadies/roadied.sock\"\n}\n```\n",
+      "apres": "  \"socketPath\": \"~/.roadies/roadied.sock\",\n  \"buildCommit\": \"0b7de36b\"\n}\n```\n\n`buildCommit` (ajout de la spec 155) est facultatif : le champ est absent quand le commit du build est inconnu. Un lecteur ancien l'ignore. Le champ `version` reste à 1.\n"
+    },
+    {
+      "id": "T011b",
+      "tache": "T011",
+      "fichier": "docs/fr/cli.md",
+      "avant": "- `--version` : affiche la version. `roadied --version` fait de même pour le binaire du daemon.\n",
+      "apres": "- `--version` : affiche la version. `roadied --version` affiche aussi le commit du build quand il est connu, par exemple `roadied 0.13.0 (0b7de36b)`. Le même commit figure dans le champ `buildCommit` de `~/.roadies/daemon-status.json`.\n"
+    },
+    {
+      "id": "T011c",
+      "tache": "T011",
+      "fichier": "docs/en/cli.md",
+      "avant": "- `--version`: prints the version. `roadied --version` does the same for the daemon binary.\n",
+      "apres": "- `--version`: prints the version. `roadied --version` also prints the build commit when it is known, for example `roadied 0.13.0 (0b7de36b)`. The same commit is in the `buildCommit` field of `~/.roadies/daemon-status.json`.\n"
+    },
+    {
+      "id": "T011d",
+      "tache": "T011",
+      "fichier": "CHANGELOG.md",
+      "avant": "## Non publié\n\n",
+      "apres": "## Non publié\n\n- Version : `roadied --version` et `~/.roadies/daemon-status.json` indiquent le commit du build\n  installé, par exemple `roadied 0.13.0 (0b7de36b)`. Le DMG lit sa version dans le code.\n\n",
+      "marqueur": "- Version : `roadied --version` et `~/.roadies/daemon-status.json` indiquent le commit du build"
+    },
+    {
+      "id": "T013",
+      "tache": "T013",
+      "fichier": "Sources/RoadieCore/Config.swift",
+      "avant": "    public static func ineffectiveKeys() -> [String: Set<String>] {\n        ConfigValidationRules.ineffectiveKeys\n    }\n",
+      "apres": "    public static func ineffectiveKeys() -> [String: Set<String>] {\n        ConfigValidationRules.ineffectiveKeys\n    }\n\n    /// Clés acceptées par le validateur, par chemin de table (« » pour la racine).\n    public static func knownKeys() -> [String: Set<String>] {\n        ConfigValidationRules.knownKeys\n    }\n"
+    },
+    {
+      "id": "T017a",
+      "tache": "T017",
+      "fichier": "AGENTS.md",
+      "avant": "<!-- SPECKIT START -->\n",
+      "apres": "## Journal des sessions\n\nLe bilan de chaque session livrée est dans `.specify/memory/sessions/journal.md`.\nAjoute le bilan d'une nouvelle session à la fin de ce fichier, pas ici.\n\n## Tests\n\n- Suite complète : `./scripts/test --no-parallel` (environ 80 secondes). Sans `--no-parallel`,\n  des tests sensibles au temps échouent quand la machine est chargée.\n- Un groupe de tests : `./scripts/test --no-parallel --filter NomDeLaSuite`.\n- Tests des scripts : `python3 -I -B -m unittest discover -s scripts/tests`.\n- Un test hors de ton périmètre échoue une fois : relance-le seul. S'il échoue deux fois de\n  suite, arrête et signale-le avec la commande et le message.\n- Ajouter un réglage : suivre `docs/dev/ajouter-un-reglage.md`.\n\n## Pièges connus\n\n- **Signature** : `make install` signe avec le certificat `roadied-cert`. Une autre signature\n  fait perdre la permission Accessibilité.\n- **Build de test périmé** : après l'ajout d'un champ à une structure de `RoadieCore`, les\n  tests peuvent planter au signal 11 (« outlined destroy »). Remède : supprimer\n  `.build/arm64-apple-macosx/debug/RoadieTilerTests.build`, puis relancer les tests.\n- **Symbole introuvable à l'édition de liens** (« Undefined symbols … TargetModeConfig.init ») :\n  `touch Sources/RoadieDaemon/OverviewController.swift`, puis relancer.\n- **Processus enfants** : `roadied` ignore SIGTERM et un enfant en hérite. Rétablir les\n  signaux par défaut au lancement de l'enfant.\n- **Audit V15** : le lancer sur un checkout hors de `.worktrees`.\n- **Avertissement sans gravité** : `scripts/test` utilise un dossier personnel temporaire ;\n  SwiftPM affiche « failed loading cached manifest … Not a directory ». Ce n'est pas une erreur.\n- **Commits** : nommer les fichiers (`git add -- <fichiers>`), jamais `git commit -a`.\n\n<!-- SPECKIT START -->\n",
+      "marqueur": "## Pièges connus\n"
+    },
+    {
+      "id": "T019",
+      "tache": "T019",
+      "fichier": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+      "avant": "        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,\n              let value\n        else { return nil }\n        return (value as! AXUIElement)",
+      "apres": "        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,\n              let value,\n              CFGetTypeID(value) == AXUIElementGetTypeID()\n        else { return nil }\n        return (value as! AXUIElement)"
+    },
+    {
+      "id": "T020",
+      "tache": "T020",
+      "fichier": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+      "avant": "              let positionValue = positionRef,\n              let sizeValue = sizeRef\n        else { return nil }",
+      "apres": "              let positionValue = positionRef,\n              let sizeValue = sizeRef,\n              CFGetTypeID(positionValue) == AXValueGetTypeID(),\n              CFGetTypeID(sizeValue) == AXValueGetTypeID()\n        else { return nil }"
+    },
+    {
+      "id": "T021a",
+      "tache": "T021",
+      "fichier": "CHANGELOG.md",
+      "avant": "## Non publié\n\n",
+      "apres": "## Non publié\n\n- Cibles à l'écran : une réponse d'accessibilité d'un type inattendu est maintenant ignorée.\n\n",
+      "marqueur": "- Cibles à l'écran : une réponse d'accessibilité d'un type inattendu est maintenant ignorée."
+    },
+    {
+      "id": "T022",
+      "tache": "T022",
+      "fichier": "Sources/RoadieDaemon/DropPreviewController.swift",
+      "avant": "        if type == .leftMouseDown {\n            let pressDetails = [\"hadPending\": String(pending != nil), \"x\": String(Double(event.location.x)),\n                \"y\": String(Double(event.location.y)), \"observedAt\": String(ProcessInfo.processInfo.systemUptime)]\n            let events = events\n            Task { @MainActor in events.append(RoadieEvent(type: \"drag.real_press\", details: pressDetails)) }\n            pointerSequence &+= 1\n",
+      "apres": "        if type == .leftMouseDown {\n            pointerSequence &+= 1\n"
+    },
+    {
+      "id": "T023",
+      "tache": "T023",
+      "fichier": "Sources/RoadieDaemon/RailController.swift",
+      "avant": "    private func handleMouseDown(at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {\n        events.append(RoadieEvent(type: \"drag.real_router_press\", details: [\"x\": String(Double(screenPoint.x)),\n            \"y\": String(Double(screenPoint.y)), \"global\": String(fromGlobalMonitor)]))\n        FrameTransitionRuntime.shared.cancel()",
+      "apres": "    private func handleMouseDown(at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {\n        FrameTransitionRuntime.shared.cancel()"
+    },
+    {
+      "id": "T024a",
+      "tache": "T024",
+      "fichier": "CHANGELOG.md",
+      "avant": "## Non publié\n\n",
+      "apres": "## Non publié\n\n- Journal : Roadie n'écrit plus la position de chaque clic gauche (`drag.real_press`,\n  `drag.real_router_press`).\n\n",
+      "marqueur": "- Journal : Roadie n'écrit plus la position de chaque clic gauche (`drag.real_press`,"
+    },
+    {
+      "id": "T027a",
+      "tache": "T027",
+      "fichier": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "avant": "        CLICommandSpec(usage: \"--version\"),\n",
+      "apres": "        CLICommandSpec(usage: \"--version\"),\n        CLICommandSpec(usage: \"completion zsh\"),\n"
+    },
+    {
+      "id": "T027b",
+      "tache": "T027",
+      "fichier": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "avant": "        case \"--version\", \"version\":\n            out(\"roadie \\(RoadieVersion.current)\")\n        case nil:",
+      "apres": "        case \"--version\", \"version\":\n            out(\"roadie \\(RoadieVersion.current)\")\n        case \"completion\":\n            guard args.count == 2, args[1] == \"zsh\" else { return usageError() }\n            out(ShellCompletion.zsh(specs: Self.commandTable))\n        case nil:",
+      "marqueur": "case \"completion\":"
+    },
+    {
+      "id": "T028a",
+      "tache": "T028",
+      "fichier": "Makefile",
+      "avant": "events config dmg package-dmg clean\n",
+      "apres": "events config dmg package-dmg clean coverage\n"
+    },
+    {
+      "id": "T028b",
+      "tache": "T028",
+      "fichier": "Makefile",
+      "avant": "test:\n\t./scripts/test\n",
+      "apres": "test:\n\t./scripts/test\n\ncoverage:\n\t./scripts/coverage\n"
+    },
+    {
+      "id": "T028c",
+      "tache": "T028",
+      "fichier": ".gitignore",
+      "avant": "/.specify/memory/*.bak-*\n",
+      "apres": "/.specify/memory/*.bak-*\n*.profraw\n",
+      "marqueur": "*.profraw\n"
+    },
+    {
+      "id": "T029a",
+      "tache": "T029",
+      "fichier": "README.md",
+      "avant": "make test\nmake build\n",
+      "apres": "make test\nmake coverage\nmake build\n"
+    },
+    {
+      "id": "T029b",
+      "tache": "T029",
+      "fichier": "README.fr.md",
+      "avant": "make test\nmake build\n",
+      "apres": "make test\nmake coverage\nmake build\n"
+    },
+    {
+      "id": "T029c",
+      "tache": "T029",
+      "fichier": "docs/fr/cli.md",
+      "avant": "\n## Fenetres et focus\n",
+      "apres": "\n## Complétion zsh\n\n```bash\nroadie completion zsh\n```\n\nLa commande écrit un script de complétion pour zsh. Le script propose les commandes de `roadie` et le premier mot qui suit. Pour l'activer, ajoute cette ligne dans `~/.zshrc`, après `compinit` :\n\n```zsh\nsource <(roadie completion zsh)\n```\n\nLe script vient de la table des commandes : une nouvelle commande y apparaît sans autre réglage. Les options comme `--json` ne sont pas proposées.\n\n## Fenetres et focus\n",
+      "marqueur": "## Complétion zsh\n"
+    },
+    {
+      "id": "T029d",
+      "tache": "T029",
+      "fichier": "docs/en/cli.md",
+      "avant": "\n## Windows And Focus\n",
+      "apres": "\n## Zsh Completion\n\n```bash\nroadie completion zsh\n```\n\nThe command writes a completion script for zsh. The script suggests the `roadie` commands and the first word after them. To turn it on, add this line to `~/.zshrc`, after `compinit`:\n\n```zsh\nsource <(roadie completion zsh)\n```\n\nThe script comes from the command table: a new command appears in it with no other change. Options such as `--json` are not suggested.\n\n## Windows And Focus\n",
+      "marqueur": "## Zsh Completion\n"
+    },
+    {
+      "id": "T029e",
+      "tache": "T029",
+      "fichier": "CHANGELOG.md",
+      "avant": "## Non publié\n\n",
+      "apres": "## Non publié\n\n- Terminal : `roadie completion zsh` écrit la complétion des commandes pour zsh. Mise en service :\n  `source <(roadie completion zsh)` dans `~/.zshrc`, après `compinit`.\n  Développement : `make coverage` mesure la couverture des tests.\n\n",
+      "marqueur": "- Terminal : `roadie completion zsh` écrit la complétion des commandes pour zsh. Mise en service :"
+    },
+    {
+      "id": "T038a",
+      "tache": "T038",
+      "fichier": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "avant": "        CLICommandSpec(usage: \"completion zsh\"),\n",
+      "apres": "        CLICommandSpec(usage: \"completion zsh\"),\n        CLICommandSpec(usage: \"update check\"),\n"
+    },
+    {
+      "id": "T038b",
+      "tache": "T038",
+      "fichier": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "avant": "            out(ShellCompletion.zsh(specs: Self.commandTable))\n        case nil:",
+      "apres": "            out(ShellCompletion.zsh(specs: Self.commandTable))\n        case \"update\":\n            guard args.count == 2, args[1] == \"check\" else { return usageError() }\n            let outcome = ReleaseCheck.evaluate(current: RoadieVersion.current) { ReleaseCheck.fetchLatestRelease() }\n            if let text = outcome.stdout { out(text) }\n            if let text = outcome.stderr { err(text) }\n            return outcome.exitCode\n        case nil:",
+      "marqueur": "case \"update\":"
+    },
+    {
+      "id": "T039a",
+      "tache": "T039",
+      "fichier": "docs/fr/cli.md",
+      "avant": "\n## Fenetres et focus\n",
+      "apres": "\n## Mises à jour\n\n```bash\nroadie update check\n```\n\nLa commande demande à GitHub le numéro de la dernière version publiée et le compare à la version installée. Elle ne télécharge rien et n'installe rien. C'est le seul appel réseau de Roadie : il part seulement quand tu lances cette commande. Aucune donnée personnelle n'est envoyée.\n\n- Code 0 : la version installée est à jour, ou une version plus récente existe. Dans ce cas, la commande affiche son numéro et son adresse.\n- Code 1 : la vérification a échoué (pas de réseau, délai de 5 secondes dépassé, réponse inattendue).\n\n## Fenetres et focus\n",
+      "marqueur": "## Mises à jour\n"
+    },
+    {
+      "id": "T039b",
+      "tache": "T039",
+      "fichier": "docs/en/cli.md",
+      "avant": "\n## Windows And Focus\n",
+      "apres": "\n## Updates\n\n```bash\nroadie update check\n```\n\nThe command asks GitHub for the latest published version and compares it with the installed version. It downloads nothing and installs nothing. It is the only network call Roadie makes: it runs only when you type this command. No personal data is sent.\n\n- Code 0: the installed version is up to date, or a newer version exists. In that case, the command prints its number and its address.\n- Code 1: the check failed (no network, 5-second timeout, unexpected response).\n\n## Windows And Focus\n",
+      "marqueur": "## Updates\n"
+    },
+    {
+      "id": "T039c",
+      "tache": "T039",
+      "fichier": "CHANGELOG.md",
+      "avant": "## Non publié\n\n",
+      "apres": "## Non publié\n\n- Mises à jour : `roadie update check` indique si une version plus récente est publiée.\n  C'est le seul appel réseau de Roadie ; il part seulement quand tu lances la commande.\n  Rien n'est téléchargé ni installé.\n\n",
+      "marqueur": "- Mises à jour : `roadie update check` indique si une version plus récente est publiée."
+    }
+  ]
+}

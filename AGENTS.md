@@ -337,12 +337,12 @@ photo) dans un profil du sélecteur `source = "zones"` (Option+Tab chez l'utilis
 retour et clic, aller-retour, bordure jaune sur l'application, photos reprises en quittant une fenêtre, 20 zones,
 24 h, 3 zones de clics par fenêtre ; icônes des cartes (× et sens interdit). Reçus : specs/135 à 137.
 Session 138 : 0.12.0 publiée (sessions 131 à 137). Reçu : specs/138-release-0120/validation.md.
-Current SpecKit feature: `153-apercu-glisser-translucide`.
+Current SpecKit feature: `155-consolidation-projet`.
 
 Contexte :
-- `specs/153-apercu-glisser-translucide/spec.md`
-- `specs/153-apercu-glisser-translucide/plan.md`
-- `specs/153-apercu-glisser-translucide/tasks.md`
+- `specs/155-consolidation-projet/spec.md`
+- `specs/155-consolidation-projet/plan.md`
+- `specs/155-consolidation-projet/tasks.md`
 <!-- SPECKIT END -->
 
 ## Revues indépendantes
