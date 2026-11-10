@@ -1,5 +1,7 @@
 # Validation - 155 consolidation du projet
 
+**Livraison finale : 0.14.0 publiée et active, 53/53 tâches ; santé 5/5.**
+
 Remplace chaque champ marqué « à remplir » (écrit en majuscules ci-dessous) par la valeur
 observée (tâche T044). N'écris jamais une valeur non observée : écris « non vérifié » et la raison.
 
@@ -72,3 +74,104 @@ Rapport d'audit : audits/2026-11-10/session-2026-11-10-consolidation-155-01/.
 Le verdict A/100 de grade.json mesure les défauts ouverts et la décision du gate ;
 il ne remplace pas les notes de qualité par axe (56–75/100 avant activation).
 Les 42 justifications et limites sont conservées dans axis-scoring.md.
+
+## Livraison réelle — 2026-11-10 17:21:10 CET
+
+**Implémentation : Implemented, 53/53 tâches. Pipeline : Livré. Première tâche non cochée : aucune.**
+
+### Périmètre et déroulement
+
+Reformulation montrée puis reprise dans la spec : terminer 155 avec Apache-2.0, section
+Launcher compatible, toutes les corrections préparées, CI manuelle seule, signature
+existante sans compte Apple, retrait des preuves inutiles, puis release et installation.
+Apport : configuration plus claire et ancien format préservé, version et code identifiables,
+dépôt réutilisable sans nouvelle dépense. Aucune extension ni nouveau paquet.
+
+Phases exécutées : sync, cadrage, mise à jour Specify/Plan/Tasks et audit de réutilisation,
+Analyze avec corrections et seconde lecture, Implement, contre-revues, Converge (2 passages,
+aucune tâche ajoutée par Converge), audit V15 fix et revue locale finale readonly, livraison,
+nettoyage. Génération intégrale des artefacts sautée : ils existaient déjà. CI distante jamais
+lancée ; notarisation et Intel exclus par le contrat. Aucun outil requis indisponible.
+
+ETA initiale : 82–150 min. ETA après Tasks : 70–125 min restantes pour 53 tâches.
+Durée à la rédaction du reçu : 104.8 min. Écart au point milieu initial (116 min) :
+-9.7 %. Les gabarits préparés ont réduit le travail de saisie ; les principaux écarts
+locaux viennent de TOMLKit superDecoder non implémenté, du commentaire scalaire, du test
+intermittent 151 et des deux modes de compilation Release. Aucun gain produit extrapolé.
+
+Nouveaux fichiers de production : ShellCompletion.swift, ReleaseCheck.swift, scripts/coverage
+et workflow manuel ; ReplayableSnapshotProvider.swift est un déplacement. Cinq suites de
+tests Spec155 ajoutées. Réutilisés : TargetModeConfig, catalogue, éditeur, service de réglages,
+routeur, statut, scripts de bundle/install/DMG. Arbitrages dans reuse-audit.md ; aucun nouveau
+module de configuration, wrapper de service ou paquet externe.
+
+### Git et publication
+
+Remote : origin, https://github.com/guthubrx/roadie.git ; branche cible main.
+Base : 0b7de36be40f459bb1096466a7b1b544aa5a8340.
+Préparation reprise : 8a5c76eeac1c3704747ff8719dc8d972eee29765 et 1b08c06d1596f2b38f1a574ac0f918086b0590ee.
+Nettoyage : 753219eace3084aaa1312ebd94482a5a68e660f5.
+Code testé, audité, publié et chargé : 3e324502fb36bd75649a1fc320a42838c8291553.
+Intégration fast-forward ; main distant vérifié identique par git ls-remote avant publication.
+Tag annoté v0.14.0 : ef248d303733f53224840c27691dc3b4b3b35428, cible 3e324502.
+Release publiée, hors brouillon/préversion, Latest vérifiée :
+https://github.com/guthubrx/roadie/releases/tag/v0.14.0.
+GitHub détecte Apache-2.0 ; aucune exécution de CI visible après push/tag/release.
+
+DMG arm64, macOS 14 minimum, signé ad hoc sans compte Apple ni notarisation. Vérification
+hdiutil, montage lecture seule, app et lien Applications, codesign --deep --strict,
+licence et notices présentes. DMG et somme retéléchargés depuis GitHub et identiques.
+SHA-256 : d9a5a4e09fce622ca13b1ca0f3ac9bc86afdd09b3eac506d18e5fc7c2d052caf.
+
+### Disque et runtime
+
+Installé par make install puis make restart. PID 59138, roadied 0.14.0 (3e324502),
+roadie 0.14.0. UUID installé identique au paquet : 5399441F-1977-3F85-88AB-3A88C1470BCC.
+Signature vérifiée ; exigence désignée et certificat identiques à l'installation précédente.
+Accessibilité conservée, configuration SHA-256 identique à la base. Santé : 5/5 après
+installation et après retrait du worktree. Premier contrôle immédiat : socket pas encore
+accessible (code 69) ; le contrôle repris et les suivants ont réussi. Aucune correction
+hypothétique appliquée à ce démarrage.
+Complétion installée valide selon zsh -n ; update check dit à jour (0.14.0).
+Pas de nouvelle interface graphique : preuves techniques, aucun diaporama nouveau requis.
+Le parcours Gatekeeper sur poste neuf et Tab dans un terminal interactif ne sont pas vérifiés.
+
+### Revues, audit et limites
+
+Revue du plan : BLOCKED sur l'ancien dossier, objections vérifiées et traitées.
+Revue du commit : APPROVE_WITH_CHANGES partiel, aucun bloquant dans les zones lues ; deux
+recommandations non retenues avec preuves dans adversarial-review-code.md. Aucune
+approbation indépendante complète inventée. V15 local : decision=pass, release_blocked=false,
+14/14 contrôles. 18 alertes historiques réfutées par SHA-256, aucun finding ouvert.
+Les notes par axe restent celles du gate avant activation (56–75/100), avec 42 justifications
+dans le rapport d'audit ; le verdict A des défauts ouverts ne les remplace pas. Limites :
+pas de benchmark ni plafond mémoire du corps GitHub ; pas de SemVer complète pour préversions.
+La revue indépendante ne remplace pas les preuves locales des zones non couvertes.
+
+### Nettoyage et conservation
+
+Worktree /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/155-consolidation-projet retiré
+après propreté, fusion et contrôle lsof sans usage ; branche locale 155-consolidation-projet
+supprimée. Build nettoyé par la commande projet, DMG intermédiaire retiré avec le worktree,
+bundle temporaire et scripts d'essai retirés après copie vérifiée. Aucun travail étranger
+embarqué et aucune identité Git modifiée.
+
+Preuves brutes, 21 diaporamas retirés du suivi, manifeste SHA, configuration, ancien app
+signé, DMG officiel retéléchargé et générateur de recettes conservés sous :
+/Users/moi/.local/state/roadies/validation/155-consolidation-projet.
+La sauvegarde de constitution originale est conservée aussi à son chemin d'origine, ignorée.
+Les 26 images utiles restent, dont les deux images liées à l'audit 131.
+
+Conservations justifiées :
+- /private/tmp/roadie155-audit-source-20261110 : source figée du validateur et preuves ;
+  archive durable audit-source-frozen.tar.gz sous le dossier privé ci-dessus (empreinte vérifiée).
+- /tmp/roadie155-probe : simulation et preuves originales du dossier préparatoire, hors Git ;
+  générateur sauvegardé durablement ; aucun travail préexistant supprimé.
+- /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability : fil préexistant,
+  hors du périmètre de cette reprise.
+- Les vues distantes de revue restent conservées sous garde native Bridget ; résultats lus,
+  tâches terminées, aucun retrait non autorisé de leurs fichiers.
+
+Reste à faire dans le périmètre : aucun. Première tâche non cochée : aucune.
+Le dernier commit documentaire de ce reçu est poussé et son SHA est vérifié à la clôture,
+sans reconstruction du binaire puisque le code est inchangé depuis 3e324502.

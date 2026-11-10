@@ -389,8 +389,15 @@ Donne : la dernière tâche cochée, le résultat de T043, le contenu de `valida
 - [x] T049 [US10] Compléter tests transport réseau injecté et configuration facultative ; tester dirty suivi/non-suivi sur bundle temporaire (FR-030).
 - [x] T050 [US11] Archiver hors Git avec SHA-256 les anciens diaporamas ; retirer du suivi ceux sans usage produit ; garder images utiles et réparer liens actifs (FR-029).
 - [x] T051 [US12] Préparer version 0.14.0, notes FR/EN et changelog regroupant les sessions depuis 0.13.0 ; documenter autorisation macOS sans compte Apple et vérifier CI strictement manuelle (FR-027/028).
-- [ ] T052 Vérifier convergence, contre-revue, audit applicable, suite complète, scripts et build Release ; consigner résultats et limites.
-- [ ] T053 Intégrer et pousser les seuls fichiers du périmètre, taguer/publier 0.14.0, retélécharger DMG/SHA, installer avec signature conservée et vérifier runtime ; nettoyer candidats sûrs (FR-027).
+- [x] T052 Vérifier convergence, contre-revue, audit applicable, suite complète, scripts et build Release ; consigner résultats et limites.
+- [x] T053 Intégrer et pousser les seuls fichiers du périmètre, taguer/publier 0.14.0, retélécharger DMG/SHA, installer avec signature conservée et vérifier runtime ; nettoyer candidats sûrs (FR-027).
 
 Les tâches T052/T053 sont des gates du pipeline : le statut Implemented du code exige
 T001–T051 vérifiées ; la clôture totale exige également T052/T053 et leurs preuves.
+
+## Clôture réelle du pipeline
+
+53/53 tâches vérifiées. Les treize commits intermédiaires des recettes ont été remplacés
+par les commits de phase 8 : préparation déjà existante, nettoyage 753219e, code 3e324502,
+puis reçu de livraison. Aucune tâche de développement ouverte. Le worktree et la branche
+155 ont été retirés après intégration, publication, activation et conservation des preuves.

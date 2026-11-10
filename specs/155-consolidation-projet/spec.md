@@ -13,7 +13,7 @@ Les preuves retirées de la publication sont sauvegardées localement, avec empr
 
 **Feature Branch**: `155-consolidation-projet`
 **Created**: 2026-11-10
-**Status**: In Progress
+**Status**: Implemented
 **Input**: « tout jusqu'a avant l'implémentation pour un modle qui sera moins fort que toi (openai sol) »
 
 ## Cadrage
@@ -466,3 +466,5 @@ Apport : dépôt réutilisable, configuration lisible et version identifiable, s
 Réussite : anciens/nouveaux fichiers Launcher testés (conflit, édition et remise à zéro),
 suite complète verte, CI manuelle relue, licence exacte, release retéléchargée identique,
 identité et santé du runtime installé vérifiées. Aucun secret ni preuve privée republié.
+
+**Pipeline** : Livré le 10 novembre 2026, 53/53 tâches. Voir validation.md.

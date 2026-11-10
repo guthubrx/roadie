@@ -388,3 +388,12 @@ Session 155, développement local du 10 novembre 2026 : version unique et commit
 gardes AX, journal sans coordonnées des clics, complétion zsh, couverture et vérification
 GitHub à la demande. 2538 tests / 387 suites et 28 scripts réussis. 366 lignes conservées
 dans ce journal. Publication et installation à venir après compléments D1/D2/D3/D8.
+
+Session 155 livrée le 10 novembre 2026 : Apache-2.0, Launcher compatible et édition/reset
+par clé, identité du build, gardes AX, complétion zsh, couverture, vérification de version
+à la demande ; CI manuelle seulement, 21 diaporamas archivés puis retirés du suivi.
+2549 tests / 388 suites et 29 scripts ; V15 pass 14/14 ; contre-revue partielle sans bloquant.
+0.14.0 publiée, DMG/SHA retéléchargés identiques ; PID 59138, santé 5/5, certificat et
+configuration conservés. Code 3e324502, UUID 5399441F-1977-3F85-88AB-3A88C1470BCC.
+Worktree/branche 155 et build nettoyés, preuves/rollback conservés. Reçu :
+specs/155-consolidation-projet/validation.md.

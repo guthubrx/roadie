@@ -1,5 +1,8 @@
 # Démarrage rapide - 155 consolidation du projet
 
+**Session livrée** : les recettes ci-dessous sont historiques. Le worktree a été retiré.
+Dépôt durable : /Users/moi/Nextcloud/10.Scripts/39.roadie. Ne pas rejouer les recettes sur main.
+
 ## Contrat actif — décision utilisateur du 10 novembre 2026
 
 Cette reprise remplace les limites de la préparation conservée ci-dessous. Le travail va
