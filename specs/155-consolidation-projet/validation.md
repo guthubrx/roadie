@@ -165,8 +165,8 @@ Les 26 images utiles restent, dont les deux images liées à l'audit 131.
 Conservations justifiées :
 - /private/tmp/roadie155-audit-source-20261110 : source figée du validateur et preuves ;
   archive durable audit-source-frozen.tar.gz sous le dossier privé ci-dessus (empreinte vérifiée).
-- /tmp/roadie155-probe : simulation et preuves originales du dossier préparatoire, hors Git ;
-  générateur sauvegardé durablement ; aucun travail préexistant supprimé.
+- /tmp/roadie155-probe : initialement conservé ; archivé et retiré lors du nettoyage
+  complémentaire décrit ci-dessous.
 - /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability : fil préexistant,
   hors du périmètre de cette reprise.
 - Les vues distantes de revue restent conservées sous garde native Bridget ; résultats lus,
@@ -175,3 +175,29 @@ Conservations justifiées :
 Reste à faire dans le périmètre : aucun. Première tâche non cochée : aucune.
 Le dernier commit documentaire de ce reçu est poussé et son SHA est vérifié à la clôture,
 sans reconstruction du binaire puisque le code est inchangé depuis 3e324502.
+
+### Nettoyage complémentaire demandé après livraison — 10 novembre 2026
+
+Avant intervention, main et origin/main pointaient tous deux sur
+292452e0c320bd792a6451d3e09905025cd9c819 ; arbre propre, une seule branche locale
+et distante (main), aucun worktree périmé signalé par git worktree prune --dry-run.
+La branche et le worktree de la session 155 avaient déjà été retirés. Aucun build
+ni dossier dist ne subsistait dans le dépôt principal ou la copie figée de l'audit.
+
+53 éléments temporaires de la session ont été retirés : 52 fichiers et le dossier
+de simulations /private/tmp/roadie155-probe. Aucun usage ouvert détecté par lsof
+avant retrait. Les 10 221 entrées ont été archivées ; chaque fichier ordinaire a
+été contrôlé par SHA-256 contre l'archive et la source, les liens par leur cible.
+Archive et manifeste privés, hors Git :
+/Users/moi/.local/state/roadies/validation/155-consolidation-projet/temporary-residuals-20261110.tar.gz
+/Users/moi/.local/state/roadies/validation/155-consolidation-projet/temporary-residuals-20261110-manifest.json
+SHA-256 de l'archive : 01c1557b7ab5efb6817a0703649b9ebaad10cd1510452a6113bd518b601ee109.
+
+La copie figée /private/tmp/roadie155-audit-source-20261110 reste nécessaire au
+validateur : le manifeste d'audit référence ce chemin. Le worktree préexistant
+/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/025-settings-readability reste
+hors périmètre ; son absence d'usage par un autre fil n'est pas établie.
+Preuves originales archivées, installation active et retour arrière sont conservés.
+
+Contrôle runtime : roadied 0.14.0 (3e324502), PID 59138, santé 5/5. Aucune modification
+de code, aucun redémarrage ni nouvelle compilation nécessaires pour ce nettoyage.
