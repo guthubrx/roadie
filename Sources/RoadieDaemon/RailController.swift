@@ -49,6 +49,7 @@ public final class RailController {
     private var pendingStageStoreRailSignature: String?
     private var lastInteractiveRailRefreshAt: Date = .distantPast
     private var clickMonitors: [Any] = []
+    private var lastLeftPress: (timestamp: TimeInterval, point: CGPoint)?
     private var pendingDrag: PendingRailDrag?
     private var pendingStageReorder: PendingStageReorder?
     private var defersPanelRebuild: Bool {
@@ -273,7 +274,7 @@ public final class RailController {
                self?.handleRightMouse(event.type, at: screenPoint) == true {
                 return nil
             }
-            self?.handleMouse(event.type, at: screenPoint)
+            self?.handleMouse(event, at: screenPoint)
             return event
         }) {
             clickMonitors.append(local)
@@ -289,7 +290,7 @@ public final class RailController {
                 if Self.isRightMouseEvent(event.type) {
                     _ = self?.handleRightMouse(event.type, at: screenPoint, fromGlobalMonitor: true)
                 } else {
-                    self?.handleMouse(event.type, at: screenPoint, fromGlobalMonitor: true)
+                    self?.handleMouse(event, at: screenPoint, fromGlobalMonitor: true)
                 }
             }
         }) {
@@ -389,8 +390,9 @@ public final class RailController {
         type == .rightMouseDown || type == .rightMouseDragged || type == .rightMouseUp
     }
 
-    private func handleMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {
-        switch type {
+    private func handleMouse(_ event: NSEvent, at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {
+        if event.type == .leftMouseDown, !acceptMouseDown(timestamp: event.timestamp, at: screenPoint) { return }
+        switch event.type {
         case .leftMouseDown:
             handleMouseDown(at: screenPoint, fromGlobalMonitor: fromGlobalMonitor)
         case .leftMouseDragged:
@@ -400,6 +402,18 @@ public final class RailController {
         default:
             break
         }
+    }
+
+    /// AppKit peut livrer le même down par les deux moniteurs, après le début du drag.
+    /// Le filtrer avant FrameTransition.cancel et dropPreview.invalidate. O(1).
+    func acceptMouseDown(timestamp: TimeInterval, at point: CGPoint) -> Bool {
+        guard timestamp > 0 else { return true } // Identité absente : ne pas avaler un clic synthétique.
+        if let previous = lastLeftPress, previous.timestamp == timestamp, previous.point == point {
+            events.append(RoadieEvent(type: "drag.duplicate_press", details: ["timestamp": String(timestamp)]))
+            return false
+        }
+        lastLeftPress = (timestamp, point)
+        return true
     }
 
     private func handleMouseDown(at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {

@@ -20,13 +20,15 @@ final class LiveDropPreview {
         var action: (@MainActor () -> Void)?
         let config: TilingConfig
         let stages: [StageScope: PersistentStage]
+        let zooms: [String: WindowID]
         var lastPlacements: [WindowID: Rect] = [:]
         var lastCandidate: DropPreviewCandidate?
-        init(context: DropPreviewContext, state: PersistentStageState, generations: PlacementGeneration, config: TilingConfig, sourceGestureOwned: Bool, sourceWindowID: WindowID?, sourceObservedFrame: Rect?, keepSourceAtOrigin: Bool) {
+        init(context: DropPreviewContext, state: PersistentStageState, generations: PlacementGeneration, config: TilingConfig, sourceGestureOwned: Bool, sourceWindowID: WindowID?, sourceObservedFrame: Rect?, keepSourceAtOrigin: Bool, intents: [String: LayoutIntent]) {
             self.sourceGestureOwned = sourceGestureOwned
             self.keepSourceAtOrigin = keepSourceAtOrigin
             self.config = config
             stages = LiveDropPreview.stageIndex(state)
+            zooms = intents.compactMapValues(\.zoomedWindowID)
             permit = InteractiveWritePermit(generations: generations)
             originals = Dictionary(context.snapshot.windows.filter {
                 $0.pin == nil && $0.window.isTileCandidate && $0.window.isOnScreen
@@ -65,7 +67,8 @@ final class LiveDropPreview {
         // La visée garde l'arbre d'avant, la garde compare l'état APRES acquisition.
         let current = Session(context: context, state: service.effectiveStageStore.state(),
                               generations: generations, config: service.effectiveConfig.tiling, sourceGestureOwned: sourceGestureOwned,
-                              sourceWindowID: sourceWindowID, sourceObservedFrame: sourceObservedFrame, keepSourceAtOrigin: keepSourceAtOrigin)
+                              sourceWindowID: sourceWindowID, sourceObservedFrame: sourceObservedFrame, keepSourceAtOrigin: keepSourceAtOrigin,
+                              intents: service.effectiveIntentStore.load())
         session = current
         current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak current] result, _ in
             guard let current else { return }
@@ -171,26 +174,35 @@ final class LiveDropPreview {
     /// Cache JSON existant : contrôle des portées et des feuilles, sans observation AX.
     /// O(w + s) : index des stages/pins construits une fois par validation.
     private func valid(_ current: Session) -> Bool {
-        guard current.permit.isCurrent else { return false }
+        func reject(_ reason: String) -> Bool {
+            EventLog().append(RoadieEvent(type: "drag.live_cancelled", details: [
+                "reason": reason, "windowID": current.source.map { String($0.rawValue) } ?? "none"]))
+            return false
+        }
+        guard current.permit.isCurrent else { return reject("generation_changed") }
         var config = service.effectiveConfig.tiling
         config.liveDragPreview = current.config.liveDragPreview
-        guard config == current.config else { return false }
+        guard config == current.config else { return reject("tiling_changed") }
         let state = service.effectiveStageStore.state()
         let stages = Self.stageIndex(state)
+        let intents = service.effectiveIntentStore.load()
         let active = Set(state.scopes.map {
             StageScope(displayID: $0.displayID, desktopID: $0.desktopID, stageID: $0.activeStageID)
         })
         let pins = Set(state.windowPins.map(\.windowID))
-        guard pins.isDisjoint(with: current.touched), current.source.map({ !pins.contains($0) }) ?? true else { return false }
+        guard pins.isDisjoint(with: current.touched), current.source.map({ !pins.contains($0) }) ?? true else { return reject("window_pinned") }
         for scope in current.scopes {
             guard state.currentDesktopID(for: scope.displayID) == scope.desktopID,
                   active.contains(scope),
                   let fresh = stages[scope], let before = current.stages[scope],
                   fresh.mode == before.mode, fresh.bspTree == before.bspTree,
                   fresh.members.map(\.windowID) == before.members.map(\.windowID),
-                  fresh.members.map(\.confirmedClosedAt) == before.members.map(\.confirmedClosedAt),
-                  service.effectiveIntentStore.intent(for: scope)?.zoomedWindowID == nil
-            else { return false }
+                  fresh.members.map(\.confirmedClosedAt) == before.members.map(\.confirmedClosedAt)
+            else { return reject("stage_changed") }
+            // Un zoom déjà présent n'est pas une commande concurrente. Le dépôt
+            // effacera l'intent ; Échap le conserve avec les cadres de départ.
+            let zoom = intents[scope.description]?.zoomedWindowID
+            guard zoom == current.zooms[scope.description] else { return reject("zoom_changed") }
         }
         return true
     }

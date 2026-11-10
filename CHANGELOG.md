@@ -5,6 +5,15 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Glisser et resize natifs : le fond transparent de Notification Center ne masque
+  plus les fenêtres après un redémarrage ; les vrais panneaux restent bloquants.
+
+- Glisser entre écrans : un zoom Roadie déjà présent ne fait plus annuler le geste.
+  Les clics AppKit livrés deux fois sont filtrés avant l'effacement de l'aperçu.
+  Les annulations du suivi direct indiquent leur raison dans le journal.
+  Ctrl + glisser conserve le geste quand seul le focus change d’écran ;
+  les changements de géométrie continuent de l’annuler.
+
 - Copie du contenu sous le pointeur pendant le glisser, avec visibilité et taille réglables. Reprise du glisser réel après une qualification tardive.
 
 - Transitions de stages : sens vertical cohérent avec la navigation et l'ordre du rail.
@@ -34,8 +43,8 @@ jour et les limites connues ; les README décrivent la version courante.
   ressort, avec aperçu local. Les réglages Roadie sont indépendants de macOS.
 - Destination de glisser au choix : contour ou vraie fenêtre avec remise en page
   réelle du contenu. Le suivi des voisines reste indépendant. Échap restaure.
-  Qualification des titres Firefox, Electron et Chrome renforcée ; entre écrans,
-  contour de destination conservé pour éviter une surface masquée par macOS.
+  Qualification des titres Firefox, Electron et Chrome renforcée ; la capture du
+  glisser natif permet aussi la vraie destination entre écrans.
 
 - Les voisines prennent leur future place pendant un glisser sur le bureau depuis
   un titre ou le rail. Réglage immédiat dans Tuilage : `live_drag_preview`, activé

@@ -135,7 +135,7 @@ public struct LayoutIntentStore: Sendable {
         try JSONPersistence.mutateChecked([String: LayoutIntent].self, at: url, default: [:], label: "layout intent", body)
     }
 
-    private func load() -> [String: LayoutIntent] {
+    func load() -> [String: LayoutIntent] {
         JSONPersistence.load([String: LayoutIntent].self, from: url, default: [:])
     }
 

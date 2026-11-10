@@ -350,9 +350,9 @@ public enum FocusFollowsMousePicker {
     /// Le contenu d'une fenêtre reste prioritaire ; dans un interstice, prend le bord le plus proche.
     /// Une fenêtre visible sous le point qui n'est pas éligible (non gérée, panneau, stage
     /// inactive) masque celles de derrière : aucune cible.
-    /// O(n), uniquement pour les gestes : le focus au mouvement garde son test strict.
+    /// O(n × d), n = fenêtres, d = écrans : le focus garde son test strict.
     public static func gestureTargetWindow(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        let windows = snapshot.windows.filter { !$0.window.isKnownBorderDecoration }
+        let windows = snapshot.windows.filter { !$0.window.isPointerPassthrough(in: snapshot.displays) }
         let frontIndex = windows.firstIndex {
             $0.window.isOnScreen && $0.window.frame.cgRect.contains(point)
         }
@@ -388,11 +388,12 @@ public enum FocusFollowsMousePicker {
         return front
     }
 
-    /// Première fenêtre visible qui contient le point. `snapshot.windows` suit l'ordre CoreGraphics
-    /// (devant vers derrière) : c'est la fenêtre que l'utilisateur voit à cet endroit.
-    // O(n) - n = fenêtres du snapshot.
+    /// Première fenêtre visible qui reçoit le pointeur, hors décorations identifiées.
+    /// `snapshot.windows` suit l'ordre CoreGraphics (devant vers derrière).
+    // O(n × d), n = fenêtres du snapshot, d = écrans.
     public static func frontWindow(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        snapshot.windows.first { $0.window.isOnScreen && $0.window.frame.cgRect.contains(point) }
+        snapshot.windows.first { $0.window.isOnScreen && !$0.window.isPointerPassthrough(in: snapshot.displays)
+            && $0.window.frame.cgRect.contains(point) }
     }
 
     private static func isEligible(_ entry: ScopedWindowSnapshot, in snapshot: DaemonSnapshot) -> Bool {

@@ -186,9 +186,9 @@ final class DividerResizeCoordinator {
             let occupied = snapshot.windows.compactMap { entry -> CGRect? in
                 let window = entry.window
                 guard window.isOnScreen else { return nil }
-                // JankyBorders expose un rectangle CG plein autour d'un contenu transparent.
-                // Exception étroite : une vraie fenêtre ou une application AX illisible reste protégée.
-                return window.isKnownBorderDecoration ? nil : window.frame.cgRect
+                // Décorations et fond Notification Center laissent passer le pointeur.
+                // Une vraie fenêtre ou une application AX illisible reste protégée.
+                return window.isPointerPassthrough(in: snapshot.displays) ? nil : window.frame.cgRect
             }
             let dividers = tree.dividers(in: geometry.container, innerGap: geometry.innerGap, excluding: geometry.absent)
             handles += dividers.filter { divider in

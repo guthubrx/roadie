@@ -64,10 +64,7 @@ public final class ModifierWindowRuntime {
     static func target(at point: CGPoint, snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
         guard snapshot.permissions.accessibilityTrusted,
               let entry = snapshot.windows.first(where: { entry in entry.window.isOnScreen
-                  && !entry.window.isKnownBorderDecoration
-                  // Le conteneur transparent de Notification Center couvre tout l'écran (CG layer21).
-                  && !(entry.window.bundleID == "com.apple.notificationcenterui" && !entry.window.isTileCandidate
-                       && entry.window.subrole == nil && snapshot.displays.contains(where: { $0.frame == entry.window.frame }))
+                  && !entry.window.isPointerPassthrough(in: snapshot.displays)
                   && entry.window.frame.cgRect.contains(point) }),
               entry.window.pid != getpid(), entry.window.furniture?.isNativeFullscreen != true,
               entry.window.isTileCandidate || entry.window.subrole == "AXStandardWindow",
@@ -178,14 +175,27 @@ public final class ModifierWindowRuntime {
 
     /// Cadence bornée des lectures JSON ; aucune observation AX, même à 120Hz.
     private func valid(_ current: Session, force: Bool = false) -> Bool {
-        guard current.permit.isCurrent, service.publishedConfig.tiling == current.config else { return false }
+        func reject(_ reason: String) -> Bool {
+            events.append(RoadieEvent(type: "modifier_gesture.invalidated", scope: current.source.scope,
+                details: ["reason": reason, "windowID": String(current.source.window.id.rawValue)]))
+            return false
+        }
+        guard current.permit.isCurrent else { return reject("generation_changed") }
+        guard service.publishedConfig.tiling == current.config else { return reject("tiling_changed") }
         if let latest = service.cachedGestureSnapshot() {
-            guard latest.displays == current.context.snapshot.displays else { return false }
-            if let pids = latest.existingWindowPIDs, pids[current.source.window.id] != current.source.window.pid { return false }
+            // NSScreen.main suit le focus : traverser un écran ne change pas sa géométrie.
+            // O(d), d = écrans ; l'ordre, le nom et isMain ne modifient pas la disposition.
+            let before = Dictionary(uniqueKeysWithValues: current.context.snapshot.displays.map { ($0.id, [$0.frame, $0.visibleFrame]) })
+            let after = Dictionary(uniqueKeysWithValues: latest.displays.map { ($0.id, [$0.frame, $0.visibleFrame]) })
+            guard before == after else { return reject("display_geometry_changed") }
+            if let pids = latest.existingWindowPIDs, pids[current.source.window.id] != current.source.window.pid {
+                return reject("window_identity_changed")
+            }
         }
         if !force, Date().timeIntervalSince(current.checkedAt) < 0.25 { return true }
         current.checkedAt = Date()
-        return contextMatches(current, state: service.effectiveStageStore.state())
+        guard contextMatches(current, state: service.effectiveStageStore.state()) else { return reject("stage_or_pin_changed") }
+        return true
     }
 
     private func contextMatches(_ current: Session, state: PersistentStageState) -> Bool {
