@@ -1,0 +1,122 @@
+{
+  "stash": "d543285c57a2b00e6582dfa9d5a045de9af2ca80",
+  "base": "5099b1d3e008bbeda00eb397ce4248d5574ecdda",
+  "index_matches_base": true,
+  "untracked_tree_empty": true,
+  "files": [
+    {
+      "member": "base/Sources/RoadieCore/Config.swift",
+      "sha256": "21afbe5ef35cf78f58c3506b6a6e1b1f0293b0c73cfe06b7cb2d4c321f115098"
+    },
+    {
+      "member": "base/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "sha256": "d01e16a4efa685abaeeaa29de8f9e13eb73a0ac9930a2171f12d68f01b503545"
+    },
+    {
+      "member": "base/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "sha256": "9e363142188977cbadc3525bb3b2a79140d37a94987ceab84ab585f70c49dba6"
+    },
+    {
+      "member": "base/Sources/RoadieDaemon/PinPopoverController.swift",
+      "sha256": "8b6d75105e7c43c5bee5389a26bcd3c379108ef10a7ac86b56b66620db3c2ee4"
+    },
+    {
+      "member": "base/Sources/RoadieDaemon/StageStore.swift",
+      "sha256": "30dd300f0d91ad6438b80e4a95999f61098669c39a23e47a618b8752379a77d4"
+    },
+    {
+      "member": "base/Sources/RoadieTiler/LayoutTypes.swift",
+      "sha256": "91c2d6857731bbd2a264dfc0246ef55df11b2a29ab25324a43a2197d4de769dd"
+    },
+    {
+      "member": "base/Tests/RoadieDaemonTests/ConfigTests.swift",
+      "sha256": "55c7504a7f4ad8b16af36836babf9a93840ffee159b3b5f792c243356f273938"
+    },
+    {
+      "member": "base/Tests/RoadieDaemonTests/SnapshotServiceTests.swift",
+      "sha256": "bf9515220b61e7c33d080b1fabd8148e228b9fa83e38b7c52b3dd27f0e62aa2a"
+    },
+    {
+      "member": "base/docs/en/features.md",
+      "sha256": "2b058242afdaa88f4508471315613e13282812144d8127db2bb662a3ca71828b"
+    },
+    {
+      "member": "base/docs/fr/features.md",
+      "sha256": "edb3db16a4cf1e0bdcdd957ec594e4f22ffad08282a93ae69d04e357f9049467"
+    },
+    {
+      "member": "base/specs/006-pin-popover-collapse/contracts/config-pin-popover.md",
+      "sha256": "5062b03dfa9c01f7fbc65df568f2152bbc0ee80dc4cf1bf0526854bbc6fc2235"
+    },
+    {
+      "member": "base/specs/006-pin-popover-collapse/contracts/ui-pin-popover.md",
+      "sha256": "867bb133393064a42cdff966004468ee8ff8acd26c76c734395b44681046dd76"
+    },
+    {
+      "member": "base/specs/006-pin-popover-collapse/data-model.md",
+      "sha256": "226d69bfd4fbc56c1950e276046cf01a480bb6476dba2719bb20afb63a6d2d82"
+    },
+    {
+      "member": "base/specs/006-pin-popover-collapse/quickstart.md",
+      "sha256": "09a269a918cae3117391c7b8753d825a69f1776cfdf43fa1f7856db51aa4dffb"
+    },
+    {
+      "member": "saved/Sources/RoadieCore/Config.swift",
+      "sha256": "7e387c07b5bfe91a786ba84b0413631c3ab3a9b2eaf64c72ddd8d44d93b9e9fd"
+    },
+    {
+      "member": "saved/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "sha256": "8f3d3317fe465289610864745520c95808955520b2a05de4172963b06228338d"
+    },
+    {
+      "member": "saved/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "sha256": "0edf843443e2ed68eb34ffa9dbd074324794f58e4b4f55e4521e051040814430"
+    },
+    {
+      "member": "saved/Sources/RoadieDaemon/PinPopoverController.swift",
+      "sha256": "d673d113f0a52476cebc34c265a1cb4037dc0a1313de7ad76c8dfad49cf0f829"
+    },
+    {
+      "member": "saved/Sources/RoadieDaemon/StageStore.swift",
+      "sha256": "eaee63383ec6066f41ca3bd582ef38dcfe399f30d28a3fa89d8dc53608e076b6"
+    },
+    {
+      "member": "saved/Sources/RoadieTiler/LayoutTypes.swift",
+      "sha256": "33e929694cbcfe2ca76d504ec416d71605f6772e84b872ca55648a140595d9c9"
+    },
+    {
+      "member": "saved/Tests/RoadieDaemonTests/ConfigTests.swift",
+      "sha256": "d726f862eda6579a371fb74d7ab23dce1483990e7b8d1946188a2eae68de6eb9"
+    },
+    {
+      "member": "saved/Tests/RoadieDaemonTests/SnapshotServiceTests.swift",
+      "sha256": "42b807c29c4219427882bc78264eba4871fbfd989ee9ba454b798ac007afffbb"
+    },
+    {
+      "member": "saved/docs/en/features.md",
+      "sha256": "3a43226a8e637dda73ae043b406d2d60dc89707817204ae8855382cf9bc215f2"
+    },
+    {
+      "member": "saved/docs/fr/features.md",
+      "sha256": "3fac89dd9dba8be991dc7246c0de20750955f2dad5d41dbfffdfd0af56426918"
+    },
+    {
+      "member": "saved/specs/006-pin-popover-collapse/contracts/config-pin-popover.md",
+      "sha256": "d5cdefccd287696122be526fcb0262ff18efa1210927e8a5c0286bc9bb5dc6f4"
+    },
+    {
+      "member": "saved/specs/006-pin-popover-collapse/contracts/ui-pin-popover.md",
+      "sha256": "f5619f6c3b02872cb1b9b8ef74a1bdebcdd79a333f35f3f84c235f259f419a6f"
+    },
+    {
+      "member": "saved/specs/006-pin-popover-collapse/data-model.md",
+      "sha256": "3f2850533abe317007effc684d987ef744b5f4776b817ad79546acb53f3b9a3f"
+    },
+    {
+      "member": "saved/specs/006-pin-popover-collapse/quickstart.md",
+      "sha256": "b0ea72aac8c6f0c0b78724e554a74abbcfa6db2294eb9873fbc600e174303415"
+    }
+  ],
+  "patch_sha256": "fb2ff094b4ee8e0e6c91c315f2cef7b7f23d304e4e247809ec9434070f7239bf",
+  "archive_sha256": "9953d9d880a96d391a13610997bcddef25aa9fb6f73d372290966ab8e1dadb13"
+}

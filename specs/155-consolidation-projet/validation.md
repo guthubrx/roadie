@@ -201,3 +201,34 @@ Preuves originales archivées, installation active et retour arrière sont conse
 
 Contrôle runtime : roadied 0.14.0 (3e324502), PID 59138, santé 5/5. Aucune modification
 de code, aucun redémarrage ni nouvelle compilation nécessaires pour ce nettoyage.
+
+### Regroupement final sur main — demande du 10 novembre 2026
+
+L'utilisateur a demandé le retrait de tous les autres worktrees, sans perte de travail.
+Le dernier worktree 025 était propre et détaché sur 0b7de36, ancêtre de main. Son fil
+propriétaire était terminé, sans exécution ni demande en attente. Le contrôle lsof
+depuis le dépôt principal ne trouvait aucun usage. Ses 354 fichiers ignorés ont été
+vérifiés par SHA-256 : 319 rapatriés aux mêmes emplacements dans le dépôt principal,
+35 déjà présents à l'identique, aucun conflit. Ces maquettes et sorties brutes d'audit
+restent hors Git. Manifeste privé :
+/Users/moi/.local/state/roadies/validation/155-consolidation-projet/worktree025-preservation.json.
+Le worktree et son dossier parent vide ont été retirés par git worktree remove et rmdir.
+
+La sauvegarde temporaire d543285 conservait un ancien essai explicitement abandonné.
+Les changements des 14 fichiers, leurs 28 instantanés et leurs empreintes sont archivés
+dans main, sous le dossier public :
+/Users/moi/Nextcloud/10.Scripts/39.roadie/specs/006-pin-popover-collapse/archives.
+La fonction abandonnée reste inactive. Une sauvegarde Git complète, vérifiée par
+git bundle verify, conserve également tous les objets et l'historique hors publication :
+/Users/moi/.local/state/roadies/validation/155-consolidation-projet/stash-d543285-complete.bundle.
+Le retrait de la sauvegarde temporaire intervient après le push vérifié des archives.
+
+La copie figée d'audit temporaire a été comparée à son archive durable : 2 850 entrées,
+aucun fichier absent, différent ou supplémentaire. Après contrôle lsof sans usage,
+la copie décompressée a été retirée. Pour rejouer le validateur, extraire l'archive
+/Users/moi/.local/state/roadies/validation/155-consolidation-projet/audit-source-frozen.tar.gz
+sous /private/tmp afin de rétablir le chemin enregistré dans le manifeste d'audit.
+
+git gc --no-prune a regroupé les objets sans purge de l'historique, des objets non
+référencés ni des journaux de références. Le stockage Git mesuré par du passe de
+217 476 à 168 228 Kio. Aucun build applicatif n'a été créé pour ces opérations.

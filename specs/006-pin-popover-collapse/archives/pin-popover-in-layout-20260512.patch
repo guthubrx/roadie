@@ -1,0 +1,598 @@
+diff --git a/Sources/RoadieCore/Config.swift b/Sources/RoadieCore/Config.swift
+index 049d8a20..8e645863 100644
+--- a/Sources/RoadieCore/Config.swift
++++ b/Sources/RoadieCore/Config.swift
+@@ -507,6 +507,7 @@ public struct PinPopoverConfig: Equatable, Codable, Sendable {
+     public var leadingExclusion: Double
+     public var trailingExclusion: Double
+     public var collapseEnabled: Bool
++    public var collapseMode: String
+     public var proxyHeight: Double
+     public var proxyMinWidth: Double
+ 
+@@ -519,6 +520,7 @@ public struct PinPopoverConfig: Equatable, Codable, Sendable {
+         leadingExclusion: Double = 64,
+         trailingExclusion: Double = 16,
+         collapseEnabled: Bool = true,
++        collapseMode: String = "hide_offscreen",
+         proxyHeight: Double = 28,
+         proxyMinWidth: Double = 160
+     ) {
+@@ -530,6 +532,7 @@ public struct PinPopoverConfig: Equatable, Codable, Sendable {
+         self.leadingExclusion = leadingExclusion
+         self.trailingExclusion = trailingExclusion
+         self.collapseEnabled = collapseEnabled
++        self.collapseMode = collapseMode
+         self.proxyHeight = proxyHeight
+         self.proxyMinWidth = proxyMinWidth
+     }
+@@ -543,6 +546,7 @@ public struct PinPopoverConfig: Equatable, Codable, Sendable {
+         case leadingExclusion = "leading_exclusion"
+         case trailingExclusion = "trailing_exclusion"
+         case collapseEnabled = "collapse_enabled"
++        case collapseMode = "collapse_mode"
+         case proxyHeight = "proxy_height"
+         case proxyMinWidth = "proxy_min_width"
+     }
+@@ -558,6 +562,7 @@ public struct PinPopoverConfig: Equatable, Codable, Sendable {
+             leadingExclusion: try c.decodeFlexibleDouble(forKey: .leadingExclusion) ?? 64,
+             trailingExclusion: try c.decodeFlexibleDouble(forKey: .trailingExclusion) ?? 16,
+             collapseEnabled: try c.decodeIfPresent(Bool.self, forKey: .collapseEnabled) ?? true,
++            collapseMode: try c.decodeIfPresent(String.self, forKey: .collapseMode) ?? "hide_offscreen",
+             proxyHeight: try c.decodeFlexibleDouble(forKey: .proxyHeight) ?? 28,
+             proxyMinWidth: try c.decodeFlexibleDouble(forKey: .proxyMinWidth) ?? 160
+         )
+@@ -923,6 +928,13 @@ private enum ConfigValidationRules {
+                 message: "must be #RRGGBB or #RRGGBBAA"
+             ))
+         }
++        if !["hide_offscreen", "in_layout"].contains(config.collapseMode) {
++            items.append(ConfigValidationItem(
++                level: .error,
++                path: "experimental.pin_popover.collapse_mode",
++                message: "must be hide_offscreen or in_layout"
++            ))
++        }
+         return items
+     }
+ 
+diff --git a/Sources/RoadieDaemon/DaemonSnapshot.swift b/Sources/RoadieDaemon/DaemonSnapshot.swift
+index fea0e65b..ffc3564c 100644
+--- a/Sources/RoadieDaemon/DaemonSnapshot.swift
++++ b/Sources/RoadieDaemon/DaemonSnapshot.swift
+@@ -206,7 +206,7 @@ public struct SnapshotService {
+                 )
+                 persistentScope.updateFrame(window: window)
+                 persistedStages.update(persistentScope)
+-                if pinPresentation?.presentation != .collapsed {
++                if pinPresentation?.presentation.isCollapsed != true {
+                     persistedStages.updatePinFrame(window: window, now: now)
+                 }
+             }
+@@ -228,7 +228,9 @@ public struct SnapshotService {
+             )
+             try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
+             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
+-            if window.isTileCandidate, pin == nil {
++            let keepsPinnedWindowsInLayout = config.experimental.pinPopover.collapseMode == "in_layout"
++            if window.isTileCandidate,
++               pin == nil || keepsPinnedWindowsInLayout || pinPresentation?.presentation == .collapsedInLayout {
+                 try? state.assignWindow(window.id, to: scope)
+             }
+             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
+@@ -620,7 +622,9 @@ public extension SnapshotService {
+ 
+             guard let stage = snapshot.state.stage(scope: scope) else { continue }
+             let effectiveMode = mode ?? stage.mode
+-            if effectiveMode.isTiled, let intent = validIntent(for: scope, from: snapshot) {
++            if effectiveMode.isTiled,
++               collapsedInLayoutHeights(in: scope, from: snapshot).isEmpty,
++               let intent = validIntent(for: scope, from: snapshot) {
+                 commands.append(contentsOf: applyPlan(from: snapshot, intent: intent).commands)
+             } else {
+                 let orderedWindowIDs = orderedWindowIDs(in: scope, from: snapshot, mode: effectiveMode)
+@@ -777,13 +781,23 @@ public extension SnapshotService {
+             scope: scope,
+             mode: effectiveMode,
+             container: display.visibleFrame.cgRect,
+-            windowIDs: orderedWindowIDs,
+-            currentFrames: currentFrames,
+-            priorityWindowIDs: priorityWindowIDs,
+-            splitPolicy: config.tiling.splitPolicy,
+-            outerGaps: outerGaps(windowCount: orderedWindowIDs.count, display: display),
+-            innerGap: config.tiling.gapsInner
+-        ))
++                windowIDs: orderedWindowIDs,
++                currentFrames: currentFrames,
++                priorityWindowIDs: priorityWindowIDs,
++                collapsedWindowHeights: collapsedInLayoutHeights(in: scope, from: snapshot),
++                splitPolicy: config.tiling.splitPolicy,
++                outerGaps: outerGaps(windowCount: orderedWindowIDs.count, display: display),
++                innerGap: config.tiling.gapsInner
++            ))
++    }
++
++    private func collapsedInLayoutHeights(in scope: StageScope, from snapshot: DaemonSnapshot) -> [WindowID: CGFloat] {
++        Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry in
++            guard entry.scope == scope,
++                  entry.pinPresentation?.presentation == .collapsedInLayout
++            else { return nil }
++            return (entry.window.id, CGFloat(config.experimental.pinPopover.proxyHeight))
++        })
+     }
+ 
+     private func validIntent(for scope: StageScope, from snapshot: DaemonSnapshot) -> LayoutIntent? {
+diff --git a/Sources/RoadieDaemon/LayoutMaintainer.swift b/Sources/RoadieDaemon/LayoutMaintainer.swift
+index 3aac06dc..dfe37c94 100644
+--- a/Sources/RoadieDaemon/LayoutMaintainer.swift
++++ b/Sources/RoadieDaemon/LayoutMaintainer.swift
+@@ -553,7 +553,7 @@ public final class LayoutMaintainer {
+             guard let pin = entry.pin,
+                   let activeScope = snapshot.state.activeScope(on: pin.homeScope.displayID),
+                   pin.visibility(in: activeScope).shouldBeVisible,
+-                  entry.pinPresentation?.presentation != .collapsed,
++                  entry.pinPresentation?.presentation.isCollapsed != true,
+                   isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+             else { continue }
+ 
+diff --git a/Sources/RoadieDaemon/PinPopoverController.swift b/Sources/RoadieDaemon/PinPopoverController.swift
+index 83d5b65c..d074edc3 100644
+--- a/Sources/RoadieDaemon/PinPopoverController.swift
++++ b/Sources/RoadieDaemon/PinPopoverController.swift
+@@ -15,6 +15,7 @@ public struct PinPopoverSettings: Equatable, Sendable {
+     public var leadingExclusion: CGFloat
+     public var trailingExclusion: CGFloat
+     public var collapseEnabled: Bool
++    public var collapseMode: String
+     public var proxyHeight: CGFloat
+     public var proxyMinWidth: CGFloat
+ 
+@@ -27,6 +28,7 @@ public struct PinPopoverSettings: Equatable, Sendable {
+         leadingExclusion: CGFloat = 64,
+         trailingExclusion: CGFloat = 16,
+         collapseEnabled: Bool = true,
++        collapseMode: String = "hide_offscreen",
+         proxyHeight: CGFloat = 28,
+         proxyMinWidth: CGFloat = 160
+     ) {
+@@ -38,6 +40,7 @@ public struct PinPopoverSettings: Equatable, Sendable {
+         self.leadingExclusion = leadingExclusion
+         self.trailingExclusion = trailingExclusion
+         self.collapseEnabled = collapseEnabled
++        self.collapseMode = collapseMode
+         self.proxyHeight = proxyHeight
+         self.proxyMinWidth = proxyMinWidth
+     }
+@@ -52,6 +55,7 @@ public struct PinPopoverSettings: Equatable, Sendable {
+             leadingExclusion: CGFloat(config.leadingExclusion),
+             trailingExclusion: CGFloat(config.trailingExclusion),
+             collapseEnabled: config.collapseEnabled,
++            collapseMode: config.collapseMode,
+             proxyHeight: CGFloat(config.proxyHeight),
+             proxyMinWidth: CGFloat(config.proxyMinWidth)
+         )
+@@ -233,7 +237,7 @@ public final class PinPopoverController {
+             windowItems.append(PinPopoverMenuItem(title: "Pin sur tous les desktops", action: .window(.pinAllDesktops, "")))
+         }
+         if settings.collapseEnabled, pin != nil {
+-            let collapsed = presentation?.presentation == .collapsed
++            let collapsed = presentation?.presentation.isCollapsed == true
+             windowItems.append(PinPopoverMenuItem(title: collapsed ? "Déplier la fenêtre" : "Replier la fenêtre", action: collapsed ? .restore : .collapse))
+         }
+ 
+@@ -259,9 +263,9 @@ public final class PinPopoverController {
+     ) -> PinPresentationState {
+         PinPresentationState(
+             windowID: window.id,
+-            presentation: .collapsed,
++            presentation: settings.collapseMode == "in_layout" ? .collapsedInLayout : .collapsed,
+             restoreFrame: window.frame,
+-            proxyFrame: Rect(defaultProxyFrame(for: window.frame.cgRect, settings: settings)),
++            proxyFrame: settings.collapseMode == "in_layout" ? nil : Rect(defaultProxyFrame(for: window.frame.cgRect, settings: settings)),
+             updatedAt: now
+         )
+     }
+@@ -509,7 +513,10 @@ public final class PinPopoverController {
+             proxyFrame: presentation.proxyFrame
+         )
+         stageStore.save(state)
+-        _ = snapshotService.setFrame(hiddenFrame(for: restoreFrame.cgRect, on: display, among: snapshot.displays), of: entry.window)
++        let targetFrame = presentation.presentation == .collapsedInLayout
++            ? inLayoutCollapsedFrame(for: restoreFrame.cgRect, settings: settings)
++            : hiddenFrame(for: restoreFrame.cgRect, on: display, among: snapshot.displays)
++        _ = snapshotService.setFrame(targetFrame, of: entry.window)
+         events.append(RoadieEvent(type: "window.pin_collapsed", scope: sourceScope, details: ["windowID": String(windowID.rawValue)]))
+         refresh()
+     }
+@@ -589,6 +596,10 @@ public final class PinPopoverController {
+         return CGRect(x: visible.minX + 1 - frame.width, y: visible.maxY - 1, width: frame.width, height: frame.height).integral
+     }
+ 
++    private func inLayoutCollapsedFrame(for frame: CGRect, settings: PinPopoverSettings) -> CGRect {
++        CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: settings.proxyHeight).integral
++    }
++
+     private static func axToNS(_ rect: CGRect) -> CGRect {
+         let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+             ?? NSScreen.main
+diff --git a/Sources/RoadieDaemon/StageStore.swift b/Sources/RoadieDaemon/StageStore.swift
+index 051675e0..935e33b2 100644
+--- a/Sources/RoadieDaemon/StageStore.swift
++++ b/Sources/RoadieDaemon/StageStore.swift
+@@ -469,6 +469,11 @@ public enum WindowPinScope: String, Codable, Sendable {
+ public enum PinPresentationMode: String, Codable, Sendable {
+     case visible
+     case collapsed
++    case collapsedInLayout = "collapsed_in_layout"
++
++    public var isCollapsed: Bool {
++        self == .collapsed || self == .collapsedInLayout
++    }
+ }
+ 
+ public struct PinPresentationState: Equatable, Codable, Sendable {
+diff --git a/Sources/RoadieTiler/LayoutTypes.swift b/Sources/RoadieTiler/LayoutTypes.swift
+index bf2bf21f..0a469378 100644
+--- a/Sources/RoadieTiler/LayoutTypes.swift
++++ b/Sources/RoadieTiler/LayoutTypes.swift
+@@ -8,6 +8,7 @@ public struct LayoutRequest: Equatable, Sendable {
+     public var windowIDs: [WindowID]
+     public var currentFrames: [WindowID: CGRect]
+     public var priorityWindowIDs: Set<WindowID>
++    public var collapsedWindowHeights: [WindowID: CGFloat]
+     public var splitPolicy: String
+     public var outerGaps: Insets
+     public var innerGap: Double
+@@ -19,6 +20,7 @@ public struct LayoutRequest: Equatable, Sendable {
+         windowIDs: [WindowID],
+         currentFrames: [WindowID: CGRect] = [:],
+         priorityWindowIDs: Set<WindowID> = [],
++        collapsedWindowHeights: [WindowID: CGFloat] = [:],
+         splitPolicy: String = "balanced",
+         outerGaps: Insets = .zero,
+         innerGap: Double = 0
+@@ -29,6 +31,7 @@ public struct LayoutRequest: Equatable, Sendable {
+         self.windowIDs = windowIDs
+         self.currentFrames = currentFrames
+         self.priorityWindowIDs = priorityWindowIDs
++        self.collapsedWindowHeights = collapsedWindowHeights
+         self.splitPolicy = splitPolicy
+         self.outerGaps = outerGaps
+         self.innerGap = max(0, innerGap)
+@@ -55,16 +58,87 @@ public struct LayoutCommand: Equatable, Sendable {
+ 
+ public enum LayoutPlanner {
+     public static func plan(_ request: LayoutRequest) -> LayoutPlan {
+-        switch request.mode {
++        let basePlan = planWithoutCollapsedAdjustments(request)
++        guard !request.collapsedWindowHeights.isEmpty else { return basePlan }
++        return applyCollapsedInLayoutHeights(basePlan, request: request)
++    }
++
++    private static func planWithoutCollapsedAdjustments(_ request: LayoutRequest) -> LayoutPlan {
++        var passthrough = request
++        passthrough.collapsedWindowHeights = [:]
++        switch passthrough.mode {
+         case .bsp:
+-            return BSPLayoutStrategy().plan(request)
++            return BSPLayoutStrategy().plan(passthrough)
+         case .mutableBsp:
+-            return MutableBSPLayoutStrategy().plan(request)
++            return MutableBSPLayoutStrategy().plan(passthrough)
+         case .masterStack:
+-            return MasterStackLayoutStrategy().plan(request)
++            return MasterStackLayoutStrategy().plan(passthrough)
+         case .float:
+-            return FloatLayoutStrategy().plan(request)
++            return FloatLayoutStrategy().plan(passthrough)
++        }
++    }
++
++    private static func applyCollapsedInLayoutHeights(_ basePlan: LayoutPlan, request: LayoutRequest) -> LayoutPlan {
++        let gap = CGFloat(request.innerGap)
++        var placements = basePlan.placements
++        let collapsedIDs = request.windowIDs.filter { request.collapsedWindowHeights[$0] != nil }
++        guard !collapsedIDs.isEmpty else { return basePlan }
++
++        for id in collapsedIDs {
++            guard let original = placements[id] else { continue }
++            let requestedHeight = request.collapsedWindowHeights[id] ?? 28
++            let collapsedHeight = min(max(18, requestedHeight), max(18, original.height))
++            let freedHeight = max(0, original.height - collapsedHeight)
++            let collapsedBand = CGRect(
++                x: original.minX,
++                y: original.minY,
++                width: original.width,
++                height: collapsedHeight
++            ).integral
++            placements[id] = collapsedBand
++            guard freedHeight > 0 else { continue }
++            expandWindowsBelowCollapsed(
++                originalFrame: original,
++                collapsedBand: collapsedBand,
++                freedHeight: freedHeight,
++                gap: gap,
++                collapsedIDs: Set(collapsedIDs),
++                placements: &placements
++            )
+         }
++        return LayoutPlan(placements: placements)
++    }
++
++    private static func expandWindowsBelowCollapsed(
++        originalFrame: CGRect,
++        collapsedBand: CGRect,
++        freedHeight: CGFloat,
++        gap: CGFloat,
++        collapsedIDs: Set<WindowID>,
++        placements: inout [WindowID: CGRect]
++    ) {
++        let candidates = placements
++            .filter { id, frame in
++                !collapsedIDs.contains(id) &&
++                    frame.minY >= originalFrame.maxY - 1 &&
++                    horizontalOverlapRatio(frame, originalFrame) >= 0.65
++            }
++            .sorted { $0.value.minY < $1.value.minY }
++        guard let target = candidates.first else { return }
++        let current = target.value
++        let newY = max(collapsedBand.maxY + gap, current.minY - freedHeight)
++        placements[target.key] = CGRect(
++            x: current.minX,
++            y: newY,
++            width: current.width,
++            height: max(18, current.maxY - newY)
++        ).integral
++    }
++
++    private static func horizontalOverlapRatio(_ first: CGRect, _ second: CGRect) -> CGFloat {
++        let overlap = max(0, min(first.maxX, second.maxX) - max(first.minX, second.minX))
++        let base = max(1, min(first.width, second.width))
++        return overlap / base
+     }
+ }
+ 
+diff --git a/Tests/RoadieDaemonTests/ConfigTests.swift b/Tests/RoadieDaemonTests/ConfigTests.swift
+index d922cf95..c29211a9 100644
+--- a/Tests/RoadieDaemonTests/ConfigTests.swift
++++ b/Tests/RoadieDaemonTests/ConfigTests.swift
+@@ -119,6 +119,7 @@ struct ConfigTests {
+         leading_exclusion = 92
+         trailing_exclusion = 20
+         collapse_enabled = false
++        collapse_mode = "in_layout"
+         proxy_height = 30
+         proxy_min_width = 180
+         """.write(to: url, atomically: true, encoding: .utf8)
+@@ -134,6 +135,7 @@ struct ConfigTests {
+         #expect(config.experimental.pinPopover.leadingExclusion == 92)
+         #expect(config.experimental.pinPopover.trailingExclusion == 20)
+         #expect(config.experimental.pinPopover.collapseEnabled == false)
++        #expect(config.experimental.pinPopover.collapseMode == "in_layout")
+         #expect(config.experimental.pinPopover.proxyHeight == 30)
+         #expect(config.experimental.pinPopover.proxyMinWidth == 180)
+     }
+@@ -145,6 +147,7 @@ struct ConfigTests {
+         #expect(config.experimental.pinPopover.enabled == false)
+         #expect(config.experimental.pinPopover.showOnUnpinned)
+         #expect(config.experimental.pinPopover.buttonSize == 12.5)
++        #expect(config.experimental.pinPopover.collapseMode == "hide_offscreen")
+         #expect(config.experimental.pinPopover.collapseEnabled)
+     }
+ 
+@@ -156,6 +159,7 @@ struct ConfigTests {
+         [experimental.pin_popover]
+         button_size = 40
+         button_color = "blue"
++        collapse_mode = "sideways"
+         titlebar_height = 4
+         proxy_height = 100
+         proxy_min_width = 20
+@@ -166,6 +170,7 @@ struct ConfigTests {
+ 
+         #expect(items.contains { $0.path == "experimental.pin_popover.button_size" && $0.level == .error })
+         #expect(items.contains { $0.path == "experimental.pin_popover.button_color" && $0.level == .error })
++        #expect(items.contains { $0.path == "experimental.pin_popover.collapse_mode" && $0.level == .error })
+         #expect(items.contains { $0.path == "experimental.pin_popover.titlebar_height" && $0.level == .error })
+         #expect(items.contains { $0.path == "experimental.pin_popover.proxy_height" && $0.level == .error })
+         #expect(items.contains { $0.path == "experimental.pin_popover.proxy_min_width" && $0.level == .error })
+diff --git a/Tests/RoadieDaemonTests/SnapshotServiceTests.swift b/Tests/RoadieDaemonTests/SnapshotServiceTests.swift
+index 09e93e05..3f23ad77 100644
+--- a/Tests/RoadieDaemonTests/SnapshotServiceTests.swift
++++ b/Tests/RoadieDaemonTests/SnapshotServiceTests.swift
+@@ -798,6 +798,56 @@ struct SnapshotServiceTests {
+         try? FileManager.default.removeItem(atPath: intentPath)
+     }
+ 
++    @Test
++    func collapsedInLayoutPinReservesTopBandAndRelayoutsRemainingWindows() {
++        let display = DisplayID(rawValue: "display-a")
++        let collapsed = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "collapsed", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
++        let second = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "second", frame: Rect(x: 0, y: 0, width: 100, height: 100), isOnScreen: true, isTileCandidate: true)
++        let third = WindowSnapshot(id: WindowID(rawValue: 3), pid: 12, appName: "C", bundleID: "c", title: "third", frame: Rect(x: 100, y: 0, width: 100, height: 100), isOnScreen: true, isTileCandidate: true)
++        let stagePath = FileManager.default.temporaryDirectory
++            .appendingPathComponent("roadie-collapsed-in-layout-\(UUID().uuidString).json")
++            .path
++        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
++        let stageStore = StageStore(path: stagePath)
++        stageStore.save(PersistentStageState(
++            scopes: [
++                PersistentStageScope(displayID: display, stages: [
++                    PersistentStage(id: StageID(rawValue: "1"), members: [
++                        PersistentStageMember(windowID: collapsed.id, bundleID: collapsed.bundleID, title: collapsed.title, frame: collapsed.frame),
++                        PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: second.frame),
++                        PersistentStageMember(windowID: third.id, bundleID: third.bundleID, title: third.title, frame: third.frame),
++                    ]),
++                ]),
++            ],
++            windowPins: [
++                PersistentWindowPin(windowID: collapsed.id, homeScope: scope, pinScope: .desktop, bundleID: collapsed.bundleID, title: collapsed.title, lastFrame: collapsed.frame),
++            ],
++            pinPresentations: [
++                PinPresentationState(windowID: collapsed.id, presentation: .collapsedInLayout, restoreFrame: collapsed.frame),
++            ],
++            activeDisplayID: display
++        ))
++        let service = SnapshotService(
++            provider: FakeProvider(
++                displaySnapshots: [
++                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
++                ],
++                windowSnapshots: [collapsed, second, third]
++            ),
++            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
++            stageStore: stageStore
++        )
++
++        let snapshot = service.snapshot()
++        let commands = service.applyPlan(from: snapshot).commands
++        let frames = Dictionary(uniqueKeysWithValues: commands.map { ($0.window.id, $0.frame) })
++
++        #expect(frames[collapsed.id] == Rect(x: 0, y: 0, width: 1000, height: 28))
++        #expect(frames[second.id] == Rect(x: 0, y: 38, width: 495, height: 462))
++        #expect(frames[third.id] == Rect(x: 505, y: 38, width: 495, height: 462))
++        try? FileManager.default.removeItem(atPath: stagePath)
++    }
++
+     @Test
+     func configWorkspacesSeedPersistentStageNames() {
+         let display = DisplayID(rawValue: "display-a")
+diff --git a/docs/en/features.md b/docs/en/features.md
+index 63ce4012..524c150b 100644
+--- a/docs/en/features.md
++++ b/docs/en/features.md
+@@ -141,14 +141,16 @@ titlebar_height = 36
+ leading_exclusion = 64
+ trailing_exclusion = 16
+ collapse_enabled = true
++collapse_mode = "hide_offscreen" # or "in_layout"
+ proxy_height = 28
+ proxy_min_width = 160
+ ```
+ 
+ When `collapse_enabled = true`, a pinned window can be collapsed. Roadie stores
+-its frame, hides the real window outside the visible work area, and shows a
+-compact proxy with the window title. The proxy can reopen the menu and restore
+-the window.
++its frame. With `collapse_mode = "hide_offscreen"`, it hides the real window
++outside the visible work area and shows a compact proxy with the window title.
++With `collapse_mode = "in_layout"`, the window stays in the layout as a top band
++and the remaining space is redistributed to the other windows.
+ 
+ Use cases:
+ 
+diff --git a/docs/fr/features.md b/docs/fr/features.md
+index edbba54f..9836d651 100644
+--- a/docs/fr/features.md
++++ b/docs/fr/features.md
+@@ -141,14 +141,16 @@ titlebar_height = 36
+ leading_exclusion = 64
+ trailing_exclusion = 16
+ collapse_enabled = true
++collapse_mode = "hide_offscreen" # ou "in_layout"
+ proxy_height = 28
+ proxy_min_width = 160
+ ```
+ 
+ Quand `collapse_enabled = true`, une fenetre pinnee peut etre repliee. Roadie
+-memorise sa position, cache la vraie fenetre hors de l'espace visible et affiche
+-un proxy compact avec son titre. Le proxy permet de rouvrir le menu et de
+-deplier la fenetre.
++memorise sa position. Avec `collapse_mode = "hide_offscreen"`, il cache la vraie
++fenetre hors de l'espace visible et affiche un proxy compact avec son titre.
++Avec `collapse_mode = "in_layout"`, la fenetre reste dans le layout sous forme
++de bande haute et l'espace restant est redistribue aux autres fenetres.
+ 
+ Cas d'usage :
+ 
+diff --git a/specs/006-pin-popover-collapse/contracts/config-pin-popover.md b/specs/006-pin-popover-collapse/contracts/config-pin-popover.md
+index b731f340..f2ce4e68 100644
+--- a/specs/006-pin-popover-collapse/contracts/config-pin-popover.md
++++ b/specs/006-pin-popover-collapse/contracts/config-pin-popover.md
+@@ -12,6 +12,7 @@ titlebar_height = 36
+ leading_exclusion = 64
+ trailing_exclusion = 16
+ collapse_enabled = true
++collapse_mode = "hide_offscreen"
+ proxy_height = 28
+ proxy_min_width = 160
+ ```
+@@ -28,6 +29,7 @@ proxy_min_width = 160
+ | `leading_exclusion` | nombre entre 0 et 240 |
+ | `trailing_exclusion` | nombre entre 0 et 240 |
+ | `collapse_enabled` | booléen |
++| `collapse_mode` | `hide_offscreen` ou `in_layout` |
+ | `proxy_height` | nombre entre 18 et 64 |
+ | `proxy_min_width` | nombre entre 80 et 360 |
+ 
+diff --git a/specs/006-pin-popover-collapse/contracts/ui-pin-popover.md b/specs/006-pin-popover-collapse/contracts/ui-pin-popover.md
+index 617e58ac..2a758c41 100644
+--- a/specs/006-pin-popover-collapse/contracts/ui-pin-popover.md
++++ b/specs/006-pin-popover-collapse/contracts/ui-pin-popover.md
+@@ -38,6 +38,7 @@
+ 
+ - La fenêtre est pinée.
+ - Son état de présentation est `collapsed`.
++- `experimental.pin_popover.collapse_mode` vaut `hide_offscreen`.
+ - Le scope du pin rend ce proxy visible dans le contexte actif.
+ 
+ ### Comportement
+@@ -45,3 +46,18 @@
+ - Clic gauche ou action "Restaurer" : restaure la vraie fenêtre au frame mémorisé.
+ - Menu secondaire : permet au minimum de restaurer ou retirer le pin.
+ - Si la fenêtre live a disparu, le proxy disparaît au prochain refresh normal.
++
++## Repliage Dans le Layout
++
++### Conditions d'Affichage
++
++- La fenêtre est pinée.
++- Son état de présentation est `collapsed_in_layout`.
++- `experimental.pin_popover.collapse_mode` vaut `in_layout` au moment du repli.
++
++### Comportement
++
++- La vraie fenêtre reste dans l'arbre de layout.
++- Le planner réserve une bande haute de `proxy_height` pixels pour cette fenêtre.
++- Les autres fenêtres de la stage active sont relayoutées dans l'espace restant.
++- L'action "Déplier la fenêtre" restaure la fenêtre à son frame mémorisé.
+diff --git a/specs/006-pin-popover-collapse/data-model.md b/specs/006-pin-popover-collapse/data-model.md
+index 046d94a3..271471a8 100644
+--- a/specs/006-pin-popover-collapse/data-model.md
++++ b/specs/006-pin-popover-collapse/data-model.md
+@@ -35,6 +35,7 @@ Réglages utilisateur de l'overlay et du repliage.
+ | `leading_exclusion` | Double | `64` | Zone gauche réservée aux boutons natifs |
+ | `trailing_exclusion` | Double | `16` | Zone droite protégée |
+ | `collapse_enabled` | Bool | `true` | Autorise l'action Replier |
++| `collapse_mode` | String | `hide_offscreen` | `hide_offscreen` affiche un proxy, `in_layout` garde la fenêtre en bande dans le layout |
+ | `proxy_height` | Double | `28` | Hauteur du proxy replié |
+ | `proxy_min_width` | Double | `160` | Largeur minimale du proxy |
+ 
+diff --git a/specs/006-pin-popover-collapse/quickstart.md b/specs/006-pin-popover-collapse/quickstart.md
+index f2342d44..8a0cb187 100644
+--- a/specs/006-pin-popover-collapse/quickstart.md
++++ b/specs/006-pin-popover-collapse/quickstart.md
+@@ -11,6 +11,7 @@
+ enabled = true
+ show_on_unpinned = true
+ collapse_enabled = true
++collapse_mode = "hide_offscreen"
+ ```
+ 
+ 4. Relancer `roadied`.
+@@ -43,7 +44,9 @@ Résultat attendu : les destinations sont cohérentes, les actions indisponibles
+ 5. Cliquer le proxy replié.
+ 6. Vérifier que la fenêtre revient à sa taille et position précédentes.
+ 
+-Résultat attendu : 20 cycles replier/restaurer ne changent pas la position ou taille perçue de la fenêtre.
++Résultat attendu en `hide_offscreen` : 20 cycles replier/restaurer ne changent pas la position ou taille perçue de la fenêtre.
++
++Variante `collapse_mode = "in_layout"` : la fenêtre reste visible sous forme de bande de `proxy_height` pixels en haut du layout actif, et les autres fenêtres récupèrent l'espace restant.
+ 
+ ## Scénario 4 : changements de stage et desktop
+ 
+@@ -61,3 +64,4 @@ Résultat attendu : aucun saut de layout, aucune boucle de focus, aucun changeme
+ - Les bordures de focus restent réactives.
+ - Les popups, dialogues de sauvegarde et panneaux système ne reçoivent pas le bouton.
+ - Désactiver `experimental.pin_popover.enabled` retire bouton et proxy sans casser les pins existants.
++- Passer `collapse_mode` de `in_layout` à `hide_offscreen` ne supprime pas les pins ; les prochains replis utilisent le nouveau mode.
