@@ -74,7 +74,8 @@ enum ReleaseCheck {
     /// une partie absente ou non numérique vaut 0. O(k), k = nombre de parties (3 en pratique).
     static func isNewer(_ candidate: String, than current: String) -> Bool {
         func parts(_ text: String) -> [Int] {
-            text.trimmingCharacters(in: CharacterSet(charactersIn: "vV")).split(separator: ".").map { Int($0) ?? 0 }
+            let digits = text.hasPrefix("v") || text.hasPrefix("V") ? text.dropFirst() : Substring(text)
+            return digits.split(separator: ".").map { Int($0) ?? 0 }
         }
         let a = parts(candidate)
         let b = parts(current)

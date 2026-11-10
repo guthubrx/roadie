@@ -10,7 +10,8 @@ Les changements sont décrits dans remplacements.json (même dossier) :
 - « copies » : un fichier de gabarits/ copié vers sa destination ;
 - « remplacements » : un texte « avant » remplacé par un texte « apres » dans un fichier.
   Le changement est vu comme déjà fait si le texte « marqueur » (à défaut, « apres ») est
-  déjà dans le fichier : relancer une tâche ne change donc rien.
+  déjà dans le fichier : relancer une tâche ne change donc rien. Si le marqueur est là mais
+  pas tout le texte ajouté, le changement est incomplet : l'outil s'arrête.
 
 Règle R0 : si un texte « avant » n'apparaît pas exactement une fois, l'outil n'écrit RIEN
 et rend le code 1. Ne corrige pas le fichier à la main : arrête la tâche et signale-le.
@@ -18,10 +19,21 @@ et rend le code 1. Ne corrige pas le fichier à la main : arrête la tâche et s
 """
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 SPEC_DIR = Path(__file__).resolve().parents[1]
+
+
+def added_text(edit):
+    """Texte inséré quand « apres » est « avant » plus une insertion ; sinon « apres » entier."""
+    before, after = edit["avant"], edit["apres"]
+    head = len(os.path.commonprefix([before, after]))
+    tail = len(os.path.commonprefix([before[head:][::-1], after[head:][::-1]]))
+    if head + tail == len(before):
+        return after[head:len(after) - tail]
+    return after
 
 
 def plan(task, data, root):
@@ -47,7 +59,10 @@ def plan(task, data, root):
             texts[target] = target.read_text(encoding="utf-8")
         text = texts[target]
         if edit.get("marqueur", edit["apres"]) in text:
-            notes.append(f"déjà fait {edit['id']} {edit['fichier']}")
+            if added_text(edit) not in text:
+                errors.append(f"{edit['id']} : changement incomplet dans {edit['fichier']} (marqueur présent, texte ajouté absent)")
+            else:
+                notes.append(f"déjà fait {edit['id']} {edit['fichier']}")
             continue
         count = text.count(edit["avant"])
         if count != 1:
@@ -83,11 +98,16 @@ def main():
     if args.check:
         print(f"OK {args.tache} : contrôle réussi, rien n'a été écrit ({len(writes)} fichier(s) à écrire).")
         return
+    # Tous les contenus sont prêts : chaque fichier est écrit à côté, puis mis en place d'un coup.
     for target, (content, executable) in writes.items():
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
+        temp = target.with_name(target.name + ".tmp155")
+        temp.write_bytes(content)
         if executable:
-            target.chmod(0o755)
+            temp.chmod(0o755)
+        elif target.exists():
+            temp.chmod(target.stat().st_mode & 0o777)
+        os.replace(temp, target)
     print(f"OK {args.tache} : {len(writes)} fichier(s) écrit(s).")
 
 

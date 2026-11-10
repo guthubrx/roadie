@@ -12,6 +12,7 @@ Sans option : déplace le journal. Avec --check : compare le résultat au fichie
 du commit de base et ne modifie rien. Option --root DOSSIER : travaille sur une copie.
 """
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -72,6 +73,8 @@ def main():
     journal = root / ".specify" / "memory" / "sessions" / "journal.md"
 
     if args.check:
+        # Le commit de base est lu dans le dépôt de l'outil : son contenu est le même partout,
+        # et une copie donnée par --root n'est pas toujours un dépôt Git.
         base = subprocess.run(
             ["git", "-C", str(Path(__file__).resolve().parents[3]), "show", f"{BASE_COMMIT}:AGENTS.md"],
             capture_output=True, text=True, check=False,
@@ -105,10 +108,15 @@ def main():
         block1.pop()
     while block2 and not block2[-1].strip():
         block2.pop()
-    journal.write_text("\n".join(HEADER + block1 + [""] + block2) + "\n", encoding="utf-8")
     while kept and not kept[-1].strip():
         kept.pop()
-    agents.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    # Les deux contenus sont écrits à côté, puis mis en place : pas d'état à moitié fait.
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    outputs = [(journal, HEADER + block1 + [""] + block2), (agents, kept)]
+    for path, content in outputs:
+        path.with_name(path.name + ".tmp155").write_text("\n".join(content) + "\n", encoding="utf-8")
+    for path, _ in outputs:
+        os.replace(path.with_name(path.name + ".tmp155"), path)
     print(f"lignes_deplacees={len(moved)}")
     print(f"journal={journal}")
     print(f"octets_agents={agents.stat().st_size}")

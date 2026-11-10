@@ -384,9 +384,11 @@ décision appartient à l'utilisateur.
 
 - **SC-001**: 0 occurrence de `/Users/moi` dans `README.md` et `README.fr.md`.
 - **SC-002**: le numéro de version littéral apparaît dans 1 seul fichier de `Sources/` et
-  `scripts/`.
-- **SC-003**: après installation, `roadied --version` et `daemon-status.json` donnent le
-  même commit de 8 caractères.
+  `scripts/` (`grep -rl '0\.13\.0' Sources scripts` rend 1 fichier ; 2 avant).
+- **SC-003**: dans un bundle construit avec un commit, `roadied --version` affiche ce
+  commit de 8 caractères et `DaemonStatus.buildCommit` le reprend. Les tâches le
+  contrôlent sur un bundle temporaire ; le contrôle sur l'application installée
+  appartient à la livraison.
 - **SC-004**: 2 nouveaux tests de garde passent ; un réglage ajouté sans déclaration fait
   échouer au moins un test.
 - **SC-005**: `AGENTS.md` passe de 39 858 octets à moins de 8 000 ; 0 ligne de journal
@@ -398,8 +400,9 @@ décision appartient à l'utilisateur.
 - **SC-009**: `make coverage` se termine avec le code 0 et affiche un résultat.
 - **SC-010**: `roadie update check` répond en 6 secondes au plus dans tous les cas.
 - **SC-011**: `LayoutMaintainer.swift` a au plus 4 400 lignes (4 462 avant).
-- **SC-012**: la suite complète passe avec au moins 2 512 tests ; les 28 tests de scripts
-  passent.
+- **SC-012**: la suite complète (`./scripts/test --no-parallel`) passe avec 2 538 tests
+  dans 387 suites (base mesurée : 2 523 dans 383 ; 15 tests ajoutés dans 4 suites) ; les
+  28 tests de scripts passent.
 - **SC-013**: 0 action sortante exécutée par les tâches (push, publication, dépense).
 
 ## Assumptions

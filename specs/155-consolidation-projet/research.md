@@ -24,8 +24,8 @@ Chaque entrée dit ce qui est **constaté** (mesuré ou exécuté), **déduit** 
   (résultat `nil`).
 - **Décision** : `scripts/build-app-bundle` accepte un quatrième argument facultatif et
   écrit la clé `RoadieBuildCommit`. `scripts/install` calcule le commit court (8
-  caractères) et ajoute `-dirty` si `git diff --quiet HEAD` échoue. Le code lit la clé par
-  lecture directe du fichier.
+  caractères) et ajoute `-dirty` si `git status --porcelain` liste un fichier (modifié ou
+  non suivi). Le code lit la clé par lecture directe du fichier.
 - **Constaté** : `Tests/RoadieDaemonTests/CLICommandRouterTests.swift` exige
   `roadie --version` égal à `roadie <version>` suivi d'un saut de ligne. Cette sortie ne
   change pas.
@@ -83,7 +83,8 @@ Chaque entrée dit ce qui est **constaté** (mesuré ou exécuté), **déduit** 
   `Tests/RoadieDaemonTests`.
 - **Constaté** : `RoadieConfigLoader.knownScalarKeys()` existe déjà. Il omet les listes et
   les tableaux de tables : il ne suffit pas pour comparer toutes les clés encodées.
-- **Constaté par essai à blanc** (code dans `recettes.md`, tâche T014) :
+- **Constaté par essai à blanc** (code dans `gabarits/Spec155ConfigGuardTests.swift`,
+  tâche T014) :
   `TOMLDecoder().decode(RoadieConfig.self, from: "")` est égal à `RoadieConfig()`, 0
   différence. Le parcours des clés encodées de `RoadieConfig()` contre les clés connues du
   validateur ne trouve aucune clé inconnue et aucune table non vérifiée. Deux valeurs à la
@@ -113,7 +114,9 @@ Chaque entrée dit ce qui est **constaté** (mesuré ou exécuté), **déduit** 
   `CLICommandRouter` est isolé sur l'acteur principal : un test qui lit `commandTable`
   doit porter `@MainActor`, sinon la compilation échoue (« main actor-isolated class
   property 'commandTable' can not be referenced from a nonisolated context »).
-- **Constaté par sonde** : la fonction de `recettes.md` (tâche T026) produit 48 lignes.
+- **Constaté par sonde** : la fonction de `gabarits/ShellCompletion.swift` (tâche T026)
+  produit un script valide. Mesuré après la US10 : `roadie completion zsh | wc -l` rend
+  `50`. Le nombre de lignes avant la US10 n'a pas été relevé.
   `zsh -n` rend 0. Avec `compinit` chargé, `_roadie` est défini et lié à `roadie`. Sans
   `compinit`, le chargement fonctionne ; la dernière ligne doit être un `if` et non un
   `&&`, sinon le code de retour du chargement est 1.
@@ -131,7 +134,7 @@ Chaque entrée dit ce qui est **constaté** (mesuré ou exécuté), **déduit** 
 - **Constaté** : quand un test échoue, SwiftPM n'écrit pas son rapport
   `codecov/roadie.json`. Les relevés bruts restent dans
   `.build/arm64-apple-macosx/debug/codecov/*.profraw`. Leurs noms contiennent une espace.
-- **Constaté par essai réel** du script de `recettes.md` (tâche T028), de 14:11:21 à
+- **Constaté par essai réel** du script `gabarits/coverage` (tâche T028), de 14:11:21 à
   14:14:25 CET, recompilation comprise : 2 523 tests réussis, code de retour 0, total
   `lignes 71.27% | fonctions 68.48% | régions 64.62%`.
 - **Décision** : script `scripts/coverage`, appelé par `make coverage`. Il lance
@@ -163,7 +166,7 @@ Chaque entrée dit ce qui est **constaté** (mesuré ou exécuté), **déduit** 
 
 - **Constaté** : aucun fichier de `Sources` n'utilise `URLSession`. Ce sera le premier
   appel réseau du produit.
-- **Constaté par sonde** : le code de `recettes.md` (tâche T037) compile avec
+- **Constaté par sonde** : le code de `gabarits/ReleaseCheck.swift` (tâche T037) compile avec
   `swiftc -swift-version 6` et rend `tag=v0.13.0
   url=https://github.com/guthubrx/roadie/releases/tag/v0.13.0`. L'API publique répond sans
   jeton.
@@ -216,20 +219,54 @@ Mesures du 10 novembre 2026 sur le commit `0b7de36b`, machine chargée (charge d
   `./scripts/test --no-parallel`. Le mode parallèle n'est pas un critère d'acceptation
   sur une machine chargée.
 - **Non vérifié** : le résultat du mode parallèle sur une machine au repos.
-- **Constaté** : `AGENTS.md` cite 2 512 tests pour la session 153. SC-012 (« au moins
-  2 512 ») reste vrai avec 2 523.
+- **Constaté** : `AGENTS.md` cite 2 512 tests pour la session 153. Deux commits de
+  correction ont suivi ; la base mesurée est 2 523 tests dans 383 suites.
+- **Décision** : SC-012 vise le nombre final exact, 2 538 tests dans 387 suites
+  (2 523 + 15 tests de la spec 155 dans 4 suites). Voir R16 pour les nombres par palier.
 
-## R16 - Essai à blanc des recettes
+## R16 - Essais à blanc des recettes
 
-- **Constaté** (10 novembre 2026) : tous les changements de code et de scripts de
-  `recettes.md` ont été appliqués une fois dans le worktree, compilés et testés, puis
-  annulés. Les textes « avant » des recettes viennent de cet essai.
-- **Constaté** : une indentation relevée de mémoire était fausse pour la tâche T022. Le
-  remplacement exact a refusé de s'appliquer. C'est la règle R0 de `recettes.md` : un
-  texte « avant » introuvable arrête la tâche.
-- **Limite** : les tâches de documentation (T002 à T004, T011, T015, T017, T029, T035,
-  T039, T041, T044) n'ont pas été jouées. Leurs textes « avant » ont été relus dans les
-  fichiers.
+Tous les essais datent du 10 novembre 2026. Ils partent du commit `0b7de36b`.
+
+- **Constaté - code** : tous les changements de code et de scripts ont été appliqués dans
+  le worktree par `tools/appliquer.py`, compilés et testés, puis annulés. État final :
+  `./scripts/test --no-parallel` rend 2 538 tests dans 387 suites, code 0.
+- **Constaté - indentation** : un texte « avant » relevé de mémoire était faux pour la
+  tâche T022. Le remplacement exact a refusé de s'appliquer. C'est le rôle de la règle R0
+  de `quickstart.md` : un texte « avant » introuvable arrête la tâche.
+- **Constaté - essai par paliers n°1** : la suite a été lancée à chaque point de commit.
+  Le palier de la US7 a échoué : deux attentes des tests de complétion portaient sur la
+  commande `update`, qui arrive à la US10. Le gabarit
+  `gabarits/Spec155ShellCompletionTests.swift` a été corrigé : l'égalité entre les
+  commandes du script et celles de la table couvre `update` dès qu'elle existe.
+- **Constaté - essai par paliers n°2** (après correction), suite complète à chaque palier :
+
+  | Palier | Code | Tests | Suites | Durée |
+  |--------|-----:|------:|-------:|------:|
+  | US2 (après T012) | 0 | 2 527 | 384 | 79,6 s |
+  | US3 (après T015) | 0 | 2 529 | 385 | 80,5 s |
+  | US5 et US6 (après T024) | 0 | 2 529 | 385 | 81,6 s |
+  | US7 (après T030) | 0 | 2 533 | 386 | 80,8 s |
+  | US9 (après T034) | 0 | 2 533 | 386 | 79,1 s |
+  | US10 (après T040) | 0 | 2 538 | 387 | 79,2 s |
+
+  Les paliers de la US5 et de la US6 ont été mesurés ensemble, en un seul lancement.
+- **Constaté - parcours complet des fiches** : les 45 fiches de `recettes.md` ont été
+  jouées dans un clone jetable, sans compilation : 13 commits aux messages exacts,
+  `git status --short` vide à la fin. Les tâches de documentation en font partie.
+- **Constaté - égalité** : le code produit par ce parcours est identique au code testé
+  par l'essai n°2 (`diff -r Sources` sans différence ; 4 fichiers de test identiques).
+- **Constaté - autres contrôles** : `./scripts/coverage` rend le code 0 (environ 3 minutes) ;
+  `roadie completion zsh | zsh -n` rend 0 ; `roadie update check` a répondu
+  « Roadie is up to date (0.13.0). » avec le code 0 ; le bundle temporaire de T012 affiche
+  `roadied 0.13.0 (abc12345)`.
+- **Constaté - test sensible au temps** : `Spec151ModifierGestureTests.aNewGenerationNeverRestoresAnObsoleteLayout`
+  a échoué une fois sous charge, puis réussi seul. D'où le piège P3 et l'option
+  `--no-parallel` dans toutes les commandes.
+- **Limites** : les fiches n'ont pas été jouées par un autre modèle. Les outils
+  `deplacer_journal.py` et `extraire_fournisseur.py` n'ont pas été lancés deux fois sans
+  option ; les fiches l'évitent par un garde `test -e`. La mesure de couverture n'a été
+  faite qu'une fois. Le workflow GitHub n'a jamais été lancé.
 
 ## Références de base
 

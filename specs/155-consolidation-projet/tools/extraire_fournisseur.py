@@ -9,6 +9,7 @@ Usage (depuis la racine du worktree) :
     python3 -I -B specs/155-consolidation-projet/tools/extraire_fournisseur.py --check
 """
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -75,8 +76,12 @@ def main():
     if target.exists():
         fail(f"{TARGET} existe déjà : l'extraction a déjà été faite")
     kept, block = split(source.read_text(encoding="utf-8").split("\n"))
-    target.write_text("\n".join(IMPORTS + block) + "\n", encoding="utf-8")
-    source.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    # Les deux contenus sont écrits à côté, puis mis en place : pas d'état à moitié fait.
+    outputs = [(target, IMPORTS + block), (source, kept)]
+    for path, content in outputs:
+        path.with_name(path.name + ".tmp155").write_text("\n".join(content) + "\n", encoding="utf-8")
+    for path, _ in outputs:
+        os.replace(path.with_name(path.name + ".tmp155"), path)
     print(f"lignes_deplacees={len(block)}")
     print(f"lignes_restantes={len(kept)}")
     print(f"fichier={target}")

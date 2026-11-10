@@ -16,7 +16,7 @@ La feature n'ajoute aucune base de données. Elle ajoute ou modifie les données
 
 | Champ | Type | Exemple | Règle |
 |-------|------|---------|-------|
-| `RoadieBuildCommit` | chaîne | `0b7de36b` ou `0b7de36b-dirty` | 8 caractères hexadécimaux du commit ; suffixe `-dirty` si l'arbre de travail diffère de `HEAD`. Clé absente si le commit est inconnu |
+| `RoadieBuildCommit` | chaîne | `0b7de36b` ou `0b7de36b-dirty` | 8 caractères hexadécimaux du commit ; suffixe `-dirty` si `git status --porcelain` liste un fichier (modifié ou non suivi). Clé absente si le commit est inconnu |
 
 ### Champ `buildCommit` (`~/.roadies/daemon-status.json`)
 

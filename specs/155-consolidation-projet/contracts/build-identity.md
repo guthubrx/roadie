@@ -6,7 +6,7 @@ But : savoir quel commit tourne, sans relever un UUID de binaire à la main.
 
 ```text
 git rev-parse --short=8 HEAD            (scripts/install, scripts/package-dmg)
-        │   + "-dirty" si git diff --quiet HEAD échoue
+        │   + "-dirty" si git status --porcelain liste un fichier
         ▼
 scripts/build-app-bundle <binaire> <Roadie.app> <version> [commit]
         │   écrit la clé RoadieBuildCommit dans Contents/Info.plist

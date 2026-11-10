@@ -164,14 +164,14 @@
       "tache": "T010",
       "fichier": "scripts/install",
       "avant": "  version=\"$(sed -n 's/.*static let current = \"\\(.*\\)\".*/\\1/p' \"$script_dir/../Sources/RoadieDaemon/DaemonHealth.swift\")\"\n  \"$script_dir/build-app-bundle\" \"$build_roadied\" \"$tmp_bundle\" \"${version:-0.0.0}\"\n",
-      "apres": "  version=\"$(sed -n 's/.*static let current = \"\\(.*\\)\".*/\\1/p' \"$script_dir/../Sources/RoadieDaemon/DaemonHealth.swift\")\"\n  # Commit du build, vide hors d'un dépôt Git ; « -dirty » si l'arbre de travail diffère de HEAD.\n  local build_commit\n  build_commit=\"$(git -C \"$script_dir/..\" rev-parse --short=8 HEAD 2>/dev/null || true)\"\n  if [[ -n \"$build_commit\" ]] && ! git -C \"$script_dir/..\" diff --quiet HEAD 2>/dev/null; then\n    build_commit=\"$build_commit-dirty\"\n  fi\n  \"$script_dir/build-app-bundle\" \"$build_roadied\" \"$tmp_bundle\" \"${version:-0.0.0}\" \"$build_commit\"\n"
+      "apres": "  version=\"$(sed -n 's/.*static let current = \"\\(.*\\)\".*/\\1/p' \"$script_dir/../Sources/RoadieDaemon/DaemonHealth.swift\")\"\n  # Commit du build, vide hors d'un dépôt Git ; « -dirty » si un fichier est modifié ou non suivi.\n  local build_commit\n  build_commit=\"$(git -C \"$script_dir/..\" rev-parse --short=8 HEAD 2>/dev/null || true)\"\n  if [[ -n \"$build_commit\" ]] && [[ -n \"$(git -C \"$script_dir/..\" status --porcelain 2>/dev/null)\" ]]; then\n    build_commit=\"$build_commit-dirty\"\n  fi\n  \"$script_dir/build-app-bundle\" \"$build_roadied\" \"$tmp_bundle\" \"${version:-0.0.0}\" \"$build_commit\"\n"
     },
     {
       "id": "T010b",
       "tache": "T010",
       "fichier": "scripts/package-dmg",
       "avant": "app_version=\"${ROADIE_VERSION:-0.13.0}\"\n",
-      "apres": "source_version=\"$(sed -n 's/.*static let current = \"\\(.*\\)\".*/\\1/p' \"$repo_root/Sources/RoadieDaemon/DaemonHealth.swift\")\"\napp_version=\"${ROADIE_VERSION:-${source_version:-0.0.0}}\"\n# Commit du build, vide hors d'un dépôt Git ; « -dirty » si l'arbre de travail diffère de HEAD.\nbuild_commit=\"$(git -C \"$repo_root\" rev-parse --short=8 HEAD 2>/dev/null || true)\"\nif [[ -n \"$build_commit\" ]] && ! git -C \"$repo_root\" diff --quiet HEAD 2>/dev/null; then\n  build_commit=\"$build_commit-dirty\"\nfi\n"
+      "apres": "source_version=\"$(sed -n 's/.*static let current = \"\\(.*\\)\".*/\\1/p' \"$repo_root/Sources/RoadieDaemon/DaemonHealth.swift\")\"\napp_version=\"${ROADIE_VERSION:-${source_version:-0.0.0}}\"\n# Commit du build, vide hors d'un dépôt Git ; « -dirty » si un fichier est modifié ou non suivi.\nbuild_commit=\"$(git -C \"$repo_root\" rev-parse --short=8 HEAD 2>/dev/null || true)\"\nif [[ -n \"$build_commit\" ]] && [[ -n \"$(git -C \"$repo_root\" status --porcelain 2>/dev/null)\" ]]; then\n  build_commit=\"$build_commit-dirty\"\nfi\n"
     },
     {
       "id": "T010c",

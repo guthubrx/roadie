@@ -1,6 +1,7 @@
 # Base de référence - 155
 
-Mesures prises avant toute modification (tâche T001). Remplace chaque `À REMPLIR`.
+Mesures prises avant toute modification (tâche T001). Remplace chaque champ marqué « à remplir »
+(écrit en majuscules ci-dessous) par la valeur observée.
 
 - Date et heure : À REMPLIR
 - Commit de départ (`git rev-parse HEAD`) : À REMPLIR

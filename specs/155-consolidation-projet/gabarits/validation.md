@@ -1,14 +1,14 @@
 # Validation - 155 consolidation du projet
 
-Remplace chaque `À REMPLIR` par la valeur observée (tâche T044). N'écris jamais une valeur
-non observée : écris « non vérifié » et la raison.
+Remplace chaque champ marqué « à remplir » (écrit en majuscules ci-dessous) par la valeur
+observée (tâche T044). N'écris jamais une valeur non observée : écris « non vérifié » et la raison.
 
 ## Résultats
 
 | Critère | Commande | Attendu | Observé |
 |---------|----------|---------|---------|
 | SC-001 | `grep -c "/Users/moi" README.md README.fr.md` | `README.md:0` et `README.fr.md:0` | À REMPLIR |
-| SC-002 | `grep -rn '"0\.13\.0"' Sources scripts` | 1 ligne, dans `Sources/RoadieDaemon/DaemonHealth.swift` | À REMPLIR |
+| SC-002 | `grep -rl '0\.13\.0' Sources scripts` | 1 seul fichier : `Sources/RoadieDaemon/DaemonHealth.swift` (2 fichiers avant la tâche T010) | À REMPLIR |
 | SC-003 | bundle temporaire de T012, `plutil -extract RoadieBuildCommit raw …` | le commit court | À REMPLIR |
 | SC-004 | `./scripts/test --no-parallel --filter Spec155ConfigGuardTests` | 2 tests réussis | À REMPLIR |
 | SC-005 | `wc -c AGENTS.md` | moins de 8 000 | À REMPLIR |
@@ -21,6 +21,7 @@ non observée : écris « non vérifié » et la raison.
 | SC-012 | `./scripts/test --no-parallel` | 2 538 tests / 387 suites, code 0 | À REMPLIR |
 | SC-012 | `python3 -I -B -m unittest discover -s scripts/tests` | 28 tests, `OK` | À REMPLIR |
 | SC-013 | relecture des commandes lancées | aucun push, aucune publication, aucune dépense | À REMPLIR |
+| FR-021 | `grep -rl "URLSession" Sources` | 1 seul fichier : `Sources/RoadieDaemon/ReleaseCheck.swift` | À REMPLIR |
 
 ## Tâches non terminées
 

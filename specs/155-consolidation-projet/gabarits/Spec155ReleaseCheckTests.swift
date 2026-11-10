@@ -14,6 +14,8 @@ import Testing
         #expect(!ReleaseCheck.isNewer("v0.13.0", than: "0.13.0"))
         #expect(!ReleaseCheck.isNewer("0.9.0", than: "0.13.0"))
         #expect(!ReleaseCheck.isNewer("0.14", than: "0.14.0"))
+        // Seul le préfixe « v » est ignoré : « 5v » n'est pas un nombre et vaut 0.
+        #expect(!ReleaseCheck.isNewer("0.13.5v", than: "0.13.0"))
     }
 
     @Test func aNewerReleaseIsAnnouncedWithItsAddress() {

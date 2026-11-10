@@ -22,11 +22,13 @@ vérifiable seul. Aucun lot ne change la disposition des fenêtres.
 | US10 | `roadie update check` | `Sources/RoadieDaemon/ReleaseCheck.swift`, `docs/decisions/031-premier-appel-reseau.md` |
 | US11 | Inventaire des images et preuves | `specs/155-consolidation-projet/validation/inventaire-publications.md` |
 
-**Méthode pour l'implémenteur** : `tasks.md` donne l'ordre. `recettes.md` donne, pour
-chaque tâche, le texte avant, le texte après, la commande de contrôle et le résultat
-attendu. L'implémenteur ne prend aucune décision de conception. Si le texte « avant » ne
-se trouve pas tel quel dans le fichier, il s'arrête et le signale (règle R0 de
-`recettes.md`).
+**Méthode pour l'implémenteur** : `quickstart.md` donne les règles. `tasks.md` donne
+l'ordre. `recettes.md` donne, pour chaque tâche, les commandes exactes et le résultat
+attendu. Les changements sont déjà préparés : l'outil `tools/appliquer.py` les écrit à
+partir de `tools/remplacements.json` et du dossier `gabarits/`. L'implémenteur ne retape
+aucun code et ne prend aucune décision de conception. Si un texte « avant » ne se trouve
+pas tel quel dans un fichier, l'outil n'écrit rien et l'implémenteur s'arrête (règle R0
+de `quickstart.md`).
 
 ## Technical Context
 
@@ -54,8 +56,9 @@ plus (délai réseau 5 s, garde 6 s).
 de dépense). Aucune suppression de preuve. Aucun changement du comportement de
 disposition. `roadie --version` inchangé.
 
-**Scale/Scope**: 45 tâches ; 7 fichiers créés dans `Sources/`, `scripts/` et `.github/` ;
-4 fichiers de test créés ; environ 12 fichiers existants modifiés.
+**Scale/Scope**: 45 tâches, 13 commits locaux ; 5 fichiers créés dans `Sources/`,
+`scripts/` et `.github/` ; 4 fichiers de test créés ; 6 documents créés ; 20 fichiers
+existants modifiés ; 1 fichier renommé ; 1 fichier retiré du suivi Git. Préparation : 12 copies de gabarits et 42 remplacements exacts.
 
 **Base de référence (mesurée le 10 novembre 2026 sur `0b7de36b`)** : voir `research.md`
 R15. La tâche T001 refait cette mesure avant tout changement.
@@ -100,14 +103,18 @@ specs/155-consolidation-projet/
 ├── contracts/
 │   ├── cli.md               # sorties et codes de retour des commandes
 │   └── build-identity.md    # Info.plist, daemon-status.json, scripts
-├── quickstart.md            # mise en route de l'implémenteur
-├── recettes.md              # avant / après / contrôle, par tâche
+├── quickstart.md            # règles de l'implémenteur (R0, pièges, interdits)
+├── recettes.md              # commandes exactes et résultat attendu, par tâche
 ├── reuse-audit.md           # audit de l'existant (gate avant tasks)
 ├── tasks.md                 # liste ordonnée des tâches
-├── adversarial-review-*.md  # contre-revue du plan
+├── adversarial-review-codex.md  # contre-revue du plan
 ├── checklists/requirements.md
-├── tools/deplacer_journal.py  # outil à usage unique de T016
+├── gabarits/                # fichiers complets copiés par appliquer.py (12)
+├── tools/appliquer.py       # applique une tâche préparée, ou contrôle sans écrire
+├── tools/remplacements.json # 12 copies et 42 remplacements exacts
+├── tools/deplacer_journal.py      # outil à usage unique de T016
 ├── tools/extraire_fournisseur.py  # outil à usage unique de T033
+├── tools/inventaire.py      # outil de T041
 └── validation/              # créé par les tâches (T001, T041, T044)
 ```
 
@@ -172,8 +179,12 @@ dans `Tests/RoadieDaemonTests/`.
    pas son rapport JSON. Le script `scripts/coverage` fusionne lui-même les relevés et
    affiche le résumé (`research.md` R9). `make test` reste le seul juge du succès des
    tests.
-6. **Journal déplacé par un outil fourni**, pas à la main : 366 lignes, vérification
-   automatique contre le commit de base.
+6. **Changements appliqués par des outils fournis**, pas à la main. `appliquer.py` fait
+   des remplacements exacts : chaque texte « avant » doit apparaître une seule fois. Il
+   contrôle toute la tâche avant d'écrire, donc une tâche n'est jamais écrite à moitié.
+   Le journal (366 lignes) est déplacé par `deplacer_journal.py`, qui se vérifie contre
+   le commit de base. Raison : l'implémenteur prévu est un modèle moins capable ; un
+   texte recopié à la main est la première source d'erreur.
 7. **Un commit local par lot**, fichiers nommés, sans `git commit -a`, sans push.
 
 ## Ordre et dépendances
@@ -189,9 +200,10 @@ dans `Tests/RoadieDaemonTests/`.
 
 | Risque | Parade |
 |--------|--------|
-| Le texte « avant » d'une recette ne correspond plus au fichier | Règle R0 : arrêt et signalement ; aucune adaptation libre |
-| Build de test périmé après changement de `DaemonStatus` ou de `RoadieConfig` (signal 11) | Remède écrit dans `recettes.md` (piège P1) |
-| Tests sensibles au temps en échec sur une machine chargée | T001 fixe la base ; un échec déjà présent dans la base n'est pas imputé au lot ; relance en `--no-parallel` (piège P3) |
+| Le texte « avant » d'une recette ne correspond plus au fichier | Règle R0 : l'outil n'écrit rien ; arrêt et signalement ; aucune adaptation libre |
+| Build de test périmé après changement de `DaemonStatus` ou de `RoadieConfig` (signal 11) | Remède écrit dans `quickstart.md` (piège P1) |
+| Une user story dépend d'une story suivante sans le dire | Essai par paliers : la suite complète a tourné à chaque point de commit (`research.md` R16) |
+| Tests sensibles au temps en échec sur une machine chargée | T001 fixe la base ; un échec déjà présent dans la base n'est pas imputé au lot ; toujours `--no-parallel` ; relance du test seul (piège P3) |
 | Appel réseau refusé (pare-feu, Little Snitch) pendant T040 | Le contrôle réel accepte les deux issues prévues : code 0 avec la version, ou code 1 avec la raison en 6 s au plus |
 | Machine GitHub incompatible (version de Swift, pas d'écran) | Non vérifié ; workflow manuel seul ; premier essai par l'utilisateur (D5) |
 

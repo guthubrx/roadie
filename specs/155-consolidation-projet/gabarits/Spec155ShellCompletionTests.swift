@@ -14,16 +14,16 @@ import Testing
         let names = commands.dropFirst("  commands=(".count).dropLast().split(separator: " ").map(String.init)
         #expect(names.contains("display"))
         #expect(names.contains("completion"))
-        #expect(names.contains("update"))
         #expect(!names.contains("--version"))
         #expect(Set(names).count == names.count)
+        let expected = CLICommandRouter.commandTable.filter(\.implemented).flatMap(\.names).filter { !$0.hasPrefix("-") }
+        #expect(Set(names) == Set(expected))
     }
 
     @Test func subcommandsComeFromTheSecondWord() {
         let all = lines()
         #expect(all.contains("      display) compadd list current focus ;;"))
         #expect(all.contains("      completion) compadd zsh ;;"))
-        #expect(all.contains("      update) compadd check ;;"))
     }
 
     @Test func commandsNotImplementedAreLeftOut() throws {
