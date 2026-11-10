@@ -209,6 +209,8 @@ public final class CLICommandRouter {
     static let commandTable: [CLICommandSpec] = [
         CLICommandSpec(usage: "help [COMMAND]"),
         CLICommandSpec(usage: "--version"),
+        CLICommandSpec(usage: "completion zsh"),
+        CLICommandSpec(usage: "update check"),
         CLICommandSpec(usage: "windows list [--json]"),
         CLICommandSpec(usage: "display list|current [--json]"),
         CLICommandSpec(usage: "display focus N|left|right|up|down"),
@@ -867,6 +869,15 @@ public final class CLICommandRouter {
             return finish(result)
         case "--version", "version":
             out("roadie \(RoadieVersion.current)")
+        case "completion":
+            guard args.count == 2, args[1] == "zsh" else { return usageError() }
+            out(ShellCompletion.zsh(specs: Self.commandTable))
+        case "update":
+            guard args.count == 2, args[1] == "check" else { return usageError() }
+            let outcome = ReleaseCheck.evaluate(current: RoadieVersion.current) { ReleaseCheck.fetchLatestRelease() }
+            if let text = outcome.stdout { out(text) }
+            if let text = outcome.stderr { err(text) }
+            return outcome.exitCode
         case nil:
             out(Self.usage())
         case .some(let unknown):

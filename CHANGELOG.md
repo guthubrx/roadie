@@ -5,6 +5,30 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+## 0.14.0 - 2026-11-10
+
+- Licence Apache-2.0, notices des dépendances incluses dans l'application.
+- Section `[launcher]` compatible avec l'ancienne section ; priorité par clé, édition et reset sans résurrection.
+- Tests de configuration étendus aux optionnels et tableaux ; transport HTTP et suffixe dirty vérifiés.
+- CI strictement manuelle ; anciens diaporamas de preuve archivés hors du dépôt courant.
+
+
+- Mises à jour : `roadie update check` indique si une version plus récente est publiée.
+  C'est le seul appel réseau de Roadie ; il part seulement quand tu lances la commande.
+  Rien n'est téléchargé ni installé.
+
+- Terminal : `roadie completion zsh` écrit la complétion des commandes pour zsh. Mise en service :
+  `source <(roadie completion zsh)` dans `~/.zshrc`, après `compinit`.
+  Développement : `make coverage` mesure la couverture des tests.
+
+- Journal : Roadie n'écrit plus la position de chaque clic gauche (`drag.real_press`,
+  `drag.real_router_press`).
+
+- Cibles à l'écran : une réponse d'accessibilité d'un type inattendu est maintenant ignorée.
+
+- Version : `roadied --version` et `~/.roadies/daemon-status.json` indiquent le commit du build
+  installé, par exemple `roadied 0.13.0 (0b7de36b)`. Le DMG lit sa version dans le code.
+
 - Glisser et resize natifs : le fond transparent de Notification Center ne masque
   plus les fenêtres après un redémarrage ; les vrais panneaux restent bloquants.
 

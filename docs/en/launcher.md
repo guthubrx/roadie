@@ -164,3 +164,22 @@ Every detail: [feature guide, search mode](features.md).
 
 Alfred is a trademark of Running with Crayons Ltd. Roadie is not affiliated with or endorsed by Alfred's authors;
 it reads the public workflow format.
+
+## Launcher section
+
+Place launcher settings in `[launcher]`. This section accepts the same keys as the old
+`[experimental.target_mode]`, including shortcuts and on-screen search. Old files still
+work. If a key exists in both sections, `launcher` wins; other legacy values remain in
+effect. A new array replaces the whole old array. Settings moves only the edited key to
+`launcher`. Reset removes both forms of the key. Comments are preserved.
+
+```toml
+[launcher]
+theme = "alfred"
+visible_results = 7
+bookmarks_enabled = true
+```
+
+Setting command identifiers (`target_mode.…`) stay stable. To return to an older Roadie
+version, move the keys back to `experimental.target_mode` or restore the configuration
+backup. No automatic migration takes place at startup.

@@ -399,3 +399,23 @@ La taille de l’aperçu réel n’est demandée qu’au changement de destinati
 Pendant le glisser, une copie figée suit le pointeur. Son contenu, sa visibilité et sa taille se règlent dans Effets > Pendant un glisser. Le défaut est une copie à 50 % de la taille initiale et 85 % de visibilité. 100 % de visibilité la rend opaque. Le ratio reste conservé. Le relâchement retire la copie et garde la vraie fenêtre. Le redimensionnement avec Ctrl+Alt reste inchangé.
 
 La destination garde son réglage indépendant : contour ou vraie fenêtre avec remise en page. Cela vaut aussi entre écrans. La capture initiale précède la remise en page ; aucune capture ne se répète à chaque mouvement. Si la capture manque, la vraie fenêtre garde son déplacement visible. Aucune nouvelle permission n’est demandée pendant le geste.
+
+## Section Launcher
+
+Les réglages du lanceur se placent dans `[launcher]`. Cette section accepte les mêmes
+clés que l'ancienne `[experimental.target_mode]`, y compris les touches et la recherche
+à l'écran. Les anciens fichiers restent valides. Si une clé figure aux deux endroits,
+`launcher` gagne ; les autres valeurs anciennes restent en vigueur. Un tableau nouveau
+remplace tout le tableau ancien. Les Paramètres déplacent seulement la clé éditée vers
+`launcher`. Une remise à zéro retire ses deux formes. Les commentaires restent.
+
+```toml
+[launcher]
+theme = "alfred"
+visible_results = 7
+bookmarks_enabled = true
+```
+
+Les identifiants des commandes de réglage (`target_mode.…`) restent stables. Pour revenir
+à une ancienne version de Roadie, remettre les clés sous `experimental.target_mode` ou
+reprendre la sauvegarde de configuration. Aucune migration automatique au démarrage.

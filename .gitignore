@@ -18,6 +18,8 @@ DerivedData/
 
 # Local metadata and private runtime data must stay outside the repository.
 /.specify/memory/user-layer.json
+/.specify/memory/*.bak-*
+*.profraw
 /.roadies/
 /.local/state/roadies/
 /.config/roadies/

@@ -392,3 +392,22 @@ destination changes.
 A frozen copy follows the pointer during dragging. Effects > During a drag controls its content, visibility and size. Defaults are 50% of the initial size and 85% visibility; 100% visibility is opaque. Aspect ratio is preserved. Releasing removes the copy and leaves the actual window. Ctrl+Alt resizing is unchanged.
 
 The destination separately offers an outline or the actual window with live layout, including across displays. Capture occurs before layout and does not repeat per movement. If capture is unavailable, the actual window keeps moving visibly. No new permission is requested during a gesture.
+
+## Launcher section
+
+Place launcher settings in `[launcher]`. This section accepts the same keys as the old
+`[experimental.target_mode]`, including shortcuts and on-screen search. Old files still
+work. If a key exists in both sections, `launcher` wins; other legacy values remain in
+effect. A new array replaces the whole old array. Settings moves only the edited key to
+`launcher`. Reset removes both forms of the key. Comments are preserved.
+
+```toml
+[launcher]
+theme = "alfred"
+visible_results = 7
+bookmarks_enabled = true
+```
+
+Setting command identifiers (`target_mode.…`) stay stable. To return to an older Roadie
+version, move the keys back to `experimental.target_mode` or restore the configuration
+backup. No automatic migration takes place at startup.

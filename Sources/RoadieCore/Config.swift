@@ -99,6 +99,9 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case shortcuts
     }
 
+    // Alias public ; le modèle interne et les anciens fichiers restent compatibles.
+    private enum LauncherKeys: String, CodingKey { case launcher }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.interface = try c.decodeIfPresent(InterfaceConfig.self, forKey: .interface) ?? InterfaceConfig()
@@ -115,6 +118,14 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.overview = try c.decodeIfPresent(OverviewConfig.self, forKey: .overview) ?? OverviewConfig()
         self.switcher = try c.decodeIfPresent(WindowSwitcherConfig.self, forKey: .switcher) ?? WindowSwitcherConfig()
         self.shortcuts = try c.decodeIfPresent([CommandShortcut].self, forKey: .shortcuts) ?? []
+        let launcher = try decoder.container(keyedBy: LauncherKeys.self)
+        if launcher.contains(.launcher) {
+            self.experimental.targetMode = try TargetModeConfig(
+                container: launcher.nestedContainer(keyedBy: TargetModeConfig.CodingKeys.self, forKey: .launcher),
+                barKeys: TargetModeConfig.decodeBarKeys(launcher.nestedContainer(keyedBy: TargetModeConfig.AnyKey.self, forKey: .launcher)),
+                defaults: self.experimental.targetMode
+            )
+        }
     }
 }
 
@@ -1167,7 +1178,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     }
 
     /// Clé TOML quelconque : les touches de la barre se lisent par leur nom (`large_type_key`…).
-    private struct AnyKey: CodingKey {
+    fileprivate struct AnyKey: CodingKey {
         var stringValue: String
         var intValue: Int? { nil }
         init(stringValue: String) { self.stringValue = stringValue }
@@ -1175,75 +1186,81 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     }
 
     public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            container: decoder.container(keyedBy: CodingKeys.self),
+            barKeys: Self.decodeBarKeys(decoder.container(keyedBy: AnyKey.self)), defaults: TargetModeConfig()
+        )
+    }
+
+    /// O(k), k = clés du lanceur. Les clés absentes conservent leur valeur héritée.
+    init(container c: KeyedDecodingContainer<CodingKeys>, barKeys: [String: String], defaults: TargetModeConfig) throws {
         self.init(
-            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
-            pickerEnabled: try c.decodeIfPresent(Bool.self, forKey: .pickerEnabled) ?? true,
-            overlayEnabled: try c.decodeIfPresent(Bool.self, forKey: .overlayEnabled) ?? false,
-            overlayLabelsOnly: try c.decodeIfPresent(Bool.self, forKey: .overlayLabelsOnly) ?? true,
-            overlayDurationSeconds: try c.decodeFlexibleDouble(forKey: .overlayDurationSeconds) ?? 3,
-            appMouseActionsEnabled: try c.decodeIfPresent(Bool.self, forKey: .appMouseActionsEnabled) ?? false,
-            scrollModeEnabled: try c.decodeIfPresent(Bool.self, forKey: .scrollModeEnabled) ?? false,
-            searchHotkey: try c.decodeIfPresent(String.self, forKey: .searchHotkey) ?? TargetModeConfig.defaultSearchHotkey,
-            actionsHotkey: try c.decodeIfPresent(String.self, forKey: .actionsHotkey) ?? TargetModeConfig.defaultActionsHotkey,
-            screenSearchHotkey: try c.decodeIfPresent(String.self, forKey: .screenSearchHotkey) ?? "",
-            launcherOnScreen: try c.decodeIfPresent(Bool.self, forKey: .launcherOnScreen) ?? true,
-            webSearchURL: try c.decodeIfPresent(String.self, forKey: .webSearchURL) ?? TargetModeConfig.defaultWebSearchURL,
-            pickModifier: try c.decodeIfPresent(String.self, forKey: .pickModifier) ?? "command",
-            returnCommand: try c.decodeIfPresent(String.self, forKey: .returnCommand) ?? "new-stage",
-            returnOption: try c.decodeIfPresent(String.self, forKey: .returnOption) ?? "here",
-            returnControl: try c.decodeIfPresent(String.self, forKey: .returnControl) ?? "web",
-            workflowViewStyle: try c.decodeIfPresent(String.self, forKey: .workflowViewStyle) ?? "system",
-            workflowsEnabled: try c.decodeIfPresent(Bool.self, forKey: .workflowsEnabled) ?? true,
-            alfredWorkflows: try c.decodeIfPresent(Bool.self, forKey: .alfredWorkflows) ?? true,
-            webSearches: try c.decodeIfPresent([WebSearch].self, forKey: .webSearches),
-            fallbackSearches: try c.decodeIfPresent([String].self, forKey: .fallbackSearches) ?? [],
-            idleFrequentEnabled: try c.decodeIfPresent(Bool.self, forKey: .idleFrequentEnabled) ?? true,
-            idleFrequentCount: try c.decodeIfPresent(Int.self, forKey: .idleFrequentCount) ?? 3,
-            typoMaxErrors: try c.decodeIfPresent(Int.self, forKey: .typoMaxErrors) ?? 2,
-            idleRecentSearchesEnabled: try c.decodeIfPresent(Bool.self, forKey: .idleRecentSearchesEnabled) ?? true,
-            idleRecentSearchesCount: try c.decodeIfPresent(Int.self, forKey: .idleRecentSearchesCount) ?? 3,
-            viewCycleHotkey: try c.decodeIfPresent(String.self, forKey: .viewCycleHotkey) ?? "command+g",
-            labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? 13,
-            searchLabelFontSize: try c.decodeFlexibleDouble(forKey: .searchLabelFontSize) ?? 13,
-            searchTextFontSize: try c.decodeFlexibleDouble(forKey: .searchTextFontSize) ?? 15,
-            commandTextFontSize: try c.decodeFlexibleDouble(forKey: .commandTextFontSize) ?? 13,
-            searchFontFamily: try c.decodeIfPresent(String.self, forKey: .searchFontFamily) ?? "system",
-            commandFontFamily: try c.decodeIfPresent(String.self, forKey: .commandFontFamily) ?? "system",
-            theme: try c.decodeIfPresent(String.self, forKey: .theme) ?? "roadie",
-            themeDark: try c.decodeIfPresent(String.self, forKey: .themeDark) ?? "",
-            visibleResults: try c.decodeIfPresent(Int.self, forKey: .visibleResults) ?? 0,
-            barScreen: try c.decodeIfPresent(String.self, forKey: .barScreen) ?? "mouse",
-            barPosition: try c.decodeIfPresent(String.self, forKey: .barPosition) ?? "bottom",
-            barSavePosition: try c.decodeIfPresent(Bool.self, forKey: .barSavePosition) ?? true,
-            terminalApp: try c.decodeIfPresent(String.self, forKey: .terminalApp) ?? "terminal",
-            bookmarksEnabled: try c.decodeIfPresent(Bool.self, forKey: .bookmarksEnabled) ?? true,
-            bookmarkBrowsers: try c.decodeIfPresent([String].self, forKey: .bookmarkBrowsers) ?? ["firefox", "safari", "chrome"],
-            appSearchPaths: try c.decodeIfPresent([String].self, forKey: .appSearchPaths) ?? [],
-            learningEnabled: try c.decodeIfPresent(Bool.self, forKey: .learningEnabled) ?? true,
-            pathSort: try c.decodeIfPresent(String.self, forKey: .pathSort) ?? "name",
-            confirmQuitAll: try c.decodeIfPresent(Bool.self, forKey: .confirmQuitAll) ?? true,
-            calcOpensCalculator: try c.decodeIfPresent(Bool.self, forKey: .calcOpensCalculator) ?? false,
-            learnVerbOrder: try c.decodeIfPresent(Bool.self, forKey: .learnVerbOrder) ?? true,
-            contentSearchKeyword: try c.decodeIfPresent(String.self, forKey: .contentSearchKeyword) ?? "in",
-            tagSearchKeyword: try c.decodeIfPresent(String.self, forKey: .tagSearchKeyword) ?? "tags",
-            webHistoryDays: try c.decodeIfPresent(Int.self, forKey: .webHistoryDays) ?? 90,
-            settingsInSearch: try c.decodeIfPresent(Bool.self, forKey: .settingsInSearch) ?? true,
-            openKeyword: try c.decodeIfPresent(String.self, forKey: .openKeyword) ?? "open",
-            findKeyword: try c.decodeIfPresent(String.self, forKey: .findKeyword) ?? "find",
-            fileTypes: try c.decodeIfPresent([String].self, forKey: .fileTypes) ?? [],
-            fileExcludedFolders: try c.decodeIfPresent([String].self, forKey: .fileExcludedFolders) ?? [],
-            calcDecimal: try c.decodeIfPresent(String.self, forKey: .calcDecimal) ?? "system",
-            calcGrouping: try c.decodeIfPresent(Bool.self, forKey: .calcGrouping) ?? false,
-            showScrollbar: try c.decodeIfPresent(Bool.self, forKey: .showScrollbar) ?? false,
-            barKeys: try Self.decodeBarKeys(decoder),
-            bttPauseKeys: try c.decodeIfPresent([String].self, forKey: .bttPauseKeys) ?? []
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled,
+            pickerEnabled: try c.decodeIfPresent(Bool.self, forKey: .pickerEnabled) ?? defaults.pickerEnabled,
+            overlayEnabled: try c.decodeIfPresent(Bool.self, forKey: .overlayEnabled) ?? defaults.overlayEnabled,
+            overlayLabelsOnly: try c.decodeIfPresent(Bool.self, forKey: .overlayLabelsOnly) ?? defaults.overlayLabelsOnly,
+            overlayDurationSeconds: try c.decodeFlexibleDouble(forKey: .overlayDurationSeconds) ?? defaults.overlayDurationSeconds,
+            appMouseActionsEnabled: try c.decodeIfPresent(Bool.self, forKey: .appMouseActionsEnabled) ?? defaults.appMouseActionsEnabled,
+            scrollModeEnabled: try c.decodeIfPresent(Bool.self, forKey: .scrollModeEnabled) ?? defaults.scrollModeEnabled,
+            searchHotkey: try c.decodeIfPresent(String.self, forKey: .searchHotkey) ?? defaults.searchHotkey,
+            actionsHotkey: try c.decodeIfPresent(String.self, forKey: .actionsHotkey) ?? defaults.actionsHotkey,
+            screenSearchHotkey: try c.decodeIfPresent(String.self, forKey: .screenSearchHotkey) ?? defaults.screenSearchHotkey,
+            launcherOnScreen: try c.decodeIfPresent(Bool.self, forKey: .launcherOnScreen) ?? defaults.launcherOnScreen,
+            webSearchURL: try c.decodeIfPresent(String.self, forKey: .webSearchURL) ?? defaults.webSearchURL,
+            pickModifier: try c.decodeIfPresent(String.self, forKey: .pickModifier) ?? defaults.pickModifier,
+            returnCommand: try c.decodeIfPresent(String.self, forKey: .returnCommand) ?? defaults.returnCommand,
+            returnOption: try c.decodeIfPresent(String.self, forKey: .returnOption) ?? defaults.returnOption,
+            returnControl: try c.decodeIfPresent(String.self, forKey: .returnControl) ?? defaults.returnControl,
+            workflowViewStyle: try c.decodeIfPresent(String.self, forKey: .workflowViewStyle) ?? defaults.workflowViewStyle,
+            workflowsEnabled: try c.decodeIfPresent(Bool.self, forKey: .workflowsEnabled) ?? defaults.workflowsEnabled,
+            alfredWorkflows: try c.decodeIfPresent(Bool.self, forKey: .alfredWorkflows) ?? defaults.alfredWorkflows,
+            webSearches: try c.decodeIfPresent([WebSearch].self, forKey: .webSearches) ?? defaults.webSearches,
+            fallbackSearches: try c.decodeIfPresent([String].self, forKey: .fallbackSearches) ?? defaults.fallbackSearches,
+            idleFrequentEnabled: try c.decodeIfPresent(Bool.self, forKey: .idleFrequentEnabled) ?? defaults.idleFrequentEnabled,
+            idleFrequentCount: try c.decodeIfPresent(Int.self, forKey: .idleFrequentCount) ?? defaults.idleFrequentCount,
+            typoMaxErrors: try c.decodeIfPresent(Int.self, forKey: .typoMaxErrors) ?? defaults.typoMaxErrors,
+            idleRecentSearchesEnabled: try c.decodeIfPresent(Bool.self, forKey: .idleRecentSearchesEnabled) ?? defaults.idleRecentSearchesEnabled,
+            idleRecentSearchesCount: try c.decodeIfPresent(Int.self, forKey: .idleRecentSearchesCount) ?? defaults.idleRecentSearchesCount,
+            viewCycleHotkey: try c.decodeIfPresent(String.self, forKey: .viewCycleHotkey) ?? defaults.viewCycleHotkey,
+            labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? defaults.labelFontSize,
+            searchLabelFontSize: try c.decodeFlexibleDouble(forKey: .searchLabelFontSize) ?? defaults.searchLabelFontSize,
+            searchTextFontSize: try c.decodeFlexibleDouble(forKey: .searchTextFontSize) ?? defaults.searchTextFontSize,
+            commandTextFontSize: try c.decodeFlexibleDouble(forKey: .commandTextFontSize) ?? defaults.commandTextFontSize,
+            searchFontFamily: try c.decodeIfPresent(String.self, forKey: .searchFontFamily) ?? defaults.searchFontFamily,
+            commandFontFamily: try c.decodeIfPresent(String.self, forKey: .commandFontFamily) ?? defaults.commandFontFamily,
+            theme: try c.decodeIfPresent(String.self, forKey: .theme) ?? defaults.theme,
+            themeDark: try c.decodeIfPresent(String.self, forKey: .themeDark) ?? defaults.themeDark,
+            visibleResults: try c.decodeIfPresent(Int.self, forKey: .visibleResults) ?? defaults.visibleResults,
+            barScreen: try c.decodeIfPresent(String.self, forKey: .barScreen) ?? defaults.barScreen,
+            barPosition: try c.decodeIfPresent(String.self, forKey: .barPosition) ?? defaults.barPosition,
+            barSavePosition: try c.decodeIfPresent(Bool.self, forKey: .barSavePosition) ?? defaults.barSavePosition,
+            terminalApp: try c.decodeIfPresent(String.self, forKey: .terminalApp) ?? defaults.terminalApp,
+            bookmarksEnabled: try c.decodeIfPresent(Bool.self, forKey: .bookmarksEnabled) ?? defaults.bookmarksEnabled,
+            bookmarkBrowsers: try c.decodeIfPresent([String].self, forKey: .bookmarkBrowsers) ?? defaults.bookmarkBrowsers,
+            appSearchPaths: try c.decodeIfPresent([String].self, forKey: .appSearchPaths) ?? defaults.appSearchPaths,
+            learningEnabled: try c.decodeIfPresent(Bool.self, forKey: .learningEnabled) ?? defaults.learningEnabled,
+            pathSort: try c.decodeIfPresent(String.self, forKey: .pathSort) ?? defaults.pathSort,
+            confirmQuitAll: try c.decodeIfPresent(Bool.self, forKey: .confirmQuitAll) ?? defaults.confirmQuitAll,
+            calcOpensCalculator: try c.decodeIfPresent(Bool.self, forKey: .calcOpensCalculator) ?? defaults.calcOpensCalculator,
+            learnVerbOrder: try c.decodeIfPresent(Bool.self, forKey: .learnVerbOrder) ?? defaults.learnVerbOrder,
+            contentSearchKeyword: try c.decodeIfPresent(String.self, forKey: .contentSearchKeyword) ?? defaults.contentSearchKeyword,
+            tagSearchKeyword: try c.decodeIfPresent(String.self, forKey: .tagSearchKeyword) ?? defaults.tagSearchKeyword,
+            webHistoryDays: try c.decodeIfPresent(Int.self, forKey: .webHistoryDays) ?? defaults.webHistoryDays,
+            settingsInSearch: try c.decodeIfPresent(Bool.self, forKey: .settingsInSearch) ?? defaults.settingsInSearch,
+            openKeyword: try c.decodeIfPresent(String.self, forKey: .openKeyword) ?? defaults.openKeyword,
+            findKeyword: try c.decodeIfPresent(String.self, forKey: .findKeyword) ?? defaults.findKeyword,
+            fileTypes: try c.decodeIfPresent([String].self, forKey: .fileTypes) ?? defaults.fileTypes,
+            fileExcludedFolders: try c.decodeIfPresent([String].self, forKey: .fileExcludedFolders) ?? defaults.fileExcludedFolders,
+            calcDecimal: try c.decodeIfPresent(String.self, forKey: .calcDecimal) ?? defaults.calcDecimal,
+            calcGrouping: try c.decodeIfPresent(Bool.self, forKey: .calcGrouping) ?? defaults.calcGrouping,
+            showScrollbar: try c.decodeIfPresent(Bool.self, forKey: .showScrollbar) ?? defaults.showScrollbar,
+            barKeys: defaults.barKeys.merging(barKeys) { _, new in new },
+            bttPauseKeys: try c.decodeIfPresent([String].self, forKey: .bttPauseKeys) ?? defaults.bttPauseKeys
         )
     }
 
     /// O(a), a = nombre d'actions de la barre.
-    private static func decodeBarKeys(_ decoder: Decoder) throws -> [String: String] {
-        let any = try decoder.container(keyedBy: AnyKey.self)
+    fileprivate static func decodeBarKeys(_ any: KeyedDecodingContainer<AnyKey>) throws -> [String: String] {
         var keys: [String: String] = [:]
         for action in LauncherBarKeys.actions {
             if let value = try any.decodeIfPresent(String.self, forKey: AnyKey(stringValue: action.configKey)) {
@@ -1705,7 +1722,7 @@ public enum RoadieConfigLoader {
     /// Les tables sans clé scalaire sont omises. Complexité : O(k) — k nombre de clés connues.
     public static func knownScalarKeys() -> [String: Set<String>] {
         var result: [String: Set<String>] = [:]
-        for (table, keys) in ConfigValidationRules.knownKeys where !nonScalarTables.contains(table) {
+        for (table, keys) in ConfigValidationRules.knownKeys where !nonScalarTables.contains(table) && table != "launcher" && !table.hasPrefix("launcher.") {
             let scalars = keys.subtracting(nonScalarKeys[table] ?? [])
             if !scalars.isEmpty { result[table] = scalars }
         }
@@ -1715,6 +1732,11 @@ public enum RoadieConfigLoader {
     /// Clés décodées mais lues nulle part dans le daemon, par chemin de table.
     public static func ineffectiveKeys() -> [String: Set<String>] {
         ConfigValidationRules.ineffectiveKeys
+    }
+
+    /// Clés acceptées par le validateur, par chemin de table (« » pour la racine).
+    public static func knownKeys() -> [String: Set<String>] {
+        ConfigValidationRules.knownKeys
     }
 
     /// Distance de Levenshtein, partagée avec le validateur (aucune seconde implémentation).
@@ -1834,6 +1856,7 @@ public struct ConfigValidationReport: Equatable, Codable, Sendable {
 
 private enum ConfigValidationRules {
     private static let supportedTables: Set<String> = [
+        "launcher", "launcher.web_searches",
         "interface",
         "tiling",
         "desktops",
@@ -1900,7 +1923,7 @@ private enum ConfigValidationRules {
     static let knownKeys: [String: Set<String>] = {
         let labelKeys: Set<String> = ["enabled", "template", "color", "font_size", "font_family", "weight", "alignment", "opacity", "offset_x", "offset_y"]
         let gapKeys: Set<String> = ["gaps_outer", "gaps_outer_top", "gaps_outer_right", "gaps_outer_bottom", "gaps_outer_left"]
-        return [
+        var keys: [String: Set<String>] = [
             "": [],
             "fx": ["drop_preview", "drag_preview", "drag_preview_opacity_percent", "drag_preview_scale_percent"],
             "fx.animations": ["enabled", "profile", "curve", "duration_ms", "intensity", "stiffness", "damping", "move", "stage", "appearance", "rail", "launcher", "switcher", "overview"],
@@ -1952,6 +1975,9 @@ private enum ConfigValidationRules {
             "rules.match": ["app", "app_regex", "title", "title_regex", "role", "subrole", "display", "desktop", "stage", "is_floating"],
             "rules.action": ["manage", "exclude", "assign_desktop", "assign_display", "assign_stage", "follow", "floating", "layout", "gap_override", "scratchpad", "emit_event", "remember_frame"]
         ]
+        keys["launcher"] = keys["experimental.target_mode"]
+        keys["launcher.web_searches"] = keys["experimental.target_mode.web_searches"]
+        return keys
     }()
 
     /// Clés décodées mais lues nulle part dans le daemon (vérifié par recherche dans `Sources/`).

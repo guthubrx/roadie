@@ -322,7 +322,31 @@ public struct DaemonHealthService {
 
 /// Version de Roadie, partagée par `roadied --version`, `roadie --version` et `daemon-status.json`.
 public enum RoadieVersion {
-    public static let current = "0.13.0"
+    public static let current = "0.14.0"
+
+    /// Commit du build, lu une fois dans `Roadie.app/Contents/Info.plist` (clé `RoadieBuildCommit`).
+    /// `nil` hors de l'application. Le chemin part de l'exécutable réel : `Bundle.main` rend `nil`
+    /// quand `roadied` est lancé par le lien `~/.local/bin/roadied`.
+    public static let buildCommit: String? = {
+        guard let executable = Bundle.main.executableURL?.resolvingSymlinksInPath() else { return nil }
+        let infoPlist = executable.deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Info.plist")
+        return buildCommit(infoPlist: infoPlist)
+    }()
+
+    static func buildCommit(infoPlist url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let commit = plist["RoadieBuildCommit"] as? String,
+              !commit.isEmpty
+        else { return nil }
+        return commit
+    }
+
+    /// Version affichée avec le commit connu entre parenthèses ; numéro seul sinon.
+    public static func display(commit: String? = buildCommit) -> String {
+        commit.map { "\(current) (\($0))" } ?? current
+    }
 }
 
 /// État publié par le daemon dans `~/.roadies/daemon-status.json`
@@ -356,6 +380,8 @@ public struct DaemonStatus: Codable, Equatable, Sendable {
     public var screenRecordingGranted: Bool
     public var config: ConfigState
     public var socketPath: String
+    /// Commit du build. Absent du fichier quand il est inconnu.
+    public var buildCommit: String?
 
     public init(
         pid: Int32,
@@ -366,7 +392,8 @@ public struct DaemonStatus: Codable, Equatable, Sendable {
         screenRecordingGranted: Bool,
         config: ConfigState,
         socketPath: String = "\(NSHomeDirectory())/.roadies/roadied.sock",
-        roadieVersion: String = RoadieVersion.current
+        roadieVersion: String = RoadieVersion.current,
+        buildCommit: String? = RoadieVersion.buildCommit
     ) {
         self.version = 1
         self.pid = pid
@@ -378,6 +405,7 @@ public struct DaemonStatus: Codable, Equatable, Sendable {
         self.screenRecordingGranted = screenRecordingGranted
         self.config = config
         self.socketPath = socketPath
+        self.buildCommit = buildCommit
     }
 
     /// Vrai si le process vit et que le battement a moins de 90 s.

@@ -1,5 +1,16 @@
 # Feature Specification: Consolidation du projet Roadie
 
+## Contrat actif — décision utilisateur du 10 novembre 2026
+
+Cette reprise remplace les limites de la préparation conservée ci-dessous. Le travail va
+jusqu'au développement complet, à la correction des constats, puis à la release 0.14.0,
+à son installation et au nettoyage. Les recettes historiques restent une base de travail ;
+le responsable peut corriger leurs défauts après diagnostic. Les contrôles par story restent
+séquentiels. Les commits de code attendent convergence et audit (skill my-specify-all).
+Aucune dépense, aucun compte développeur Apple, aucune CI automatique ni lancement CI.
+Les preuves retirées de la publication sont sauvegardées localement, avec empreintes.
+
+
 **Feature Branch**: `155-consolidation-projet`
 **Created**: 2026-11-10
 **Status**: In Progress
@@ -360,12 +371,12 @@ décision appartient à l'utilisateur.
 - **FR-020**: `roadie update check` DOIT comparer la version courante à la dernière version
   publiée, répondre en 6 secondes au plus, et rendre 0 si la réponse est connue, 1 sinon.
 - **FR-021**: Roadie NE DOIT effectuer aucun appel réseau hors de `roadie update check`.
-- **FR-022**: un rapport DOIT lister les images et diaporamas suivis par Git ; le lot NE
-  DOIT retirer aucun fichier de preuve.
+- **FR-022**: un rapport DOIT lister les images et diaporamas suivis par Git avant le retrait
+  autorisé des preuves inutiles, avec archive locale et empreintes (FR-029).
 - **FR-023**: `CHANGELOG.md` (section « Non publié ») et la documentation des commandes en
   français et en anglais DOIVENT décrire les changements visibles.
-- **FR-024**: aucune tâche NE DOIT publier, pousser, dépenser ou supprimer des données
-  locales de l'utilisateur.
+- **FR-024**: aucune tâche NE DOIT dépenser ni supprimer les données locales de l’utilisateur ;
+  intégration, push et publication sont autorisés par la reprise.
 
 ### Key Entities
 
@@ -403,12 +414,12 @@ décision appartient à l'utilisateur.
 - **SC-012**: la suite complète (`./scripts/test --no-parallel`) passe avec 2 538 tests
   dans 387 suites (base mesurée : 2 523 dans 383 ; 15 tests ajoutés dans 4 suites) ; les
   28 tests de scripts passent.
-- **SC-013**: 0 action sortante exécutée par les tâches (push, publication, dépense).
+- **SC-013**: 0 dépense et 0 lancement de CI ; push et publication vérifiés conformément à FR-027.
 
 ## Assumptions
 
-- La licence, la publication d'une version, la notarisation et le déclenchement automatique
-  de la CI sont des décisions de l'utilisateur. Elles sont hors des tâches.
+- Les décisions D1/D2/D3/D4/D5/D8 sont actées dans la reprise. La notarisation et
+  la CI automatique restent exclues ; les autres décisions sont couvertes par T046–053.
 - L'implémenteur travaille dans le worktree
   `/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/155-consolidation-projet`.
 - Le dépôt GitHub `guthubrx/roadie` est public ; son API de releases répond sans jeton
@@ -426,3 +437,32 @@ décision appartient à l'utilisateur.
 - Spec 093 (audit de la base de code) et spec 129 (corrections d'audit) : garde-fous de
   configuration existants, réutilisés.
 - Spec 145 et spec 152 : origine des deux événements de clic.
+
+## Cadrage de la reprise approuvée
+
+Demande initiale : développer toutes les corrections préparées ; Apache-2.0 ; section
+Launcher ; pas de compte développeur ; pas de CI automatique ; retrait des preuves inutiles.
+Demande reformulée : terminer la consolidation, préserver la configuration existante,
+vérifier les corrections puis publier et installer 0.14.0. La signature reste celle du poste.
+Apport : dépôt réutilisable, configuration lisible et version identifiable, sans coût nouveau.
+
+### Exigences de reprise (prioritaires sur les anciennes exclusions FR-022/024 et SC-013)
+
+- **FR-025** : distribuer le code sous Apache-2.0, texte officiel dans LICENSE, README FR/EN alignés.
+- **FR-026** : accepter `[launcher]` pour les réglages aujourd'hui sous `[experimental.target_mode]`.
+  Un ancien fichier conserve exactement son comportement ; à clé commune, launcher gagne.
+  Les paramètres écrivent la valeur effective dans launcher, sans valeur ancienne résiduelle
+  susceptible de réapparaître après remise à zéro. Les autres sections et commentaires restent.
+- **FR-027** : publier 0.14.0 après correction et vérification ; sources, DMG et somme SHA-256
+  concordent ; le code publié est installé et chargé. Aucune CI déclenchée par push, tag ou release.
+- **FR-028** : conserver la signature locale existante, sans compte Apple payant, avec aide
+  FR/EN pour autoriser explicitement l'application dans macOS.
+- **FR-029** : inventorier puis retirer les anciens diaporamas de preuve du dépôt courant,
+  conserver les originaux hors Git avec empreintes ; garder icône, captures des guides et
+  illustrations encore référencées. Aucun changement de l'historique Git.
+- **FR-030** : vérifier aussi le suffixe dirty sur fichier suivi modifié ET fichier non suivi,
+  les chemins réseau HTTP/erreur/annulation, et les réglages facultatifs/éléments des tableaux.
+
+Réussite : anciens/nouveaux fichiers Launcher testés (conflit, édition et remise à zéro),
+suite complète verte, CI manuelle relue, licence exacte, release retéléchargée identique,
+identité et santé du runtime installé vérifiées. Aucun secret ni preuve privée republié.

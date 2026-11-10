@@ -1,5 +1,16 @@
 # Recettes - 155 consolidation du projet
 
+## Contrat actif — décision utilisateur du 10 novembre 2026
+
+Cette reprise remplace les limites de la préparation conservée ci-dessous. Le travail va
+jusqu'au développement complet, à la correction des constats, puis à la release 0.14.0,
+à son installation et au nettoyage. Les recettes historiques restent une base de travail ;
+le responsable peut corriger leurs défauts après diagnostic. Les contrôles par story restent
+séquentiels. Les commits de code attendent convergence et audit (skill my-specify-all).
+Aucune dépense, aucun compte développeur Apple, aucune CI automatique ni lancement CI.
+Les preuves retirées de la publication sont sauvegardées localement, avec empreintes.
+
+
 Une fiche par tâche de `tasks.md`, dans le même ordre. Lis d'abord `quickstart.md`.
 
 Chaque fiche donne : le but, les étapes avec la commande exacte et le résultat attendu, puis les

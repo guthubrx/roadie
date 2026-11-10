@@ -13,8 +13,11 @@
   "accessibilityTrusted": true,
   "screenRecordingGranted": false,
   "config": { "valid": true, "path": "~/.config/roadies/roadies.toml", "error": null },
-  "socketPath": "~/.roadies/roadied.sock"
+  "socketPath": "~/.roadies/roadied.sock",
+  "buildCommit": "0b7de36b"
 }
 ```
+
+`buildCommit` (ajout de la spec 155) est facultatif : le champ est absent quand le commit du build est inconnu. Un lecteur ancien l'ignore. Le champ `version` reste à 1.
 
 `roadie doctor` considère le daemon arrêté si le pid n'est pas vivant ou si `updatedAt` a plus de 90 s.

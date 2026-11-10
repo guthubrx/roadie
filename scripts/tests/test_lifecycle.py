@@ -323,6 +323,29 @@ class LifecycleTests(unittest.TestCase):
                 self.assertNotIn("active et demarre", result.stdout)
                 self.assertLessEqual(self.state["calls"].count(["sleep", "0.1"]), 30)
 
+    def test_install_marks_tracked_and_untracked_changes_in_build_identity(self):
+        # Vrai dépôt Git, commandes système simulées : aucune installation sur le poste.
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(self.repo), *args], text=True).strip()
+        (self.repo / ".gitignore").write_text("/.build/\n")
+        git("init", "-q")
+        git("add", "--", "scripts", "Sources", "Makefile", ".gitignore")
+        git("commit", "-qm", "test(config): Fixture de version")
+        commit = git("rev-parse", "--short=8", "HEAD")
+        source = self.repo / "Sources/RoadieDaemon/DaemonHealth.swift"
+        original = source.read_text()
+        for mode in ("clean", "tracked", "untracked"):
+            with self.subTest(mode=mode):
+                source.write_text(original + ("// change\n" if mode == "tracked" else ""))
+                extra = self.repo / "new-setting.txt"
+                if mode == "untracked": extra.write_text("new\n")
+                self.state["calls"] = []
+                result = self.run_script("install")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                call = next(c for c in self.state["calls"] if c[0] == "build-app-bundle")
+                self.assertEqual(call[-1], commit + ("-dirty" if mode != "clean" else ""))
+                extra.unlink(missing_ok=True)
+
     def test_install_keeps_the_requested_build_concurrency(self):
         self.env["ROADIE_BUILD_JOBS"] = "2"
         result = self.run_script("install")

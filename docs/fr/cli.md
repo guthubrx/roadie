@@ -24,11 +24,36 @@ Utilisation typique :
 
 - `daemon health` : verifier que le daemon et l'etat sont coherents. Le contrôle `macos-window-settings` signale en avertissement les réglages macOS qui déplacent les fenêtres à la place de Roadie : Stage Manager, juxtaposition en glissant une fenêtre vers un bord de l'écran ou vers la barre des menus, clic sur le fond d'écran pour afficher le bureau. Le message indique où les désactiver dans Réglages Système. Roadie ne modifie jamais ces réglages.
 - `doctor` : rapport complet sur le daemon (en marche ou non), les permissions Accessibilité et Enregistrement d'écran, et la validité de la configuration. Il lit `~/.roadies/daemon-status.json`, que le daemon met à jour régulièrement.
-- `--version` : affiche la version. `roadied --version` fait de même pour le binaire du daemon.
+- `--version` : affiche la version. `roadied --version` affiche aussi le commit du build quand il est connu, par exemple `roadied 0.13.0 (0b7de36b)`. Le même commit figure dans le champ `buildCommit` de `~/.roadies/daemon-status.json`.
 - `state audit` : detecter doublons, references obsoletes ou scopes casses.
 - `state heal` : reparer les incoherences conservatrices, dont les noms de stage en double.
 - `metrics --json` : alimenter un script ou un dashboard.
 - `performance ...` : lire les interactions recentes depuis le journal, sans instrumentation active du daemon.
+
+## Complétion zsh
+
+```bash
+roadie completion zsh
+```
+
+La commande écrit un script de complétion pour zsh. Le script propose les commandes de `roadie` et le premier mot qui suit. Pour l'activer, ajoute cette ligne dans `~/.zshrc`, après `compinit` :
+
+```zsh
+source <(roadie completion zsh)
+```
+
+Le script vient de la table des commandes : une nouvelle commande y apparaît sans autre réglage. Les options comme `--json` ne sont pas proposées.
+
+## Mises à jour
+
+```bash
+roadie update check
+```
+
+La commande demande à GitHub le numéro de la dernière version publiée et le compare à la version installée. Elle ne télécharge rien et n'installe rien. C'est le seul appel réseau de Roadie : il part seulement quand tu lances cette commande. Aucune donnée personnelle n'est envoyée.
+
+- Code 0 : la version installée est à jour, ou une version plus récente existe. Dans ce cas, la commande affiche son numéro et son adresse.
+- Code 1 : la vérification a échoué (pas de réseau, délai de 5 secondes dépassé, réponse inattendue).
 
 ## Fenetres et focus
 

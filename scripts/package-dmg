@@ -5,7 +5,13 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 dist_dir="$repo_root/dist"
 app_name="Roadie"
-app_version="${ROADIE_VERSION:-0.13.0}"
+source_version="$(sed -n 's/.*static let current = "\(.*\)".*/\1/p' "$repo_root/Sources/RoadieDaemon/DaemonHealth.swift")"
+app_version="${ROADIE_VERSION:-${source_version:-0.0.0}}"
+# Commit du build, vide hors d'un dépôt Git ; « -dirty » si un fichier est modifié ou non suivi.
+build_commit="$(git -C "$repo_root" rev-parse --short=8 HEAD 2>/dev/null || true)"
+if [[ -n "$build_commit" ]] && [[ -n "$(git -C "$repo_root" status --porcelain 2>/dev/null)" ]]; then
+  build_commit="$build_commit-dirty"
+fi
 app_bundle="$dist_dir/$app_name.app"
 dmg_path="$dist_dir/$app_name.dmg"
 
@@ -28,7 +34,7 @@ mkdir -p "$dist_dir"
 "$script_dir/with-xcode" swift build --configuration release --product roadie
 bin_dir="$("$script_dir/with-xcode" swift build --show-bin-path --configuration release)"
 
-"$script_dir/build-app-bundle" "$bin_dir/roadied" "$app_bundle" "$app_version"
+"$script_dir/build-app-bundle" "$bin_dir/roadied" "$app_bundle" "$app_version" "$build_commit"
 cp "$bin_dir/roadie" "$app_bundle/Contents/Resources/roadie"
 chmod +x "$app_bundle/Contents/Resources/roadie"
 

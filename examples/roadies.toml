@@ -133,7 +133,7 @@ enabled = true
 
 # EN: Target mode (letters and search). label_font_size: label text size in points, 8 to 48.
 # FR: Mode cible (lettres et recherche). label_font_size : taille du texte des étiquettes en points, de 8 à 48.
-[experimental.target_mode]
+[launcher]
 label_font_size = 13
 
 # EN: Recursive grid. label_font_size: label text size in points, 8 to 48.

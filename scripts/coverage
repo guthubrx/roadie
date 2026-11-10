@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Mesure la couverture des tests et affiche le total. Usage : scripts/coverage (ou make coverage)
+# SwiftPM n'écrit pas son rapport quand un test échoue : le script fusionne lui-même les relevés.
+set -uo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+test_status=0
+"$script_dir/test" --enable-code-coverage --no-parallel || test_status=$?
+
+bin_dir="$("$script_dir/with-xcode" swift build --show-bin-path)"
+shopt -s nullglob
+raw_profiles=("$bin_dir"/codecov/*.profraw)
+if [[ ${#raw_profiles[@]} -eq 0 ]]; then
+  echo "coverage : aucun relevé dans $bin_dir/codecov" >&2
+  exit 1
+fi
+
+profdata="$bin_dir/codecov/default.profdata"
+"$script_dir/with-xcode" xcrun llvm-profdata merge -sparse "${raw_profiles[@]}" -o "$profdata" || exit 1
+
+test_binary="$bin_dir/roadiePackageTests.xctest/Contents/MacOS/roadiePackageTests"
+report="$("$script_dir/with-xcode" xcrun llvm-cov report "$test_binary" \
+  -instr-profile "$profdata" -ignore-filename-regex '(/\.build/|/Tests/)')" || exit 1
+
+# Dernière ligne du rapport : TOTAL, puis régions, fonctions et lignes (total, manquées, pourcentage).
+total="$(printf '%s\n' "$report" | awk '$1 == "TOTAL" { printf "lignes %s | fonctions %s | régions %s", $10, $7, $4 }')"
+if [[ -z "$total" ]]; then
+  echo "coverage : ligne TOTAL absente du rapport" >&2
+  exit 1
+fi
+echo "coverage : $total"
+echo "coverage : données fusionnées dans $profdata"
+if [[ $test_status -ne 0 ]]; then
+  echo "coverage : des tests ont échoué pendant la mesure (code $test_status). Le résultat de « make test » fait foi." >&2
+fi
+exit 0

@@ -24,11 +24,36 @@ Typical use:
 
 - `daemon health`: check daemon and state health. The `macos-window-settings` check warns about macOS settings that move windows instead of Roadie: Stage Manager, tiling by dragging a window to a screen edge or to the menu bar, and clicking the wallpaper to reveal the desktop. The message says where to turn them off in System Settings. Roadie never changes these settings.
 - `doctor`: full report on the daemon (running or not), the Accessibility and Screen Recording permissions, and the validity of the configuration. It reads `~/.roadies/daemon-status.json`, which the daemon updates regularly.
-- `--version`: prints the version. `roadied --version` does the same for the daemon binary.
+- `--version`: prints the version. `roadied --version` also prints the build commit when it is known, for example `roadied 0.13.0 (0b7de36b)`. The same commit is in the `buildCommit` field of `~/.roadies/daemon-status.json`.
 - `state audit`: detect duplicates, stale references, or broken scopes.
 - `state heal`: repair conservative state inconsistencies, including duplicate stage names.
 - `metrics --json`: feed a script or dashboard.
 - `performance ...`: read recent interactions from the event log without active daemon instrumentation.
+
+## Zsh Completion
+
+```bash
+roadie completion zsh
+```
+
+The command writes a completion script for zsh. The script suggests the `roadie` commands and the first word after them. To turn it on, add this line to `~/.zshrc`, after `compinit`:
+
+```zsh
+source <(roadie completion zsh)
+```
+
+The script comes from the command table: a new command appears in it with no other change. Options such as `--json` are not suggested.
+
+## Updates
+
+```bash
+roadie update check
+```
+
+The command asks GitHub for the latest published version and compares it with the installed version. It downloads nothing and installs nothing. It is the only network call Roadie makes: it runs only when you type this command. No personal data is sent.
+
+- Code 0: the installed version is up to date, or a newer version exists. In that case, the command prints its number and its address.
+- Code 1: the check failed (no network, 5-second timeout, unexpected response).
 
 ## Windows And Focus
 

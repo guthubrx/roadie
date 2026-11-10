@@ -39,7 +39,7 @@ struct SettingsServiceTests {
         "com.apple.systempreferences", # commentaire interne
     ]
 
-    [experimental.target_mode]
+    [launcher]
     enabled = true # mode lettres
     label_font_size = 13
     search_hotkey = "command+control+alt+f"
@@ -220,11 +220,20 @@ struct SettingsServiceTests {
         for (id, _, literal) in changes {
             let d = try descriptor(id)
             let old = try #require(ConfigFileEditor.readLiteral(fixture, table: d.tablePath, key: d.key))
-            let header = try #require(before.firstIndex(of: "[\(d.tablePath)]"))
+            let table = d.tablePath == "experimental.target_mode" ? "launcher" : d.tablePath
+            let header = try #require(before.firstIndex(of: "[\(table)]"))
             let index = try #require(before[header...].firstIndex { $0.hasPrefix("\(d.key) = ") })
             expected[index] = before[index].replacingOccurrences(of: "= \(old)", with: "= \(literal)")
         }
-        #expect(try read(config).components(separatedBy: "\n") == expected)
+        let actual = try read(config).components(separatedBy: "\n")
+        if actual != expected {
+            for index in 0..<max(actual.count, expected.count) {
+                let found = index < actual.count ? actual[index] : "<absent>"
+                let wanted = index < expected.count ? expected[index] : "<absent>"
+                if found != wanted { print("SPEC155 ligne \(index): réel=\(String(reflecting: found)) attendu=\(String(reflecting: wanted))") }
+            }
+        }
+        #expect(actual == expected)
         #expect(zip(before, expected).filter { $0 != $1 }.count == changes.count)
     }
 
@@ -233,7 +242,7 @@ struct SettingsServiceTests {
         let (service, config, _) = try makeService(nil, file: "sous-dossier/roadies.toml")
         #expect(service.configText() == "")
         #expect(service.set("target_mode.label_font_size", to: "20") == .applied(old: .double(13), new: .double(20)))
-        #expect(try read(config) == "[experimental.target_mode]\nlabel_font_size = 20.0\n")
+        #expect(try read(config) == "[launcher]\nlabel_font_size = 20.0\n")
         #expect(try extraFiles(config).isEmpty)
         #expect(try mode(config) == 0o644)
     }

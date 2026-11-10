@@ -1,5 +1,16 @@
 # Décisions - 155 Consolidation du projet
 
+## Contrat actif — décision utilisateur du 10 novembre 2026
+
+Cette reprise remplace les limites de la préparation conservée ci-dessous. Le travail va
+jusqu'au développement complet, à la correction des constats, puis à la release 0.14.0,
+à son installation et au nettoyage. Les recettes historiques restent une base de travail ;
+le responsable peut corriger leurs défauts après diagnostic. Les contrôles par story restent
+séquentiels. Les commits de code attendent convergence et audit (skill my-specify-all).
+Aucune dépense, aucun compte développeur Apple, aucune CI automatique ni lancement CI.
+Les preuves retirées de la publication sont sauvegardées localement, avec empreintes.
+
+
 Ce fichier sépare ce qui appartient à l'utilisateur de ce que l'implémenteur exécute.
 
 - **Bloquante** : aucune tâche n'existe tant que l'utilisateur n'a pas choisi.
@@ -97,3 +108,11 @@ signale-le.
 | D17 | Aide partagée pour les lectures d'accessibilité | Deux usages seulement ; la règle du projet demande trois usages réels avant une abstraction. |
 | D18 | Déclaration unique de chaque réglage | Refonte de la configuration (313 réglages) ; US3 pose des gardes à la place. |
 | D19 | Événements `live_tick` et `layout.preparation` | Utilisés par les mesures de performance des sessions 048, 123 et 149. |
+
+## Décisions actées le 10 novembre 2026 (prioritaires)
+
+D1 Apache-2.0. D2 Release 0.14.0 après les développements et corrections.
+D3 Section [launcher] acceptée, compatibilité et priorité par clé précisées dans FR-026.
+D4 Aucun compte développeur ; avertissement macOS accepté ; signature locale conservée.
+D5 CI strictement manuelle, aucun lancement demandé. D8 Retrait des preuves inutiles
+autorisé après archive locale ; images utiles conservées ; historique Git inchangé.

@@ -1,5 +1,16 @@
 # Tasks: 155 - Consolidation du projet
 
+## Contrat actif — décision utilisateur du 10 novembre 2026
+
+Cette reprise remplace les limites de la préparation conservée ci-dessous. Le travail va
+jusqu'au développement complet, à la correction des constats, puis à la release 0.14.0,
+à son installation et au nettoyage. Les recettes historiques restent une base de travail ;
+le responsable peut corriger leurs défauts après diagnostic. Les contrôles par story restent
+séquentiels. Les commits de code attendent convergence et audit (skill my-specify-all).
+Aucune dépense, aucun compte développeur Apple, aucune CI automatique ni lancement CI.
+Les preuves retirées de la publication sont sauvegardées localement, avec empreintes.
+
+
 **Input** : documents de conception dans `specs/155-consolidation-projet/`
 **Prérequis** : `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`, `reuse-audit.md` (statut PASS)
 
@@ -40,7 +51,7 @@ Toutes les commandes se lancent depuis la racine du worktree :
 
 **But** : mesurer l'état de départ. Ces mesures servent de comparaison à la fin.
 
-- [ ] T001 Relever la base de référence dans `specs/155-consolidation-projet/validation/baseline.md` (fiche T001). Résultat : `./scripts/test --no-parallel` rend `exit=0` avec 2523 tests dans 383 suites ; `grep -c "À REMPLIR"` sur le fichier rend `0` ; commit `docs(155): Relever la base de référence`.
+- [x] T001 Relever la base de référence dans `specs/155-consolidation-projet/validation/baseline.md` (fiche T001). Résultat : `./scripts/test --no-parallel` rend `exit=0` avec 2523 tests dans 383 suites ; `grep -c "À REMPLIR"` sur le fichier rend `0` ; commit `docs(155): Relever la base de référence`.
 
 ---
 
@@ -59,10 +70,10 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Implementation for User Story 1
 
-- [ ] T002 [US1] Retirer le chemin personnel de `README.fr.md` (fiche T002). Résultat : `grep -c "/Users/moi" README.md README.fr.md` rend `README.md:0` et `README.fr.md:0`.
-- [ ] T003 [US1] Renommer `docs/decisions/013-native-command-input.md` en `docs/decisions/030-native-command-input.md` par `git mv`, puis corriger son titre (fiche T003). Résultat : `ls docs/decisions | grep -c '^013-'` rend `1` ; la première ligne du fichier renommé est `# 030 - Champ natif dans la boîte de commandes`.
-- [ ] T004 [US1] Retirer `.specify/memory/constitution.md.bak-20260508-143829` du suivi Git et ajouter la règle dans `.gitignore` (fiche T004). Résultat : `git ls-files .specify/memory | grep -c "bak-"` rend `0` ; le fichier existe encore sur le disque.
-- [ ] T005 [US1] Contrôler la story et committer `README.fr.md`, `docs/decisions/030-native-command-input.md`, `.gitignore` (fiche T005). Résultat : commit `docs(155): Nettoyer la documentation publique` ; `git status --short` n'affiche rien.
+- [x] T002 [US1] Retirer le chemin personnel de `README.fr.md` (fiche T002). Résultat : `grep -c "/Users/moi" README.md README.fr.md` rend `README.md:0` et `README.fr.md:0`.
+- [x] T003 [US1] Renommer `docs/decisions/013-native-command-input.md` en `docs/decisions/030-native-command-input.md` par `git mv`, puis corriger son titre (fiche T003). Résultat : `ls docs/decisions | grep -c '^013-'` rend `1` ; la première ligne du fichier renommé est `# 030 - Champ natif dans la boîte de commandes`.
+- [x] T004 [US1] Retirer `.specify/memory/constitution.md.bak-20260508-143829` du suivi Git et ajouter la règle dans `.gitignore` (fiche T004). Résultat : `git ls-files .specify/memory | grep -c "bak-"` rend `0` ; le fichier existe encore sur le disque.
+- [x] T005 [US1] Contrôler la story et committer `README.fr.md`, `docs/decisions/030-native-command-input.md`, `.gitignore` (fiche T005). Résultat : commit `docs(155): Nettoyer la documentation publique` ; `git status --short` n'affiche rien.
 
 **Checkpoint** : la documentation publique est propre. Un commit.
 
@@ -76,16 +87,16 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Tests for User Story 2 (écrits avant le code)
 
-- [ ] T006 [US2] Créer `Tests/RoadieDaemonTests/Spec155BuildIdentityTests.swift` à partir du gabarit (fiche T006). Résultat : `OK T006 : 1 fichier(s) écrit(s).` Ne lance pas les tests : la compilation échoue jusqu'à la fin de T007, c'est attendu.
+- [x] T006 [US2] Créer `Tests/RoadieDaemonTests/Spec155BuildIdentityTests.swift` à partir du gabarit (fiche T006). Résultat : `OK T006 : 1 fichier(s) écrit(s).` Ne lance pas les tests : la compilation échoue jusqu'à la fin de T007, c'est attendu.
 
 ### Implementation for User Story 2
 
-- [ ] T007 [US2] Ajouter `RoadieVersion.buildCommit`, `RoadieVersion.display` et le champ `DaemonStatus.buildCommit` dans `Sources/RoadieDaemon/DaemonHealth.swift` (fiche T007). Résultat : `OK T007 : 1 fichier(s) écrit(s).`
-- [ ] T008 [US2] Afficher le commit dans `roadied --version` dans `Sources/roadied/main.swift` (fiche T008). Résultat : `./scripts/test --no-parallel --filter Spec155BuildIdentityTests` affiche `Test run with 4 tests in 1 suite passed`.
-- [ ] T009 [US2] Accepter un quatrième argument (le commit) dans `scripts/build-app-bundle` et l'écrire dans la clé `RoadieBuildCommit` (fiche T009). Résultat : `bash -n scripts/build-app-bundle; echo "syntaxe=$?"` affiche `syntaxe=0`.
-- [ ] T010 [US2] Transmettre le commit depuis `scripts/install` et `scripts/package-dmg` ; lire la version dans `DaemonHealth.swift` depuis `scripts/package-dmg` (fiche T010). Résultat : `install=0`, `dmg=0` ; `grep -rl '0\.13\.0' Sources scripts` rend une seule ligne, `Sources/RoadieDaemon/DaemonHealth.swift`.
-- [ ] T011 [US2] Documenter le commit du build dans `specs/016-roadie-stabilization/contracts/daemon-status.md`, `docs/fr/cli.md`, `docs/en/cli.md` et `CHANGELOG.md` (fiche T011). Résultat : `OK T011 : 4 fichier(s) écrit(s).`
-- [ ] T012 [US2] Contrôler la story sur un bundle temporaire, lancer la suite complète et committer (fiche T012). Résultat : `roadied 0.13.0 (abc12345)` dans le bundle ; suite `exit=0`, 2527 tests dans 384 suites (le test existant de `roadie --version` y reste vert : FR-008) ; commit `feat(155): Inscrire le commit du build dans la version`. Rien n'est installé.
+- [x] T007 [US2] Ajouter `RoadieVersion.buildCommit`, `RoadieVersion.display` et le champ `DaemonStatus.buildCommit` dans `Sources/RoadieDaemon/DaemonHealth.swift` (fiche T007). Résultat : `OK T007 : 1 fichier(s) écrit(s).`
+- [x] T008 [US2] Afficher le commit dans `roadied --version` dans `Sources/roadied/main.swift` (fiche T008). Résultat : `./scripts/test --no-parallel --filter Spec155BuildIdentityTests` affiche `Test run with 4 tests in 1 suite passed`.
+- [x] T009 [US2] Accepter un quatrième argument (le commit) dans `scripts/build-app-bundle` et l'écrire dans la clé `RoadieBuildCommit` (fiche T009). Résultat : `bash -n scripts/build-app-bundle; echo "syntaxe=$?"` affiche `syntaxe=0`.
+- [x] T010 [US2] Transmettre le commit depuis `scripts/install` et `scripts/package-dmg` ; lire la version dans `DaemonHealth.swift` depuis `scripts/package-dmg` (fiche T010). Résultat : `install=0`, `dmg=0` ; `grep -rl '0\.13\.0' Sources scripts` rend une seule ligne, `Sources/RoadieDaemon/DaemonHealth.swift`.
+- [x] T011 [US2] Documenter le commit du build dans `specs/016-roadie-stabilization/contracts/daemon-status.md`, `docs/fr/cli.md`, `docs/en/cli.md` et `CHANGELOG.md` (fiche T011). Résultat : `OK T011 : 4 fichier(s) écrit(s).`
+- [x] T012 [US2] Contrôler la story sur un bundle temporaire, lancer la suite complète et committer (fiche T012). Résultat : `roadied 0.13.0 (abc12345)` dans le bundle ; suite `exit=0`, 2527 tests dans 384 suites (le test existant de `roadie --version` y reste vert : FR-008) ; commit `feat(155): Inscrire le commit du build dans la version`. Rien n'est installé.
 
 **Checkpoint** : une publication ne change plus qu'un fichier. Un commit.
 
@@ -99,12 +110,12 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] Ajouter l'accesseur `RoadieConfigLoader.knownKeys()` dans `Sources/RoadieCore/Config.swift` (fiche T013). Résultat : `OK T013 : 1 fichier(s) écrit(s).` Si un signal 11 apparaît à la tâche suivante : piège P1.
+- [x] T013 [US3] Ajouter l'accesseur `RoadieConfigLoader.knownKeys()` dans `Sources/RoadieCore/Config.swift` (fiche T013). Résultat : `OK T013 : 1 fichier(s) écrit(s).` Si un signal 11 apparaît à la tâche suivante : piège P1.
 
 ### Tests for User Story 3
 
-- [ ] T014 [US3] Créer `Tests/RoadieDaemonTests/Spec155ConfigGuardTests.swift` à partir du gabarit (fiche T014). Résultat : `./scripts/test --no-parallel --filter Spec155ConfigGuardTests` affiche `Test run with 2 tests in 1 suite passed`.
-- [ ] T015 [US3] Créer `docs/dev/ajouter-un-reglage.md`, lancer la suite complète et committer (fiche T015). Résultat : suite `exit=0`, 2529 tests dans 385 suites ; commit `test(155): Garder les réglages sous contrôle`.
+- [x] T014 [US3] Créer `Tests/RoadieDaemonTests/Spec155ConfigGuardTests.swift` à partir du gabarit (fiche T014). Résultat : `./scripts/test --no-parallel --filter Spec155ConfigGuardTests` affiche `Test run with 2 tests in 1 suite passed`.
+- [x] T015 [US3] Créer `docs/dev/ajouter-un-reglage.md`, lancer la suite complète et committer (fiche T015). Résultat : suite `exit=0`, 2529 tests dans 385 suites ; commit `test(155): Garder les réglages sous contrôle`.
 
 **Checkpoint** : les réglages sont gardés par deux tests. Un commit.
 
@@ -118,9 +129,9 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Implementation for User Story 4
 
-- [ ] T016 [US4] Déplacer le journal d'`AGENTS.md` vers `.specify/memory/sessions/journal.md` avec `specs/155-consolidation-projet/tools/deplacer_journal.py` (fiche T016). Résultat : `lignes_deplacees=366` ; `octets_agents=1916`. Ne lance pas l'outil deux fois : la fiche a un garde `test -e`.
-- [ ] T017 [US4] Ajouter les sections « Journal des sessions », « Tests » et « Pièges connus » dans `AGENTS.md` (fiche T017). Résultat : `OK T017 : 1 fichier(s) écrit(s).` Cette tâche exige T016.
-- [ ] T018 [US4] Contrôler la story et committer `AGENTS.md` et `.specify/memory/sessions/journal.md` (fiche T018). Résultat : `wc -c AGENTS.md` rend moins de 8000 (attendu : environ 3736) ; `grep -c "SPECKIT" AGENTS.md` rend `4` ; commit `docs(155): Alléger les consignes des agents`.
+- [x] T016 [US4] Déplacer le journal d'`AGENTS.md` vers `.specify/memory/sessions/journal.md` avec `specs/155-consolidation-projet/tools/deplacer_journal.py` (fiche T016). Résultat : `lignes_deplacees=366` ; `octets_agents=1916`. Ne lance pas l'outil deux fois : la fiche a un garde `test -e`.
+- [x] T017 [US4] Ajouter les sections « Journal des sessions », « Tests » et « Pièges connus » dans `AGENTS.md` (fiche T017). Résultat : `OK T017 : 1 fichier(s) écrit(s).` Cette tâche exige T016.
+- [x] T018 [US4] Contrôler la story et committer `AGENTS.md` et `.specify/memory/sessions/journal.md` (fiche T018). Résultat : `wc -c AGENTS.md` rend moins de 8000 (attendu : environ 3736) ; `grep -c "SPECKIT" AGENTS.md` rend `4` ; commit `docs(155): Alléger les consignes des agents`.
 
 **Checkpoint** : les consignes sont courtes. Un commit.
 
@@ -134,9 +145,9 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Implementation for User Story 5
 
-- [ ] T019 [US5] Contrôler le type avant la conversion en `AXUIElement` dans `Sources/RoadieDaemon/AppTargetQueryService.swift` (fiche T019). Résultat : `OK T019 : 1 fichier(s) écrit(s).`
-- [ ] T020 [US5] Contrôler le type des valeurs de position et de taille dans `Sources/RoadieDaemon/AppTargetQueryService.swift` (fiche T020). Résultat : `OK T020 : 1 fichier(s) écrit(s).`
-- [ ] T021 [US5] Noter le changement dans `CHANGELOG.md`, lancer la suite complète et committer (fiche T021). Résultat : `grep -c "CFGetTypeID" Sources/RoadieDaemon/AppTargetQueryService.swift` rend `5` ; suite `exit=0`, 2529 tests dans 385 suites ; commit `fix(155): Contrôler le type des réponses d'accessibilité`.
+- [x] T019 [US5] Contrôler le type avant la conversion en `AXUIElement` dans `Sources/RoadieDaemon/AppTargetQueryService.swift` (fiche T019). Résultat : `OK T019 : 1 fichier(s) écrit(s).`
+- [x] T020 [US5] Contrôler le type des valeurs de position et de taille dans `Sources/RoadieDaemon/AppTargetQueryService.swift` (fiche T020). Résultat : `OK T020 : 1 fichier(s) écrit(s).`
+- [x] T021 [US5] Noter le changement dans `CHANGELOG.md`, lancer la suite complète et committer (fiche T021). Résultat : `grep -c "CFGetTypeID" Sources/RoadieDaemon/AppTargetQueryService.swift` rend `5` ; suite `exit=0`, 2529 tests dans 385 suites ; commit `fix(155): Contrôler le type des réponses d'accessibilité`.
 
 **Checkpoint** : deux conversions forcées sont gardées. Un commit.
 
@@ -150,9 +161,9 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Implementation for User Story 6
 
-- [ ] T022 [US6] Retirer l'événement `drag.real_press` de `Sources/RoadieDaemon/DropPreviewController.swift` (fiche T022). Résultat : `OK T022 : 1 fichier(s) écrit(s).`
-- [ ] T023 [US6] Retirer l'événement `drag.real_router_press` de `Sources/RoadieDaemon/RailController.swift` (fiche T023). Résultat : `OK T023 : 1 fichier(s) écrit(s).`
-- [ ] T024 [US6] Noter le changement dans `CHANGELOG.md`, lancer la suite complète et committer (fiche T024). Résultat : la recherche des deux événements dans `Sources/` n'affiche aucune ligne, puis `rc=1` ; suite `exit=0`, 2529 tests dans 385 suites ; commit `fix(155): Ne plus journaliser la position des clics`.
+- [x] T022 [US6] Retirer l'événement `drag.real_press` de `Sources/RoadieDaemon/DropPreviewController.swift` (fiche T022). Résultat : `OK T022 : 1 fichier(s) écrit(s).`
+- [x] T023 [US6] Retirer l'événement `drag.real_router_press` de `Sources/RoadieDaemon/RailController.swift` (fiche T023). Résultat : `OK T023 : 1 fichier(s) écrit(s).`
+- [x] T024 [US6] Noter le changement dans `CHANGELOG.md`, lancer la suite complète et committer (fiche T024). Résultat : la recherche des deux événements dans `Sources/` n'affiche aucune ligne, puis `rc=1` ; suite `exit=0`, 2529 tests dans 385 suites ; commit `fix(155): Ne plus journaliser la position des clics`.
 
 **Checkpoint** : le journal ne contient plus la position des clics. Un commit.
 
@@ -166,15 +177,15 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Tests for User Story 7 (écrits avant le code)
 
-- [ ] T025 [US7] Créer `Tests/RoadieDaemonTests/Spec155ShellCompletionTests.swift` à partir du gabarit (fiche T025). Résultat : `OK T025 : 1 fichier(s) écrit(s).` Ne lance pas les tests : la compilation échoue jusqu'à la fin de T027, c'est attendu.
+- [x] T025 [US7] Créer `Tests/RoadieDaemonTests/Spec155ShellCompletionTests.swift` à partir du gabarit (fiche T025). Résultat : `OK T025 : 1 fichier(s) écrit(s).` Ne lance pas les tests : la compilation échoue jusqu'à la fin de T027, c'est attendu.
 
 ### Implementation for User Story 7
 
-- [ ] T026 [US7] Créer `Sources/RoadieDaemon/ShellCompletion.swift` à partir du gabarit (fiche T026). Résultat : `OK T026 : 1 fichier(s) écrit(s).`
-- [ ] T027 [US7] Brancher la commande `completion` dans `Sources/RoadieDaemon/CLICommandRouter.swift` (fiche T027). Résultat : `./scripts/test --no-parallel --filter Spec155ShellCompletionTests` affiche `Test run with 4 tests in 1 suite passed`.
-- [ ] T028 [US7] Créer `scripts/coverage`, ajouter la cible `coverage` au `Makefile` et les fichiers de mesure à `.gitignore` (fiche T028). Résultat : `syntaxe=0`, `executable=0`, puis `1` pour `grep -c '^coverage:' Makefile`. Cette tâche exige T004.
-- [ ] T029 [US7] Documenter la complétion et la couverture dans `README.md`, `README.fr.md`, `docs/fr/cli.md`, `docs/en/cli.md` et `CHANGELOG.md` (fiche T029). Résultat : `OK T029 : 5 fichier(s) écrit(s).`
-- [ ] T030 [US7] Contrôler la complétion, lancer la suite complète puis `make coverage`, et committer (fiche T030). Résultat : `zsh=0` et `bash=64` ; suite `exit=0`, 2533 tests dans 386 suites ; `coverage=0` avec une ligne `coverage : lignes …` ; commit `feat(155): Ajouter la complétion zsh et la mesure de couverture`. Supprime `default.profraw` s'il existe (piège P4).
+- [x] T026 [US7] Créer `Sources/RoadieDaemon/ShellCompletion.swift` à partir du gabarit (fiche T026). Résultat : `OK T026 : 1 fichier(s) écrit(s).`
+- [x] T027 [US7] Brancher la commande `completion` dans `Sources/RoadieDaemon/CLICommandRouter.swift` (fiche T027). Résultat : `./scripts/test --no-parallel --filter Spec155ShellCompletionTests` affiche `Test run with 4 tests in 1 suite passed`.
+- [x] T028 [US7] Créer `scripts/coverage`, ajouter la cible `coverage` au `Makefile` et les fichiers de mesure à `.gitignore` (fiche T028). Résultat : `syntaxe=0`, `executable=0`, puis `1` pour `grep -c '^coverage:' Makefile`. Cette tâche exige T004.
+- [x] T029 [US7] Documenter la complétion et la couverture dans `README.md`, `README.fr.md`, `docs/fr/cli.md`, `docs/en/cli.md` et `CHANGELOG.md` (fiche T029). Résultat : `OK T029 : 5 fichier(s) écrit(s).`
+- [x] T030 [US7] Contrôler la complétion, lancer la suite complète puis `make coverage`, et committer (fiche T030). Résultat : `zsh=0` et `bash=64` ; suite `exit=0`, 2533 tests dans 386 suites ; `coverage=0` avec une ligne `coverage : lignes …` ; commit `feat(155): Ajouter la complétion zsh et la mesure de couverture`. Supprime `default.profraw` s'il existe (piège P4).
 
 **Checkpoint** : complétion et couverture disponibles. Un commit.
 
@@ -188,8 +199,8 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Implementation for User Story 8
 
-- [ ] T031 [US8] Créer `.github/workflows/tests.yml` à partir du gabarit (fiche T031). Résultat : `OK T031 : 1 fichier(s) écrit(s).`
-- [ ] T032 [US8] Contrôler l'absence de déclencheur automatique et committer `.github/workflows/tests.yml` (fiche T032). Résultat : `1`, puis `0` ; commit `ci(155): Ajouter les tests à la demande sur GitHub`. Ne lance jamais le workflow.
+- [x] T031 [US8] Créer `.github/workflows/tests.yml` à partir du gabarit (fiche T031). Résultat : `OK T031 : 1 fichier(s) écrit(s).`
+- [x] T032 [US8] Contrôler l'absence de déclencheur automatique et committer `.github/workflows/tests.yml` (fiche T032). Résultat : `1`, puis `0` ; commit `ci(155): Ajouter les tests à la demande sur GitHub`. Ne lance jamais le workflow.
 
 **Checkpoint** : workflow présent, jamais lancé. Un commit.
 
@@ -203,8 +214,8 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Implementation for User Story 9
 
-- [ ] T033 [US9] Déplacer la classe vers `Sources/RoadieDaemon/ReplayableSnapshotProvider.swift` avec `specs/155-consolidation-projet/tools/extraire_fournisseur.py` (fiche T033). Résultat : `lignes_deplacees=69` ; `lignes_restantes=4392` ; le contrôle `--check` rend `OK`. Ne lance pas l'outil deux fois : la fiche a un garde `test -e`.
-- [ ] T034 [US9] Lancer la suite complète et committer `Sources/RoadieDaemon/LayoutMaintainer.swift` et `Sources/RoadieDaemon/ReplayableSnapshotProvider.swift` (fiche T034). Résultat : suite `exit=0`, 2533 tests dans 386 suites ; commit `refactor(155): Sortir ReplayableSnapshotProvider de LayoutMaintainer`.
+- [x] T033 [US9] Déplacer la classe vers `Sources/RoadieDaemon/ReplayableSnapshotProvider.swift` avec `specs/155-consolidation-projet/tools/extraire_fournisseur.py` (fiche T033). Résultat : `lignes_deplacees=69` ; `lignes_restantes=4392` ; le contrôle `--check` rend `OK`. Ne lance pas l'outil deux fois : la fiche a un garde `test -e`.
+- [x] T034 [US9] Lancer la suite complète et committer `Sources/RoadieDaemon/LayoutMaintainer.swift` et `Sources/RoadieDaemon/ReplayableSnapshotProvider.swift` (fiche T034). Résultat : suite `exit=0`, 2533 tests dans 386 suites ; commit `refactor(155): Sortir ReplayableSnapshotProvider de LayoutMaintainer`.
 
 **Checkpoint** : le plus gros fichier a 70 lignes de moins. Un commit.
 
@@ -218,15 +229,15 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Decision and Tests for User Story 10 (décision et tests écrits avant le code)
 
-- [ ] T035 [US10] Créer `docs/decisions/031-premier-appel-reseau.md` à partir du gabarit (fiche T035). Résultat : `OK T035 : 1 fichier(s) écrit(s).`
-- [ ] T036 [US10] Créer `Tests/RoadieDaemonTests/Spec155ReleaseCheckTests.swift` à partir du gabarit (fiche T036). Résultat : `OK T036 : 1 fichier(s) écrit(s).` Ne lance pas les tests : la compilation échoue jusqu'à la fin de T037, c'est attendu.
+- [x] T035 [US10] Créer `docs/decisions/031-premier-appel-reseau.md` à partir du gabarit (fiche T035). Résultat : `OK T035 : 1 fichier(s) écrit(s).`
+- [x] T036 [US10] Créer `Tests/RoadieDaemonTests/Spec155ReleaseCheckTests.swift` à partir du gabarit (fiche T036). Résultat : `OK T036 : 1 fichier(s) écrit(s).` Ne lance pas les tests : la compilation échoue jusqu'à la fin de T037, c'est attendu.
 
 ### Implementation for User Story 10
 
-- [ ] T037 [US10] Créer `Sources/RoadieDaemon/ReleaseCheck.swift` à partir du gabarit (fiche T037). Résultat : `OK T037 : 1 fichier(s) écrit(s).`
-- [ ] T038 [US10] Brancher la commande `update check` dans `Sources/RoadieDaemon/CLICommandRouter.swift` (fiche T038). Résultat : `./scripts/test --no-parallel --filter Spec155ReleaseCheckTests` affiche `Test run with 5 tests in 1 suite passed`. Cette tâche exige T027.
-- [ ] T039 [US10] Documenter `roadie update check` dans `docs/fr/cli.md`, `docs/en/cli.md` et `CHANGELOG.md` (fiche T039). Résultat : `OK T039 : 3 fichier(s) écrit(s).`
-- [ ] T040 [US10] Faire un seul appel réel, lancer la suite complète et committer (fiche T040). Résultat : réponse en 6 secondes au plus, `code=0` ou `code=1`, puis `usage=64` ; suite `exit=0`, 2538 tests dans 387 suites ; commit `feat(155): Ajouter roadie update check`.
+- [x] T037 [US10] Créer `Sources/RoadieDaemon/ReleaseCheck.swift` à partir du gabarit (fiche T037). Résultat : `OK T037 : 1 fichier(s) écrit(s).`
+- [x] T038 [US10] Brancher la commande `update check` dans `Sources/RoadieDaemon/CLICommandRouter.swift` (fiche T038). Résultat : `./scripts/test --no-parallel --filter Spec155ReleaseCheckTests` affiche `Test run with 5 tests in 1 suite passed`. Cette tâche exige T027.
+- [x] T039 [US10] Documenter `roadie update check` dans `docs/fr/cli.md`, `docs/en/cli.md` et `CHANGELOG.md` (fiche T039). Résultat : `OK T039 : 3 fichier(s) écrit(s).`
+- [x] T040 [US10] Faire un seul appel réel, lancer la suite complète et committer (fiche T040). Résultat : réponse en 6 secondes au plus, `code=0` ou `code=1`, puis `usage=64` ; suite `exit=0`, 2538 tests dans 387 suites ; commit `feat(155): Ajouter roadie update check`.
 
 **Checkpoint** : la vérification de version existe. Un commit.
 
@@ -240,8 +251,8 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 ### Implementation for User Story 11
 
-- [ ] T041 [US11] Produire `specs/155-consolidation-projet/validation/inventaire-publications.md` avec `specs/155-consolidation-projet/tools/inventaire.py` (fiche T041). Résultat : `OK : 26 image(s) et 21 diaporama(s) listés dans …`. Ne retire et ne modifie aucune image.
-- [ ] T042 [US11] Committer `specs/155-consolidation-projet/validation/inventaire-publications.md` (fiche T042). Résultat : commit `docs(155): Inventorier les images et diaporamas publiés`.
+- [x] T041 [US11] Produire `specs/155-consolidation-projet/validation/inventaire-publications.md` avec `specs/155-consolidation-projet/tools/inventaire.py` (fiche T041). Résultat : `OK : 26 image(s) et 21 diaporama(s) listés dans …`. Ne retire et ne modifie aucune image.
+- [x] T042 [US11] Committer `specs/155-consolidation-projet/validation/inventaire-publications.md` (fiche T042). Résultat : commit `docs(155): Inventorier les images et diaporamas publiés`.
 
 **Checkpoint** : l'inventaire attend la décision de l'utilisateur (`decisions.md` D8). Un commit.
 
@@ -251,9 +262,9 @@ Deux dépendances d'ordre existent entre stories ; elles sont listées dans « D
 
 **But** : contrôle final sur l'état complet, reçu de validation, journal.
 
-- [ ] T043 Relancer la suite complète et les tests des scripts (fiche T043). Résultat : `./scripts/test --no-parallel` rend `exit=0`, 2538 tests dans 387 suites ; `python3 -I -B -m unittest discover -s scripts/tests` rend `Ran 28 tests` puis `OK`.
-- [ ] T044 Créer `specs/155-consolidation-projet/validation.md` à partir du gabarit et y écrire la valeur observée de chaque critère SC-001 à SC-013 et de l'exigence FR-021 (fiche T044). Résultat : `grep -c "À REMPLIR" specs/155-consolidation-projet/validation.md` rend `0`. Une valeur non observée s'écrit « non vérifié » avec la raison.
-- [ ] T045 Ajouter le bilan de la session à la fin de `.specify/memory/sessions/journal.md` et faire le dernier commit (fiche T045). Résultat : commit `docs(155): Consigner la validation de la consolidation` ; `git status --short` n'affiche rien.
+- [x] T043 Relancer la suite complète et les tests des scripts (fiche T043). Résultat : `./scripts/test --no-parallel` rend `exit=0`, 2538 tests dans 387 suites ; `python3 -I -B -m unittest discover -s scripts/tests` rend `Ran 28 tests` puis `OK`.
+- [x] T044 Créer `specs/155-consolidation-projet/validation.md` à partir du gabarit et y écrire la valeur observée de chaque critère SC-001 à SC-013 et de l'exigence FR-021 (fiche T044). Résultat : `grep -c "À REMPLIR" specs/155-consolidation-projet/validation.md` rend `0`. Une valeur non observée s'écrit « non vérifié » avec la raison.
+- [x] T045 Ajouter le bilan de la session à la fin de `.specify/memory/sessions/journal.md` et faire le dernier commit (fiche T045). Résultat : commit `docs(155): Consigner la validation de la consolidation` ; `git status --short` n'affiche rien.
 
 ---
 
@@ -369,3 +380,17 @@ Donne : la dernière tâche cochée, le résultat de T043, le contenu de `valida
 - Les messages de commit sont écrits dans les fiches. Copie-les tels quels.
 - Un échec isolé du test `Spec151ModifierGestureTests.aNewGenerationNeverRestoresAnObsoleteLayout` : piège P3 (relance ce test seul).
 - Décisions en attente de l'utilisateur : `decisions.md`, D1 à D5 et D8. Elles ne bloquent aucune tâche.
+
+## Compléments approuvés — après T045
+
+- [x] T046 [US12] Ajouter LICENSE Apache-2.0 officielle et référence dans README.md/README.fr.md ; vérifier contenu et attribution existante sans nouvelle identité inventée (FR-025).
+- [x] T047 [US13] Écrire ADR 032 et tests Launcher : ancien/nouveau fichier, priorité par clé, valeurs facultatives/tableaux, clés inconnues, édition et remise à zéro sans résurrection (FR-026).
+- [x] T048 [US13] Réutiliser TargetModeConfig, RoadieConfig et ConfigFileEditor pour lire et éditer [launcher], documenter la forme canonique FR/EN et exemple (FR-026).
+- [x] T049 [US10] Compléter tests transport réseau injecté et configuration facultative ; tester dirty suivi/non-suivi sur bundle temporaire (FR-030).
+- [x] T050 [US11] Archiver hors Git avec SHA-256 les anciens diaporamas ; retirer du suivi ceux sans usage produit ; garder images utiles et réparer liens actifs (FR-029).
+- [x] T051 [US12] Préparer version 0.14.0, notes FR/EN et changelog regroupant les sessions depuis 0.13.0 ; documenter autorisation macOS sans compte Apple et vérifier CI strictement manuelle (FR-027/028).
+- [ ] T052 Vérifier convergence, contre-revue, audit applicable, suite complète, scripts et build Release ; consigner résultats et limites.
+- [ ] T053 Intégrer et pousser les seuls fichiers du périmètre, taguer/publier 0.14.0, retélécharger DMG/SHA, installer avec signature conservée et vérifier runtime ; nettoyer candidats sûrs (FR-027).
+
+Les tâches T052/T053 sont des gates du pipeline : le statut Implemented du code exige
+T001–T051 vérifiées ; la clôture totale exige également T052/T053 et leurs preuves.

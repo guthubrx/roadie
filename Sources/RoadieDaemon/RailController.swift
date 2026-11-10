@@ -417,8 +417,6 @@ public final class RailController {
     }
 
     private func handleMouseDown(at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {
-        events.append(RoadieEvent(type: "drag.real_router_press", details: ["x": String(Double(screenPoint.x)),
-            "y": String(Double(screenPoint.y)), "global": String(fromGlobalMonitor)]))
         FrameTransitionRuntime.shared.cancel()
         // Un nouveau clic invalide tout drag precedent reste en suspens.
         pendingDrag = nil

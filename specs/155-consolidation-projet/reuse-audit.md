@@ -135,3 +135,29 @@ Aucun arbitrage ne demande une décision de l'utilisateur.
 - [x] Les regles projet applicables ont ete lues
 - [x] Les specs existantes proches ont ete verifiees
 - [x] Le plan.md a ete refactore ou les divergences sont justifiees
+
+## Reprise et recherche anti-doublon du 10 novembre 2026
+
+Gate renouvelée : PASS. Recherches par nom et responsabilité dans Sources, Tests,
+scripts et documentation ; aucun paquet ajouté.
+
+| Item | Recherche / preuve | Décision |
+|---|---|---|
+| Launcher | RoadieConfig, TargetModeConfig, ConfigFileEditor ; Config.swift:835, ConfigFileEditor.swift:17 ; aucun type LauncherConfig existant | REUTILISER les modèles et éditeur, sans structure doublée |
+| Transport de vérification | ReleaseCheck du gabarit, URLSession absent des sources de base | REUTILISER ReleaseCheck, injecter URLSession pour test HTTP local |
+| Licence | git ls-files LICENSE* sans résultat ; auteur depuis Git, texte officiel Apache | CRÉER LICENSE requis par D1 |
+| Tests de reprise | suites Spec155 existantes préparées ; ConfigFileEditorTests existante | ÉTENDRE ces suites et ajouter suite Launcher dans les tests du même module |
+| Release | scripts/package-dmg, scripts/install et reçu specs/141-release-0130/validation.md | REUTILISER procédure et signature |
+| Nettoyage preuves | tools/inventaire.py et preuves-corrections suivies | REUTILISER inventaire et Git ; archive locale hors suivi avant retrait |
+
+Arbitrage : garder TargetModeConfig interne pour éviter une migration de tous ses
+consommateurs ; [launcher] est le chemin public canonique. Priorité explicite par clé.
+
+Complément licence : recherche LICENSE/COPYING et notices dans le dépôt et TOMLKit.
+Aucun fichier de licence produit ni notice tiers n'existe. CRÉER LICENSE officielle et
+THIRD_PARTY_NOTICES pour les notices de TOMLKit/toml++ liées au binaire ; réutiliser
+build-app-bundle pour les embarquer. Aucun nouveau service ni dépendance.
+
+T048 : initialiseur partagé à deux chemins de décodage justifié par compatibilité TOMLKit
+(superDecoder non implémenté). Réutilisation nestedContainer/KeyedDecodingContainer et
+decodeBarKeys existant ; pas de nouveau décodeur ni de structure de configuration.

@@ -1,5 +1,16 @@
 # Implementation Plan: Consolidation du projet Roadie
 
+## Contrat actif — décision utilisateur du 10 novembre 2026
+
+Cette reprise remplace les limites de la préparation conservée ci-dessous. Le travail va
+jusqu'au développement complet, à la correction des constats, puis à la release 0.14.0,
+à son installation et au nettoyage. Les recettes historiques restent une base de travail ;
+le responsable peut corriger leurs défauts après diagnostic. Les contrôles par story restent
+séquentiels. Les commits de code attendent convergence et audit (skill my-specify-all).
+Aucune dépense, aucun compte développeur Apple, aucune CI automatique ni lancement CI.
+Les preuves retirées de la publication sont sauvegardées localement, avec empreintes.
+
+
 **Branch**: `155-consolidation-projet` | **Date**: 2026-11-10 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `specs/155-consolidation-projet/spec.md`
 
@@ -216,3 +227,19 @@ dans `Tests/RoadieDaemonTests/`.
 | `ResultBox` marqué `@unchecked Sendable` (US10) | Attente synchrone d'une réponse `URLSession` dans une commande ; l'accès est protégé par un verrou | `async/await` : `CLICommandRouter.dispatch` est synchrone ; le rendre asynchrone toucherait 79 commandes |
 | Lecture directe d'`Info.plist` au lieu de `Bundle.main` | `Bundle.main` rend `nil` quand le binaire est lancé par un lien symbolique (constaté) | `Bundle.main.object(forInfoDictionaryKey:)` : ne fonctionne pas dans le cas réel d'installation |
 | Champ `buildCommit` ajouté à un contrat existant (spec 016) | FR-007 : le commit doit être lisible sans lancer de commande | Fichier séparé : un second fichier d'état à garder cohérent |
+
+## Plan de reprise du 10 novembre
+
+Réutiliser TargetModeConfig pour [launcher], avec décodage sur les valeurs héritées
+plutôt que nouvelle structure dupliquée. Réutiliser ConfigFileEditor pour écriture ciblée
+et lecture des valeurs effectives. L'ancien modèle interne reste stable pour les consommateurs.
+Le nouveau chemin l'emporte par clé ; édition/reset suppriment l'ancienne valeur concernée.
+ADR 032 documente ce choix. Tests avant migration. Aucun nouveau paquet.
+Transport URLSession injectable dans ReleaseCheck pour tests locaux sans réseau.
+Licence : texte officiel Apache. Retrait des anciens diaporamas après archive locale
+SHA-256, sans réécriture Git. Reprendre scripts/install et scripts/package-dmg pour release.
+
+Ajustement testé lors de T048 : TOMLKit ne fournit pas superDecoder ; les conteneurs
+nestedContainer sont passés au même initialiseur de réglages. Aucun wrapper Decoder.
+La migration de Paramètres est par clé, scalaires et listes éditables existants.
+Les tableaux de recherches web restent lisibles dans les deux formes sans nouvel éditeur.

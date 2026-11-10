@@ -14,8 +14,8 @@ les applications d'un projet dans une stage, retrouve-les dans le rail et passe 
 l'autre sur chaque écran. Tape quelques lettres pour ouvrir une application, une fenêtre, un fichier
 ou une page web, et choisis où elle s'ouvre. Tes workflows d'Alfred y tournent aussi, sans Powerpack.
 
-**[Télécharger Roadie 0.13.0](https://github.com/guthubrx/roadie/releases/tag/v0.13.0)** ·
-[Découvrir les nouveautés](docs/releases/v0.13.0.md) · [Guide d'installation](#installation-manuelle)
+**[Télécharger Roadie 0.14.0](https://github.com/guthubrx/roadie/releases/tag/v0.14.0)** ·
+[Découvrir les nouveautés](docs/releases/v0.14.0.md) · [Guide d'installation](#installation-manuelle)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">
@@ -287,9 +287,9 @@ Cette cible masque la mise en place macOS habituelle :
 
 - build `roadie` et `roadied` en mode release ;
 - installe le daemon comme application `~/Applications/Roadie.app`, avec son nom et son icône dans les réglages de confidentialité ;
-- installe la commande dans `/Users/moi/.local/bin`, avec un lien `roadied` vers le daemon de l'application : le service reste indépendant du dossier source ;
+- installe la commande dans `~/.local/bin`, avec un lien `roadied` vers le daemon de l'application : le service reste indépendant du dossier source ;
 - signe l’application et la commande (voir plus bas) ;
-- crée `/Users/moi/Library/LaunchAgents/com.roadie.roadied.plist`, qui lance le daemon depuis l'application ;
+- crée `~/Library/LaunchAgents/com.roadie.roadied.plist`, qui lance le daemon depuis l'application ;
 - démarre le LaunchAgent s’il n’est pas déjà chargé.
 
 Ajoute `~/.local/bin` à ton `PATH` pour pouvoir taper `roadie` dans un terminal.
@@ -327,6 +327,7 @@ Commandes utiles :
 
 ```bash
 make test
+make coverage
 make build
 make install
 make uninstall
@@ -400,22 +401,16 @@ Le DMG contient `Roadie.app` et un raccourci `/Applications`, donc l’installat
 
 Important : ce build est signé ad-hoc, pas signé avec un certificat Apple Developer ID, et pas notarized par Apple. macOS Gatekeeper ne le considérera donc pas comme une app publique entièrement approuvée.
 
-Pour les utilisateurs, le premier lancement attendu est :
+Pour le premier lancement :
 
-1. Glisser `Roadie.app` dans `/Applications`.
-2. L’ouvrir une première fois avec clic droit > Ouvrir, puis confirmer. Roadie démarre comme une app de fond sans menu ni fenêtre.
-3. Si macOS bloque encore l’app, lancer :
+1. Glisser `Roadie.app` dans `/Applications`, puis essayer de l'ouvrir.
+2. Si macOS bloque le lancement, ouvrir **Réglages Système > Confidentialité et sécurité**,
+   cliquer sur **Ouvrir quand même**, puis confirmer l'ouverture de Roadie.
+3. Dans ce même panneau, accorder **Accessibilité** et, pour les aperçus de fenêtres,
+   **Enregistrement d'écran** à `/Applications/Roadie.app`.
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Roadie.app
-```
-
-4. Donner les permissions à `/Applications/Roadie.app` dans Réglages Système > Confidentialité et sécurité :
-
-- Accessibilité.
-- Enregistrement d’écran, si les thumbnails live du nav rail sont souhaitées.
-
-Cette limite est normale tant que l’app n’est pas signée avec un certificat Apple Developer ID et notarized par Apple.
+Roadie reste distribué sans compte développeur Apple et sans notarisation. Cet
+avertissement est attendu. [Procédure Apple](https://support.apple.com/en-us/102445).
 
 Le DMG demande `create-dmg` (`brew install create-dmg`). Le script vérifie ses outils d’abord et s’arrête avec un message clair s’il en manque un.
 
@@ -873,3 +868,9 @@ examples               Config d’exemple, raccourcis skhd et Karabiner
 ## Statut
 
 Le développement se poursuit sur `main`. Les [notes de release](https://github.com/guthubrx/roadie/releases) présentent les nouveautés et les consignes de mise à jour.
+
+## Licence
+
+Roadie est distribué sous [Apache-2.0](LICENSE). Les licences des dépendances sont dans [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+
+Copyright 2026 guthubrx.

@@ -1,4 +1,5 @@
 import Foundation
+import RoadieCore
 
 /// Raisons de refus d'une édition de `roadies.toml`. `line` est numérotée à partir de 1.
 public enum ConfigEditError: Error, Equatable {
@@ -15,11 +16,28 @@ public enum ConfigEditError: Error, Equatable {
 /// seule la ligne visée change ; commentaires, ordre, tables inconnues et fins de ligne restent intacts.
 /// Un automate suit, ligne à ligne, les chaînes (`"…"`, `'…'`, `"""`, `'''`) et les tableaux ouverts.
 public enum ConfigFileEditor {
+    /// Chemin public du lanceur. O(t), t = longueur du chemin ; aucun second catalogue.
+    static func launcherTable(_ table: String, key: String) -> String {
+        guard table == "experimental.target_mode",
+              RoadieConfigLoader.knownKeys()[table]?.contains(key) == true else { return table }
+        return "launcher"
+    }
+
     /// `table` : chemin TOML complet de la table (`experimental.target_grid`), `key` : clé simple.
     /// `value` : LITTÉRAL TOML déjà formaté (`4`, `0.55`, `true`, `"#7AA2F7"`) ; `nil` retire la ligne de la clé
     /// (son commentaire de fin de ligne, s'il existe, reste en ligne de commentaire : FR-024).
     /// Retourne le nouveau texte. Complexité : O(L) sur L = nombre de caractères du fichier.
     public static func edit(_ text: String, table: String, key: String, value: String?) -> Result<String, ConfigEditError> {
+        let canonical = launcherTable(table, key: key)
+        if canonical != table {
+            return editUnmapped(text, table: table, key: key, value: nil).flatMap {
+                editUnmapped($0, table: canonical, key: key, value: value)
+            }
+        }
+        return editUnmapped(text, table: table, key: key, value: value)
+    }
+
+    private static func editUnmapped(_ text: String, table: String, key: String, value: String?) -> Result<String, ConfigEditError> {
         let (found, failure) = locate(text, table: table, key: key)
         if let failure { return .failure(failure) }
         var lines = found.lines
@@ -73,6 +91,10 @@ public enum ConfigFileEditor {
     /// `nil` si la clé est absente, vide, ou si l'édition serait refusée (valeur multi-lignes, clé en double…).
     /// Complexité : O(L) sur L = nombre de caractères du fichier.
     public static func readLiteral(_ text: String, table: String, key: String) -> String? {
+        let canonical = launcherTable(table, key: key)
+        if canonical != table, locate(text, table: canonical, key: key).0.keyIndex != nil {
+            return readLiteral(text, table: canonical, key: key)
+        }
         let (found, failure) = locate(text, table: table, key: key)
         guard failure == nil, let keyIndex = found.keyIndex, !found.valueRange.isEmpty else { return nil }
         var view = String.UnicodeScalarView()
@@ -143,6 +165,8 @@ public enum ConfigFileEditor {
 
     /// Littéral d'une clé dans un index de `literalIndex`, comme `readLiteral`. O(t), t = longueur du chemin.
     public static func literal(in index: [String: String], table: String, key: String) -> String? {
+        let canonical = launcherTable(table, key: key)
+        if canonical != table, let value = index[canonical + "\u{1F}" + key] { return value }
         let path = (table.isEmpty ? [] : segments(Array(table.unicodeScalars)[...])) + [key]
         return index[path.joined(separator: "\u{1F}")]
     }
@@ -151,6 +175,10 @@ public enum ConfigFileEditor {
     /// commentaires et lignes vides retirés, lignes ramenées sur une seule (`["a", "b"]`).
     /// `nil` si la clé est absente, vide ou illisible. Complexité : O(L) sur L = nombre de caractères du fichier.
     public static func readRawValue(_ text: String, table: String, key: String) -> String? {
+        let canonical = launcherTable(table, key: key)
+        if canonical != table, locate(text, table: canonical, key: key).0.keyIndex != nil {
+            return readRawValue(text, table: canonical, key: key)
+        }
         let (found, failure) = locate(text, table: table, key: key)
         guard let keyIndex = found.keyIndex, let keyEnd = found.keyEnd, !found.valueRange.isEmpty else { return nil }
         // Seuls les refus propres à la forme de cette valeur sont tolérés.
@@ -449,6 +477,16 @@ extension ConfigFileEditor {
     }
     /// Remplace une valeur structurée en conservant tous ses commentaires, même sur plusieurs lignes.
     static func editStructuredValue(_ text: String, table: String, key: String, value: String?) -> Result<String, ConfigEditError> {
+        let canonical = launcherTable(table, key: key)
+        if canonical != table {
+            return editStructuredUnmapped(text, table: table, key: key, value: nil).flatMap {
+                editStructuredUnmapped($0, table: canonical, key: key, value: value)
+            }
+        }
+        return editStructuredUnmapped(text, table: table, key: key, value: value)
+    }
+
+    private static func editStructuredUnmapped(_ text: String, table: String, key: String, value: String?) -> Result<String, ConfigEditError> {
         let (found, failure) = locate(text, table: table, key: key)
         if let failure {
             switch failure {
@@ -456,7 +494,7 @@ extension ConfigFileEditor {
             default: return .failure(failure)
             }
         }
-        guard let index = found.keyIndex else { return edit(text, table: table, key: key, value: value) }
+        guard let index = found.keyIndex else { return editUnmapped(text, table: table, key: key, value: value) }
         guard let end = found.keyEnd else { return .failure(.ambiguousInsertion) }
         var lines = found.lines
         let eol = lines.first(where: { !$0.end.isEmpty })?.end ?? "\n"

@@ -1009,7 +1009,8 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     private static func copyElementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
-              let value
+              let value,
+              CFGetTypeID(value) == AXUIElementGetTypeID()
         else { return nil }
         return (value as! AXUIElement)
     }
@@ -1075,7 +1076,9 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionRef) == .success,
               AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef) == .success,
               let positionValue = positionRef,
-              let sizeValue = sizeRef
+              let sizeValue = sizeRef,
+              CFGetTypeID(positionValue) == AXValueGetTypeID(),
+              CFGetTypeID(sizeValue) == AXValueGetTypeID()
         else { return nil }
 
         var point = CGPoint.zero

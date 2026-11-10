@@ -14,8 +14,8 @@ Group a project's apps in a stage, find them in the side rail and switch desktop
 Type a few letters to open an app, a window, a file or a web page, and choose where it opens. Your
 Alfred workflows run there too, without the Powerpack.
 
-**[Download Roadie 0.13.0](https://github.com/guthubrx/roadie/releases/tag/v0.13.0)** ·
-[What's new](docs/releases/v0.13.0.en.md) · [Installation guide](#manual-installation)
+**[Download Roadie 0.14.0](https://github.com/guthubrx/roadie/releases/tag/v0.14.0)** ·
+[What's new](docs/releases/v0.14.0.en.md) · [Installation guide](#manual-installation)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie workspaces across multiple displays" width="100%">
@@ -316,6 +316,7 @@ Useful commands:
 
 ```bash
 make test
+make coverage
 make build
 make install
 make uninstall
@@ -389,22 +390,16 @@ The DMG contains `Roadie.app` and an `/Applications` shortcut, so installation i
 
 Important: this build is ad hoc signed, not Developer ID signed, and not notarized. That means macOS Gatekeeper will not treat it like a fully trusted public app.
 
-For users, the expected first-run flow is:
+For the first launch:
 
-1. Drag `Roadie.app` to `/Applications`.
-2. Open it once with right click > Open, then confirm. Roadie starts as a background menu-less app.
-3. If macOS still blocks it, run:
+1. Drag `Roadie.app` to `/Applications`, then try to open it.
+2. If macOS blocks the launch, go to **System Settings > Privacy & Security**,
+   select **Open Anyway**, then confirm that you want to open Roadie.
+3. In the same settings panel, grant **Accessibility** and, for window previews,
+   **Screen Recording** to `/Applications/Roadie.app`.
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Roadie.app
-```
-
-4. Grant permissions to `/Applications/Roadie.app` in System Settings > Privacy & Security:
-
-- Accessibility.
-- Screen Recording, if live nav rail thumbnails are wanted.
-
-This limitation is normal until the app is signed with an Apple Developer ID certificate and notarized by Apple.
+Roadie remains distributed without an Apple developer account or notarization. This
+warning is expected. [Apple instructions](https://support.apple.com/en-us/102445).
 
 The DMG needs `create-dmg` (`brew install create-dmg`). The script checks its tools first and stops with a clear message if one is missing.
 
@@ -868,3 +863,9 @@ examples               Example config, skhd and Karabiner shortcuts
 ## Status
 
 Development continues on `main`. Follow the [release notes](https://github.com/guthubrx/roadie/releases) for new features and update instructions.
+
+## License
+
+Roadie is licensed under [Apache-2.0](LICENSE). Dependency notices are in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+
+Copyright 2026 guthubrx.

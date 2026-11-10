@@ -1,0 +1,1006 @@
+{
+  "meta": {
+    "protocol": "15.0.0",
+    "release_blocked": false,
+    "decision": "pass"
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "findings": [
+    {
+      "rule_id": "github-actions.mutable-checkout-reference",
+      "file": "specs/155-consolidation-projet/gabarits/tests.yml",
+      "line": 16,
+      "symbol": "US8.T031.template",
+      "instance": "checkout-template-mobile-ref",
+      "category": "security",
+      "title": "GitHub Actions step uses a mutable tag or branch reference. Tags and branch names can be silently repointed by the action owner, enabling supply-chain attacks — as seen in the trivy-action and kics-github-action compromises. Pin the reference to a full 40-character commit SHA instead, e.g. `uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608`.",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "status": "fixed",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T152807031975Z/stdout.json",
+          "sha256": "cc1800b039de6de5966caab3e55bcb8271db92cbc0f290bcf2a2b7d7c99a1560"
+        }
+      ],
+      "rationale": "Gabarit de recette avec tag mobile ; workflow réel déjà épinglé. Gabarit et recette alignés sur le même SHA vérifié.",
+      "remediation": "Référence checkout épinglée au SHA complet dans le gabarit et la recette.",
+      "fix_validation": {
+        "status": "done",
+        "rationale": "Semgrep révision 1 terminé sans candidat et lecture des deux YAML et de la recette.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variants-ci.md",
+            "sha256": "a042b0bf7abd0c3eaed61933a66a21ea27d62449ff3d7facc5e8a84e0e3083fc"
+          },
+          {
+            "kind": "source",
+            "path": "specs/155-consolidation-projet/gabarits/tests.yml",
+            "line": 16,
+            "sha256": "8480dd1054b6f169c8334bdb1c4a984914cc81f71fa00ebc93d6d818ecc637e9"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Workflow réel, gabarit et recette relus ; aucune autre référence checkout mobile.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/variants-ci.md",
+            "sha256": "a042b0bf7abd0c3eaed61933a66a21ea27d62449ff3d7facc5e8a84e0e3083fc"
+          }
+        ]
+      },
+      "fingerprint": "0e95e6f75ebd4c5eb23a"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 87,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Sources/RoadieAX/WindowKeyFocus.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "e4d6229997ab3a9cbe8e"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 88,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "993aca314f1268ce2457"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 89,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Sources/RoadieAX/WindowTitleDragAccess.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "2a7806115c53dba1e732"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 318,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "b39cd68a4e58034f8678"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 479,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "2332686cf392e0b73370"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map-final.json",
+      "line": 511,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "90703f0962c66952d4beaee04bf7b0ed0be72f41",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "a8f8e421ece500496d7d"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 87,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Sources/RoadieAX/WindowKeyFocus.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "0311a68ab585f701597c"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 88,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "7b210804f9350d7d1440"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 89,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Sources/RoadieAX/WindowTitleDragAccess.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "3645bdadf2b267ed72d3"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 318,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "d8b5506b5949dc10010c"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 479,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "a6021ecc62481641be02"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-transfert145-01/notes/scanner-snapshot-map.json",
+      "line": 511,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "edd99a41b228ad35f41079dddc5860401a6c1441",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "46a2788ad1a2b672228d"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 90,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Sources/RoadieAX/WindowKeyFocus.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "740f5b0b6f6a3238dd02"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 91,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Sources/RoadieAX/WindowSwitcherWindowAccess.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "a14b57139fec97d8ebe0"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 92,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Sources/RoadieAX/WindowTitleDragAccess.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "c3cfce1b5d79d4198017"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 321,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Tests/RoadieAXTests/Spec098WindowKeyFocusTests.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "a4165569cb7a742ce4c4"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 482,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Tests/RoadieDaemonTests/Spec075KeysTests.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "db305b4e4682dd3abc8a"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "audits/2026-10-31/session-2026-10-31-effets144-01/notes/scanner-snapshot-map.json",
+      "line": 514,
+      "symbol": "file-sha256-map",
+      "instance": "source-file-sha256:Tests/RoadieDaemonTests/Spec100DeadKeyTests.swift",
+      "category": "security",
+      "title": "Empreinte SHA-256 de fichier source, pas un identifiant d’accès",
+      "severity": "HIGH",
+      "confidence": "high",
+      "status": "refuted",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "runs/20261110T153134884181Z/raw.json",
+          "sha256": "e40f0de4f89ab28cfbdfef88dc7d77b94f69d0574b8fcd6be36abc32e138a2bf"
+        },
+        {
+          "kind": "artifact",
+          "path": "notes/history-sha-refutation.md",
+          "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+        }
+      ],
+      "rationale": "Entrée JSON de 64 caractères hexadécimaux ; SHA256(git show COMMIT:fichier nommé) égale exactement la valeur signalée. Vérification individuelle des 18 entrées.",
+      "remediation": "Aucune révocation ni modification de règle : faux positif démontré par les octets de chaque fichier dans le commit d’origine.",
+      "historical_commit": "fe63993caa507b9a9e8f96b824a344850d485b4d",
+      "counter_audit": {
+        "reviewer": "Relecture locale déterministe du responsable",
+        "independent": false,
+        "verdict": "refuted",
+        "rationale": "Même responsable, contre-preuve mathématique sur les fichiers historiques ; aucune revue distante de ces 18 entrées prétendue.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "variants": {
+        "status": "done",
+        "rationale": "Les 18 alertes de tout l’historique ont été vérifiées, même cause ; aucun autre candidat du scan.",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "notes/history-sha-refutation.md",
+            "sha256": "eae9285677d7195db3ae3b2767bb534a108b7dc14213cad4b9307f73d10205f8"
+          }
+        ]
+      },
+      "fingerprint": "04a021e30000d808538b"
+    }
+  ],
+  "suppressed": []
+}

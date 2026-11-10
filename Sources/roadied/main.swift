@@ -649,7 +649,7 @@ case "help", "-h", "--help":
     printUsage()
     exit(0)
 case "--version", "version":
-    print("roadied \(RoadieVersion.current)")
+    print("roadied \(RoadieVersion.display())")
     exit(0)
 default:
     printUsage()

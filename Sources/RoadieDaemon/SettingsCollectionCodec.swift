@@ -5,6 +5,8 @@ import TOMLKit
 /// Lecture sémantique avec TOMLKit ; l'écriture conserve séparément le texte source.
 enum SettingsCollectionCodec {
     static func node(_ root: TOMLTable, path: [String]) -> (any TOMLValueConvertible)? {
+        if path.starts(with: ["experimental", "target_mode"]),
+           let value = node(root, path: ["launcher"] + path.dropFirst(2)) { return value }
         var current: (any TOMLValueConvertible)? = root
         for key in path { current = current?.table?[key] }
         return current

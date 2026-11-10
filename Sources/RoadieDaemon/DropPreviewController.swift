@@ -661,10 +661,6 @@ final class WindowDragReorderController {
         }
         if WindowDragNativeRelease.matches(event) { return false }
         if type == .leftMouseDown {
-            let pressDetails = ["hadPending": String(pending != nil), "x": String(Double(event.location.x)),
-                "y": String(Double(event.location.y)), "observedAt": String(ProcessInfo.processInfo.systemUptime)]
-            let events = events
-            Task { @MainActor in events.append(RoadieEvent(type: "drag.real_press", details: pressDetails)) }
             pointerSequence &+= 1
             dragDeliveryScheduled = false; queuedDragPoint = nil
             userInput.setCapturedPointerHeld(false)

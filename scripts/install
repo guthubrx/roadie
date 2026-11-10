@@ -96,7 +96,13 @@ install_app() {
   local tmp_bundle="$app_bundle.tmp"
   local version
   version="$(sed -n 's/.*static let current = "\(.*\)".*/\1/p' "$script_dir/../Sources/RoadieDaemon/DaemonHealth.swift")"
-  "$script_dir/build-app-bundle" "$build_roadied" "$tmp_bundle" "${version:-0.0.0}"
+  # Commit du build, vide hors d'un dépôt Git ; « -dirty » si un fichier est modifié ou non suivi.
+  local build_commit
+  build_commit="$(git -C "$script_dir/.." rev-parse --short=8 HEAD 2>/dev/null || true)"
+  if [[ -n "$build_commit" ]] && [[ -n "$(git -C "$script_dir/.." status --porcelain 2>/dev/null)" ]]; then
+    build_commit="$build_commit-dirty"
+  fi
+  "$script_dir/build-app-bundle" "$build_roadied" "$tmp_bundle" "${version:-0.0.0}" "$build_commit"
   if [[ -n "$codesign_identity" ]]; then
     codesign --force --sign "$codesign_identity" "$tmp_bundle"
   else

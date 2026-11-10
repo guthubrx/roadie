@@ -275,3 +275,25 @@ Tous les essais datent du 10 novembre 2026. Ils partent du commit `0b7de36b`.
 - La feature ne touche ni agent IA, ni donnée personnelle nouvelle. US6 retire une
   donnée d'usage (positions des clics). US10 ajoute un appel sortant à la demande, sans
   donnée de l'utilisateur dans la requête.
+
+## Reprise — décisions techniques
+
+[launcher] réutilise TargetModeConfig ; décodage de chaque clé sur les valeurs anciennes,
+éditeur ciblé canonique ; aucun réencodage global ni type de réglages en double.
+Sources officielles consultées le 10 novembre : Apache LICENSE-2.0.txt et Apple
+https://support.apple.com/en-us/102445 (Réglages Système > Confidentialité et sécurité >
+Ouvrir quand même après une première tentative). Aucun compte payant créé.
+
+Vérification documentaire tests : swiftlang/swift-testing (README officiel) confirme
+les traits de suite et les tests paramétrés, sans nouvelle dépendance. API URLProtocol
+Apple consultée ; rendu Markdown indisponible dans le navigateur de recherche.
+La qualification repose donc sur compilation Swift et test local du vrai URLSession.
+
+Compatibilité TOMLKit vérifiée : superDecoder(forKey:) appelle fatalError dans
+KeyedDecodingContainerProtocol.swift:297. Premier essai Launcher arrêté sur ce chemin.
+Correction : réutiliser nestedContainer, implémenté aux lignes 241–265, et passer les
+conteneurs au même initialiseur TargetModeConfig. Aucun adaptateur Decoder ajouté.
+
+Test transport : le protocole bloqué déclenche réellement URLError.timedOut (-1001)
+avant la garde externe. L'assertion accepte cette erreur native ou la garde timeout ;
+la durée bornée et stopLoading restent exigés. Ce constat provient du payload réel.

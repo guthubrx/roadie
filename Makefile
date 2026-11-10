@@ -1,7 +1,10 @@
-.PHONY: test build install uninstall permissions displays windows snapshot state plan apply maintain dev-start stop restart status logs doctor self-test events config dmg package-dmg clean
+.PHONY: test build install uninstall permissions displays windows snapshot state plan apply maintain dev-start stop restart status logs doctor self-test events config dmg package-dmg clean coverage
 
 test:
 	./scripts/test
+
+coverage:
+	./scripts/coverage
 
 build:
 	./scripts/with-xcode swift build

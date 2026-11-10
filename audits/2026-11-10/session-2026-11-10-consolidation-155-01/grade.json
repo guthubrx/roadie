@@ -1,0 +1,28 @@
+{
+  "protocol": "15.0.0",
+  "grade": "A",
+  "score": 100,
+  "date": "2026-11-10",
+  "spec": "specs/155-consolidation-projet/spec.md",
+  "scope": "Code de la consolidation 155, configuration Launcher, outils et préparation de 0.14.0 ; opérations de publication et activation contrôlées séparément à la livraison",
+  "decision": "pass",
+  "release_blocked": false,
+  "coverage_percent": 100.0,
+  "controls_verified": 14,
+  "controls_applicable": 14,
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "candidates": 0,
+    "suppressed": 0
+  },
+  "limits": [],
+  "source_drift": [],
+  "input_sha256": "ca3e30b7b957935932e8c7d342a3583ce01f463d4fd66381b499ac5c90fd9993",
+  "manifest_sha256": "d0282b785f518154badb2ee1197f10d18ad62c7bf6b226414ef1d7e63a5f2ccf",
+  "policy_sha256": "88132df4e2ca463f2b8f303c5163527afcc650d3292350e3ffa49a4744b79446"
+}

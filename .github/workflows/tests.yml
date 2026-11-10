@@ -1,0 +1,22 @@
+# Tests de Roadie sur une machine GitHub. Déclenchement manuel seulement :
+# onglet Actions > Tests > Run workflow. Aucun push ni pull request ne le lance.
+name: Tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Version de Swift
+        run: swift --version
+      - name: Tests Swift
+        run: ./scripts/test --no-parallel
+      - name: Tests des scripts
+        run: python3 -I -B -m unittest discover -s scripts/tests

@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Construit Roadie.app (sans signature) autour d'un binaire roadied déjà compilé.
-# Usage : scripts/build-app-bundle <binaire-roadied> <chemin/Roadie.app> <version>
+# Usage : scripts/build-app-bundle <binaire-roadied> <chemin/Roadie.app> <version> [commit]
+# Le commit, facultatif, est écrit dans Info.plist (clé RoadieBuildCommit).
 # Partagé par `make install` et `make dmg`. Une application avec identifiant et icône
 # apparaît sous le nom « Roadie » dans les réglages de confidentialité de macOS.
 set -euo pipefail
 
-if [[ $# -ne 3 ]]; then
-  echo "Usage : $0 <binaire-roadied> <chemin/Roadie.app> <version>" >&2
+if [[ $# -lt 3 || $# -gt 4 ]]; then
+  echo "Usage : $0 <binaire-roadied> <chemin/Roadie.app> <version> [commit]" >&2
   exit 64
 fi
 roadied_binary="$1"
 app_bundle="$2"
 app_version="$3"
+build_commit="${4:-}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 icon_path="$script_dir/../docs/assets/roadie-logo.png"
@@ -25,6 +27,10 @@ mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources" "$iconset
 
 cp "$roadied_binary" "$app_bundle/Contents/MacOS/roadied"
 chmod +x "$app_bundle/Contents/MacOS/roadied"
+
+# Licences livrées avec les binaires, y compris les dépendances liées.
+cp "$script_dir/../LICENSE" "$app_bundle/Contents/Resources/LICENSE"
+cp "$script_dir/../THIRD_PARTY_NOTICES" "$app_bundle/Contents/Resources/THIRD_PARTY_NOTICES"
 
 for size in 16 32 64 128 256 512; do
   sips -z "$size" "$size" "$icon_path" --out "$iconset/icon_${size}x${size}.png" >/dev/null
@@ -64,3 +70,7 @@ cat > "$app_bundle/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+if [[ -n "$build_commit" ]]; then
+  plutil -insert RoadieBuildCommit -string "$build_commit" "$app_bundle/Contents/Info.plist"
+fi
