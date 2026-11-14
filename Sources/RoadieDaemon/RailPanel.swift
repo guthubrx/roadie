@@ -143,7 +143,7 @@ final class RailPanel: NSPanel {
     private var reorderCopies: [StageID: StageCardView] = [:]
     private var reorderOriginals: [(card: StageCardView, opacity: Float)] = []
 
-    override var canBecomeKey: Bool { true }
+    override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
     init() {

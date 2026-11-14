@@ -184,7 +184,16 @@ public struct RestoreSafetyService {
             }
         }
         var unreachableIDs = Set<UInt32>()
+        var staleIDs = Set<UInt32>()
         for member in Self.hiddenStageMembers(state) where !targetIDs.contains(member.windowID.rawValue) {
+            // L'inventaire de TOUS les Spaces fait foi pour une identité absente du
+            // relevé AX. Un PID encore vivant ne prouve pas que son ancienne fenêtre
+            // existe, ni qu'un identifiant réutilisé lui appartient encore.
+            if liveByID[member.windowID.rawValue] == nil, let inventory = current.existingWindowPIDs,
+               inventory[member.windowID] == nil || member.pid.map({ inventory[member.windowID] != $0 }) == true {
+                staleIDs.insert(member.windowID.rawValue)
+                continue
+            }
             if let live = liveByID[member.windowID.rawValue] {
                 if !Self.isVisible(live.frame, displays: displays) { addTarget(live) }
             } else if nativeMemberIDs.contains(member.windowID.rawValue) {
@@ -242,6 +251,7 @@ public struct RestoreSafetyService {
                 "clamped_hidden": .int(clampedHidden),
                 "unreachable": .int(unreachableIDs.count),
                 "failed_window_ids": .array(failedIDs.sorted().map { .int(Int($0)) }),
+                "stale_window_ids": .array(staleIDs.sorted().map { .int(Int($0)) }),
                 "native_fullscreen_skipped": .int(skippedNativeIDs.count),
                 "unknown_frame": .int(report.missing)
             ]

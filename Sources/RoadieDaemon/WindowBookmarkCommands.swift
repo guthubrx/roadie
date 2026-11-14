@@ -159,20 +159,33 @@ public struct WindowBookmarkCommandService {
             return .persistenceFailure(label, error)
         }
 
+        var rollbackCommands: [ApplyCommand] = []
         func restoreFailure(_ reason: String) -> WindowCommandResult {
             // Ne revenir en arrière que si aucun autre écrivain n'a modifié l'état.
             // Les données d'une commande concurrente ne doivent jamais être écrasées.
             var rolledBack = false
             do {
                 try store.mutateChecked { state in
-                    guard let expected = plan.committedState, state == expected else { return }
+                    guard generation == PlacementGeneration.shared.current,
+                          let expected = plan.committedState, state == expected else { return }
                     state = plan.previousState
                     rolledBack = true
                 }
             } catch { return .persistenceFailure(label, error) }
+            var rollbackFailed = 0
+            if rolledBack, !rollbackCommands.isEmpty {
+                // Révoquer les écritures différées de la destination avant la compensation.
+                let rollbackGeneration = PlacementGeneration.shared.next()
+                rollbackFailed = service.apply(ApplyPlan(commands: rollbackCommands),
+                    generation: rollbackGeneration, publish: false).failed
+                if let id = snapshot.focusedWindowID, let previous = windowsByID[id] {
+                    _ = service.focus(previous)
+                }
+            }
             service.invalidateSharedSnapshot()
             events.append(RoadieEvent(type: "\(eventPrefix)_focus_failed", scope: targetScope,
-                details: details.merging(["reason": reason, "rolledBack": String(rolledBack)], uniquingKeysWith: { _, new in new })))
+                details: details.merging(["reason": reason, "rolledBack": String(rolledBack),
+                    "rollbackPlacementFailed": String(rollbackFailed)], uniquingKeysWith: { _, new in new })))
             return .failure("\(label): \(reason)")
         }
         if let prepareTarget, !prepareTarget() { return restoreFailure("application refused to unhide") }
@@ -206,7 +219,20 @@ public struct WindowBookmarkCommandService {
                 placement.restoring[member.windowID] = member.frame.cgRect
             }
         }
-        let (layoutPlan, result) = service.applyCommandPlacement(placement, snapshot: refreshed, cause: cause, generation: generation, events: events)
+        // Réutiliser l'observation de la commande : un second relevé synchrone peut attendre
+        // une application lente et réconcilier l'état au milieu de cette transaction.
+        guard generation == PlacementGeneration.shared.current else { return restoreFailure("context changed") }
+        var placementSnapshot = refreshed ?? snapshot
+        try? placementSnapshot.state.switchDesktop(targetScope.desktopID, on: targetScope.displayID)
+        try? placementSnapshot.state.switchStage(targetScope.stageID, in: targetScope.displayID, desktopID: targetScope.desktopID)
+        // Le résultat de cette commande promet un focus effectif, pas sa planification.
+        // Les bascules de stage gardent leurs animations ; ici le placement doit finir avant AXRaise.
+        let (layoutPlan, result) = service.applyCommandPlacement(placement, snapshot: placementSnapshot,
+            cause: cause, generation: generation, events: events, immediately: true)
+        rollbackCommands = layoutPlan.commands.compactMap { command in
+            guard let original = windowsByID[command.window.id] else { return nil }
+            return ApplyCommand(window: original, frame: original.frame)
+        }
         let layoutAttempted = layoutPlan.commands.count
         let applied = result.applied + result.clamped
         // Si AX n'expose pas encore la fenêtre restaurée, remettre son cadre mémorisé.
@@ -217,7 +243,17 @@ public struct WindowBookmarkCommandService {
             restoredMissing = service.setFrame(member.frame.cgRect, of: target, generation: generation) != nil
         }
         // Le placement peut avoir changé la fenêtre active ; confirmer le focus après celui-ci.
-        let ok = service.focus(target)
+        var ok = service.focus(target)
+        if !ok, requireOwnership, generation == PlacementGeneration.shared.current {
+            let outcome = service.focusOnOtherSpace(target)
+            ok = outcome.focused
+            events.append(RoadieEvent(type: "\(eventPrefix)_space_focus", scope: targetScope,
+                details: details.merging(["phase": "final", "opened": String(outcome.opened),
+                    "remote": String(outcome.remote), "focused": String(outcome.focused),
+                    "waitedMs": String(outcome.waitedMs)], uniquingKeysWith: { _, new in new })))
+        }
+        guard generation == PlacementGeneration.shared.current else { return restoreFailure("context changed") }
+        guard ok else { return restoreFailure("final focus failed") }
         if ok {
             mouseFollower.follow(target)
             // Gardé en `mutate` (REL-021) : simple observation après le focus déjà donné, que le

@@ -78,9 +78,15 @@ final class StageSceneTransition {
     func pulse(applied: Bool) {
         guard phase != .finished else { return }
         guard valid() else { cancel(); return }
-        if phase != .animating, clock() > deadline { fallback("deadline"); return }
+        if phase != .animating, clock() > deadline {
+            if phase == .target { useSourceOnly("deadline") }
+            else { fallback("deadline") }
+            return
+        }
         guard phase == .applying, applied else { return }
         phase = .target
+        // Le temps d'écriture n'est pas consommé une seconde fois par la capture.
+        deadline = clock() + 0.12
         Task { [weak self] in
             guard let self else { return }
             // Laisser WindowServer présenter les dernières écritures AX.
@@ -90,8 +96,8 @@ final class StageSceneTransition {
             let target = await capture(context)
             log("capture_target", milliseconds: (clock() - started) * 1000)
             guard phase == .target, valid() else { return }
-            guard clock() <= deadline else { fallback("target_late"); return }
-            guard let target else { fallback("target_nil"); return }
+            guard clock() <= deadline else { useSourceOnly("target_late"); return }
+            guard let target else { useSourceOnly("target_nil"); return }
             log("target", milliseconds: (clock() - started) * 1000)
             phase = .animating
             panel?.setTarget(target)
@@ -114,6 +120,14 @@ final class StageSceneTransition {
     func cancel() {
         EffectAnimator.shared.cancel(animationID)
         close()
+    }
+    private func useSourceOnly(_ reason: String) {
+        // L'animation de sortie tourne déjà. La laisser finir évite une coupure
+        // brutale sans attendre une capture et sans prolonger le maintien du layout.
+        phase = .animating
+        events.append(RoadieEvent(type: "effects.scene_degraded", details: [
+            "reason": reason, "mode": "source_only"
+        ]))
     }
     private func fallback(_ reason: String) {
         events.append(RoadieEvent(type: "effects.scene_direct", details: ["reason": reason]))
@@ -176,6 +190,7 @@ private final class StageScenePanel: NSPanel {
         outgoing.setAffineTransform(CGAffineTransform(translationX: motion.width * p, y: motion.height * p))
         incoming.setAffineTransform(CGAffineTransform(translationX: -motion.width * (1-p), y: -motion.height * (1-p)))
         incoming.opacity = Float(p)
+        outgoing.opacity = Float(1-p)
         CATransaction.commit()
     }
 }

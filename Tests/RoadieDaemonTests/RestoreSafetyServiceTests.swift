@@ -338,6 +338,28 @@ struct RestoreSafetyCoverageTests {
     }
 
     @Test(arguments: [false, true])
+    func vanishedOrReusedCGIdentityIsNotRestored(reused: Bool) {
+        let fixture = makeFixture(hiddenMember: member(2, pid: alivePID))
+        defer { cleanup(fixture) }
+        fixture.provider.inventory = reused ? [WindowID(rawValue: 2): deadPID] : [:]
+        fixture.writer.unreachable = [WindowID(rawValue: 2)]
+        let result = fixture.service.unhideAll()
+        #expect(result.failed == 0)
+        #expect(result.attempted == 0)
+        #expect(fixture.writer.requested[WindowID(rawValue: 2)] == nil)
+    }
+
+    @Test func memberPresentOnAnotherSpaceIsStillRestored() {
+        let fixture = makeFixture(hiddenMember: member(2, pid: alivePID))
+        defer { cleanup(fixture) }
+        fixture.provider.inventory = [WindowID(rawValue: 2): alivePID]
+        let result = fixture.service.unhideAll()
+        #expect(result.applied == 1)
+        #expect(result.failed == 0)
+        #expect(fixture.writer.requested[WindowID(rawValue: 2)] == [visibleFrame])
+    }
+
+    @Test(arguments: [false, true])
     func nativeFullscreenWindowIsNotResizedByUnhideAll(parked: Bool) {
         var native = hiddenWindow(2, frame: parked ? hiddenFrame : visibleFrame)
         native.isOnScreen = !parked

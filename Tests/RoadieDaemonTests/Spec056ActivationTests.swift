@@ -139,6 +139,61 @@ struct Spec056ActivationTests {
         else { #expect(store.state() == before) }
     }
 
+    @Test @MainActor func focusCriticalPlacementFinishesBeforeTheFocusEvenWhenAnimationsAreEnabled() throws {
+        let current = spec056Window(1, x: 100)
+        let target = spec056Window(2, x: 999)
+        let provider = PowerUserProvider(windows: [current, target])
+        let writer = Spec056RestoringWriter(provider: provider, target: target, becomesReadable: false)
+        writer.requiresFrameBeforeFocus = true
+        let store = StageStore(path: tempPath("spec156-before-focus"))
+        var member = spec056Member(target); member.frame = Rect(x: 400, y: 100, width: 300, height: 300)
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: powerDisplay().id,
+            activeStageID: StageID(rawValue: "source"), stages: [
+                PersistentStage(id: StageID(rawValue: "source"), mode: .float, members: [spec056Member(current)]),
+                PersistentStage(id: StageID(rawValue: "destination"), mode: .float, members: [member])])]))
+        let owner = try #require(store.state().stageScope(for: target.id))
+        var config = RoadieConfig(); config.fx.animations.enabled = true
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: config,
+                                      stageStore: store, persistStateChanges: false)
+        FrameTransitionRuntime.shared.start()
+        defer { FrameTransitionRuntime.shared.stop() }
+        let result = WindowBookmarkCommandService(service: service, store: store).focusWindow(target, in: owner,
+            snapshot: service.snapshot(followFocus: false), generation: PlacementGeneration.shared.next(),
+            label: "switcher", cause: "switcher.activate", eventPrefix: "window.switcher", requireOwnership: true, details: [:])
+        #expect(result.changed)
+        #expect(result.outcome != .failed)
+        #expect(writer.calls.first == "frame")
+    }
+
+    @Test(arguments: [false, true])
+    func finalFocusFailureRestoresStateAndFramesUnlessACommandSupersedesIt(concurrentChange: Bool) throws {
+        let current = spec056Window(1, x: 100)
+        let target = spec056Window(2, x: 500)
+        let provider = PowerUserProvider(windows: [current, target])
+        let writer = Spec056RestoringWriter(provider: provider, target: target, becomesReadable: false)
+        writer.focusSucceeds = false
+        let store = StageStore(path: tempPath("spec156-final-focus"))
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: powerDisplay().id,
+            activeStageID: StageID(rawValue: "source"), stages: [
+                PersistentStage(id: StageID(rawValue: "source"), mode: .float, members: [spec056Member(current)]),
+                PersistentStage(id: StageID(rawValue: "destination"), mode: .float, members: [spec056Member(target)])])]))
+        let owner = try #require(store.state().stageScope(for: target.id))
+        let before = store.state()
+        if concurrentChange { writer.onFocus = { store.mutate { $0.focusDisplay(DisplayID(rawValue: "concurrent")) } } }
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(),
+                                      stageStore: store, persistStateChanges: false)
+        let result = WindowBookmarkCommandService(service: service, store: store).focusWindow(target, in: owner,
+            snapshot: service.snapshot(followFocus: false), generation: PlacementGeneration.shared.next(),
+            label: "switcher", cause: "switcher.activate", eventPrefix: "window.switcher", requireOwnership: true, details: [:])
+        #expect(result.outcome == .failed)
+        if concurrentChange {
+            #expect(store.state().activeDisplayID == DisplayID(rawValue: "concurrent"))
+        } else {
+            #expect(store.state() == before)
+            #expect(writer.frameRequests[current.id] == current.frame)
+        }
+    }
+
     /// Session 106 : depuis un plein écran natif, la fenêtre visée est sur un autre espace et AX ne la voit
     /// pas. Le repli ouvre l'application et change d'espace ; sans lui, l'activation échoue comme avant et revient en arrière.
     @Test(arguments: [false, true])
@@ -297,7 +352,9 @@ private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Senda
     let becomesReadable: Bool
     var calls: [String] = []
     var restoredFrame: Rect?
+    var frameRequests: [WindowID: Rect] = [:]
     var focusSucceeds = true
+    var requiresFrameBeforeFocus = false
     var frameSucceeds = true
     var onFocus: (() -> Void)?
     var otherSpaceSucceeds = false
@@ -307,6 +364,7 @@ private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Senda
     func focus(_ window: WindowSnapshot) -> Bool {
         calls.append("focus")
         onFocus?()
+        if requiresFrameBeforeFocus, restoredFrame == nil { return false }
         guard focusSucceeds else { return false }
         provider.focusedID = target.id
         if becomesReadable, !provider.snapshots.contains(where: { $0.id == target.id }) {
@@ -325,6 +383,7 @@ private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Senda
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         calls.append("frame")
         guard frameSucceeds else { return nil }
+        frameRequests[window.id] = Rect(frame)
         if window.id == target.id { restoredFrame = Rect(frame) }
         return frame
     }

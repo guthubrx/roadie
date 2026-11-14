@@ -2073,18 +2073,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let parsed = LauncherFileQuery.parse(query, keywords: launcher.fileKeywords)
         let needle = LauncherMatch.fold(parsed.needle)
         // Contenu ou étiquette : le nom ne dit rien des fichiers qui restent, la liste attend Spotlight.
-        var shown = needle.isEmpty || parsed.mode != .name ? [] : files.filter { LauncherMatch.fold($0.name).contains(needle) }
-        // Fichiers récents (session 123) : même règle que Spotlight, montrés avant sa réponse, qui les remplace.
-        if parsed.mode == .name, LauncherFileRules.shouldSearch(query, keywords: launcher.fileKeywords) {
-            let known = Set(shown.map(\.path))
-            shown += LauncherRecentFiles.shared.matches(parsed.needle).filter { !known.contains($0.path) }
-            shown = Array(LauncherFileRules.ordered(shown).prefix(LauncherFileRules.limit))
-        }
+        let shown = needle.isEmpty || parsed.mode != .name ? [] : files.filter { LauncherMatch.fold($0.name).contains(needle) }
         files = shown
         fileSearch.keywords = launcher.fileKeywords
         fileSearch.extraTypes = launcher.fileTypes
         fileSearch.excluded = launcher.fileExcluded
-        fileSearch.search(query) { [weak self] found in
+        fileSearch.search(query, retaining: shown) { [weak self] found in
             guard let self, !self.finished, self.model.query == query, self.step == .objects else { return }
             self.files = found
             self.filesChanged = true

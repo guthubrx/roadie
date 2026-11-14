@@ -516,7 +516,8 @@ extension SnapshotService {
         snapshot: DaemonSnapshot? = nil,
         cause: String,
         generation: UInt64,
-        events: EventLog
+        events: EventLog,
+        immediately: Bool = false
     ) -> (plan: ApplyPlan, result: ApplyResult) {
         let startedAt = clock()
         let observed = snapshot ?? sharedSnapshot(followFocus: false)
@@ -567,7 +568,8 @@ extension SnapshotService {
                     stationary: observed.windows.filter { !moving.contains($0.window.id) && $0.window.isOnScreen }
                         .map { $0.window.frame.cgRect })
             } : nil
-        let result = apply(plan, generation: generation, animation: cause.hasPrefix("stage.") ? .stage : .move,
+        let result = apply(plan, generation: generation, publish: !immediately,
+                           animation: cause.hasPrefix("stage.") ? .stage : .move,
                            transitionDirection: placement.transitionDirection, animationDisplays: observed.displays, stageScene: scene)
         if let episode, let scope = treeScopes.first {
             events.append(RoadieEvent(type: "layout_apply", scope: scope, details: [

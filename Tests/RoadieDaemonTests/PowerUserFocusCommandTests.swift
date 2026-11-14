@@ -7,6 +7,7 @@ import RoadieDaemon
 
 final class PowerUserProvider: SystemSnapshotProviding, @unchecked Sendable {
     var focusedID: WindowID?
+    var inventory: [WindowID: Int32]?
     let displaySnapshots: [DisplaySnapshot]
     private let snapshotLock = NSLock()
     private var storedSnapshots: [WindowSnapshot]
@@ -24,6 +25,7 @@ final class PowerUserProvider: SystemSnapshotProviding, @unchecked Sendable {
     func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: true) }
     func displays() -> [DisplaySnapshot] { displaySnapshots }
     func windows() -> [WindowSnapshot] { snapshots }
+    func existingWindowPIDs() -> [WindowID: Int32]? { inventory }
     func focusedWindowID() -> WindowID? { focusedID }
 }
 

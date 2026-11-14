@@ -2441,7 +2441,7 @@ public final class TargetModeRuntimeController: NSObject {
             var details = saved.restore()
             details["roadieKey"] = roadieKey
             Thread.sleep(forTimeInterval: 0.2)
-            details["after"] = String(saved.focusIsSaved())
+            details["after"] = saved.element == nil ? "unknown" : String(saved.focusIsSaved())
             DispatchQueue.main.async {
                 details["roadieKeyAfter"] = MainActor.assumeIsolated { Self.keyWindowName() }
                 events.append(RoadieEvent(type: "launcher.focus_restore", details: details))

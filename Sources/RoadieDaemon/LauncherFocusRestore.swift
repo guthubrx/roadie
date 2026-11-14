@@ -31,6 +31,7 @@ struct LauncherFocusSnapshot: @unchecked Sendable {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, Self.timeout)
         return ["bundleID": bundleID, "saved": element == nil ? "none" : "element", "kept": String(focusIsSaved(app)),
+                "verification": element == nil ? "unavailable" : "observed",
                 "key": String(window.map { WindowKeyFocus.makeKey(pid: pid, window: $0) } ?? false)]
     }
 

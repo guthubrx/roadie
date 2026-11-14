@@ -1204,7 +1204,6 @@ public final class RailController {
             )
             if panels[displayID] == nil {
                 panels[displayID] = panel
-                panel.makeKey()
                 panel.orderFrontRegardless()
             } else if !panel.isVisible {
                 panel.orderFrontRegardless()

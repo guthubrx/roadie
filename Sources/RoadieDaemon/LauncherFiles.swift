@@ -271,17 +271,38 @@ final class LauncherFileSearch {
     }
     private let latest = Latest()
     private var pending: DispatchWorkItem?
+    private let recent: @Sendable (String) -> [LauncherFile]
+
+    init(recent: @escaping @Sendable (String) -> [LauncherFile] = { LauncherRecentFiles.shared.matches($0) }) {
+        self.recent = recent
+    }
     /// Mots-clés `in` et `tags` réglés (session 113).
     var keywords = LauncherFileKeywords()
     /// Types ajoutés et dossiers écartés (session 119).
     var extraTypes: [String] = []
     var excluded: [String] = []
 
-    func search(_ text: String, done: @escaping @MainActor ([LauncherFile]) -> Void) {
+    func search(_ text: String, retaining: [LauncherFile] = [], done: @escaping @MainActor ([LauncherFile]) -> Void) {
         cancel()
         guard LauncherFileRules.shouldSearch(text, keywords: keywords) else { done([]); return }
-        let string = LauncherFileRules.queryString(LauncherFileQuery.parse(text, keywords: keywords), extraTypes: extraTypes)
+        let parsed = LauncherFileQuery.parse(text, keywords: keywords)
+        let string = LauncherFileRules.queryString(parsed, extraTypes: extraTypes)
         let excluded = excluded, latest = latest, token = latest.next()
+        // Le catalogue récent peut contenir des années de fichiers. Même sans E/S,
+        // le parcourir dans refreshFiles bloque le rendu et la frappe.
+        if parsed.mode == .name {
+            let recent = recent
+            Self.queue.async {
+                guard latest.isCurrent(token) else { return }
+                var seen = Set(retaining.map(\.path))
+                let found = retaining + recent(parsed.needle).filter { seen.insert($0.path).inserted }
+                let files = Array(LauncherFileRules.ordered(found).prefix(LauncherFileRules.limit))
+                guard !files.isEmpty else { return }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { if latest.isCurrent(token) { done(files) } }
+                }
+            }
+        }
         let work = DispatchWorkItem {
             Self.queue.async {
                 guard latest.isCurrent(token) else { return }

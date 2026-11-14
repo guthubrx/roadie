@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import os
 import RoadieCore
 
 @_silgen_name("_AXUIElementGetWindow")
@@ -543,7 +544,9 @@ final class AXAttributeCache: @unchecked Sendable {
 }
 
 /// Fenêtres AX d'une application, lues en une seule énumération `kAXWindows`.
-struct AXApplicationWindows {
+// L'index est immuable après construction ; ses handles AX étaient déjà partagés
+// par AXWindowIndexCache. Les lectures d'un même PID restent dans un seul lot.
+struct AXApplicationWindows: @unchecked Sendable {
     let pid: pid_t
     /// Éléments dans l'ordre AX, avec leur CGWindowID quand AX le donne.
     let entries: [(id: CGWindowID?, element: AXUIElement)]
@@ -783,8 +786,6 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         }
 
         let currentPID = ProcessInfo.processInfo.processIdentifier
-        // Fenetres AX par application pour ce snapshot (nil memorise = application illisible).
-        var appWindows: [pid_t: AXApplicationWindows?] = [:]
         // SPEC-051 A-03 : une requête LaunchServices par application, pas par fenêtre CG.
         var bundleByPID: [pid_t: String] = [:]
         // O(n) : préparer toutes les cibles CG avant l'unique énumération AX par PID.
@@ -841,8 +842,6 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 && rect.height >= 60
                 && !bundleID.hasPrefix("com.apple.WindowManager")
 
-            let attrs = tileCandidate ? attributes(forCGWindowID: number, pid: pid, requiredWindowIDs: requiredWindowIDs[pid], appWindows: &appWindows, generation: attributesGeneration) : nil
-
             return WindowSnapshot(
                 id: WindowID(rawValue: number),
                 pid: pid,
@@ -851,16 +850,51 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 title: title,
                 frame: Rect(rect),
                 isOnScreen: true,
-                isTileCandidate: tileCandidate,
-                subrole: attrs?.stable.subrole,
-                role: attrs?.stable.role,
-                furniture: attrs?.furniture
+                isTileCandidate: tileCandidate
             )
         }
+        let indexes = OSAllocatedUnfairLock(initialState: [AXApplicationWindows]())
+        let requiredByPID = requiredWindowIDs
+        let observed = Self.observeWindowGroups(result) { group in
+            var appWindows: [pid_t: AXApplicationWindows?] = [:]
+            let windows = group.map { original -> WindowSnapshot in
+                var window = original
+                if window.isTileCandidate, let attrs = self.attributes(forCGWindowID: window.id.rawValue,
+                    pid: window.pid, requiredWindowIDs: requiredByPID[window.pid],
+                    appWindows: &appWindows, generation: attributesGeneration) {
+                    window.subrole = attrs.stable.subrole
+                    window.role = attrs.stable.role
+                    window.furniture = attrs.furniture
+                }
+                return window
+            }
+            let groupIndexes = appWindows.values.compactMap { $0 }
+            indexes.withLock { $0.append(contentsOf: groupIndexes) }
+            return windows
+        }
+        AXAttributeCache.shared.retain(only: Set(observed.map { $0.id.rawValue }), generation: attributesGeneration)
+        AXWindowIndexCache.shared.replaceAll(with: indexes.withLock { $0 }, generation: indexGeneration)
+        return observed
+    }
 
-        AXAttributeCache.shared.retain(only: Set(result.map { $0.id.rawValue }), generation: attributesGeneration)
-        AXWindowIndexCache.shared.replaceAll(with: appWindows.values.compactMap { $0 }, generation: indexGeneration)
-        return result
+    /// Un groupe garde l'énumération et les lectures d'un PID dans le même ordre.
+    /// Le résultat conserve l'ordre CG initial. O(w) hors lectures AX.
+    static func observeWindowGroups(_ windows: [WindowSnapshot],
+        read: @Sendable ([WindowSnapshot]) -> [WindowSnapshot]) -> [WindowSnapshot] {
+        let groups = Array(Dictionary(grouping: windows, by: \.pid).values)
+        let workers = min(4, groups.count)
+        guard workers > 0 else { return windows }
+        let observed = OSAllocatedUnfairLock(initialState: [WindowID: WindowSnapshot]())
+        DispatchQueue.concurrentPerform(iterations: workers) { worker in
+            for index in stride(from: worker, to: groups.count, by: workers) {
+                let batch = read(groups[index])
+                observed.withLock { result in
+                    for window in batch { result[window.id] = window }
+                }
+            }
+        }
+        let result = observed.withLock { $0 }
+        return windows.map { result[$0.id] ?? $0 }
     }
 
     /// Index réutilisable : connu et couvrant toutes les fenêtres demandées (non vides). O(k).

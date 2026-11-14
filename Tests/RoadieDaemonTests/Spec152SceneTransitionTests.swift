@@ -76,11 +76,11 @@ import RoadieCore
         #expect(scene.phase == .finished && submissions == 1 && captures == 1)
     }
 
-    @Test func aLateTargetCannotStartAnAnimationAfterItsDeadline() async {
+    @Test func aLateTargetKeepsTheOutgoingAnimationWithoutRestartingIt() async {
         var now = 0.0, submissions = 0, captures = 0
         var pending: CheckedContinuation<CGImage?, Never>?
         let image = image()
-        let scene = StageSceneTransition(context: context(), direction: .down, policy: MotionPolicy(),
+        let scene = StageSceneTransition(context: context(), direction: .down, policy: MotionPolicy(duration: 0.1),
             events: EventLog(), valid: { true }, submit: { submissions += 1 }, presents: false, clock: { now },
             capture: { _ in
                 captures += 1
@@ -92,9 +92,33 @@ import RoadieCore
         scene.pulse(applied: true)
         #expect(await wait { pending != nil })
         now = 0.201; scene.pulse(applied: true)
+        #expect(scene.phase == .animating)
         pending?.resume(returning: image)
         await Task.yield()
-        #expect(scene.phase == .finished && submissions == 1 && captures == 2)
+        #expect(await wait { scene.phase == .finished })
+        #expect(submissions == 1 && captures == 2)
+    }
+
+    @Test func targetCaptureHasItsOwnBudgetAfterTheWriterFinishes() async {
+        var now = 0.0, captures = 0
+        var pending: CheckedContinuation<CGImage?, Never>?
+        let image = image()
+        let scene = StageSceneTransition(context: context(), direction: .up, policy: MotionPolicy(duration: 0.15),
+            events: EventLog(), valid: { true }, submit: {}, presents: false, clock: { now },
+            capture: { _ in
+                captures += 1
+                if captures == 1 { return image }
+                return await withCheckedContinuation { pending = $0 }
+            })
+        scene.start()
+        #expect(await wait { scene.phase == .applying })
+        now = 0.19; scene.pulse(applied: true)
+        #expect(await wait { pending != nil })
+        now = 0.27
+        pending?.resume(returning: image)
+        #expect(await wait { scene.phase == .animating || scene.phase == .finished })
+        #expect(scene.phase == .animating)
+        scene.cancel()
     }
 
     @Test func theNormalTransitionUsesTwoCapturesAndOnePlacement() async {

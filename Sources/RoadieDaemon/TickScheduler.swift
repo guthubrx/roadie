@@ -60,6 +60,8 @@ public final class TickScheduler {
     private var preparationTask: Task<Void, Never>?
     private var stopped = false
     private var preparationFailures = 0
+    private var preparationRetries = 0
+    private var preparationReported = false
     private var preparationRetryAt: Date?
     private let nextDeadline: @MainActor (Date) -> Date?
     private let isBlocked: @MainActor () -> Bool
@@ -179,22 +181,28 @@ public final class TickScheduler {
         if let retry = preparationRetryAt, date < retry { arm(); return }
         if let prepare, !prepared {
             guard preparationTask == nil else { return }
+            if preparationFailures == 0 {
+                preparationMs = 0
+                preparationRetries = 0
+                AXCallTimings.shared.reset()
+            }
             preparationTask = Task { [weak self] in
                 let start = Date()
                 self?.preparationStartedAt = self?.now()
-                AXCallTimings.shared.reset()
                 let ready = await prepare()
                 guard let self else { return }
                 self.preparationTask = nil
                 guard !self.stopped else { return }
-                self.preparationMs = Date().timeIntervalSince(start) * 1000
+                self.preparationMs += Date().timeIntervalSince(start) * 1000
                 if ready {
-                    if self.preparationFailures > 0 {
+                    self.preparationRetries = self.preparationFailures
+                    if self.preparationReported {
                         self.events?.append(RoadieEvent(type: "layout.preparation", details: [
                             "state": "ready", "rejections": String(self.preparationFailures)
                         ]))
                     }
                     self.preparationFailures = 0
+                    self.preparationReported = false
                     self.preparationRetryAt = nil
                     self.fire(prepared: true)
                 }
@@ -207,7 +215,9 @@ public final class TickScheduler {
                     let retry = self.now().addingTimeInterval(delay)
                     self.preparationRetryAt = retry
                     let count = self.preparationFailures
-                    if count <= 4 || count & (count - 1) == 0 {
+                    if (count >= 2 && (count <= 4 || count & (count - 1) == 0))
+                        || (count == 1 && self.preparationMs >= 200) {
+                        self.preparationReported = true
                         self.events?.append(RoadieEvent(type: "layout.preparation", details: [
                             "state": delay >= 0.4 ? "backoff" : "retry",
                             "reason": "snapshot_unavailable_or_invalidated",
@@ -293,6 +303,9 @@ public final class TickScheduler {
             "latencyMs": ms(requested.map { start.timeIntervalSince($0.requestedAt) } ?? 0),
             "durationMs": ms(duration),
             "observationMs": String(format: "%.1f", preparationMs),
+            "preparationRetries": String(preparationRetries),
+            // Les résultats des écritures asynchrones arrivent dans leurs événements finaux.
+            "resultPhase": "immediate",
             "commands": String(result.commands),
             "applied": String(result.applied),
             "failed": String(result.failed),
