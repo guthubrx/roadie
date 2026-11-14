@@ -27,7 +27,7 @@ Le cache de compilation de 1,4 Gio a été nettoyé par SwiftPM. Le worktree de 
 un rapport les classant supprimables. Les trois ressources temporaires de la fixture
 ont été retirées après vérification de l’arrêt de leurs processus. Aucun stage ni
 signet temporaire ne reste. La fenêtre existante déplacée pendant les essais a
-retrouvé sa stage d’origine. Aucun processus utilisateur n’a été terminé.
+retrouvé sa stage d’origine. Aucune autre application utilisateur n’a été terminée.
 
 Le seul checkout et la seule branche conservés après la clôture sont main.
 Le worktree documentaire de clôture est soumis au même retrait gardé après ce commit.
