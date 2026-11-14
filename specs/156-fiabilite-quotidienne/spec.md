@@ -1,6 +1,6 @@
 # Session 156 - Fiabilité quotidienne
 
-Statut : en cours. Correction demandée le 14 novembre 2026 : « Corrige tout ».
+Statut : livrée, avec preuves natives partielles. Correction demandée le 14 novembre 2026 : « Corrige tout ».
 
 Corriger les défauts confirmés de la revue des journaux des 7-14 novembre : rappel
 partiellement appliqué après refus du focus, travail de fichiers sur le fil principal,

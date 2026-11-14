@@ -397,3 +397,17 @@ par clé, identité du build, gardes AX, complétion zsh, couverture, vérificat
 configuration conservés. Code 3e324502, UUID 5399441F-1977-3F85-88AB-3A88C1470BCC.
 Worktree/branche 155 et build nettoyés, preuves/rollback conservés. Reçu :
 specs/155-consolidation-projet/validation.md.
+
+Session 156 livrée le 14 novembre 2026 : rappel immédiat avant focus et compensation
+en cas de refus final, fichiers récents hors rendu, observations AX bornées à quatre
+applications, restauration des identités CG vérifiées, budgets de capture séparés et
+fondu de sortie conservé, rail sans prise du clavier et diagnostics moins bruyants.
+2560 tests / 391 suites et 29 scripts réussis ; contre-revue traitée.
+Code 57b9e6ae intégré et poussé, 0.14.0 active, PID 62557,
+UUID F38BCEF8-D412-3699-8761-D9E0C7A9AD05, santé 5/5.
+Configuration et signature conservées ; aucune CI lancée ni nouvelle release.
+Preuves natives partielles : outils sans permission de frappe ou de capture,
+pas de diaporama visuel vérifié. Les essais temporaires sont retirés.
+Build 1,4 Gio et worktree de validation 46 Mo nettoyés avec leur branche ;
+retour arrière et traces utiles hors Git conservés. Reçu :
+specs/156-fiabilite-quotidienne/validation.md.
