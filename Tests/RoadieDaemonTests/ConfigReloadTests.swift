@@ -10,7 +10,7 @@ struct ConfigReloadTests {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent("config.toml")
-        try "[tiling]\ngaps_inner = 27".write(to: file, atomically: true, encoding: .utf8)
+        try "[tiling]\ngaps_inner = 11".write(to: file, atomically: true, encoding: .utf8)
         let events = dir.appendingPathComponent("events.jsonl")
         let lock = FileLock(path: FileLock.lockPath(for: events))
         try lock.acquire()
@@ -18,21 +18,27 @@ struct ConfigReloadTests {
         let started = DispatchSemaphore(value: 0)
         let reloaded = DispatchSemaphore(value: 0)
         let read = DispatchSemaphore(value: 0)
-        let service = ConfigReloadService(activeConfig: RoadieConfig(), activePath: file.path,
+        var initial = RoadieConfig()
+        initial.tiling.gapsInner = 11
+        let service = ConfigReloadService(activeConfig: initial, activePath: file.path,
             eventLog: EventLog(path: events.path), now: { started.signal(); return Date() })
         Thread {
             _ = service.reload(path: file.path)
             reloaded.signal()
         }.start()
         try #require(started.wait(timeout: .now() + 3) == .success)
+        try "[tiling]\ngaps_inner = 27".write(to: file, atomically: true, encoding: .utf8)
         Thread {
-            let before = ProcessInfo.processInfo.systemUptime
-            _ = service.currentConfig()
-            print("session158 reader_ms=\((ProcessInfo.processInfo.systemUptime - before) * 1000)")
+            let deadline = ProcessInfo.processInfo.systemUptime + 1
+            while service.state.pendingPath == nil, ProcessInfo.processInfo.systemUptime < deadline {
+                Thread.sleep(forTimeInterval: 0.001)
+            }
+            #expect(service.currentConfig().tiling.gapsInner == 11)
             read.signal()
         }.start()
         let readBeforeUnlock = read.wait(timeout: .now() + 0.25) == .success
         lock.release()
+        if !readBeforeUnlock { _ = read.wait(timeout: .now() + 3) }
         try #require(reloaded.wait(timeout: .now() + 3) == .success)
         #expect(readBeforeUnlock)
         #expect(service.activeConfig.tiling.gapsInner == 27)

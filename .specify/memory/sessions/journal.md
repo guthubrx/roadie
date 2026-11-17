@@ -445,3 +445,5 @@ configuration active passe de 256 ms à moins de 0,1 ms. Cette mesure porte sur
 un lecteur concurrent et ne mesure pas la durée totale du rechargement.
 Les quatre régressions couvrent les deux historiques, l'attente du lecteur et le
 remplacement à taille et date identiques. 2 568 tests Swift et 29 tests de scripts réussis.
+La contre-revue a conduit à étendre le test du lecteur à un fichier modifié
+pendant l'attente et à vérifier le refus de suppression transmis au sélecteur lorsque le fichier est illisible.

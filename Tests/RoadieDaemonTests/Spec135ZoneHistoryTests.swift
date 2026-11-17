@@ -45,7 +45,8 @@ struct Spec135ZoneHistoryTests {
         try invalid.write(to: file)
         let history = ZoneHistory(path: file.path)
         let fresh = zone("Nouvelle")
-        _ = history.record(fresh, element: nil, policy: ZonePolicy())
+        #expect(history.record(fresh, element: nil, policy: ZonePolicy()) == nil)
+        #expect(!history.forget(fresh))
         #expect(try Data(contentsOf: file) == invalid)
         let backups = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent.hasPrefix("zones.json.corrupt-") }
