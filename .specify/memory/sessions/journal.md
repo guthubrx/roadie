@@ -429,3 +429,19 @@ refusées au processus de validation. Les contrôles visuels restent partiels.
 La revue du code a identifié deux suites possibles : conserver les fichiers de
 zones et de positions flottantes illisibles, puis raccourcir le verrou du
 rechargement explicite de configuration. Ces évolutions restent des propositions.
+
+Session 158, 17 novembre 2026. L'historique des zones et les positions flottantes
+emploient la persistance JSON protégée du daemon. Une erreur de lecture conserve
+l'original, déclenche sa mise de côté et empêche son écrasement. Après réparation,
+les éditions repartent du contenu sur disque. Une suppression de zone refusée
+préserve la miniature. Les fichiers historiques existants gardent leur format.
+
+La commande de rechargement prépare la configuration hors du verrou des lecteurs.
+Les commandes explicites restent sérialisées. Une lecture automatique commencée
+avant la commande ne peut publier une ancienne configuration. Un changement du
+fichier principal ou des règles pendant le chargement invalide la tentative.
+Dans un essai macOS où le journal est retenu pendant 250 ms, la lecture de la
+configuration active passe de 256 ms à moins de 0,1 ms. Cette mesure porte sur
+un lecteur concurrent et ne mesure pas la durée totale du rechargement.
+Les quatre régressions couvrent les deux historiques, l'attente du lecteur et le
+remplacement à taille et date identiques. 2 568 tests Swift et 29 tests de scripts réussis.

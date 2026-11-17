@@ -21,6 +21,37 @@ struct Spec132FloatingPlacementTests {
         FloatingFrameStore(path: FileManager.default.temporaryDirectory.appendingPathComponent("spec132-\(UUID().uuidString).json").path)
     }
 
+    @Test func corruptPositionsPreserveBytesAndMergeAfterRepair() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("frames.json")
+        let invalid = Data("[".utf8)
+        try invalid.write(to: file)
+        let store = FloatingFrameStore(path: file.path)
+        let placement = FloatingPlacement(store: store)
+        func move(x: Double) {
+            _ = placement.observe([window(4, CGRect(x: x, y: 100, width: 200, height: 200))],
+                displays: [screen], avoidRail: false, railWidth: { 0 }, key: { _ in "active" })
+        }
+        move(x: 100)
+        move(x: 140)
+        #expect(try Data(contentsOf: file) == invalid)
+        let backups = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("frames.json.corrupt-") }
+        #expect(backups.count == 1)
+        if let backup = backups.first { #expect(try Data(contentsOf: backup) == invalid) }
+        let recovered = Rect(x: 10, y: 20, width: 300, height: 200)
+        try JSONEncoder().encode(["restored": recovered]).write(to: file, options: .atomic)
+        let reopened = placement.observe([window(5, CGRect(x: 200, y: 300, width: 240, height: 100))],
+            displays: [screen], avoidRail: false, railWidth: { 0 }, key: { _ in "restored" })
+        #expect(reopened.first?.frame == recovered.cgRect)
+        move(x: 150)
+        move(x: 180)
+        #expect(store.load()["restored"] == recovered)
+        #expect(store.load()["active"]?.x == 180)
+    }
+
     @Test func windowsOpeningOverTheRailMoveToItsRight() {
         let info = CGRect(x: 10, y: 10, width: 390, height: 1000)
         #expect(FloatingPlacement.placement(for: info, displays: [screen], railWidth: 150, avoidRail: true, remembered: nil)

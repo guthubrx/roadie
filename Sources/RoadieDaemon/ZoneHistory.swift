@@ -125,80 +125,81 @@ struct ZonePolicy: Equatable, Sendable {
 final class ZoneHistory {
     static let shared = ZoneHistory()
 
-    private let path: String
-    private(set) var records: [ZoneRecord]
+    private let url: URL
     private var elements: [String: AXUIElement] = [:]
+    var records: [ZoneRecord] {
+        JSONPersistence.load([ZoneRecord].self, from: url, default: [])
+    }
 
     init(path: String = NSString(string: TestEnvironment.launcherFile("zone-history.json")).expandingTildeInPath) {
-        self.path = path
-        let data = FileManager.default.contents(atPath: path)
-        records = data.flatMap { try? JSONDecoder().decode([ZoneRecord].self, from: $0) } ?? []
+        url = URL(fileURLWithPath: path)
     }
 
-    /// Zone en tête ; la même zone n'apparaît qu'une fois. Rend les zones sorties de l'historique (photos à
-    /// effacer). O(n).
+    /// Les photos et les éléments ne sont retirés qu'après une écriture réussie.
+    private func update(_ edit: (inout [ZoneRecord]) -> Void) -> [String]? {
+        if case .corrupt = JSONPersistence.loadResult([ZoneRecord].self, from: url) { return nil }
+        do {
+            let removed = try JSONPersistence.mutateChecked([ZoneRecord].self, at: url, default: [], label: "zone-history") { saved in
+                let before = Set(saved.map(\.key))
+                edit(&saved)
+                return before.subtracting(saved.map(\.key)).sorted()
+            }
+            for key in removed { elements[key] = nil }
+            return removed
+        } catch {
+            fputs("roadie: \(error)\n", stderr)
+            return nil
+        }
+    }
+
     @discardableResult
-    func record(_ record: ZoneRecord, element: AXUIElement?, policy: ZonePolicy, now: Date = Date()) -> [String] {
-        elements[record.key] = element
-        return apply([record] + records.filter { $0.key != record.key }, policy: policy, now: now)
+    func record(_ record: ZoneRecord, element: AXUIElement?, policy: ZonePolicy, now: Date = Date()) -> [String]? {
+        var retained = false
+        guard var removed = update({ saved in
+            saved = policy.kept([record] + saved.filter { $0.key != record.key }, now: now)
+            retained = saved.first?.key == record.key
+        }) else { return nil }
+        if retained {
+            elements[record.key] = element
+        } else if !removed.contains(record.key) {
+            removed.append(record.key)
+            removed.sort()
+        }
+        return removed
     }
 
-    /// Zones encore valables (âge, nombre) ; rend celles qui sortent. O(n).
     @discardableResult
     func prune(policy: ZonePolicy, now: Date = Date()) -> [String] {
-        apply(records, policy: policy, now: now)
+        let current = records
+        guard policy.kept(current, now: now) != current else { return [] }
+        return update { $0 = policy.kept($0, now: now) } ?? []
     }
 
-    private func apply(_ candidates: [ZoneRecord], policy: ZonePolicy, now: Date) -> [String] {
-        let before = Set(records.map(\.key)).union(candidates.map(\.key))
-        let kept = policy.kept(candidates, now: now)
-        let keys = Set(kept.map(\.key))
-        let changed = kept != records
-        records = kept
-        elements = elements.filter { keys.contains($0.key) }
-        if changed { save() }
-        return before.subtracting(keys).sorted()
-    }
-
-    /// Zone où l'on revient : elle remonte en tête, datée de maintenant, avec son élément et sa photo. Comme une
-    /// fenêtre activée par ⌘Tab, elle devient la plus récente : un second appui ramène à la précédente (essai du 30
-    /// octobre 2026 : l'ordre ne bougeait pas, ⌥Tab reproposait toujours la même zone). O(n).
     func touch(_ record: ZoneRecord, now: Date = Date()) {
-        guard let index = records.firstIndex(where: { $0.key == record.key }) else { return }
-        var moved = records.remove(at: index)
-        moved.date = now
-        records.insert(moved, at: 0)
-        save()
+        _ = update { saved in
+            guard let index = saved.firstIndex(where: { $0.key == record.key }) else { return }
+            var moved = saved.remove(at: index)
+            moved.date = now
+            saved.insert(moved, at: 0)
+        }
     }
 
-    /// Zones de clics d'une application, retirées (sens interdit, session 137) ; rend leurs clés. O(n).
     func forgetClicks(bundleID: String) -> [String] {
-        let dropped = records.filter { $0.fromClick == true && $0.bundleID == bundleID }.map(\.key)
-        guard !dropped.isEmpty else { return [] }
-        records.removeAll { $0.fromClick == true && $0.bundleID == bundleID }
-        save()
-        return dropped
+        update { $0.removeAll { $0.fromClick == true && $0.bundleID == bundleID } } ?? []
     }
 
-    /// Vignette capturée pour cette zone. O(n).
     func setThumbnail(_ crop: CGRect, for key: String) {
-        guard let index = records.firstIndex(where: { $0.key == key }) else { return }
-        records[index].thumbnailCrop = Rect(crop)
-        save()
+        _ = update { saved in
+            guard let index = saved.firstIndex(where: { $0.key == key }) else { return }
+            saved[index].thumbnailCrop = Rect(crop)
+        }
     }
 
     func element(for record: ZoneRecord) -> AXUIElement? { elements[record.key] }
 
-    /// Zone dont la fenêtre a disparu. O(n).
-    func forget(_ record: ZoneRecord) {
-        records.removeAll { $0.key == record.key }
-        elements[record.key] = nil
-        save()
-    }
-
-    private func save() {
-        try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(records).write(to: URL(fileURLWithPath: path), options: .atomic)
+    @discardableResult
+    func forget(_ record: ZoneRecord) -> Bool {
+        update { $0.removeAll { $0.key == record.key } }?.contains(record.key) == true
     }
 }
 
@@ -208,7 +209,9 @@ final class ZoneHistory {
 enum ZoneRecorder {
     static func remember(_ record: ZoneRecord, element: AXUIElement?, events: EventLog) {
         guard ZonePolicy.isUsed(ConfigReloadService.shared.currentConfig().switcher) else { return }
-        ZoneHistory.shared.record(record, element: element, policy: .current).forEach(ZoneThumbnails.shared.remove)
+        guard let removed = ZoneHistory.shared.record(record, element: element, policy: .current) else { return }
+        removed.forEach(ZoneThumbnails.shared.remove)
+        guard !removed.contains(record.key) else { return }
         events.append(RoadieEvent(type: "zone.recorded", details: [
             "app": record.appName, "source": record.fromClick == true ? "click" : "search",
             "count": String(ZoneHistory.shared.records.count)]))

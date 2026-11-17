@@ -13,13 +13,19 @@ struct FloatingFrameStore: Sendable {
     }
 
     func load() -> [String: Rect] {
-        guard let data = FileManager.default.contents(atPath: path) else { return [:] }
-        return (try? JSONDecoder().decode([String: Rect].self, from: data)) ?? [:]
+        JSONPersistence.load([String: Rect].self, from: URL(fileURLWithPath: path), default: [:])
     }
 
-    func save(_ frames: [String: Rect]) {
-        try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(frames).write(to: URL(fileURLWithPath: path), options: .atomic)
+    func merge(_ changes: [String: Rect]) {
+        let url = URL(fileURLWithPath: path)
+        if case .corrupt = JSONPersistence.loadResult([String: Rect].self, from: url) { return }
+        do {
+            try JSONPersistence.mutateChecked([String: Rect].self, at: url, default: [:], label: "floating-frames") { saved in
+                saved.merge(changes) { _, new in new }
+            }
+        } catch {
+            fputs("roadie: \(error)\n", stderr)
+        }
     }
 }
 
@@ -40,14 +46,12 @@ final class FloatingPlacement {
     }
 
     private let store: FloatingFrameStore
-    private var frames: [String: Rect]
     /// Fenêtres suivies : dernier cadre connu et règle qui retient leur place.
     private var known: [WindowID: (frame: Rect, key: String?)] = [:]
     private var primed = false
 
     init(store: FloatingFrameStore = FloatingFrameStore()) {
         self.store = store
-        frames = store.load()
     }
 
     /// Fenêtres concernées : non tuilées et hors des stages, standard ou dialogue, d'une autre application que
@@ -96,13 +100,14 @@ final class FloatingPlacement {
             return []
         }
         var moves: [Move] = []
-        var changed = false
+        var changes: [String: Rect] = [:]
         lazy var width = railWidth()
+        lazy var rememberedFrames = store.load()
         for window in windows where window.isOnScreen {
             guard let previous = known[window.id] else {
                 let rememberKey = key(window)
                 known[window.id] = (window.frame, rememberKey)
-                let remembered = rememberKey.flatMap { frames[$0] }?.cgRect
+                let remembered = rememberKey.flatMap { changes[$0] ?? rememberedFrames[$0] }?.cgRect
                 if let target = Self.placement(for: window.frame.cgRect, displays: displays, railWidth: width,
                                                avoidRail: avoidRail, remembered: remembered) {
                     moves.append(Move(window: window, frame: target, reason: remembered.map { Self.close($0, target) } == true ? "remembered" : "rail"))
@@ -112,11 +117,10 @@ final class FloatingPlacement {
             guard !Self.close(previous.frame.cgRect, window.frame.cgRect) else { continue }
             known[window.id] = (window.frame, previous.key)
             if let rememberKey = previous.key {
-                frames[rememberKey] = window.frame
-                changed = true
+                changes[rememberKey] = window.frame
             }
         }
-        if changed { store.save(frames) }
+        if !changes.isEmpty { store.merge(changes) }
         return moves
     }
 

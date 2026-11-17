@@ -588,7 +588,7 @@ public final class WindowSwitcherController {
     private func dismiss(_ id: WindowID) {
         guard let session, let entry = session.model?.matches.first(where: { $0.id == id }) else { return }
         if let zone = session.zones[id] {
-            ZoneHistory.shared.forget(zone.record)
+            guard ZoneHistory.shared.forget(zone.record) else { return }
             ZoneThumbnails.shared.remove(zone.record.key)
             events.append(RoadieEvent(type: "zone.dismissed", details: ["app": zone.record.appName]))
         } else {

@@ -36,12 +36,33 @@ struct Spec135ZoneHistoryTests {
         #expect(ZoneRecord.label(title: "AXCell", searchText: nil, subtitle: "B12") == "B12")
     }
 
+    @MainActor @Test func corruptHistoryPreservesBytesAndResumesAfterRepair() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("zones.json")
+        let invalid = Data("{".utf8)
+        try invalid.write(to: file)
+        let history = ZoneHistory(path: file.path)
+        let fresh = zone("Nouvelle")
+        _ = history.record(fresh, element: nil, policy: ZonePolicy())
+        #expect(try Data(contentsOf: file) == invalid)
+        let backups = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("zones.json.corrupt-") }
+        #expect(backups.count == 1)
+        if let backup = backups.first { #expect(try Data(contentsOf: backup) == invalid) }
+        let recovered = zone("Restaurée", y: 220)
+        try JSONEncoder().encode([recovered]).write(to: file, options: .atomic)
+        _ = history.record(fresh, element: nil, policy: ZonePolicy())
+        #expect(ZoneHistory(path: file.path).records == [fresh, recovered])
+    }
+
     @MainActor @Test func historyIsKeptAcrossRestarts() {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("spec135-\(UUID().uuidString).json").path
         defer { try? FileManager.default.removeItem(atPath: path) }
         let history = ZoneHistory(path: path)
         var dropped: [String] = []
-        for index in 0..<21 { dropped += history.record(zone("Zone \(index)", y: Double(index * 30)), element: nil, policy: ZonePolicy()) }
+        for index in 0..<21 { dropped += history.record(zone("Zone \(index)", y: Double(index * 30)), element: nil, policy: ZonePolicy()) ?? [] }
         #expect(history.records.count == 20 && dropped == [zone("Zone 0", y: 0).key])
         history.setThumbnail(CGRect(x: 1, y: 2, width: 3, height: 4), for: history.records[0].key)
         let reloaded = ZoneHistory(path: path)
