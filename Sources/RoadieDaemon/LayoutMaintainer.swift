@@ -152,6 +152,13 @@ public final class LayoutMaintainer {
         let mode: WindowManagementMode
     }
     private var treeMinimums: [WindowID: TreeMinimum] = [:]
+    /// Une redistribution reste réversible tant que ses voisines peuvent encore refuser leur nouvelle taille.
+    private struct MinimumRepair {
+        let generation: UInt64
+        let original: BSPTree
+        let proposed: BSPTree
+    }
+    private var minimumRepairs: [StageScope: MinimumRepair] = [:]
     private var reportedEchoWrites: [UInt32: Date] = [:]
     /// Lecture échouée d'un refus en attente : prochaine tentative (T218).
     private var refusalReadRetryAt: [UInt32: Date] = [:]
@@ -1702,6 +1709,10 @@ public final class LayoutMaintainer {
     /// splits nécessaires sur l'axe contraint, dans la génération en cours. Correction infaisable :
     /// la frame obtenue est acceptée (chevauchement, comme yabai). O(r · n).
     private func correctConfirmedRefusals(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, generation: UInt64) {
+        minimumRepairs = minimumRepairs.filter { $0.value.generation == generation }
+
+        // Toutes les contraintes confirmées par ce relevé sont connues avant la première redistribution.
+        var refusals: [(WindowID, StageScope, WrittenFrame, CGRect, CGSize)] = []
         for entry in snapshot.windows {
             let id = entry.window.id.rawValue
             guard let scope = entry.scope, scopes.contains(scope),
@@ -1717,24 +1728,32 @@ public final class LayoutMaintainer {
                 size: Self.largest(treeMinimums[entry.window.id]?.size ?? .zero, minimum),
                 pid: entry.window.pid, bundleID: entry.window.bundleID, scope: scope, mode: mode
             )
+            refusals.append((entry.window.id, scope, written, readBack, minimum))
+        }
+
+        for (windowID, scope, written, readBack, minimum) in refusals {
+            let id = windowID.rawValue
             // Sans arbre lisible, rien à corriger : la frame obtenue est acceptée.
             var reason = "minimum_size_infeasible"
             if let tree = store.state().bspTree(for: scope),
                let geometry = treeGeometry(of: scope, in: snapshot) {
-                var knownMinimums = treeMinimums.filter { $0.key != entry.window.id }.mapValues(\.size)
+                var knownMinimums = treeMinimums.filter { $0.key != windowID }.mapValues(\.size)
                 // Le côté minimal supposé évite de créer un nouveau refus chez une voisine
                 // dont l'application n'a pas encore révélé sa contrainte (T228).
-                for neighbour in tree.windowIDs where neighbour != entry.window.id && knownMinimums[neighbour] == nil {
+                for neighbour in tree.windowIDs where neighbour != windowID && knownMinimums[neighbour] == nil {
                     knownMinimums[neighbour] = CGSize(
                         width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide
                     )
                 }
                 let corrected = tree.correctingForMinimumSize(
-                    of: entry.window.id, minimum: minimum, in: geometry.container, innerGap: geometry.innerGap,
+                    of: windowID, minimum: minimum, in: geometry.container, innerGap: geometry.innerGap,
                     excluding: geometry.absent, knownMinimums: knownMinimums
                 )
                 if let corrected, corrected != tree {
-                    store.mutate { $0.setBSPTree(corrected, for: scope) }
+                    guard replaceMinimumRepair(tree, with: corrected, scope: scope, generation: generation) else { continue }
+                    let prior = minimumRepairs[scope]
+                    let original = prior.flatMap { $0.proposed == tree ? $0.original : nil } ?? tree
+                    minimumRepairs[scope] = MinimumRepair(generation: generation, original: original, proposed: corrected)
                     events.append(RoadieEvent(type: "layout_clamped_scope_repaired", scope: scope, details: [
                         "windowIDs": String(id),
                         "source": "tree_minimum_size",
@@ -1743,7 +1762,23 @@ public final class LayoutMaintainer {
                     continue
                 }
                 // Arbre inchangé : le refus ne révèle aucune taille minimale (décalage, arrondi).
-                if corrected != nil { reason = "refusal_without_minimum" }
+                if corrected != nil {
+                    reason = "refusal_without_minimum"
+                } else if let repair = minimumRepairs[scope], repair.proposed == tree {
+                    // Revenir aux ratios précédents seulement si notre redistribution a réduit
+                    // la dimension que cette voisine vient de refuser.
+                    let previous = repair.original.projected(excluding: geometry.absent)
+                        .place(in: geometry.container, innerGap: geometry.innerGap)[windowID]
+                    let proposed = tree.projected(excluding: geometry.absent)
+                        .place(in: geometry.container, innerGap: geometry.innerGap)[windowID]
+                    if let previous, let proposed, Self.matches(proposed, written.requested),
+                       (readBack.width > written.requested.width + LayoutTolerance.clampShrink && previous.width > proposed.width
+                        || readBack.height > written.requested.height + LayoutTolerance.clampShrink && previous.height > proposed.height) {
+                        let restored = replaceMinimumRepair(tree, with: repair.original, scope: scope, generation: generation)
+                        minimumRepairs[scope] = nil
+                        if restored { reason = "incompatible_neighbour_minimum_restored" }
+                    }
+                }
             }
             writtenFrames.accept(windowID: id, frame: readBack)
             events.append(RoadieEvent(type: "layout_app_response_accepted", details: [
@@ -1752,6 +1787,19 @@ public final class LayoutMaintainer {
                 "actual": frameDescription(Rect(readBack)),
                 "reason": reason
             ]))
+        }
+    }
+
+    private func replaceMinimumRepair(_ expected: BSPTree, with replacement: BSPTree, scope: StageScope, generation: UInt64) -> Bool {
+        do {
+            return try store.mutateChecked { state in
+                guard generation == generations.current, state.bspTree(for: scope) == expected else { return false }
+                state.setBSPTree(replacement, for: scope)
+                return true
+            }
+        } catch {
+            events.append(RoadieEvent(type: "layout_failed", scope: scope, details: ["reason": "minimum_repair_persistence_failed"]))
+            return false
         }
     }
 

@@ -9,6 +9,15 @@ public struct StageSceneContext: Sendable {
     let frame: CGRect
     let stationary: [CGRect]
 
+    static func stationaryFrames(in windows: [ScopedWindowSnapshot], moving: Set<WindowID>, on display: DisplaySnapshot) -> [CGRect] {
+        windows.compactMap { entry in
+            let window = entry.window
+            guard window.isOnScreen, !moving.contains(window.id),
+                  !window.isPointerPassthrough(in: [display]) else { return nil }
+            return window.frame.cgRect
+        }
+    }
+
     /// Soustractions successives : les trous qui se chevauchent ne se remplissent pas.
     func maskPath() -> CGPath {
         var path = CGPath(rect: CGRect(origin: .zero, size: frame.size), transform: nil)

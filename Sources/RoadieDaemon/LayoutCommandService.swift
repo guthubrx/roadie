@@ -565,8 +565,7 @@ extension SnapshotService {
             ? maximizedFrame(on: sceneDisplays[0]).map { frame in
                 let moving = Set(plan.commands.map { $0.window.id })
                 return StageSceneContext(display: sceneDisplays[0], frame: frame,
-                    stationary: observed.windows.filter { !moving.contains($0.window.id) && $0.window.isOnScreen }
-                        .map { $0.window.frame.cgRect })
+                    stationary: StageSceneContext.stationaryFrames(in: observed.windows, moving: moving, on: sceneDisplays[0]))
             } : nil
         let result = apply(plan, generation: generation, publish: !immediately,
                            animation: cause.hasPrefix("stage.") ? .stage : .move,

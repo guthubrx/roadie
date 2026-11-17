@@ -11,6 +11,24 @@ import RoadieCore
             visibleFrame: Rect(x: 0, y: 32, width: 800, height: 568), isMain: true)
         return StageSceneContext(display: display, frame: display.visibleFrame.cgRect, stationary: [])
     }
+    @Test func transparentDesktopLayerLeavesTheAnimationVisibleUnderARealPanel() {
+        let display = context().display
+        let background = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "Notification Center",
+            bundleID: "com.apple.notificationcenterui", title: "", frame: display.frame, isOnScreen: true, isTileCandidate: false)
+        var panel = background
+        panel.id = WindowID(rawValue: 2)
+        panel.subrole = "AXFloatingWindow"
+        panel.frame = Rect(x: 10, y: 40, width: 100, height: 50)
+        var moving = panel
+        moving.id = WindowID(rawValue: 3)
+        moving.frame = display.frame
+        let windows = [background, panel, moving].map { ScopedWindowSnapshot(window: $0, scope: nil) }
+        let stationary = StageSceneContext.stationaryFrames(in: windows, moving: [moving.id], on: display)
+        let mask = StageSceneContext(display: display, frame: display.frame.cgRect, stationary: stationary).maskPath()
+        #expect(mask.contains(CGPoint(x: 400, y: 300)))
+        #expect(!mask.contains(CGPoint(x: 60, y: 535)))
+    }
+
     private func image() -> CGImage {
         CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 8,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!

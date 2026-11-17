@@ -411,3 +411,21 @@ pas de diaporama visuel vérifié. Les essais temporaires sont retirés.
 Build 1,4 Gio et worktree de validation 46 Mo nettoyés avec leur branche ;
 retour arrière et traces utiles hors Git conservés. Reçu :
 specs/156-fiabilite-quotidienne/validation.md.
+
+Session 157, 17 novembre 2026. Le tuilage reprend les ratios précédents lorsqu'une
+fenêtre voisine refuse la réduction imposée par une redistribution infaisable.
+Les refus simultanés sont tous connus avant de redistribuer la place.
+La restauration vérifie la génération et l'arbre courant. Après un échec d’activation, le sélecteur redemande le focus pour
+la fenêtre qui avait effectivement le clavier sur macOS. Le fond transparent du centre de notifications et les décorations
+de bordure ne masquent plus la transition de stage. Les vrais panneaux continuent
+de masquer la partie de la scène qu'ils occupent.
+
+Le scénario à quatre fenêtres retrouve les trois cadres initiaux lors d'une nouvelle
+commande. Les tests couvrent aussi un changement de disposition entre deux refus,
+un focus sur le deuxième écran et le masque du panneau. 2 564 tests Swift dans
+391 suites et 29 tests de scripts réussis. La capture et la frappe simulée sont
+refusées au processus de validation. Les contrôles visuels restent partiels.
+
+La revue du code a identifié deux suites possibles : conserver les fichiers de
+zones et de positions flottantes illisibles, puis raccourcir le verrou du
+rechargement explicite de configuration. Ces évolutions restent des propositions.

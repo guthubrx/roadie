@@ -111,6 +111,8 @@ public struct WindowBookmarkCommandService {
         }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        // Le focus du relevé sans suivi peut appartenir au premier écran.
+        let previousFocus = service.focusedWindowID().flatMap { windowsByID[$0] }
         // Préparé hors verrou : fenêtres visibles de l'écran (aucune E/S ni AX dans `mutate`).
         let visibleWindows = windowsByID.values.filter {
             display.frame.cgRect.contains($0.frame.center) && !HiddenWindowPlacement.isHiddenOrLegacyOffscreen($0.frame.cgRect, in: snapshot.displays)
@@ -178,8 +180,8 @@ public struct WindowBookmarkCommandService {
                 let rollbackGeneration = PlacementGeneration.shared.next()
                 rollbackFailed = service.apply(ApplyPlan(commands: rollbackCommands),
                     generation: rollbackGeneration, publish: false).failed
-                if let id = snapshot.focusedWindowID, let previous = windowsByID[id] {
-                    _ = service.focus(previous)
+                if let previousFocus, rollbackGeneration == PlacementGeneration.shared.current {
+                    _ = service.focus(previousFocus)
                 }
             }
             service.invalidateSharedSnapshot()

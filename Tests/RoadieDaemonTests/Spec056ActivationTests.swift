@@ -169,7 +169,10 @@ struct Spec056ActivationTests {
     func finalFocusFailureRestoresStateAndFramesUnlessACommandSupersedesIt(concurrentChange: Bool) throws {
         let current = spec056Window(1, x: 100)
         let target = spec056Window(2, x: 500)
-        let provider = PowerUserProvider(windows: [current, target])
+        let otherDisplay = powerDisplay("display-2", index: 2, x: 1000)
+        let front = spec056Window(3, x: 1100)
+        let provider = PowerUserProvider(displays: [powerDisplay(), otherDisplay], windows: [current, target, front])
+        provider.focusedID = front.id
         let writer = Spec056RestoringWriter(provider: provider, target: target, becomesReadable: false)
         writer.focusSucceeds = false
         let store = StageStore(path: tempPath("spec156-final-focus"))
@@ -182,8 +185,10 @@ struct Spec056ActivationTests {
         if concurrentChange { writer.onFocus = { store.mutate { $0.focusDisplay(DisplayID(rawValue: "concurrent")) } } }
         let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(),
                                       stageStore: store, persistStateChanges: false)
+        var snapshot = service.snapshot(followFocus: false)
+        snapshot.focusedWindowID = current.id
         let result = WindowBookmarkCommandService(service: service, store: store).focusWindow(target, in: owner,
-            snapshot: service.snapshot(followFocus: false), generation: PlacementGeneration.shared.next(),
+            snapshot: snapshot, generation: PlacementGeneration.shared.next(),
             label: "switcher", cause: "switcher.activate", eventPrefix: "window.switcher", requireOwnership: true, details: [:])
         #expect(result.outcome == .failed)
         if concurrentChange {
@@ -191,6 +196,7 @@ struct Spec056ActivationTests {
         } else {
             #expect(store.state() == before)
             #expect(writer.frameRequests[current.id] == current.frame)
+            #expect(writer.focusAttempts.last == front.id)
         }
     }
 
@@ -351,6 +357,7 @@ private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Senda
     let target: WindowSnapshot
     let becomesReadable: Bool
     var calls: [String] = []
+    var focusAttempts: [WindowID] = []
     var restoredFrame: Rect?
     var frameRequests: [WindowID: Rect] = [:]
     var focusSucceeds = true
@@ -363,6 +370,7 @@ private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Senda
     }
     func focus(_ window: WindowSnapshot) -> Bool {
         calls.append("focus")
+        focusAttempts.append(window.id)
         onFocus?()
         if requiresFrameBeforeFocus, restoredFrame == nil { return false }
         guard focusSucceeds else { return false }

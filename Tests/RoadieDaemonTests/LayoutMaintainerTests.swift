@@ -4091,6 +4091,79 @@ struct TreeLayoutMaintainerTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func incompatibleNeighbourMinimumPreservesTheLayout(userChangedTree: Bool) {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 40, y: 20, width: 700, height: 300), treeW2: treeRight])
+        world.minimumSizes[treeW1] = CGSize(width: 700, height: 0)
+        world.minimumSizes[treeW2] = CGSize(width: 480, height: 0)
+        let store = treeStore("incompatible-neighbour", tree: treeSideBySide, frames: world.frames)
+        let harness = TreeHarness("incompatible-neighbour", world: world, store: store)
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        _ = harness.maintainer.tick(cause: "deadline")
+        #expect(store.state().bspTree(for: treeScope) != treeSideBySide)
+        let expected = userChangedTree ? treeSideBySide.swapping(treeW1, treeW2) : treeSideBySide
+        if userChangedTree { store.mutate { $0.setBSPTree(expected, for: treeScope) } }
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        _ = harness.maintainer.tick(cause: "deadline")
+        #expect(store.state().bspTree(for: treeScope) == expected)
+        if !userChangedTree {
+            harness.command("reapply")
+            harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+            _ = harness.maintainer.tick(cause: "deadline")
+            #expect(store.state().bspTree(for: treeScope) == expected)
+        }
+    }
+
+    @Test func simultaneousIncompatibleMinimaLeaveTheOriginalRatios() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 40, y: 20, width: 700, height: 300),
+                                       treeW2: Rect(x: 550, y: 20, width: 550, height: 300)])
+        world.minimumSizes[treeW1] = CGSize(width: 700, height: 0)
+        world.minimumSizes[treeW2] = CGSize(width: 550, height: 0)
+        let store = treeStore("simultaneous-minima", tree: treeSideBySide, frames: world.frames)
+        let harness = TreeHarness("simultaneous-minima", world: world, store: store)
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        let retry = harness.maintainer.tick(cause: "deadline")
+        #expect(store.state().bspTree(for: treeScope) == treeSideBySide)
+        #expect(retry.commands == 0)
+    }
+
+    @Test func threeNeighbourRefusalsDoNotPersistAnInfeasibleFourWindowLayout() throws {
+        let fourth = WindowID(rawValue: 4)
+        let container = CGRect(x: 1662, y: -1228, width: 3684, height: 2114)
+        let display = DisplaySnapshot(id: treeScope.displayID, index: 1, name: "Fictif",
+            frame: Rect(container), visibleFrame: Rect(container), isMain: true)
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.687, first:
+            .split(orientation: .vertical, ratio: 0.61, first:
+                .split(orientation: .horizontal, ratio: 0.5, first: .leaf(treeW2), second: .leaf(treeW3)),
+                second: .leaf(fourth)), second: .leaf(treeW1))
+        let original = tree.place(in: container, innerGap: 10).mapValues(Rect.init)
+        let world = TreeWorld(displays: [display], frames: original)
+        world.frames[treeW1] = Rect(x: 5351, y: -1236, width: 3690, height: 2122)
+        for (id, width) in [(treeW1, 3232), (treeW2, 599), (treeW3, 572), (fourth, 864)] {
+            world.minimumSizes[id] = CGSize(width: width, height: 0)
+        }
+        let store = treeStore("four-minima", display: display, tree: tree, frames: world.frames)
+        let harness = TreeHarness("four-minima", world: world, store: store, gapsInner: 10)
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        _ = harness.maintainer.tick(cause: "deadline")
+        #expect(store.state().bspTree(for: treeScope) != tree)
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        _ = harness.maintainer.tick(cause: "deadline")
+        #expect(store.state().bspTree(for: treeScope) == tree)
+        #expect(harness.events.contains("incompatible_neighbour_minimum_restored"))
+        harness.command("reapply")
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        _ = harness.maintainer.tick(cause: "deadline")
+        #expect(store.state().bspTree(for: treeScope) == tree)
+        for id in [treeW2, treeW3, fourth] {
+            #expect(world.frames[id] == original[id])
+        }
+    }
+
     /// T228 : un échange asymétrique ajuste les splits imbriqués sans reprendre toute la grande
     /// case au terminal. Le plan corrigé reste dans le budget et atteint la stabilité.
     @Test(arguments: [0.0, 120.0])
