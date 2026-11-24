@@ -108,8 +108,9 @@ public struct WindowFrameUpdate: Sendable {
     public var preservesSize: Bool
     /// Première disposition : rejoindre la destination avant de grandir sur l'écran de naissance.
     public var positionsBeforeResizing: Bool
-    /// Frame intermédiaire d'animation (Lot E) : écriture allégée (1 position + au plus 1 taille,
-    /// sans relecture `AXFullScreen` ni `readBack` synchrone ni double relayout `sizeBefore/sizeAfter`).
+    /// Frame intermédiaire d'animation (Lot E) : écriture allégée (au plus 1 position et 1 taille,
+    /// sans double relayout `sizeBefore/sizeAfter` et sans alimenter `WrittenFrameRegistry`),
+    /// tout en conservant la garde fraîche `AXFullScreen` et la relecture groupée du cadre observé.
     /// La frame finale conserve intégralement le contrat de vérification et d'enregistrement Spec043.
     public var isIntermediateAnimationFrame: Bool
 
