@@ -35,6 +35,6 @@ public struct SpatialBSPLayoutStrategy: LayoutStrategy {
             tree = tree.inserting(id, at: previous, side: .right, in: rect, innerGap: gap)
             previous = id
         }
-        return LayoutPlan(placements: tree.place(in: rect, innerGap: gap))
+        return LayoutPlan(placements: tree.place(in: rect, innerGap: gap, minimumSizes: request.minimumSizes))
     }
 }

@@ -474,3 +474,8 @@ Session 161, 24 novembre 2026. Optimisation Lot B — maîtrise mémoire et surf
 (2) `SCStreamConfiguration` configuré en `32BGRA` / `sRGB`, bornes mémoire LRU sur `ZoneThumbnails.images` (32), `RailThumbnailStore.detailed` (24 / 180 s), `RailThumbnailStore.icons` (64, sans `lockFocus()`) et `StageCardView.appIconCache` (64, avec `proposedRect` 64×64) ;
 (3) `BorderView` passe au rendu vectoriel `CAShapeLayer` + sous-vue pastille dédiée (suppression du tampon bitmap plein-cadre CoreAnimation) et `BorderPanel`/`RailPanel`/`RailDragGhostWindow` fixés en `colorSpace = .sRGB` (évite les tampons 16 bits HDR `RGhA`).
 2 585 tests Swift dans 391 suites et 29 tests de scripts réussis.
+
+Session 162, 24 novembre 2026. Optimisation Lot C — placement BSP prédictif sous contraintes de taille minimale :
+(1) `LayoutRequest.minimumSizes` transmis à `BSPTree.place(in:innerGap:minimumSizes:)` (`SpatialBSPLayoutStrategy`) et à `BSPLayoutStrategy` : chaque split contraint les étendues enfants aux bornes minimales connues quand elles tiennent dans le conteneur (en préservant les ratios déjà conformes et le repli d'origine en cas d'infaisabilité) ;
+(2) `LayoutMaintainer.treeMinimums` (minimums confirmés selon tous les invariants Spec043 : refus confirmé, PID, bundleID, scope, invalidation sur réduction utilisateur) est synchronisé dans `SnapshotProcessState` et appliqué dans `SnapshotService.reconciledTree` lors de l'insertion d'une nouvelle fenêtre ainsi que dans `previewPlacements`, ajustant la coupe avant la première écriture AX sans contourner les gardes Spec043.
+2 587 tests Swift dans 391 suites et 29 tests de scripts réussis.

@@ -151,7 +151,16 @@ public final class LayoutMaintainer {
         let scope: StageScope
         let mode: WindowManagementMode
     }
-    private var treeMinimums: [WindowID: TreeMinimum] = [:]
+    private var treeMinimums: [WindowID: TreeMinimum] = [:] {
+        didSet { syncConfirmedMinimums() }
+    }
+
+    private func syncConfirmedMinimums() {
+        let confirmed = treeMinimums.mapValues {
+            SnapshotProcessState.ConfirmedMinimum(pid: $0.pid, bundleID: $0.bundleID, scope: $0.scope, size: $0.size)
+        }
+        service.syncConfirmedMinimums(confirmed)
+    }
     /// Une redistribution reste réversible tant que ses voisines peuvent encore refuser leur nouvelle taille.
     private struct MinimumRepair {
         let generation: UInt64

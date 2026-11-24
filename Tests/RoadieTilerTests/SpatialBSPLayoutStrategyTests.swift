@@ -105,4 +105,61 @@ struct SpatialBSPLayoutStrategyTests {
         #expect(unknown.placements.count == 3)
         #expect(unknown.placements[win(2)] == CGRect(x: 700, y: 0, width: 300, height: 500))
     }
+
+    @Test
+    func respectsKnownMinimumSizesInSpatialBSPAndBSPModes() {
+        // Cas réel observé (session 162) : 2 fenêtres empilées dans 900×1078, la seconde refuse sous 582 px.
+        let verticalStack = BSPTree.split(orientation: .horizontal, ratio: 0.5, first: .leaf(win(1)), second: .leaf(win(2)))
+        let container = CGRect(x: 0, y: 0, width: 900, height: 1078)
+        let spatialPlan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .spatialBsp,
+            container: container,
+            windowIDs: [win(1), win(2)],
+            bspTree: verticalStack,
+            innerGap: 10,
+            minimumSizes: [win(2): CGSize(width: 0, height: 582)]
+        ))
+        #expect(spatialPlan.placements[win(2)]?.height == 582)
+        #expect(spatialPlan.placements[win(1)]?.height == 486)
+
+        // Même respect en mode `.bsp` équilibré (split horizontal car hauteur > largeur).
+        let bspPlan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .bsp,
+            container: container,
+            windowIDs: [win(1), win(2)],
+            innerGap: 10,
+            minimumSizes: [win(2): CGSize(width: 0, height: 582)]
+        ))
+        #expect(bspPlan.placements[win(2)]?.height == 582)
+        #expect(bspPlan.placements[win(1)]?.height == 486)
+
+        // Si le ratio existant satisfait déjà les minimums, le ratio utilisateur reste intact.
+        let wideTree = BSPTree.split(orientation: .vertical, ratio: 0.7, first: .leaf(win(1)), second: .leaf(win(2)))
+        let preserved = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .spatialBsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
+            windowIDs: [win(1), win(2)],
+            bspTree: wideTree,
+            innerGap: 0,
+            minimumSizes: [win(1): CGSize(width: 500, height: 0), win(2): CGSize(width: 250, height: 0)]
+        ))
+        #expect(preserved.placements[win(1)]?.width == 700)
+        #expect(preserved.placements[win(2)]?.width == 300)
+
+        // Si la somme des minimums dépasse le conteneur (infaisable), le ratio d'origine reste conservé.
+        let infeasible = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .spatialBsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
+            windowIDs: [win(1), win(2)],
+            bspTree: wideTree,
+            innerGap: 0,
+            minimumSizes: [win(1): CGSize(width: 700, height: 0), win(2): CGSize(width: 600, height: 0)]
+        ))
+        #expect(infeasible.placements[win(1)]?.width == 700)
+        #expect(infeasible.placements[win(2)]?.width == 300)
+    }
 }

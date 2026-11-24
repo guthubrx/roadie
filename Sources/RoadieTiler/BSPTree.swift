@@ -91,9 +91,19 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
 
     /// Calcule la frame de chaque fenêtre en répartissant `rect` selon l'arbre.
     /// `innerGap` est l'espace laissé entre deux enfants d'un split.
-    public func place(in rect: CGRect, innerGap: CGFloat) -> [WindowID: CGRect] {
+    /// Avec `minimumSizes`, ajuste chaque split lorsque les tailles minimales des deux côtés
+    /// tiennent dans l'étendue disponible ; si le total dépasse, conserve le ratio d'origine.
+    public func place(
+        in rect: CGRect,
+        innerGap: CGFloat,
+        minimumSizes: [WindowID: CGSize] = [:]
+    ) -> [WindowID: CGRect] {
         var result: [WindowID: CGRect] = [:]
-        place(in: rect, innerGap: innerGap, into: &result)
+        if minimumSizes.isEmpty {
+            place(in: rect, innerGap: innerGap, into: &result)
+        } else {
+            place(in: rect, innerGap: innerGap, minimumSizes: minimumSizes, into: &result)
+        }
         return result
     }
 
@@ -107,6 +117,58 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
             first.place(in: rects.first, innerGap: innerGap, into: &result)
             second.place(in: rects.second, innerGap: innerGap, into: &result)
+        }
+    }
+
+    private func place(
+        in rect: CGRect,
+        innerGap: CGFloat,
+        minimumSizes: [WindowID: CGSize],
+        into result: inout [WindowID: CGRect]
+    ) {
+        switch self {
+        case .empty:
+            return
+        case .leaf(let id):
+            result[id] = rect.integral
+        case .split(let orientation, let ratio, let first, let second):
+            let firstMin = first.requiredMinimumSize(innerGap: innerGap, minimumSizes: minimumSizes)
+            let secondMin = second.requiredMinimumSize(innerGap: innerGap, minimumSizes: minimumSizes)
+            let minFirstExtent = orientation == .vertical ? firstMin.width : firstMin.height
+            let minSecondExtent = orientation == .vertical ? secondMin.width : secondMin.height
+            let rects = Self.childRects(
+                of: rect,
+                orientation: orientation,
+                ratio: ratio,
+                innerGap: innerGap,
+                minFirstExtent: minFirstExtent,
+                minSecondExtent: minSecondExtent
+            )
+            first.place(in: rects.first, innerGap: innerGap, minimumSizes: minimumSizes, into: &result)
+            second.place(in: rects.second, innerGap: innerGap, minimumSizes: minimumSizes, into: &result)
+        }
+    }
+
+    /// Borne inférieure géométrique d'un sous-arbre selon les tailles minimales connues. O(n).
+    private func requiredMinimumSize(innerGap: CGFloat, minimumSizes: [WindowID: CGSize]) -> CGSize {
+        switch self {
+        case .empty:
+            return .zero
+        case .leaf(let id):
+            let size = minimumSizes[id] ?? .zero
+            return CGSize(width: max(0, size.width), height: max(0, size.height))
+        case .split(let orientation, _, let first, let second):
+            let a = first.requiredMinimumSize(innerGap: innerGap, minimumSizes: minimumSizes)
+            let b = second.requiredMinimumSize(innerGap: innerGap, minimumSizes: minimumSizes)
+            let splitGap = Self.gap(for: orientation, innerGap: innerGap)
+            switch orientation {
+            case .vertical:
+                let extraGap = (a.width > 0 && b.width > 0) ? splitGap : 0
+                return CGSize(width: a.width + b.width + extraGap, height: max(a.height, b.height))
+            case .horizontal:
+                let extraGap = (a.height > 0 && b.height > 0) ? splitGap : 0
+                return CGSize(width: max(a.width, b.width), height: a.height + b.height + extraGap)
+            }
         }
     }
 
@@ -139,17 +201,26 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         return max(0, extent - gap(for: orientation, in: rect, innerGap: innerGap))
     }
 
-    /// Rectangles des deux enfants d'un split, au ratio borné.
+    /// Rectangles des deux enfants d'un split, au ratio borné et contraint par les minimums si faisable.
     static func childRects(
         of rect: CGRect,
         orientation: BSPOrientation,
         ratio: Double,
-        innerGap: CGFloat
+        innerGap: CGFloat,
+        minFirstExtent: CGFloat = 0,
+        minSecondExtent: CGFloat = 0
     ) -> (first: CGRect, second: CGRect) {
         let clamped = min(max(ratio, ratioBounds.lowerBound), ratioBounds.upperBound)
         let gap = gap(for: orientation, in: rect, innerGap: innerGap)
         let usable = usableExtent(of: rect, orientation: orientation, innerGap: innerGap)
-        let firstExtent = floor(usable * clamped)
+        var firstExtent = floor(usable * clamped)
+        if minFirstExtent > 0 || minSecondExtent > 0 {
+            let lower = ceil(max(0, minFirstExtent))
+            let upper = floor(usable - ceil(max(0, minSecondExtent)))
+            if lower <= upper, usable > 0 {
+                firstExtent = min(max(firstExtent, lower), upper)
+            }
+        }
         let secondExtent = usable - firstExtent
         switch orientation {
         case .vertical:

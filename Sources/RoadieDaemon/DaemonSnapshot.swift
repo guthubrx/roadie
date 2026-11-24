@@ -378,6 +378,10 @@ public struct SnapshotService: Sendable {
         processState.noteDestroyed(windowID, at: clock())
     }
 
+    func syncConfirmedMinimums(_ minimums: [WindowID: SnapshotProcessState.ConfirmedMinimum]) {
+        processState.setConfirmedMinimums(minimums)
+    }
+
     /// Un placement explicite confirme une fenêtre vivante. Seul un signal antérieur à la
     /// commande est révoqué ; une fermeture arrivée pendant le relevé reste prioritaire.
     func confirmLiveWindowPlacement(_ windowID: WindowID, in snapshot: DaemonSnapshot, requestedAt: Date) {
@@ -853,7 +857,9 @@ public struct SnapshotService: Sendable {
             guard let container = containers[persistentScope.displayID] else { continue }
             for stageIndex in persistentScope.stages.indices where persistentScope.stages[stageIndex].mode.usesTreeEngine {
                 let stage = persistentScope.stages[stageIndex]
+                let scope = StageScope(displayID: persistentScope.displayID, desktopID: persistentScope.desktopID, stageID: stage.id)
                 let kept = Set(stage.members.map(\.windowID)).subtracting(input.destroyedWindowIDs).subtracting(pinned)
+                let confirmedMinimums = processState.confirmedMinimumSizes(for: stage.members, in: scope)
                 let tree = Self.reconciledTree(
                     stage.bspTree ?? .empty,
                     stage: stage,
@@ -862,7 +868,8 @@ public struct SnapshotService: Sendable {
                     globalFocus: input.providerFocusedID,
                     side: side,
                     container: container,
-                    innerGap: innerGap
+                    innerGap: innerGap,
+                    confirmedMinimums: confirmedMinimums
                 )
                 let next: BSPTree? = tree.isEmpty && stage.bspTree == nil ? nil : tree
                 guard next != stage.bspTree else { continue }
@@ -887,7 +894,8 @@ public struct SnapshotService: Sendable {
         globalFocus: WindowID?,
         side: BSPInsertionSide,
         container: CGRect,
-        innerGap: CGFloat
+        innerGap: CGFloat,
+        confirmedMinimums: [WindowID: CGSize] = [:]
     ) -> BSPTree {
         var leaves = Set(initial.windowIDs)
         let removed = leaves.subtracting(kept)
@@ -895,10 +903,27 @@ public struct SnapshotService: Sendable {
         leaves.subtract(removed)
         let absent = leaves.subtracting(live)
         var anchor = bspInsertionAnchor(leaves: leaves, live: live, globalFocus: globalFocus, stage: stage)
+        var inserted = false
         for member in stage.members where kept.contains(member.windowID) && live.contains(member.windowID) {
             guard leaves.insert(member.windowID).inserted else { continue }
             tree = tree.inserting(member.windowID, at: anchor, side: side, in: container, innerGap: innerGap, excluding: absent)
             anchor = member.windowID // une rafale se greffe à côté de la dernière insérée
+            inserted = true
+        }
+        // Lot C : lorsqu'une nouvelle fenêtre divise une stage qui contient déjà des minimums
+        // confirmés (Spec043), ajuster la coupe immédiatement avant la première écriture AX.
+        if inserted, !confirmedMinimums.isEmpty {
+            for (windowID, minimum) in confirmedMinimums.sorted(by: { $0.key.rawValue < $1.key.rawValue })
+                where leaves.contains(windowID) && !absent.contains(windowID) {
+                var others = confirmedMinimums
+                others.removeValue(forKey: windowID)
+                if let adjusted = tree.correctingForMinimumSize(
+                    of: windowID, minimum: minimum, in: container, innerGap: innerGap,
+                    excluding: absent, knownMinimums: others
+                ) {
+                    tree = adjusted
+                }
+            }
         }
         return tree
     }
@@ -2631,8 +2656,53 @@ final class SnapshotProcessState: @unchecked Sendable {
     private var destroyedEvidence: [WindowID: DestroyedWindowEvidence] = [:]
     private var treeAppliedAt: [StageScope: Date] = [:]
     private var legacyTreeMigrationClaimed = false
+    struct ConfirmedMinimum: Sendable, Equatable {
+        var pid: Int32
+        var bundleID: String
+        var scope: StageScope
+        var size: CGSize
+    }
+
+    /// Tailles minimales confirmées par Spec043 (`LayoutMaintainer.treeMinimums`), indexées par fenêtre.
+    private var confirmedMinimums: [WindowID: ConfirmedMinimum] = [:]
     /// Rang de la dernière passe de commande dans son épisode (`pass` de `layout_apply`, A12).
     private var commandPass: (episode: String, pass: Int)?
+
+    func setConfirmedMinimums(_ minimums: [WindowID: ConfirmedMinimum]) {
+        lock.withLock { confirmedMinimums = minimums }
+    }
+
+    func confirmedMinimumSizes(for members: [PersistentStageMember], in scope: StageScope) -> [WindowID: CGSize] {
+        lock.withLock {
+            guard !confirmedMinimums.isEmpty else { return [:] }
+            var result: [WindowID: CGSize] = [:]
+            for member in members {
+                guard let entry = confirmedMinimums[member.windowID],
+                      entry.scope == scope,
+                      entry.bundleID == member.bundleID,
+                      member.pid == nil || member.pid == entry.pid
+                else { continue }
+                result[member.windowID] = entry.size
+            }
+            return result
+        }
+    }
+
+    func confirmedMinimumSizes(for windows: [WindowSnapshot], in scope: StageScope) -> [WindowID: CGSize] {
+        lock.withLock {
+            guard !confirmedMinimums.isEmpty else { return [:] }
+            var result: [WindowID: CGSize] = [:]
+            for window in windows {
+                guard let entry = confirmedMinimums[window.id],
+                      entry.scope == scope,
+                      entry.pid == window.pid,
+                      entry.bundleID == window.bundleID
+                else { continue }
+                result[window.id] = entry.size
+            }
+            return result
+        }
+    }
 
     func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, maxAge: TimeInterval, at date: Date, stateStamp: [Int64],
                  config: RoadieConfig, observationGeneration: UInt64) {
@@ -2755,6 +2825,7 @@ final class SnapshotProcessState: @unchecked Sendable {
 
     func noteDestroyed(_ id: WindowID, at date: Date) {
         lock.withLock {
+            confirmedMinimums.removeValue(forKey: id)
             guard destroyed.insert(id).inserted else { return }
             revision &+= 1
             published.removeAll()
@@ -2934,6 +3005,7 @@ extension SnapshotService {
         guard let stage = snapshot.state.stage(scope: scope),
               let display = snapshot.displays.first(where: { $0.id == scope.displayID }) else { return [:] }
         let container = display.visibleFrame.cgRect
+        let knownMinimums = processState.confirmedMinimumSizes(for: snapshot.windows.map(\.window), in: scope)
         let ordered = orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode).filter { $0 != incoming }
         if stage.mode.usesTreeEngine {
             let placed = treePlacedWindowIDs(ordered, in: snapshot)
@@ -2955,7 +3027,8 @@ extension SnapshotService {
                 windowIDs: placed + [incoming],
                 bspTree: next,
                 outerGaps: outerGaps(windowCount: placed.count + 1, display: display),
-                innerGap: config.tiling.gapsInner
+                innerGap: config.tiling.gapsInner,
+                minimumSizes: knownMinimums
             )).placements
         }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
@@ -2971,7 +3044,8 @@ extension SnapshotService {
             splitPolicy: config.tiling.splitPolicy,
             outerGaps: outerGaps(windowCount: live.count + 1, display: display),
             innerGap: config.tiling.gapsInner,
-            masterRatio: config.tiling.masterRatio
+            masterRatio: config.tiling.masterRatio,
+            minimumSizes: knownMinimums
         )).placements
     }
 }

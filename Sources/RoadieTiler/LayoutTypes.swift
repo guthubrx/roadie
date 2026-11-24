@@ -22,6 +22,9 @@ public struct LayoutRequest: Equatable, Sendable {
     /// Part initiale du panneau principal en mode `.masterStack` (`[tiling] master_ratio`,
     /// REL-030). Ignorée par les autres modes ; bornée à 0,1...0,9 par la stratégie.
     public var masterRatio: Double
+    /// Tailles minimales observées par fenêtre (Lot C) : les stratégies BSP ajustent les splits
+    /// dès la planification lorsque les minimums tiennent dans le conteneur, évitant les refus répétés.
+    public var minimumSizes: [WindowID: CGSize]
 
     public init(
         scope: StageScope,
@@ -35,7 +38,8 @@ public struct LayoutRequest: Equatable, Sendable {
         splitPolicy: String = "balanced",
         outerGaps: Insets = .zero,
         innerGap: Double = 0,
-        masterRatio: Double = 0.6
+        masterRatio: Double = 0.6,
+        minimumSizes: [WindowID: CGSize] = [:]
     ) {
         self.scope = scope
         self.mode = mode
@@ -49,6 +53,7 @@ public struct LayoutRequest: Equatable, Sendable {
         self.outerGaps = outerGaps
         self.innerGap = max(0, innerGap)
         self.masterRatio = masterRatio
+        self.minimumSizes = minimumSizes
     }
 }
 

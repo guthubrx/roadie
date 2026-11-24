@@ -18,6 +18,7 @@ public struct BSPLayoutStrategy: LayoutStrategy {
             currentFrames: request.currentFrames,
             priorityWindowIDs: request.priorityWindowIDs,
             newWindowIDs: request.newWindowIDs,
+            minimumSizes: request.minimumSizes,
             splitPolicy: request.splitPolicy,
             placements: &placements
         )
@@ -31,6 +32,7 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         currentFrames: [WindowID: CGRect],
         priorityWindowIDs: Set<WindowID>,
         newWindowIDs: Set<WindowID>,
+        minimumSizes: [WindowID: CGSize],
         splitPolicy: String,
         placements: inout [WindowID: CGRect]
     ) {
@@ -54,6 +56,7 @@ public struct BSPLayoutStrategy: LayoutStrategy {
                 currentFrames: currentFrames,
                 priorityWindowIDs: priorityWindowIDs,
                 newWindowIDs: newWindowIDs,
+                minimumSizes: minimumSizes,
                 splitPolicy: splitPolicy,
                 placements: &placements
             )
@@ -66,6 +69,7 @@ public struct BSPLayoutStrategy: LayoutStrategy {
                 currentFrames: currentFrames,
                 priorityWindowIDs: priorityWindowIDs,
                 newWindowIDs: newWindowIDs,
+                minimumSizes: minimumSizes,
                 splitPolicy: splitPolicy,
                 placements: &placements
             )
@@ -80,6 +84,7 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         currentFrames: [WindowID: CGRect],
         priorityWindowIDs: Set<WindowID>,
         newWindowIDs: Set<WindowID>,
+        minimumSizes: [WindowID: CGSize],
         splitPolicy: String,
         placements: inout [WindowID: CGRect]
     ) {
@@ -97,13 +102,20 @@ public struct BSPLayoutStrategy: LayoutStrategy {
             priorityWindowIDs: priorityWindowIDs,
             newWindowIDs: newWindowIDs
         )
-        let leftWidth = floor(usableWidth * ratio)
+        let leftWidth = clampedFirstExtent(
+            proposed: floor(usableWidth * ratio),
+            usable: usableWidth,
+            first: leftWindows,
+            second: rightWindows,
+            horizontal: true,
+            minimumSizes: minimumSizes
+        )
         let rightWidth = usableWidth - leftWidth
         let leftRect = CGRect(x: rect.minX, y: rect.minY, width: leftWidth, height: rect.height)
         let rightRect = CGRect(x: rect.minX + leftWidth + effectiveGap, y: rect.minY, width: rightWidth, height: rect.height)
 
-        split(windows: leftWindows, rect: leftRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
-        split(windows: rightWindows, rect: rightRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
+        split(windows: leftWindows, rect: leftRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, minimumSizes: minimumSizes, splitPolicy: splitPolicy, placements: &placements)
+        split(windows: rightWindows, rect: rightRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, minimumSizes: minimumSizes, splitPolicy: splitPolicy, placements: &placements)
     }
 
     private func splitVertically(
@@ -114,6 +126,7 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         currentFrames: [WindowID: CGRect],
         priorityWindowIDs: Set<WindowID>,
         newWindowIDs: Set<WindowID>,
+        minimumSizes: [WindowID: CGSize],
         splitPolicy: String,
         placements: inout [WindowID: CGRect]
     ) {
@@ -130,13 +143,44 @@ public struct BSPLayoutStrategy: LayoutStrategy {
             priorityWindowIDs: priorityWindowIDs,
             newWindowIDs: newWindowIDs
         )
-        let topHeight = floor(usableHeight * ratio)
+        let topHeight = clampedFirstExtent(
+            proposed: floor(usableHeight * ratio),
+            usable: usableHeight,
+            first: topWindows,
+            second: bottomWindows,
+            horizontal: false,
+            minimumSizes: minimumSizes
+        )
         let bottomHeight = usableHeight - topHeight
         let topRect = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: topHeight)
         let bottomRect = CGRect(x: rect.minX, y: rect.minY + topHeight + effectiveGap, width: rect.width, height: bottomHeight)
 
-        split(windows: topWindows, rect: topRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
-        split(windows: bottomWindows, rect: bottomRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
+        split(windows: topWindows, rect: topRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, minimumSizes: minimumSizes, splitPolicy: splitPolicy, placements: &placements)
+        split(windows: bottomWindows, rect: bottomRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, minimumSizes: minimumSizes, splitPolicy: splitPolicy, placements: &placements)
+    }
+
+    private func clampedFirstExtent(
+        proposed: CGFloat,
+        usable: CGFloat,
+        first: ArraySlice<WindowID>,
+        second: ArraySlice<WindowID>,
+        horizontal: Bool,
+        minimumSizes: [WindowID: CGSize]
+    ) -> CGFloat {
+        guard !minimumSizes.isEmpty, usable > 0 else { return proposed }
+        let minFirst = first.reduce(CGFloat(0)) { best, id in
+            let size = minimumSizes[id] ?? .zero
+            return max(best, horizontal ? size.width : size.height)
+        }
+        let minSecond = second.reduce(CGFloat(0)) { best, id in
+            let size = minimumSizes[id] ?? .zero
+            return max(best, horizontal ? size.width : size.height)
+        }
+        guard minFirst > 0 || minSecond > 0 else { return proposed }
+        let lower = ceil(max(0, minFirst))
+        let upper = floor(usable - ceil(max(0, minSecond)))
+        guard lower <= upper else { return proposed }
+        return min(max(proposed, lower), upper)
     }
 
     private func splitRatio(
