@@ -119,8 +119,7 @@ public final class ModifierWindowRuntime {
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
         }
         events.append(RoadieEvent(type: "modifier_gesture.started", scope: source.scope,
-            details: ["operation": operation.rawValue, "windowID": String(source.window.id.rawValue),
-                      "startX": String(Double(point.x)), "startY": String(Double(point.y))]))
+            details: ["operation": operation.rawValue, "windowID": String(source.window.id.rawValue)]))
         return true
     }
 

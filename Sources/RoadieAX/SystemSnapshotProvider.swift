@@ -299,6 +299,12 @@ enum AXMessaging {
         _ = AXUIElementSetMessagingTimeout(element, timeout)
         return element
     }
+
+    /// Pose le même délai court sur un élément fenêtre (certains appels sur fenêtre ignorent le délai système).
+    static func configure(_ element: AXUIElement) {
+        _ = systemWideTimeout
+        _ = AXUIElementSetMessagingTimeout(element, timeout)
+    }
 }
 
 /// Registre des applications qui ne répondent plus à AX : pid -> date de reprise.
@@ -565,6 +571,7 @@ struct AXApplicationWindows: @unchecked Sendable {
 
         var entries: [(id: CGWindowID?, element: AXUIElement)] = []
         for element in windows {
+            AXMessaging.configure(element)
             var id = CGWindowID()
             let idError = AXUIElementGetWindowID(element, &id)
             if registry.noteResult(idError, pid: pid) { return nil }
@@ -581,6 +588,7 @@ struct AXApplicationWindows: @unchecked Sendable {
             children: { value($0, kAXChildrenAttribute) as? [AXUIElement] ?? [] },
             identifier: { element in
                 guard !registry.isQuarantined(pid) else { return nil }
+                AXMessaging.configure(element)
                 var id = CGWindowID()
                 let error = AXUIElementGetWindowID(element, &id)
                 registry.noteResult(error, pid: pid)
@@ -663,14 +671,70 @@ public func axWindowElements(pid: pid_t) -> [CGWindowID: AXUIElement] {
 /// devenu invalide.
 final class AXWindowIndexCache: @unchecked Sendable {
     static let shared = AXWindowIndexCache()
+    /// Fenêtre CG absente de kAXWindows pendant au moins 1 s : considérée comme auxiliaire non-AX
+    /// (évite de ré-énumérer 256 enfants à chaque tick), puis revérifiée après 30 s ou invalidation.
+    static let settledUnresolvedAge: TimeInterval = 1.0
+    static let settledUnresolvedTTL: TimeInterval = 30.0
+
+    private struct UnresolvedEntry {
+        var firstSeen: Date
+        var lastChecked: Date
+    }
 
     private let lock = NSLock()
     private var byPID: [pid_t: AXApplicationWindows] = [:]
+    private var unresolvedByPID: [pid_t: [CGWindowID: UnresolvedEntry]] = [:]
     private var generation: UInt64 = 0
+    private let now: @Sendable () -> Date
+
+    init(now: @escaping @Sendable () -> Date = { Date() }) {
+        self.now = now
+    }
+
     func beginSnapshot() -> UInt64 { lock.withLock { generation &+= 1; return generation } }
 
     func windows(for pid: pid_t) -> AXApplicationWindows? {
         lock.withLock { byPID[pid] }
+    }
+
+    /// Index réutilisable si chaque ID demandé est connu ou confirmé non-AX depuis `settledUnresolvedAge`
+    /// (et vérifié dans `settledUnresolvedTTL`). Un nouvel ID force toujours une énumération fraîche. O(k).
+    func reusableWindows(for pid: pid_t, required: Set<CGWindowID>?) -> AXApplicationWindows? {
+        lock.withLock {
+            guard let cached = byPID[pid], let required, !required.isEmpty else { return nil }
+            let date = now()
+            let unresolved = unresolvedByPID[pid] ?? [:]
+            let covered = required.allSatisfy { id in
+                if cached.element(id: id) != nil { return true }
+                guard let entry = unresolved[id] else { return false }
+                return date.timeIntervalSince(entry.firstSeen) >= Self.settledUnresolvedAge
+                    && date.timeIntervalSince(entry.lastChecked) < Self.settledUnresolvedTTL
+            }
+            return covered ? cached : nil
+        }
+    }
+
+    /// Consigne les IDs demandés restés absents après une énumération fraîche de `pid`. O(k).
+    func recordObservation(for pid: pid_t, index: AXApplicationWindows, required: Set<CGWindowID>?, generation expected: UInt64? = nil) {
+        lock.withLock {
+            guard expected == nil || expected == generation else { return }
+            let date = now()
+            var entries = unresolvedByPID[pid] ?? [:]
+            if let required {
+                entries = entries.filter { required.contains($0.key) && index.element(id: $0.key) == nil }
+                for id in required where index.element(id: id) == nil {
+                    if var existing = entries[id] {
+                        existing.lastChecked = date
+                        entries[id] = existing
+                    } else {
+                        entries[id] = UnresolvedEntry(firstSeen: date, lastChecked: date)
+                    }
+                }
+            } else {
+                entries = entries.filter { index.element(id: $0.key) == nil }
+            }
+            unresolvedByPID[pid] = entries.isEmpty ? nil : entries
+        }
     }
 
     func store(_ windows: AXApplicationWindows) {
@@ -681,12 +745,18 @@ final class AXWindowIndexCache: @unchecked Sendable {
     func replaceAll(with windows: [AXApplicationWindows], generation expected: UInt64? = nil) {
         lock.withLock {
             guard expected == nil || expected == generation else { return }
-            byPID = Dictionary(windows.map { ($0.pid, $0) }, uniquingKeysWith: { $1 })
+            let next = Dictionary(windows.map { ($0.pid, $0) }, uniquingKeysWith: { $1 })
+            byPID = next
+            unresolvedByPID = unresolvedByPID.filter { next[$0.key] != nil }
         }
     }
 
     func invalidate(pid: pid_t) {
-        lock.withLock { generation &+= 1; byPID[pid] = nil }
+        lock.withLock {
+            generation &+= 1
+            byPID[pid] = nil
+            unresolvedByPID[pid] = nil
+        }
     }
 }
 
@@ -861,7 +931,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 var window = original
                 if window.isTileCandidate, let attrs = self.attributes(forCGWindowID: window.id.rawValue,
                     pid: window.pid, requiredWindowIDs: requiredByPID[window.pid],
-                    appWindows: &appWindows, generation: attributesGeneration) {
+                    appWindows: &appWindows, generation: attributesGeneration, indexGeneration: indexGeneration) {
                     window.subrole = attrs.stable.subrole
                     window.role = attrs.stable.role
                     window.furniture = attrs.furniture
@@ -911,7 +981,8 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         pid: pid_t,
         requiredWindowIDs: Set<CGWindowID>?,
         appWindows: inout [pid_t: AXApplicationWindows?],
-        generation: UInt64
+        generation: UInt64,
+        indexGeneration: UInt64
     ) -> AXWindowAttributes? {
         let cache = AXAttributeCache.shared
         let registry = AXUnresponsiveApps.shared
@@ -922,10 +993,18 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
             index = memo
         } else {
             // SPEC-051 A-02 : l'index du relevé précédent sert s'il connaît toutes les fenêtres
-            // visibles ; une fenêtre nouvelle force une énumération. L'écrivain l'invalide déjà sur
-            // création, destruction ou élément devenu invalide.
-            index = Self.reusableIndex(AXWindowIndexCache.shared.windows(for: pid), required: requiredWindowIDs)
-                ?? AXApplicationWindows(pid: pid, requiredWindowIDs: requiredWindowIDs)
+            // visibles (ou les IDs confirmés non-AX depuis 1 s) ; une fenêtre neuve force une énumération.
+            if let reused = AXWindowIndexCache.shared.reusableWindows(for: pid, required: requiredWindowIDs) {
+                index = reused
+            } else {
+                let fresh = AXApplicationWindows(pid: pid, requiredWindowIDs: requiredWindowIDs)
+                if let fresh {
+                    AXWindowIndexCache.shared.recordObservation(
+                        for: pid, index: fresh, required: requiredWindowIDs, generation: indexGeneration
+                    )
+                }
+                index = fresh
+            }
             appWindows.updateValue(index, forKey: pid)
         }
         let lastKnown = cache.lastKnown(for: id)
@@ -1269,36 +1348,63 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     ///    elle a déjà une fenêtre sur l'espace affiché (réglage « passer à un espace… » actif) ;
     /// 2. élément AX obtenu par jeton distant, puis focus et AXRaise sur la fenêtre elle-même (AltTab).
     public func focusOnOtherSpace(_ window: WindowSnapshot, timeout: TimeInterval) -> SpaceFocusOutcome {
-        let start = Date()
+        focusOnOtherSpace(
+            window,
+            timeout: timeout,
+            openApplication: { pid in
+                guard let url = NSRunningApplication(processIdentifier: pid)?.bundleURL else { return false }
+                let configuration = NSWorkspace.OpenConfiguration()
+                configuration.activates = true
+                NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+                return true
+            },
+            remoteWindow: Self.remoteWindowElement,
+            makeKey: { pid, id in WindowKeyFocus.makeKey(pid: pid, windowID: id) },
+            sleep: { Thread.sleep(forTimeInterval: $0) }
+        )
+    }
+
+    func focusOnOtherSpace(
+        _ window: WindowSnapshot,
+        timeout: TimeInterval,
+        openApplication: (pid_t) -> Bool,
+        remoteWindow: (pid_t, CGWindowID) -> AXUIElement?,
+        makeKey: (pid_t, CGWindowID) -> Bool,
+        sleep: (TimeInterval) -> Void
+    ) -> SpaceFocusOutcome {
+        let start = now()
         var outcome = SpaceFocusOutcome(opened: false, focused: false, waitedMs: 0)
         func finished() -> SpaceFocusOutcome {
-            outcome.waitedMs = Int(Date().timeIntervalSince(start) * 1000)
+            outcome.waitedMs = max(0, Int(now().timeIntervalSince(start) * 1000))
             return outcome
         }
         func reached(until deadline: TimeInterval) -> Bool {
             repeat {
-                Thread.sleep(forTimeInterval: 0.05)
+                sleep(0.05)
+                windowIndex.invalidate(pid: window.pid)
                 var windows: PIDWindows?
-                if let element = element(pid: window.pid, id: window.id, title: window.title, frame: window.frame, windows: &windows) {
-                    outcome.focused = focus(element, pid: window.pid)
+                if let element = element(pid: window.pid, id: window.id, title: window.title, frame: window.frame, windows: &windows),
+                   focus(element, pid: window.pid) {
+                    outcome.focused = true
                     return true
                 }
-            } while Date().timeIntervalSince(start) < deadline
+            } while now().timeIntervalSince(start) < deadline
             return false
         }
-        if let url = NSRunningApplication(processIdentifier: window.pid)?.bundleURL {
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = true
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+        if openApplication(window.pid) {
             outcome.opened = true
             if reached(until: timeout / 2) { return finished() }
         }
-        guard let remote = Self.remoteWindowElement(pid: window.pid, windowID: CGWindowID(window.id.rawValue)) else {
+        if let remote = remoteWindow(window.pid, CGWindowID(window.id.rawValue)) {
+            AXMessaging.configure(remote)
+            outcome.remote = true
+            _ = focus(remote, pid: window.pid)
+            _ = reached(until: timeout)
             return finished()
         }
-        outcome.remote = true
-        _ = focus(remote, pid: window.pid)
-        _ = reached(until: timeout)
+        if makeKey(window.pid, CGWindowID(window.id.rawValue)) {
+            _ = reached(until: timeout)
+        }
         return finished()
     }
 
@@ -1394,6 +1500,10 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         let focusedWindow = io.setValue(element, of: kAXFocusedWindowAttribute, on: app)
         if registry.noteResult(focusedWindow, pid: pid) {
             return false
+        }
+        if focusedWindow != .success {
+            let mainError = io.setValue(kCFBooleanTrue, of: kAXMainAttribute, on: element)
+            if registry.noteResult(mainError, pid: pid) { return false }
         }
         let raise = io.performAction(kAXRaiseAction, on: element)
         if registry.noteResult(raise, pid: pid) { return false }

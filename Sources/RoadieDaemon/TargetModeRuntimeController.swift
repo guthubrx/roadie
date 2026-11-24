@@ -499,12 +499,19 @@ public final class TargetModeRuntimeController: NSObject {
         }
         searchOpening = Task { [weak self] in
             guard let self else { return }
+            let readFocused = command.name == "targets.screen" ? nil : self.service.focusedWindowReader()
             var snapshot: DaemonSnapshot?
             for attempt in 0..<4 {
                 guard !Task.isCancelled else { return }
                 snapshot = await self.service.readerSnapshot(followFocus: false)
                 if snapshot != nil { break }
                 if attempt < 3 { try? await Task.sleep(for: .milliseconds(100)) }
+            }
+            let focusedWindowID: WindowID?
+            if let readFocused, !Task.isCancelled {
+                focusedWindowID = await Task.detached(priority: .userInitiated) { readFocused() }.value
+            } else {
+                focusedWindowID = nil
             }
             guard !Task.isCancelled, self.currentCommand == command.name else { return }
             self.searchEscapeMonitors.forEach(NSEvent.removeMonitor)
@@ -515,11 +522,12 @@ public final class TargetModeRuntimeController: NSObject {
                 self.finish(TargetActionResult(changed: false, message: "snapshot_unavailable", error: "snapshot_unavailable"), command: command.name)
                 return
             }
-            self.showTargetsSearch(command, snapshot: snapshot, clock: clock)
+            self.showTargetsSearch(command, snapshot: snapshot, focusedWindowID: focusedWindowID, clock: clock)
         }
     }
 
-    private func showTargetsSearch(_ command: TargetModeRuntimeCommand, snapshot: DaemonSnapshot, clock: LauncherOpenClock) {
+    private func showTargetsSearch(_ command: TargetModeRuntimeCommand, snapshot: DaemonSnapshot,
+                                   focusedWindowID: WindowID? = nil, clock: LauncherOpenClock) {
         let config = service.effectiveConfig.experimental.targetMode
         // Barre immédiate (FR-009) : cibles Roadie tout de suite, puis toutes les fenêtres visibles, lues
         // en arrière-plan, chacune affichée dès qu'elle est lue. 2 s par fenêtre au moins : la barre
@@ -544,7 +552,7 @@ public final class TargetModeRuntimeController: NSObject {
         if command.name == "targets.actions" {
             // Fenêtre active réelle (session 098) : celle du snapshot sans suivi du focus est la fenêtre
             // retenue pour la stage du premier écran, pas forcément celle de l'application au premier plan.
-            let focused = service.focusedWindowID() ?? WindowSwitcherFocusHistory.shared.recentIDs.first
+            let focused = focusedWindowID ?? WindowSwitcherFocusHistory.shared.recentIDs.first
             let window = focused.flatMap { id in roadieTargets.first { $0.id == "window:\(id.rawValue)" } }.map(LauncherSubject.target)
             // Session 131 : un texte sélectionné passe avant la fenêtre (actions universelles d'Alfred).
             initialSubject = LauncherText.initialSubject(selection: Self.axSelectedText(), window: window)
@@ -593,7 +601,8 @@ public final class TargetModeRuntimeController: NSObject {
             },
             // Recherche à l'écran (session 133) : ni liste ni index des applications.
             launcher: command.name == "targets.screen" ? .disabled
-                : launcherContext(initialSubject: initialSubject, targets: roadieTargets, initialQuery: command.string("query"), snapshot: snapshot),
+                : launcherContext(initialSubject: initialSubject, targets: roadieTargets, initialQuery: command.string("query"),
+                                  snapshot: snapshot, preloadedFocusedWindowID: focusedWindowID),
             screenOnly: command.name == "targets.screen",
             onFinish: { [weak self] result in
                 if let self { clock.finish(events: self.events) }
@@ -622,7 +631,7 @@ public final class TargetModeRuntimeController: NSObject {
     }
 
     private func launcherContext(initialSubject: LauncherSubject? = nil, targets: [RoadieTarget] = [], initialQuery: String? = nil,
-                                 snapshot provided: DaemonSnapshot? = nil) -> LauncherSearchContext {
+                                 snapshot provided: DaemonSnapshot? = nil, preloadedFocusedWindowID: WindowID?? = nil) -> LauncherSearchContext {
         let catalog = LauncherAppCatalog.shared
         catalog.setExtraRoots(service.effectiveConfig.experimental.targetMode.appSearchPaths)
         let rankingStore = LauncherRankingStore()
@@ -703,10 +712,9 @@ public final class TargetModeRuntimeController: NSObject {
             idle += [.header(tr("Règle proposée", "Suggested rule")), .rule(first, .create), .rule(first, .later), .rule(first, .never)]
         }
         let windowTargets = Dictionary(targets.filter { $0.kind == .window }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        // Fenêtre active lue dans l'application au premier plan (session 098) : `snapshot.focusedWindowID`
-        // désignait la fenêtre retenue pour la stage du premier écran (iTerm2 sur l'autre écran).
+        // Fenêtre active lue hors du fil principal (session 159) quand préparée par `startTargetsSearch`.
         LauncherOpenClock.current?.mark("idle_rows")
-        let focused = service.focusedWindowID()
+        let focused = preloadedFocusedWindowID ?? service.focusedWindowID()
         LauncherOpenClock.current?.mark("focused_window")
         let recentIDs = WindowSwitcherFocusHistory.shared.recentIDs
         let previous = Self.previousWindow(recent: recentIDs, focused: focused, targets: windowTargets)

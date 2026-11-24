@@ -695,6 +695,36 @@ struct AXCacheInvalidationTests {
         cache.invalidate(pid: 61)
         #expect(cache.windows(for: 61) == nil)
     }
+
+    @Test
+    func windowIndexSettlesPersistentNonAXWindowIDsWithoutBlockingNewDiscovery() {
+        let clock = ManualClock()
+        let cache = AXWindowIndexCache(now: { clock.now })
+        let pid: pid_t = 77
+        let found = index(pid: pid, ids: [701])
+        let required: Set<CGWindowID> = [701, 702] // 702 = fenêtre auxiliaire absente de kAXWindows
+
+        cache.store(found)
+        cache.recordObservation(for: pid, index: found, required: required)
+        // Avant 1 s : laisse `windowDiscovery` ré-énumérer pour une fenêtre neuve en cours d'apparition.
+        #expect(cache.reusableWindows(for: pid, required: required) == nil)
+
+        clock.advance(1.1)
+        #expect(cache.reusableWindows(for: pid, required: required)?.element(id: 701) != nil)
+        // Une nouvelle fenêtre CG force immédiatement une ré-énumération fraîche.
+        #expect(cache.reusableWindows(for: pid, required: [701, 702, 703]) == nil)
+
+        // Expiration TTL (30 s) : revérification périodique.
+        clock.advance(31)
+        #expect(cache.reusableWindows(for: pid, required: required) == nil)
+
+        // Invalidation explicite sur événement AX : oublie les non-AX.
+        cache.recordObservation(for: pid, index: found, required: required)
+        clock.advance(1.1)
+        #expect(cache.reusableWindows(for: pid, required: required) != nil)
+        cache.invalidate(pid: pid)
+        #expect(cache.reusableWindows(for: pid, required: required) == nil)
+    }
 }
 
 @Suite
@@ -845,5 +875,58 @@ extension AXWindowFrameWriterTests {
                 frame: CGRect(x: 4432, y: -759, width: 914, height: 1052), positionsBeforeResizing: true)],
             generation: expected, isCurrent: { generations.current == expected })
         #expect(f.io.frameWrites == ["set AXPosition"])
+    }
+
+    @Test func spec159FocusOnOtherSpaceRetriesFailedFocusAndFallsBackToMakeKey() {
+        let f = WriterFixture()
+        let pid: pid_t = 88
+        let target = window(881, pid: pid)
+        // 1) Fenêtre trouvée au 1er essai mais `focus` échoue (transition en cours) : doit retenter
+        // et invalider l'index au lieu de sortir immédiatement avec `focused=false`.
+        f.io.windows[pid] = index(pid: pid, ids: [881])
+        f.io.actionError = .failure
+        var sleeps = 0
+        let first = f.writer.focusOnOtherSpace(
+            target, timeout: 0.4,
+            openApplication: { _ in true },
+            remoteWindow: { _, _ in nil },
+            makeKey: { _, _ in false },
+            sleep: { step in
+                f.clock.advance(step)
+                sleeps += 1
+                if sleeps == 2 { f.io.actionError = .success }
+            }
+        )
+        #expect(first.opened)
+        #expect(first.focused)
+        #expect(sleeps == 2)
+        #expect(f.io.enumerations >= 2)
+
+        // 2) Absente de kAXWindows et sans jeton distant (cas Firefox) : repli sur `makeKey` par windowID.
+        let f2 = WriterFixture()
+        var makeKeyCalled = false
+        let second = f2.writer.focusOnOtherSpace(
+            target, timeout: 0.4,
+            openApplication: { _ in true },
+            remoteWindow: { _, _ in nil },
+            makeKey: { _, id in
+                makeKeyCalled = true
+                if id == 881 { f2.io.windows[pid] = index(pid: pid, ids: [881]) }
+                return true
+            },
+            sleep: { f2.clock.advance($0) }
+        )
+        #expect(makeKeyCalled)
+        #expect(!second.remote)
+        #expect(second.focused)
+    }
+
+    @Test func spec159FocusAttemptsAXMainWhenAXFocusedWindowFails() {
+        let f = WriterFixture()
+        let pid: pid_t = 9_999_998
+        f.io.windows[pid] = index(pid: pid, ids: [502])
+        f.io.setErrors[kAXFocusedWindowAttribute] = .failure
+        _ = f.writer.focus(window(502, pid: pid))
+        #expect(f.io.calls.contains("set AXMain"))
     }
 }

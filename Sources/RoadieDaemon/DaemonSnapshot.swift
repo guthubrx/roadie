@@ -2273,6 +2273,10 @@ public extension SnapshotService {
         provider.focusedWindowID()
     }
 
+    @MainActor func focusedWindowReader() -> @Sendable () -> WindowID? {
+        provider.focusedWindowReader()
+    }
+
     /// Écriture directe d'une fenêtre (T213) : `generation` est celle de la commande, par défaut la
     /// génération en cours. Budget A13 épuisé : nil sans écriture, frame observée acceptée et signalée.
     /// `preservingSize` : position seule, pour garer une fenêtre sans toucher sa taille (SPEC-062).

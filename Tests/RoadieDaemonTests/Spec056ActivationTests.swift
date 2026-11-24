@@ -200,6 +200,38 @@ struct Spec056ActivationTests {
         }
     }
 
+    @Test func rollbackSkipsWindowsWhosePlacementFailed() throws {
+        let current = spec056Window(1, x: 100)
+        let target = spec056Window(2, x: 999)
+        var targetMember = spec056Member(target)
+        targetMember.frame = Rect(x: 400, y: 100, width: 300, height: 300)
+        let provider = PowerUserProvider(windows: [current, target])
+        let writer = Spec056RestoringWriter(provider: provider, target: target, becomesReadable: false)
+        writer.focusSucceeds = false
+        writer.failingFrameWindowIDs = [target.id]
+        let store = StageStore(path: tempPath("spec159-rollback-skip-failed"))
+        let eventsPath = tempPath("spec159-rollback-events")
+        defer { try? FileManager.default.removeItem(atPath: eventsPath) }
+        let events = EventLog(path: eventsPath)
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: powerDisplay().id,
+            activeStageID: StageID(rawValue: "source"), stages: [
+                PersistentStage(id: StageID(rawValue: "source"), mode: .float, members: [spec056Member(current)]),
+                PersistentStage(id: StageID(rawValue: "destination"), mode: .float, members: [targetMember])])]))
+        let owner = try #require(store.state().stageScope(for: target.id))
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(),
+                                      stageStore: store, events: events, persistStateChanges: false)
+        let result = WindowBookmarkCommandService(service: service, store: store, events: events).focusWindow(
+            target, in: owner, snapshot: service.snapshot(followFocus: false),
+            generation: PlacementGeneration.shared.next(), label: "switcher", cause: "switcher.activate",
+            eventPrefix: "window.switcher", requireOwnership: true, details: [:])
+        #expect(result.outcome == .failed)
+        // `current` a été masquée puis restaurée ; `target` ayant échoué au placement n'est pas ré-écrite au rollback.
+        #expect(writer.frameAttempts[current.id] == 2)
+        #expect(writer.frameAttempts[target.id] == 1)
+        let failureEvent = try #require(events.envelopes(limit: 50).last { $0.type == "window.switcher_focus_failed" })
+        #expect(failureEvent.payload["rollbackPlacementFailed"] == .string("0"))
+    }
+
     /// Session 106 : depuis un plein écran natif, la fenêtre visée est sur un autre espace et AX ne la voit
     /// pas. Le repli ouvre l'application et change d'espace ; sans lui, l'activation échoue comme avant et revient en arrière.
     @Test(arguments: [false, true])
@@ -363,6 +395,8 @@ private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Senda
     var focusSucceeds = true
     var requiresFrameBeforeFocus = false
     var frameSucceeds = true
+    var failingFrameWindowIDs: Set<WindowID> = []
+    var frameAttempts: [WindowID: Int] = [:]
     var onFocus: (() -> Void)?
     var otherSpaceSucceeds = false
     init(provider: PowerUserProvider, target: WindowSnapshot, becomesReadable: Bool) {
@@ -390,7 +424,8 @@ private final class Spec056RestoringWriter: WindowFrameWriting, @unchecked Senda
     }
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         calls.append("frame")
-        guard frameSucceeds else { return nil }
+        frameAttempts[window.id, default: 0] += 1
+        guard frameSucceeds, !failingFrameWindowIDs.contains(window.id) else { return nil }
         frameRequests[window.id] = Rect(frame)
         if window.id == target.id { restoredFrame = Rect(frame) }
         return frame

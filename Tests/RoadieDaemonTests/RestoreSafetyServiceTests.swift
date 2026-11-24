@@ -680,4 +680,54 @@ struct RestoreSafetyCoverageTests {
         try competing.acquire()
         competing.release()
     }
+
+    @Test
+    func unhideAllTreatsRetiredSpacelessWindowOfVisibleAppAsStaleNotFailed() throws {
+        let display = powerDisplay()
+        let provider = PowerUserProvider(displays: [display], windows: [powerWindow(1, x: 0)])
+        provider.inventory = [WindowID(rawValue: 1): 1, WindowID(rawValue: 180_564): alivePID]
+        let writer = ScriptedFrameWriter(provider: provider)
+        writer.unreachable = [WindowID(rawValue: 180_564)]
+        let stagePath = tempPath("spec159-retired-stage")
+        let restorePath = tempPath("spec159-retired-restore")
+        let markerPath = tempPath("spec159-retired-marker")
+        let eventsPath = tempPath("spec159-retired-events")
+        defer {
+            for p in [stagePath, restorePath, markerPath, eventsPath, "\(markerPath).recovery.lock"] {
+                try? FileManager.default.removeItem(atPath: p)
+            }
+        }
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display.id, activeStageID: stage1, stages: [
+                PersistentStage(id: stage1, members: [member(1, pid: 1, frame: provider.snapshots[0].frame)]),
+                PersistentStage(id: stage2, members: [member(180_564, pid: alivePID)]),
+            ])
+        ], activeDisplayID: display.id))
+        let events = EventLog(path: eventsPath)
+        let snapshotService = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(),
+                                              stageStore: stageStore, events: events)
+
+        // 1) App visible + aucun Space SkyLight (ex. AlDente) : fenêtre retirée → stale, pas d'échec.
+        let retiredService = RestoreSafetyService(
+            path: restorePath, markerPath: markerPath, service: snapshotService, eventLog: events,
+            windowsWithoutSpace: { ids in ids }, isApplicationHidden: { _ in false }
+        )
+        let okReport = retiredService.unhideAll()
+        #expect(okReport.failed == 0)
+
+        // 2) App masquée : sans Space ne prouve pas la fermeture → reste un échec.
+        let hiddenAppService = RestoreSafetyService(
+            path: restorePath, markerPath: markerPath, service: snapshotService, eventLog: events,
+            windowsWithoutSpace: { ids in ids }, isApplicationHidden: { _ in true }
+        )
+        #expect(hiddenAppService.unhideAll().failed == 1)
+
+        // 3) Fenêtre encore sur un autre Space : pas dans `windowsWithoutSpace` → reste un échec.
+        let otherSpaceService = RestoreSafetyService(
+            path: restorePath, markerPath: markerPath, service: snapshotService, eventLog: events,
+            windowsWithoutSpace: { _ in [] }, isApplicationHidden: { _ in false }
+        )
+        #expect(otherSpaceService.unhideAll().failed == 1)
+    }
 }

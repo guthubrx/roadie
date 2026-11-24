@@ -188,11 +188,15 @@ final class ZoneHistory {
         update { $0.removeAll { $0.fromClick == true && $0.bundleID == bundleID } } ?? []
     }
 
-    func setThumbnail(_ crop: CGRect, for key: String) {
+    @discardableResult
+    func setThumbnail(_ crop: CGRect, for key: String) -> Bool {
+        var updated = false
         _ = update { saved in
             guard let index = saved.firstIndex(where: { $0.key == key }) else { return }
             saved[index].thumbnailCrop = Rect(crop)
+            updated = true
         }
+        return updated
     }
 
     func element(for record: ZoneRecord) -> AXUIElement? { elements[record.key] }
@@ -220,7 +224,9 @@ enum ZoneRecorder {
                                                            windowSize: CGSize(width: record.windowWidth, height: record.windowHeight)) { outcome in
                 if outcome != "ok" { events.append(RoadieEvent(type: "zone.thumbnail", details: ["app": record.appName, "outcome": outcome])) }
             }
-            if let crop { ZoneHistory.shared.setThumbnail(crop, for: record.key) }
+            if let crop, !ZoneHistory.shared.setThumbnail(crop, for: record.key) {
+                ZoneThumbnails.shared.remove(record.key)
+            }
         }
     }
 }

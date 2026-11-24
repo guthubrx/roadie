@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import RoadieAX
@@ -54,17 +55,23 @@ public struct RestoreSafetyService {
     private let markerPath: String
     private let service: SnapshotService
     private let eventLog: EventLog
+    private let windowsWithoutSpace: @Sendable (Set<WindowID>) -> Set<WindowID>?
+    private let isApplicationHidden: @Sendable (Int32) -> Bool
 
     public init(
         path: String = "~/.local/state/roadies/restore.json",
         markerPath: String = "~/.local/state/roadies/restore-run.json",
         service: SnapshotService = SnapshotService(),
-        eventLog: EventLog = EventLog()
+        eventLog: EventLog = EventLog(),
+        windowsWithoutSpace: @escaping @Sendable (Set<WindowID>) -> Set<WindowID>? = SpaceProbe.windowsWithoutSpace,
+        isApplicationHidden: @escaping @Sendable (Int32) -> Bool = { NSRunningApplication(processIdentifier: $0)?.isHidden == true }
     ) {
         self.path = NSString(string: path).expandingTildeInPath
         self.markerPath = NSString(string: markerPath).expandingTildeInPath
         self.service = service
         self.eventLog = eventLog
+        self.windowsWithoutSpace = windowsWithoutSpace
+        self.isApplicationHidden = isApplicationHidden
     }
 
     /// Écrit la dernière frame visible de chaque fenêtre gérée (FR-037). Une fenêtre masquée
@@ -185,6 +192,7 @@ public struct RestoreSafetyService {
         }
         var unreachableIDs = Set<UInt32>()
         var staleIDs = Set<UInt32>()
+        var offscreenMemberPIDs: [UInt32: Int32] = [:]
         for member in Self.hiddenStageMembers(state) where !targetIDs.contains(member.windowID.rawValue) {
             // L'inventaire de TOUS les Spaces fait foi pour une identité absente du
             // relevé AX. Un PID encore vivant ne prouve pas que son ancienne fenêtre
@@ -201,6 +209,9 @@ public struct RestoreSafetyService {
             } else if let pid = member.pid {
                 // pid mort : fenêtre fermée, rien à restaurer.
                 guard ProcessLiveness.isAlive(pid) else { continue }
+                if current.existingWindowPIDs?[member.windowID] == pid {
+                    offscreenMemberPIDs[member.windowID.rawValue] = pid
+                }
                 addTarget(WindowSnapshot(
                     id: member.windowID,
                     pid: pid,
@@ -229,13 +240,25 @@ public struct RestoreSafetyService {
             item.status == .clamped && !(item.actual.map { Self.isVisible($0, displays: displays) } ?? false)
         }
         let clampedHidden = clampedHiddenItems.count
-        let failedIDs = Set(result.items.filter { $0.status == .failed }.map { $0.windowID.rawValue })
+        var rawFailedIDs = Set(result.items.filter { $0.status == .failed }.map { $0.windowID.rawValue })
+        // Fenêtre fermée mais gardée en mémoire par son application (ex. AlDente) : absente
+        // du relevé AX, écriture AX impossible, application visible et aucun Space SkyLight.
+        let retiredCandidates = Set(rawFailedIDs.compactMap { raw -> WindowID? in
+            guard let pid = offscreenMemberPIDs[raw], !isApplicationHidden(pid) else { return nil }
+            return WindowID(rawValue: raw)
+        })
+        if !retiredCandidates.isEmpty, let withoutSpace = windowsWithoutSpace(retiredCandidates), !withoutSpace.isEmpty {
+            let retiredRaw = Set(withoutSpace.map(\.rawValue))
+            rawFailedIDs.subtract(retiredRaw)
+            staleIDs.formUnion(retiredRaw)
+        }
+        let failedIDs = rawFailedIDs
             .union(clampedHiddenItems.map { $0.windowID.rawValue }).union(unreachableIDs)
         let report = RestoreSafetyApplyResult(
             path: path,
-            attempted: result.attempted + unreachableIDs.count,
+            attempted: result.attempted + unreachableIDs.count - staleIDs.intersection(Set(result.items.map { $0.windowID.rawValue })).count,
             applied: result.applied + result.clamped - clampedHidden,
-            failed: result.failed + clampedHidden + unreachableIDs.count,
+            failed: rawFailedIDs.count + clampedHidden + unreachableIDs.count,
             missing: unknown
         )
         eventLog.append(RoadieEventEnvelope(

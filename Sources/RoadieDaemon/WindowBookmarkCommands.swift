@@ -231,8 +231,9 @@ public struct WindowBookmarkCommandService {
         // Les bascules de stage gardent leurs animations ; ici le placement doit finir avant AXRaise.
         let (layoutPlan, result) = service.applyCommandPlacement(placement, snapshot: placementSnapshot,
             cause: cause, generation: generation, events: events, immediately: true)
+        let movedIDs = Set(result.items.filter { $0.status == .applied || $0.status == .clamped }.map(\.windowID))
         rollbackCommands = layoutPlan.commands.compactMap { command in
-            guard let original = windowsByID[command.window.id] else { return nil }
+            guard movedIDs.contains(command.window.id), let original = windowsByID[command.window.id] else { return nil }
             return ApplyCommand(window: original, frame: original.frame)
         }
         let layoutAttempted = layoutPlan.commands.count

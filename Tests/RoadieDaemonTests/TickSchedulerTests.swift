@@ -581,4 +581,26 @@ extension Spec149SchedulerTests {
         #expect(ticks == 1)
         scheduler.stop()
     }
+
+    @Test func suspendClearsPreSleepPendingRequestSoWakeLatencyStaysFresh() {
+        let eventsPath = tempPath("spec159-sleep-latency")
+        defer { try? FileManager.default.removeItem(atPath: eventsPath) }
+        let events = EventLog(path: eventsPath)
+        let harness = Harness(events: events)
+        harness.blocked = true
+        harness.scheduler.request(cause: "ax:didActivateApplication")
+        // Mise en veille pendant 2 heures : la demande pré-veille est abandonnée.
+        harness.scheduler.suspend()
+        harness.timer.advance(by: 7_200)
+        harness.blocked = false
+        harness.scheduler.request(cause: "ax:didWake")
+        harness.timer.advance(by: 0.1)
+
+        #expect(harness.ticks.map(\.cause) == ["ax:didWake"])
+        let logged = events.envelopes(limit: 50).filter { $0.type == "live_tick" }
+        #expect(logged.count == 1)
+        let rawLatency: String? = if case .string(let value) = logged[0].payload["latencyMs"] { value } else { nil }
+        let latencyMs = Double(rawLatency ?? "") ?? .greatestFiniteMagnitude
+        #expect(latencyMs < 100)
+    }
 }

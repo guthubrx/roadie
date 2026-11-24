@@ -161,10 +161,24 @@ public final class TickScheduler {
 
     public func stop() {
         stopped = true
+        suspend()
+    }
+
+    /// Mise en veille ou verrouillage : abandonne la demande et la préparation pré-veille.
+    /// Le réveil déclenche une réconciliation fraîche, sans latence gonflée par la veille.
+    public func suspend() {
         cancelTimer?()
         cancelTimer = nil
         preparationTask?.cancel()
         preparationTask = nil
+        pending = nil
+        armedDeadline = nil
+        preparationMs = 0
+        preparationStartedAt = nil
+        preparationFailures = 0
+        preparationRetries = 0
+        preparationReported = false
+        preparationRetryAt = nil
     }
 
     /// Minuteur échu : une passe pour la demande échue, sinon pour l'échéance interne armée si

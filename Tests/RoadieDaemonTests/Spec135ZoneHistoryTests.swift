@@ -83,4 +83,38 @@ struct Spec135ZoneHistoryTests {
         #expect(ZoneThumbnails.crop(zone: .zero, windowSize: CGSize(width: 250, height: 150)) == CGRect(x: 0, y: 0, width: 250, height: 150))
         #expect(ZoneThumbnails.fileName("299224|12|-3") == "299224-12--3.png")
     }
+
+    @MainActor @Test func removingZoneDuringCapturePreventsOrphanThumbnail() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("spec159-thumbs-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let thumbs = ZoneThumbnails(folder: dir.path)
+        let key = "299224|12|8"
+        let token = thumbs.beginCapture(for: key)
+        // Suppression survenue pendant la capture asynchrone.
+        thumbs.remove(key)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = try #require(CGContext(data: nil, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 32,
+                                             space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let cgImage = try #require(context.makeImage())
+        let stored = await thumbs.store((cgImage, CGSize(width: 8, height: 8)), key: key, crop: CGRect(x: 0, y: 0, width: 8, height: 8), token: token)
+        #expect(!stored)
+        #expect(!FileManager.default.fileExists(atPath: thumbs.path(for: key)))
+        #expect(thumbs.image(for: key) == nil)
+
+        // Une nouvelle capture valide sur la même clé n'est pas effacée par un ancien jeton obsolète.
+        let freshToken = thumbs.beginCapture(for: key)
+        #expect(await thumbs.store((cgImage, CGSize(width: 8, height: 8)), key: key, crop: CGRect(x: 0, y: 0, width: 8, height: 8), token: freshToken))
+        #expect(!(await thumbs.store((cgImage, CGSize(width: 8, height: 8)), key: key, crop: CGRect(x: 0, y: 0, width: 8, height: 8), token: token)))
+        #expect(FileManager.default.fileExists(atPath: thumbs.path(for: key)))
+        #expect(thumbs.image(for: key) != nil)
+
+        // Et `setThumbnail` renvoie false si la zone a déjà été oubliée.
+        let historyPath = dir.appendingPathComponent("zones.json").path
+        let history = ZoneHistory(path: historyPath)
+        let z = zone("Zone supprimée")
+        _ = history.record(z, element: nil, policy: ZonePolicy())
+        #expect(history.forget(z))
+        #expect(!history.setThumbnail(CGRect(x: 0, y: 0, width: 8, height: 8), for: z.key))
+    }
 }

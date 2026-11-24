@@ -293,7 +293,6 @@ public final class TitlebarContextMenuController {
         let snapshot = snapshotService.snapshot()
         let axPoint = Self.appKitPointToAX(point)
         let hit = Self.hitTest(point: axPoint, snapshot: snapshot, settings: settings)
-        traceClick(source: source, rawPoint: point, axPoint: axPoint, hit: hit, snapshot: snapshot, settings: settings)
         guard hit.isEligible, let window = hit.window, let windowID = hit.windowID else {
             logIgnored(hit: hit, window: hit.window)
             return false
@@ -650,25 +649,6 @@ public final class TitlebarContextMenuController {
             lastIgnoredAt[key] = now
             return true
         }
-    }
-
-    private func traceClick(
-        source: String,
-        rawPoint: CGPoint,
-        axPoint: CGPoint,
-        hit: TitlebarHitTest,
-        snapshot: DaemonSnapshot,
-        settings: TitlebarContextMenuSettings
-    ) {
-        let windowSummary: String
-        if let window = hit.window {
-            windowSummary = "window=\(window.id.rawValue) app=\(window.appName) frame=\(window.frame.x),\(window.frame.y),\(window.frame.width),\(window.frame.height)"
-        } else {
-            windowSummary = "window=-"
-        }
-        debug(
-            "click source=\(source) raw=\(Int(rawPoint.x)),\(Int(rawPoint.y)) ax=\(Int(axPoint.x)),\(Int(axPoint.y)) enabled=\(settings.enabled) windows=\(snapshot.windows.count) reason=\(hit.reason.rawValue) eligible=\(hit.isEligible) \(windowSummary)"
-        )
     }
 
     private func eventDetails(window: WindowSnapshot?, reason: TitlebarHitTestReason) -> [String: String] {

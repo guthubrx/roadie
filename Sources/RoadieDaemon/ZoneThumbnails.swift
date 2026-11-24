@@ -25,6 +25,8 @@ final class ZoneThumbnails {
 
     let folder: String
     private var images: [String: NSImage] = [:]
+    private var generations: [String: UInt64] = [:]
+    private var nextGeneration: UInt64 = 0
 
     init(folder: String = NSString(string: TestEnvironment.launcherFile("zone-thumbs")).expandingTildeInPath) {
         self.folder = folder
@@ -60,17 +62,29 @@ final class ZoneThumbnails {
     }
 
     func remove(_ key: String) {
+        nextGeneration &+= 1
+        generations[key] = nextGeneration
         images[key] = nil
         try? FileManager.default.removeItem(atPath: path(for: key))
     }
 
+    func beginCapture(for key: String) -> UInt64 {
+        generations[key] ?? 0
+    }
+
+    func isCaptureValid(_ token: UInt64, for key: String) -> Bool {
+        (generations[key] ?? 0) == token
+    }
+
     /// Capture du rectangle autour de la zone (relatif à la fenêtre) ; rend le rectangle découpé, ou nil si la fenêtre
-    /// ne se capture pas (autorisation, fenêtre fermée). `outcome` reçoit la raison d'un échec (diagnostic) ou « ok ».
+    /// ne se capture pas (autorisation, fenêtre fermée) ou si la zone a été supprimée pendant la capture.
     func capture(key: String, windowID: UInt32, zone: CGRect, windowSize: CGSize, outcome: (String) -> Void = { _ in }) async -> CGRect? {
+        let token = beginCapture(for: key)
         let crop = Self.crop(zone: zone, windowSize: windowSize)
-        guard let image = await Self.windowImage(windowID, region: crop, outcome: outcome) else { return nil }
-        await store(image, key: key, crop: crop)
-        return crop
+        guard let image = await Self.windowImage(windowID, region: crop, outcome: outcome),
+              isCaptureValid(token, for: key) else { return nil }
+        let stored = await store(image, key: key, crop: crop, token: token)
+        return stored ? crop : nil
     }
 
     /// Délai minimal entre deux rafraîchissements des photos d'une même fenêtre.
@@ -90,17 +104,21 @@ final class ZoneThumbnails {
         guard !zones.isEmpty, Self.isRefreshDue(last: refreshedAt[windowID], now: now) else { return }
         refreshedAt = refreshedAt.filter { now.timeIntervalSince($0.value) < Self.refreshInterval }
         refreshedAt[windowID] = now
+        let tokens = Dictionary(uniqueKeysWithValues: zones.map { ($0.key, beginCapture(for: $0.key)) })
         Task { @MainActor in
             guard let window = await Self.windowImage(windowID, region: nil, outcome: { _ in }) else { return }
             let size = window.size
             let pixelsPerPoint = CGFloat(window.cgImage.width) / max(1, size.width)
             for zone in zones {
+                guard let token = tokens[zone.key], isCaptureValid(token, for: zone.key) else { continue }
                 let crop = Self.crop(zone: zone.relative.cgRect, windowSize: size)
                 let pixels = CGRect(x: crop.minX * pixelsPerPoint, y: crop.minY * pixelsPerPoint,
                                     width: crop.width * pixelsPerPoint, height: crop.height * pixelsPerPoint).integral
                 guard let part = window.cgImage.cropping(to: pixels) else { continue }
-                await store((part, crop.size), key: zone.key, crop: crop)
-                ZoneHistory.shared.setThumbnail(crop, for: zone.key)
+                guard await store((part, crop.size), key: zone.key, crop: crop, token: token) else { continue }
+                if !ZoneHistory.shared.setThumbnail(crop, for: zone.key) {
+                    remove(zone.key)
+                }
             }
         }
     }
@@ -145,16 +163,38 @@ final class ZoneThumbnails {
         return (image, area.size)
     }
 
-    /// Photo gardée en mémoire et écrite hors du fil principal.
-    private func store(_ image: (cgImage: CGImage, size: CGSize), key: String, crop: CGRect) async {
-        images[key] = NSImage(cgImage: image.cgImage, size: crop.size)
+    /// Photo gardée en mémoire et écrite hors du fil principal via un fichier temporaire unique :
+    /// si `remove(key)` invalide `token` pendant la capture ou l'écriture, seul le fichier temporaire
+    /// est retiré et aucune nouvelle capture sur la même clé n'est écrasée.
+    @discardableResult
+    func store(_ image: (cgImage: CGImage, size: CGSize), key: String, crop: CGRect, token: UInt64) async -> Bool {
+        guard isCaptureValid(token, for: key) else { return false }
         let target = path(for: key)
+        let temporary = "\(target).tmp-\(UUID().uuidString)"
         let folder = folder
         let data = NSBitmapImageRep(cgImage: image.cgImage).representation(using: .png, properties: [:])
-        await Task.detached(priority: .utility) {
-            try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
-            try? data?.write(to: URL(fileURLWithPath: target), options: .atomic)
+        let wrote: Bool = await Task.detached(priority: .utility) {
+            guard let data else { return false }
+            do {
+                try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+                try data.write(to: URL(fileURLWithPath: temporary), options: [])
+                return true
+            } catch {
+                try? FileManager.default.removeItem(atPath: temporary)
+                return false
+            }
         }.value
+        guard wrote else { return false }
+        guard isCaptureValid(token, for: key) else {
+            try? FileManager.default.removeItem(atPath: temporary)
+            return false
+        }
+        guard rename(temporary, target) == 0 else {
+            try? FileManager.default.removeItem(atPath: temporary)
+            return false
+        }
+        images[key] = NSImage(cgImage: image.cgImage, size: crop.size)
+        return true
     }
 }
 

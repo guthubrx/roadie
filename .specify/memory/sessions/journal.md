@@ -447,3 +447,14 @@ Les quatre régressions couvrent les deux historiques, l'attente du lecteur et l
 remplacement à taille et date identiques. 2 568 tests Swift et 29 tests de scripts réussis.
 La contre-revue a conduit à étendre le test du lecteur à un fichier modifié
 pendant l'attente et à vérifier le refus de suppression transmis au sélecteur lorsque le fichier est illisible.
+
+Session 159, 24 novembre 2026. Correctifs issus de l'analyse des 70 175 événements et journaux du 17 au 24 novembre :
+(1) `AXWindowIndexCache` mémorise les fenêtres CG non-AX persistantes (après 1 s, TTL 30 s) pour éviter la ré-énumération répétée de 256 enfants AX à chaque tick, et pose le délai AX de 0,5 s directement sur les éléments fenêtres ;
+(2) `DisplayParkingService` réutilise les stages vides portant un ancien `previousFocusedWindowID` et purge les résidus automatiques vides et anonymes `-recovered-` / `-restored-` tout en préservant les stages renommées, occupées ou actives ;
+(3) `TickScheduler.suspend()` abandonne la demande pré-veille à la mise en veille et au verrouillage pour supprimer les latences gonflées au réveil ;
+(4) `AXWindowFrameWriter.focusOnOtherSpace` retente le focus en invalidant l'index AX et tente `WindowKeyFocus.makeKey` sans jeton distant, `focus` tente `AXMain` sur échec de `AXFocusedWindow`, et `WindowBookmarkCommandService` ne rejoue pas au rollback les fenêtres dont le placement a échoué ;
+(5) `RestoreSafetyService.unhideAll()` classe comme obsolètes les fenêtres retirées en mémoire d'applications visibles sans Space SkyLight (ex. AlDente) ;
+(6) suppression des coordonnées de clic brutes sur `stderr` (`titlebar-context-menu`) et dans `modifier_gesture.started` ;
+(7) garde par jeton de génération et renommage atomique dans `ZoneThumbnails` contre les miniatures orphelines lors d'une suppression en cours de capture ;
+(8) lecture de la fenêtre focalisée hors du fil principal à l'ouverture du lanceur.
+2 577 tests Swift dans 391 suites et 29 tests de scripts réussis.

@@ -323,7 +323,10 @@ func installDisplayChangeObserver(displaySettleSeconds: Double, onHealed: @escap
 /// Veille, verrouillage de session : suspend les ticks. Réveil, retour de session : reprise
 /// 3 s plus tard par une seule réconciliation, le temps que macOS restaure écrans et fenêtres.
 @MainActor
-func installPowerObservers(reconcile: @escaping @MainActor () -> Void) {
+func installPowerObservers(
+    onSuspend: @escaping @MainActor () -> Void = {},
+    reconcile: @escaping @MainActor () -> Void
+) {
     let center = NSWorkspace.shared.notificationCenter
     let suspendNames = [NSWorkspace.willSleepNotification, NSWorkspace.sessionDidResignActiveNotification]
     let resumeNames = [NSWorkspace.didWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification]
@@ -335,6 +338,7 @@ func installPowerObservers(reconcile: @escaping @MainActor () -> Void) {
                 nativeResizeRuntime?.cancel(reason: "sleep")
                 FrameTransitionRuntime.shared.cancel()
                 tickSuspendedUntil = .distantFuture
+                onSuspend()
             }
         })
     }
@@ -343,6 +347,7 @@ func installPowerObservers(reconcile: @escaping @MainActor () -> Void) {
             MainActor.assumeIsolated {
                 let resumeDelay: TimeInterval = 3
                 tickSuspendedUntil = Date().addingTimeInterval(resumeDelay)
+                onSuspend()
                 pendingWakeReconcile?.cancel()
                 let item = DispatchWorkItem {
                     MainActor.assumeIsolated {
@@ -473,7 +478,7 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     installDisplayChangeObserver(displaySettleSeconds: displaySettleSeconds) {
         scheduler.request(cause: "ax:displayReconfigured")
     }
-    installPowerObservers { scheduler.request(cause: "ax:didWake") }
+    installPowerObservers(onSuspend: { scheduler.suspend() }, reconcile: { scheduler.request(cause: "ax:didWake") })
 
     // Filet de sécurité (FR-017). `--ticks N` arrête le process après N filets.
     var safetyNetCount = 0

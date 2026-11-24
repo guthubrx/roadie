@@ -636,6 +636,62 @@ struct DisplayParkingServiceTests {
         #expect(Date().timeIntervalSince(start) < 5.0)
     }
 
+    @Test
+    func reusesEmptySlotEvenWithStalePreviousFocusedWindowIDAndPrunesUnnamedRecoveredResidues() throws {
+        let hostID = DisplayID(rawValue: "built-in")
+        let goneID = DisplayID(rawValue: "external")
+        let logicalID = LogicalDisplayID(displayID: goneID)
+        let origin2 = StageOrigin(
+            logicalDisplayID: logicalID, displayID: goneID, desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "2"), position: 2, nameAtParking: "Stage 2",
+            parkedAt: Date(timeIntervalSince1970: 100)
+        )
+        let originCustom = StageOrigin(
+            logicalDisplayID: logicalID, displayID: goneID, desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "9"), position: 3, nameAtParking: "Perso 2",
+            parkedAt: Date(timeIntervalSince1970: 100)
+        )
+        var state = PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: hostID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1", members: [member(1)]),
+                    // Stage vide portant un ancien previousFocusedWindowID : doit être réutilisable.
+                    PersistentStage(id: StageID(rawValue: "2"), name: "Stage 2", previousFocusedWindowID: WindowID(rawValue: 90865)),
+                    // Résidus automatiques vides et anonymes : doivent être purgés.
+                    PersistentStage(id: StageID(rawValue: "2-recovered-3"), name: "Stage 2", previousFocusedWindowID: WindowID(rawValue: 32), parkingState: .restored, origin: origin2),
+                    PersistentStage(id: StageID(rawValue: "1-restored-2"), name: "Stage 1", parkingState: .restored, origin: origin2),
+                    // Stage renommée par l'utilisateur (vide) et stage récupérée encore occupée : conservées.
+                    PersistentStage(id: StageID(rawValue: "9-restored-2"), name: "Perso 2", parkingState: .restored, origin: originCustom),
+                    PersistentStage(id: StageID(rawValue: "6-recovered-2"), name: "Stage 6", parkingState: .restored, origin: origin2, members: [member(60)]),
+                ]),
+                PersistentStageScope(displayID: goneID, logicalDisplayID: logicalID, stages: [
+                    PersistentStage(id: StageID(rawValue: "2"), name: "Stage 2", members: [member(20)]),
+                ]),
+            ],
+            activeDisplayID: hostID
+        )
+
+        // Débranchement : le slot vide "2" (malgré previousFocusedWindowID) est réutilisé.
+        let parkReport = DisplayParkingService().transition(
+            state: &state, liveDisplays: [display("built-in", isMain: true)], windows: [window(1), window(20), window(60)],
+            now: Date(timeIntervalSince1970: 100)
+        )
+        #expect(parkReport.kind == DisplayParkingTransitionKind.park)
+        // Après 60 s : matérialisation + purge des résidus automatiques vides.
+        _ = DisplayParkingService().transition(
+            state: &state, liveDisplays: [display("built-in", isMain: true)], windows: [window(1), window(20), window(60)],
+            now: Date(timeIntervalSince1970: 200)
+        )
+        let host = try #require(state.scopes.first { $0.displayID == hostID })
+        let ids = host.stages.map { $0.id.rawValue }
+        #expect(ids.contains("2"))
+        #expect(host.stages.first { $0.id.rawValue == "2" }?.members.map { $0.windowID } == [WindowID(rawValue: 20)])
+        #expect(!ids.contains("2-recovered-3"))
+        #expect(!ids.contains("1-restored-2"))
+        #expect(ids.contains("9-restored-2"))
+        #expect(ids.contains("6-recovered-2"))
+    }
+
     private func parkedState(
         hostID: DisplayID,
         originID: DisplayID,

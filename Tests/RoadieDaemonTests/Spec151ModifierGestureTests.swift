@@ -327,4 +327,19 @@ import Testing
         controller.checkPhysicalRelease()
         #expect(!input.isCapturedPointerHeld && !runtime.isActive)
     }
+
+    @Test func modifierGestureEventOmitsRawPointerCoordinates() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let input = UserInputActivity(), runtime = setup(f, input: input)
+        defer { runtime.cancelImmediately(reason: "test") }
+        let entry = f.context.snapshot.windows[0], original = f.original(f.source)
+        let point = CGPoint(x: original.midX, y: original.midY)
+        #expect(runtime.begin(source: entry, snapshot: f.context.snapshot, at: point, operation: .resize))
+        runtime.end(cancelled: true)
+        #expect(await f.waitFor { !runtime.isActive })
+        let events = EventLog(path: f.directory.appendingPathComponent("modifier.jsonl").path).envelopes(limit: 50)
+        let started = try #require(events.first { $0.type == "modifier_gesture.started" })
+        #expect(started.payload["startX"] == nil && started.payload["startY"] == nil)
+        #expect(started.payload["operation"] == .string("resize"))
+    }
 }
