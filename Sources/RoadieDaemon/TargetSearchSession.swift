@@ -918,7 +918,9 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         // Historique presse-papiers local sécurisé (Spec 163 : `cb …` ou `clipboard …`).
         let fullConfig = ConfigReloadService.shared.currentConfig()
         if fullConfig.clipboard.enabled, let cbFilter = Self.prefixQuery(model.query, prefixes: ["cb", "clipboard"]) {
-            let entries = ClipboardHistoryStore().load().search(cbFilter, limit: 15)
+            let entries = ClipboardHistoryStore()
+                .pruneIfNeeded(maxItems: fullConfig.clipboard.maxItems, retentionDays: fullConfig.clipboard.retentionDays)
+                .search(cbFilter, limit: 15)
             let rows: [LauncherList.Row] = entries.map { entry in
                 let badge = entry.pinned ? "📌 " : ""
                 let source = entry.sourceBundleID.map { "\($0) · " } ?? ""

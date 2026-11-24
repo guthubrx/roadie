@@ -2487,12 +2487,15 @@ public final class CLICommandRouter {
     private func runClipboardCommand(_ args: [String]) throws -> Int32 {
         guard let verb = args.first?.lowercased() else { return usageError() }
         let store = ClipboardHistoryStore()
+        let clipboardConfig = configReload.currentConfig().clipboard
         let json = args.contains("--json")
         switch verb {
         case "list":
             let limit = args.dropFirst().first(where: { !$0.hasPrefix("--") }).flatMap(Int.init) ?? 20
             guard limit > 0 else { return usageError() }
-            let entries = store.load().search("", limit: limit)
+            let entries = store
+                .pruneIfNeeded(maxItems: clipboardConfig.maxItems, retentionDays: clipboardConfig.retentionDays)
+                .search("", limit: limit)
             if json {
                 try printCodableJSON(entries)
             } else if entries.isEmpty {
@@ -2507,7 +2510,9 @@ public final class CLICommandRouter {
         case "search":
             let queryParts = args.dropFirst().filter { $0 != "--json" }
             guard !queryParts.isEmpty else { return usageError() }
-            let entries = store.load().search(queryParts.joined(separator: " "), limit: 30)
+            let entries = store
+                .pruneIfNeeded(maxItems: clipboardConfig.maxItems, retentionDays: clipboardConfig.retentionDays)
+                .search(queryParts.joined(separator: " "), limit: 30)
             if json {
                 try printCodableJSON(entries)
             } else if entries.isEmpty {

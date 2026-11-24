@@ -112,8 +112,10 @@ public enum SnippetsService {
 }
 
 /// Tampon circulaire pur de saisie clavier pour l'auto-expansion optionnelle (`snippets.auto_expand`).
+/// Lié au `targetPID` courant : tout changement d'application réinitialise immédiatement le tampon (Spec 163 R1).
 public struct SnippetTypingBuffer: Equatable, Sendable {
     public private(set) var text: String = ""
+    public private(set) var targetPID: pid_t?
     private let capacity: Int
 
     public init(capacity: Int = 48) {
@@ -122,14 +124,27 @@ public struct SnippetTypingBuffer: Equatable, Sendable {
 
     public mutating func reset() {
         text.removeAll(keepingCapacity: true)
+        targetPID = nil
     }
 
-    public mutating func backspace() {
+    public mutating func backspace(targetPID: pid_t? = nil) {
+        if let targetPID, let current = self.targetPID, current != targetPID {
+            reset()
+            return
+        }
         if !text.isEmpty { text.removeLast() }
     }
 
     /// Ajoute un caractère et renvoie le snippet dont le mot-clé vient de se terminer sur un délimiteur (espace).
-    public mutating func append(_ character: Character, items: [SnippetItem]) -> SnippetItem? {
+    /// Si `targetPID` diffère du PID précédent, le tampon est vidé avant traitement afin de ne jamais
+    /// déclencher une expansion à cheval sur deux applications/fenêtres.
+    public mutating func append(_ character: Character, targetPID: pid_t? = nil, items: [SnippetItem]) -> SnippetItem? {
+        if let targetPID {
+            if let current = self.targetPID, current != targetPID {
+                reset()
+            }
+            self.targetPID = targetPID
+        }
         if character == " " {
             let matched = matchSuffix(in: items)
             reset()
@@ -172,10 +187,13 @@ public final class SnippetAutoExpander {
 
     private let configLoader: () -> RoadieConfig
     private var configObservers: [NSObjectProtocol] = []
+    private var workspaceObserver: NSObjectProtocol?
     private var keyMonitor: Any?
+    private var mouseMonitor: Any?
     private var buffer = SnippetTypingBuffer()
     private var started = false
     private var isExpanding = false
+    private var expansionGeneration: UInt64 = 0
     var hasActiveKeyMonitor: Bool { keyMonitor != nil }
 
     public init(configLoader: @escaping () -> RoadieConfig = { ConfigReloadService.shared.currentConfig() }) {
@@ -211,6 +229,17 @@ public final class SnippetAutoExpander {
         keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             MainActor.assumeIsolated { self?.handleKeyEvent(event) }
         }
+        // Tout clic souris ou changement d'application vide immédiatement le tampon (Spec 163 R1).
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.buffer.reset() }
+        }
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.buffer.reset() }
+        }
     }
 
     private func uninstallKeyMonitor() {
@@ -218,8 +247,46 @@ public final class SnippetAutoExpander {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
         }
+        if let mouseMonitor {
+            NSEvent.removeMonitor(mouseMonitor)
+            self.mouseMonitor = nil
+        }
+        if let workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
+            self.workspaceObserver = nil
+        }
         buffer.reset()
     }
+
+    /// Garde pur de restauration du presse-papiers : n'autorise la restauration que si aucune nouvelle
+    /// expansion ni aucune nouvelle copie utilisateur (`changeCount`) n'est survenue depuis l'écriture.
+    static func shouldRestorePasteboard(
+        expectedGeneration: UInt64,
+        currentGeneration: UInt64,
+        expectedChangeCount: Int,
+        currentChangeCount: Int
+    ) -> Bool {
+        expectedGeneration == currentGeneration && expectedChangeCount == currentChangeCount
+    }
+
+    /// Refuse l'expansion par presse-papiers si le presse-papiers actif porte un marqueur sensible
+    /// (mot de passe masqué / transitoire) afin de ne jamais détruire un secret en attente de collage.
+    static func canSafelyUsePasteboard(types: Set<String>) -> Bool {
+        !ClipboardSecurityFilter.hasForbiddenPasteboardType(types)
+    }
+
+    private static let navigationResetKeyCodes: Set<UInt16> = [
+        53,  // Escape
+        115, // Home
+        116, // Page Up
+        117, // Forward Delete
+        119, // End
+        121, // Page Down
+        123, // Left Arrow
+        124, // Right Arrow
+        125, // Down Arrow
+        126, // Up Arrow
+    ]
 
     private func handleKeyEvent(_ event: NSEvent) {
         guard !isExpanding else { return }
@@ -233,37 +300,45 @@ public final class SnippetAutoExpander {
             uninstallKeyMonitor()
             return
         }
-        if let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier?.lowercased(),
+        let frontApp = NSWorkspace.shared.frontmostApplication
+        if let bundle = frontApp?.bundleIdentifier?.lowercased(),
            config.clipboard.excludedBundles.contains(where: { $0.lowercased() == bundle }) {
             buffer.reset()
             return
         }
         let mods = event.modifierFlags.intersection([.command, .control, .option])
-        if !mods.isEmpty {
+        if !mods.isEmpty || Self.navigationResetKeyCodes.contains(event.keyCode) {
             buffer.reset()
             return
         }
+        let frontPID = frontApp?.processIdentifier
         if event.keyCode == 51 { // Backspace
-            buffer.backspace()
+            buffer.backspace(targetPID: frontPID)
             return
         }
         guard let chars = event.characters, chars.count == 1, let ch = chars.first else {
             buffer.reset()
             return
         }
-        if let matched = buffer.append(ch, items: config.snippets.items) {
+        if let matched = buffer.append(ch, targetPID: frontPID, items: config.snippets.items) {
             performExpansion(for: matched)
         }
     }
 
     private func performExpansion(for item: SnippetItem) {
+        let pasteboard = NSPasteboard.general
+        let rawTypes = Set(pasteboard.types?.map(\.rawValue) ?? [])
+        // Ne jamais écraser un presse-papiers contenant un secret (mot de passe masqué/transitoire) (Spec 163 R1).
+        guard Self.canSafelyUsePasteboard(types: rawTypes) else {
+            return
+        }
+
         isExpanding = true
         defer { isExpanding = false }
 
-        let pasteboard = NSPasteboard.general
-        let rawTypes = Set(pasteboard.types?.map(\.rawValue) ?? [])
-        let pasteboardIsSensitive = ClipboardSecurityFilter.hasForbiddenPasteboardType(rawTypes)
-        let previousText = pasteboardIsSensitive ? nil : pasteboard.string(forType: .string)
+        expansionGeneration &+= 1
+        let myGeneration = expansionGeneration
+        let previousText = pasteboard.string(forType: .string)
         let expanded = SnippetsService.expand(item.body, clipboardText: previousText)
         // Supprimer le mot-clé tapé + l'espace déclencheur.
         let deleteCount = item.keyword.trimmingCharacters(in: .whitespacesAndNewlines).count + 1
@@ -277,6 +352,7 @@ public final class SnippetAutoExpander {
         }
         // Copier avec marqueur TransientType pour ne pas polluer l'historique presse-papiers.
         ClipboardMonitor.copyToPasteboard(expanded.text, transient: true)
+        let writtenChangeCount = pasteboard.changeCount
         if let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
            let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) {
             down.flags = .maskCommand
@@ -293,10 +369,20 @@ public final class SnippetAutoExpander {
                 }
             }
         }
-        // Restaurer le presse-papiers antérieur après un court délai (avec marqueur transitoire).
+        // Restaurer le presse-papiers antérieur UNIQUEMENT si ni la génération ni le changeCount n'ont changé.
         if let previousText {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                ClipboardMonitor.copyToPasteboard(previousText, transient: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self,
+                          Self.shouldRestorePasteboard(
+                              expectedGeneration: myGeneration,
+                              currentGeneration: self.expansionGeneration,
+                              expectedChangeCount: writtenChangeCount,
+                              currentChangeCount: NSPasteboard.general.changeCount
+                          )
+                    else { return }
+                    ClipboardMonitor.copyToPasteboard(previousText, transient: true)
+                }
             }
         }
     }

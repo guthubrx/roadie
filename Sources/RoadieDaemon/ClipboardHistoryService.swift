@@ -32,9 +32,9 @@ public enum ClipboardSecurityFilter {
         return false
     }
 
-    /// Retourne `true` si la copie doit être ignorée. O(t + b).
-    public static func shouldIgnore(
-        text: String?,
+    /// Vérifie uniquement les métadonnées (types pasteboard et application source) AVANT toute lecture
+    /// du texte brut dans `NSPasteboard` (Spec 163 R1). O(t + b).
+    public static func shouldIgnoreMetadata(
         pasteboardTypes: Set<String>,
         sourceBundleID: String?,
         excludedBundles: [String]
@@ -49,6 +49,23 @@ public enum ClipboardSecurityFilter {
                     return true
                 }
             }
+        }
+        return false
+    }
+
+    /// Retourne `true` si la copie doit être ignorée. O(t + b).
+    public static func shouldIgnore(
+        text: String?,
+        pasteboardTypes: Set<String>,
+        sourceBundleID: String?,
+        excludedBundles: [String]
+    ) -> Bool {
+        if shouldIgnoreMetadata(
+            pasteboardTypes: pasteboardTypes,
+            sourceBundleID: sourceBundleID,
+            excludedBundles: excludedBundles
+        ) {
+            return true
         }
         guard let text else { return true }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return true }
@@ -220,6 +237,28 @@ public final class ClipboardHistoryStore: Sendable {
         Self.decodeBook(from: url)
     }
 
+    /// Charge le livre et purge sur disque toute entrée non épinglée expirée ou excédant `maxItems`
+    /// sans attendre une nouvelle copie (Spec 163 R1).
+    @discardableResult
+    public func pruneIfNeeded(
+        now: Date = Date(),
+        maxItems: Int = 200,
+        retentionDays: Int = 7
+    ) -> ClipboardHistoryBook {
+        let current = load()
+        var candidate = current
+        candidate.prune(now: now, maxItems: maxItems, retentionDays: retentionDays)
+        guard candidate.entries != current.entries else { return current }
+        do {
+            return try mutateChecked { book in
+                book.prune(now: now, maxItems: maxItems, retentionDays: retentionDays)
+                return book
+            }
+        } catch {
+            return candidate
+        }
+    }
+
     private static func decodeBook(from url: URL) -> ClipboardHistoryBook {
         guard let data = try? Data(contentsOf: url) else {
             return ClipboardHistoryBook()
@@ -302,6 +341,8 @@ public final class ClipboardMonitor {
     private var configObservers: [NSObjectProtocol] = []
     private var started = false
     private var lastChangeCount: Int
+    private var lastPrunedAt: Date = .distantPast
+    private static let periodicPruneInterval: TimeInterval = 600
     var isTimerRunning: Bool { timer != nil }
 
     public init(
@@ -334,11 +375,15 @@ public final class ClipboardMonitor {
 
     func syncTimerForCurrentConfig() {
         guard started else { return }
-        let enabled = configLoader().clipboard.enabled
-        guard enabled else {
+        let config = configLoader().clipboard
+        guard config.enabled else {
             stopTimer()
             return
         }
+        // Purge immédiate au démarrage / rechargement indépendamment de toute copie (Spec 163 R1).
+        let now = Date()
+        _ = store.pruneIfNeeded(now: now, maxItems: config.maxItems, retentionDays: config.retentionDays)
+        lastPrunedAt = now
         guard timer == nil else { return }
         lastChangeCount = NSPasteboard.general.changeCount
         let created = Timer(timeInterval: 0.75, repeats: true) { [weak self] _ in
@@ -354,12 +399,17 @@ public final class ClipboardMonitor {
         timer = nil
     }
 
-    /// Lit le presse-papiers courant si son `changeCount` a évolué, applique le filtre de sécurité et enregistre.
+    /// Lit le presse-papiers courant si son `changeCount` a évolué, filtre les métadonnées AVANT de
+    /// lire le texte brut, et exécute une purge périodique indépendante des copies (Spec 163 R1).
     func pollOnce(now: Date = Date()) {
         let config = configLoader().clipboard
         guard config.enabled else {
             stopTimer()
             return
+        }
+        if now.timeIntervalSince(lastPrunedAt) >= Self.periodicPruneInterval {
+            _ = store.pruneIfNeeded(now: now, maxItems: config.maxItems, retentionDays: config.retentionDays)
+            lastPrunedAt = now
         }
         let pasteboard = NSPasteboard.general
         let currentCount = pasteboard.changeCount
@@ -368,6 +418,14 @@ public final class ClipboardMonitor {
 
         let rawTypes = Set(pasteboard.types?.map(\.rawValue) ?? [])
         let sourceBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        // Rejeter les types sensibles et apps exclues AVANT même d'appeler `string(forType:)`.
+        guard !ClipboardSecurityFilter.shouldIgnoreMetadata(
+            pasteboardTypes: rawTypes,
+            sourceBundleID: sourceBundle,
+            excludedBundles: config.excludedBundles
+        ) else {
+            return
+        }
         let text = pasteboard.string(forType: .string)
         ingest(text: text, pasteboardTypes: rawTypes, sourceBundleID: sourceBundle, config: config, now: now)
     }

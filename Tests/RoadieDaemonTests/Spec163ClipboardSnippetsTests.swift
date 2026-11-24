@@ -352,4 +352,57 @@ struct Spec163ClipboardSnippetsTests {
         let expandedLine = snipExpand.stdout.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
         #expect(expandedLine == "Validé !")
     }
+
+    // MARK: - Durcissements R1 (purge indépendante, filtrage métadonnées, sécurité auto-expandeur)
+
+    @Test @MainActor func r1GuardsProtectSensitiveClipboardTargetSwitchAndIndependentRetention() throws {
+        // 1. Restauration différée refusée si changeCount ou génération a changé
+        #expect(SnippetAutoExpander.shouldRestorePasteboard(expectedGeneration: 3, currentGeneration: 3, expectedChangeCount: 10, currentChangeCount: 10))
+        #expect(!SnippetAutoExpander.shouldRestorePasteboard(expectedGeneration: 3, currentGeneration: 3, expectedChangeCount: 10, currentChangeCount: 11))
+        #expect(!SnippetAutoExpander.shouldRestorePasteboard(expectedGeneration: 3, currentGeneration: 4, expectedChangeCount: 10, currentChangeCount: 10))
+
+        // 2. Auto-expansion refusée si le presse-papiers porte un marqueur sensible (préserve le secret)
+        #expect(!SnippetAutoExpander.canSafelyUsePasteboard(types: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"]))
+        #expect(!SnippetAutoExpander.canSafelyUsePasteboard(types: ["org.nspasteboard.TransientType"]))
+        #expect(SnippetAutoExpander.canSafelyUsePasteboard(types: ["public.utf8-plain-text"]))
+
+        // 3. Le tampon clavier se vide dès qu'on change d'application (targetPID différent)
+        let items = [SnippetItem(keyword: ";sig", title: "Sig", body: "Cordialement")]
+        var buffer = SnippetTypingBuffer()
+        for ch in ";sig" {
+            #expect(buffer.append(ch, targetPID: 100, items: items) == nil)
+        }
+        // Espace tapé dans une AUTRE application (PID 200) -> ne déclenche PAS l'expansion !
+        #expect(buffer.append(" ", targetPID: 200, items: items) == nil)
+        #expect(buffer.text.isEmpty)
+
+        // 4. Filtrage des métadonnées avant lecture du texte brut
+        #expect(ClipboardSecurityFilter.shouldIgnoreMetadata(
+            pasteboardTypes: ["org.nspasteboard.ConcealedType"],
+            sourceBundleID: "com.apple.Notes",
+            excludedBundles: ClipboardConfig.defaultExcludedBundles
+        ))
+        #expect(ClipboardSecurityFilter.shouldIgnoreMetadata(
+            pasteboardTypes: ["public.utf8-plain-text"],
+            sourceBundleID: "org.keepassxc.keepassxc",
+            excludedBundles: ClipboardConfig.defaultExcludedBundles
+        ))
+
+        // 5. Purge indépendante de toute nouvelle copie (`pruneIfNeeded` + `pollOnce`)
+        let dir = try tempDir("r1-prune")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("clipboard.json")
+        let store = ClipboardHistoryStore(path: file.path)
+        let oldDate = Date(timeIntervalSince1970: 1_700_000_000)
+        try store.mutateChecked { book in
+            _ = book.record(text: "expiré", sourceBundleID: "com.apple.Notes", now: oldDate, maxItems: 200, retentionDays: 7)
+            let kept = book.record(text: "épinglé", sourceBundleID: "com.apple.Notes", now: oldDate, maxItems: 200, retentionDays: 7)
+            _ = book.togglePin(idOrPrefix: kept.id)
+        }
+        let later = oldDate.addingTimeInterval(10 * 86_400)
+        let prunedBook = store.pruneIfNeeded(now: later, maxItems: 200, retentionDays: 7)
+        #expect(prunedBook.entries.map(\.text) == ["épinglé"])
+        // Vérifier que la purge a bien été persistée sur disque
+        #expect(store.load().entries.map(\.text) == ["épinglé"])
+    }
 }
