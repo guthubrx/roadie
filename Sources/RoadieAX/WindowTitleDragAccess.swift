@@ -32,7 +32,7 @@ public enum WindowTitleDragAccess {
             // Un bouton, onglet ou champ ne devient jamais un titre par sa seule géométrie.
             guard role == kAXStaticTextRole || role == kAXGroupRole,
                   let raw = value(hit, kAXWindowAttribute), CFGetTypeID(raw) == AXUIElementGetTypeID() else { return false }
-            owner = unsafeBitCast(raw, to: AXUIElement.self)
+            owner = raw as! AXUIElement
             if role == kAXStaticTextRole {
                 guard let titleElement = value(owner, kAXTitleUIElementAttribute),
                       CFGetTypeID(titleElement) == AXUIElementGetTypeID(), CFEqual(titleElement, hit) else { return false }

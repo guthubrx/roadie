@@ -166,7 +166,7 @@ struct Spec093WorkflowSafetyTests {
         defer { releaseFirst.signal() }
         try #require(firstEntered.wait(timeout: .now() + 5) == .success)
         DispatchQueue.global().async(group: group) {
-            try? StagedFileReplacement.withDirectoryLock(folder) { secondEntered.signal() }
+            _ = try? StagedFileReplacement.withDirectoryLock(folder) { secondEntered.signal() }
         }
         #expect(secondEntered.wait(timeout: .now() + 0.2) == .timedOut)
         releaseFirst.signal()

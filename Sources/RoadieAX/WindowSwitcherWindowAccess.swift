@@ -110,7 +110,7 @@ public enum WindowSwitcherWindowAccess {
                   CFGetTypeID(raw) == AXUIElementGetTypeID() else {
                 return .refused(AXError.noValue.rawValue)
             }
-            let button = unsafeBitCast(raw, to: AXUIElement.self)
+            let button = raw as! AXUIElement
             guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return .refused(AXError.cannotComplete.rawValue) }
             let error = AXUIElementPerformAction(button, kAXPressAction as CFString)
             AXUnresponsiveApps.shared.noteResult(error, pid: pid)

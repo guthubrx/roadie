@@ -222,7 +222,7 @@ struct Spec061OverviewGeometryTests {
             let config = OverviewConfig(presentation: presentation, magnification: 200)
             let baseline = OverviewLayout.make(model: model, viewport: size, config: OverviewConfig(presentation: presentation, loupe: false))
             let target = try #require(baseline.cards.first)
-            let desktop = try #require(model.displays.flatMap(\.desktops).first { $0.entries.contains { $0.id == target.entry.id } })
+            _ = try #require(model.displays.flatMap(\.desktops).first { $0.entries.contains { $0.id == target.entry.id } })
             let plan = OverviewLayout.make(model: model, viewport: size, config: config, window: target.entry.id)
             let enlarged = try #require(plan.cards.first { $0.entry.id == target.entry.id })
             #expect(enlarged.frame.width * enlarged.frame.height > target.frame.width * target.frame.height)

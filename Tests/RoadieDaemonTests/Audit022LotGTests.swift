@@ -286,7 +286,7 @@ struct Audit022LotGTests {
     @Test
     func presetNextStartsFromFocusedWindow() {
         let config = RoadieConfig()
-        let (service, writer, store) = widthFixture(focus: 2)
+        let (service, _, store) = widthFixture(focus: 2)
         let expected = config.widthAdjustment.presets.first(where: { $0 > 0.61 }) ?? config.widthAdjustment.presets.last ?? 0.6
 
         let result = WidthAdjustmentService(service: service, config: config, events: EventLog(path: tempPath("lot-g-width-preset-events")))

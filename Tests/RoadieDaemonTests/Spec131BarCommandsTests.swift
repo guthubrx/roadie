@@ -48,7 +48,7 @@ struct Spec131BarCommandsTests {
         fixture.link("T", "CB")
         let workflow = try fixture.write()
         let effects = RecordedEffects()
-        var engine = AlfredWorkflowEngine(effects: effects)
+        let engine = AlfredWorkflowEngine(effects: effects)
         engine.tasksRoot = root
         let calls = Counter()
         engine.updateTasks = { root in

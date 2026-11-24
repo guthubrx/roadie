@@ -1,4 +1,5 @@
 import AppKit
+import os
 import Testing
 import RoadieAX
 import RoadieCore
@@ -246,13 +247,13 @@ struct Spec029ResizeTests {
     func recoveredGesturesKeepTheExistingSameWindowCoalescence() {
         let input = UserInputActivity()
         let start = Date(timeIntervalSince1970: 100)
-        var frame = CGRect(x: 0, y: 0, width: 500, height: 500)
-        input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+        let frame = OSAllocatedUnfairLock(initialState: CGRect(x: 0, y: 0, width: 500, height: 500))
+        input.observeGestures(target: { _ in (7, frame.withLock { $0 }) }, onRelease: { _ in })
         input.mouseDown(at: .zero, now: start)
         input.mouseDragged()
         #expect(input.blocksLayout(mouseButtonsPressed: false, now: start))
         #expect(!input.blocksLayout(mouseButtonsPressed: false, now: start.addingTimeInterval(0.31)))
-        frame.size.width = 600
+        frame.withLock { $0.size.width = 600 }
         input.mouseDown(at: .zero, now: start.addingTimeInterval(0.5))
         input.mouseDragged()
         #expect(input.blocksLayout(mouseButtonsPressed: false, now: start.addingTimeInterval(0.5)))

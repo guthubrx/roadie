@@ -646,7 +646,7 @@ enum SearchBarRenderer {
         let size = CGSize(width: thumbnail.size.width * scale, height: thumbnail.size.height * scale)
         let frame = CGRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height)
         // Une nouvelle capture est une autre image : elle a sa propre réduction.
-        nonisolated(unsafe) let capture = thumbnail
+        let capture = thumbnail
         guard let small = LauncherIconRaster.image("window:\(id.rawValue):\(ObjectIdentifier(thumbnail).hashValue)",
                                                    size: frame.size, source: { capture }) else {
             appIcon(rect.size)?.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)

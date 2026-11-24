@@ -3,6 +3,7 @@ import CoreGraphics
 
 enum RoadieScreenCoordinate {
     /// Position attachée à l'événement, même si le fil principal le traite plus tard.
+    @MainActor
     static func mouseEventPoint(_ event: NSEvent) -> CGPoint {
         if let point = event.cgEvent?.location {
             return axRectToNS(CGRect(origin: point, size: .zero)).origin

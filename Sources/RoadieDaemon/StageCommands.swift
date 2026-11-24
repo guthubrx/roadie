@@ -53,6 +53,7 @@ public struct StageCommandService {
     private let config: RoadieConfig
     private let commandActivity: LayoutCommandActivity
     private var intentStore: LayoutIntentStore { service.effectiveIntentStore }
+    private var focusRecall: StageFocusRecallService { StageFocusRecallService(service: service) }
 
     public init(
         service: SnapshotService = SnapshotService(),
@@ -1452,24 +1453,12 @@ public struct StageCommandService {
                             events: events
                         )
                     }
-                    let focused: Bool
-                    if let window = windowsByID[preferredWindowID] {
-                        focused = service.focus(window)
-                    } else {
-                        let recall = recallMissingWindows(
-                            in: targetStage,
-                            preferredWindowID: preferredWindowID,
-                            includeMaximized: true,
-                            onlyPreferred: true
-                        )
-                        if recall.focusedWindowID != nil || recall.activatedApplication {
-                            focused = true
-                        } else if let bundleID = preferredBundleID, !bundleID.isEmpty {
-                            focused = service.activateApplication(bundleID: bundleID)
-                        } else {
-                            focused = false
-                        }
-                    }
+                    let focused = focusRecall.focusOrRecallPreferred(
+                        windowID: preferredWindowID,
+                        bundleID: preferredBundleID,
+                        in: targetStage,
+                        windowsByID: windowsByID
+                    )
                     events.append(RoadieEvent(
                         type: "stage_focus_window",
                         scope: switchScope,
@@ -1551,14 +1540,12 @@ public struct StageCommandService {
                         ).result
                         applied = result.applied + result.clamped
                     }
-                    var focusedWindow = false
-                    if let focusedID = targetFocusedWindowID,
-                       let window = windowsByID[focusedID] {
-                        focusedWindow = service.focus(window)
-                    }
-                    let recall = !focusedWindow
-                        ? recallMissingWindows(in: targetStage, preferredWindowID: targetFocusedWindowID, includeMaximized: true)
-                        : MissingWindowRecall()
+                    let (focusedWindow, recall) = focusRecall.focusOrRecallTarget(
+                        windowID: targetFocusedWindowID,
+                        in: targetStage,
+                        windowsByID: windowsByID,
+                        includeMaximized: true
+                    )
                     let focusedApplicationWindow = recall.focusedWindowID != nil
                     let activatedApplication = recall.activatedApplication
                     events.append(RoadieEvent(
@@ -1814,16 +1801,12 @@ public struct StageCommandService {
             }
             if !deferred { _ = service.focus(focusedWindow) }
         } else if let preferredWindowID {
-            let recall = recallMissingWindows(
+            _ = focusRecall.focusOrRecallPreferred(
+                windowID: preferredWindowID,
+                bundleID: preferredBundleID,
                 in: transition.targetStage,
-                preferredWindowID: preferredWindowID,
-                includeMaximized: true,
-                onlyPreferred: true
+                windowsByID: windowsByID
             )
-            if recall.focusedWindowID == nil, !recall.activatedApplication,
-               let bundleID = preferredBundleID, !bundleID.isEmpty {
-                _ = service.activateApplication(bundleID: bundleID)
-            }
         }
         let focusMs = elapsedMs(since: focusStartedAt)
         let totalMs = elapsedMs(since: startedAt)
@@ -1875,52 +1858,22 @@ public struct StageCommandService {
         return fullscreenIDs.first
     }
 
-    struct MissingWindowRecall {
-        var attempted: [WindowID] = []
-        var focusedWindowID: WindowID?
-        var activatedApplication = false
-    }
-
     static func missingFocusCandidates(in stage: PersistentStage?, preferredWindowID: WindowID? = nil, includeMaximized: Bool = false) -> [PersistentStageMember] {
-        guard let stage else { return [] }
-        let preferred = preferredWindowID ?? stage.focusedWindowID
-        return stage.members.filter {
-            !$0.bundleID.isEmpty && $0.confirmedClosedAt == nil && (includeMaximized || $0.presentationState != .maximized)
-        }.sorted { lhs, rhs in
-            if lhs.windowID == preferred { return rhs.windowID != preferred }
-            if rhs.windowID == preferred { return false }
-            let left = lhs.lastSeenAt ?? .distantPast
-            let right = rhs.lastSeenAt ?? .distantPast
-            return left == right ? lhs.windowID.rawValue < rhs.windowID.rawValue : left > right
-        }
+        StageFocusRecallService.missingFocusCandidates(in: stage, preferredWindowID: preferredWindowID, includeMaximized: includeMaximized)
     }
 
-    /// Chaque membre éligible est essayé au plus une fois ; arrêt au premier focus réussi.
-    /// Si `onlyPreferred` est vrai, seule la fenêtre demandée explicitement est sollicitée (clic sur
-    /// une icône précise du rail), sans jamais dévier le focus vers une autre application de la stage.
     private func recallMissingWindows(
         in stage: PersistentStage?,
         preferredWindowID: WindowID? = nil,
         includeMaximized: Bool = false,
         onlyPreferred: Bool = false
     ) -> MissingWindowRecall {
-        var candidates = Self.missingFocusCandidates(in: stage, preferredWindowID: preferredWindowID, includeMaximized: includeMaximized)
-        if onlyPreferred, let preferredWindowID {
-            candidates = candidates.filter { $0.windowID == preferredWindowID }
-        }
-        var result = MissingWindowRecall()
-        for member in candidates {
-            result.attempted.append(member.windowID)
-            if service.focusApplicationWindow(bundleID: member.bundleID, windowID: member.windowID,
-                                              title: member.title, frame: member.frame) {
-                result.focusedWindowID = member.windowID
-                return result
-            }
-        }
-        if let member = candidates.first {
-            result.activatedApplication = service.activateApplication(bundleID: member.bundleID)
-        }
-        return result
+        focusRecall.recallMissingWindows(
+            in: stage,
+            preferredWindowID: preferredWindowID,
+            includeMaximized: includeMaximized,
+            onlyPreferred: onlyPreferred
+        )
     }
 
     /// Frames de masquage des fenêtres `ids` vivantes, sur l'écran de la commande. O(k).

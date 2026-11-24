@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 import RoadieAX
 import RoadieCore
@@ -376,11 +377,11 @@ extension Spec144FrameTransitionTests {
         let source = try #require(f.context.snapshot.windows.first { $0.window.id == f.source }?.window)
         f.backend.blockedPID = source.pid
         let permit = InteractiveWritePermit(generations: f.generations)
-        var allowNextIntermediate = true
+        let allowNextIntermediate = OSAllocatedUnfairLock(initialState: true)
         let dispatcher = InteractiveFrameDispatcher(
             service: f.service,
             permit: permit,
-            allowIntermediateStart: { _, _ in allowNextIntermediate }
+            allowIntermediateStart: { _, _ in allowNextIntermediate.withLock { $0 } }
         ) { _, _ in }
         let midA = Rect(x: 80, y: 80, width: 500, height: 500)
         let midB = Rect(x: 160, y: 80, width: 500, height: 500)
@@ -389,7 +390,7 @@ extension Spec144FrameTransitionTests {
         // En file pendant que midA est bloqué, puis la politique coupe les intermédiaires tardifs.
         dispatcher.submit([ApplyCommand(window: source, frame: midB)],
                           generation: PlacementGeneration.outsideBudget, intermediate: true)
-        allowNextIntermediate = false
+        allowNextIntermediate.withLock { $0 = false }
         f.backend.blockedPID = nil
         f.backend.gate.signal()
         #expect(await f.waitFor { dispatcher.isIdle })

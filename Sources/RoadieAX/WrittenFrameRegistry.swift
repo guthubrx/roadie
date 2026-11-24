@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import os
 import RoadieCore
 
 /// Refus d'une même cible répété d'une génération à l'autre (SPEC-068) : une fenêtre à taille
@@ -272,21 +273,20 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
 
 /// Génération de placement globale et monotone (A13). Une génération s'ouvre à chaque intention
 /// externe (événement, commande, bascule, geste) ; une correction interne garde la génération en cours.
-public final class PlacementGeneration: @unchecked Sendable {
+public final class PlacementGeneration: Sendable {
     public static let shared = PlacementGeneration()
     /// Génération des écritures hors budget (T222, A3) : réparation des modes sans arbre
     /// (`bsp`, `masterStack` : recalage, voisines, tailles minimales, isolement), qui n'ont pas la
     /// garantie d'une passe. Jamais rendue par `next()` ; inscrite au registre comme une autre.
     public static let outsideBudget = UInt64.max
-    private let lock = NSLock()
-    private var value: UInt64 = 0
+    private let value = OSAllocatedUnfairLock<UInt64>(initialState: 0)
 
     public init() {}
 
     /// Ouvre une nouvelle génération et la renvoie. O(1).
     @discardableResult
-    public func next() -> UInt64 { lock.withLock { value &+= 1; return value } }
+    public func next() -> UInt64 { value.withLock { $0 &+= 1; return $0 } }
 
     /// Génération en cours (0 si aucune n'a été ouverte). O(1).
-    public var current: UInt64 { lock.withLock { value } }
+    public var current: UInt64 { value.withLock { $0 } }
 }

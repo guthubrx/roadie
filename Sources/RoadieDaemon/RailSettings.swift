@@ -1,4 +1,5 @@
 import Foundation
+import os
 import RoadieCore
 
 public struct RailSettings: Equatable, Sendable {
@@ -519,18 +520,21 @@ public struct RailSettings: Equatable, Sendable {
 }
 
 /// Dernier `RailSettings` chargé par chemin, avec la signature du fichier lu.
-/// `@unchecked Sendable` : `entries` n'est lu et modifié que sous `lock`.
-private final class RailSettingsCache: @unchecked Sendable {
+private final class RailSettingsCache: Sendable {
+    private struct Entry: Sendable {
+        var stamp: [Int64]
+        var settings: RailSettings
+    }
+
     static let shared = RailSettingsCache()
 
-    private let lock = NSLock()
-    private var entries: [String: (stamp: [Int64], settings: RailSettings)] = [:]
+    private let entries = OSAllocatedUnfairLock(initialState: [String: Entry]())
 
     func settings(for path: String, stamp: [Int64]) -> RailSettings? {
-        lock.withLock { entries[path].flatMap { $0.stamp == stamp ? $0.settings : nil } }
+        entries.withLock { $0[path].flatMap { $0.stamp == stamp ? $0.settings : nil } }
     }
 
     func store(_ settings: RailSettings, for path: String, stamp: [Int64]) {
-        lock.withLock { entries[path] = (stamp, settings) }
+        entries.withLock { $0[path] = Entry(stamp: stamp, settings: settings) }
     }
 }

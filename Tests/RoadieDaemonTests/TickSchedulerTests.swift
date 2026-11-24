@@ -394,13 +394,13 @@ struct UserInputGestureTests {
     @Test
     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
         let input = UserInputActivity()
-        var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
-        input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+        let frame = OSAllocatedUnfairLock(initialState: CGRect(x: 0, y: 0, width: 500, height: 400))
+        input.observeGestures(target: { _ in (7, frame.withLock { $0 }) }, onRelease: { _ in })
         let first = Date(timeIntervalSince1970: 100)
 
         input.mouseDown(at: .zero, now: first)
         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
-        frame.size.width = 600
+        frame.withLock { $0.size.width = 600 }
         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
 
@@ -486,11 +486,11 @@ extension TickSchedulerTests {
         var release: CheckedContinuation<Bool, Never>?
         var reads = 0
         var ticks = 0
-        var blocked = false
+        let blocked = OSAllocatedUnfairLock(initialState: false)
         let scheduler = TickScheduler(tick: { _ in
             ticks += 1
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-        }, nextDeadline: { _ in nil }, isBlocked: { blocked }, now: { timer.clock.now },
+        }, nextDeadline: { _ in nil }, isBlocked: { blocked.withLock { $0 } }, now: { timer.clock.now },
             schedule: timer.schedule, events: nil, prepare: {
                 reads += 1
                 return await withCheckedContinuation { release = $0 }
@@ -502,11 +502,11 @@ extension TickSchedulerTests {
         scheduler.request(cause: "second")
         timer.advance(by: 1)
         #expect(reads == 1 && ticks == 0)
-        blocked = true
+        blocked.withLock { $0 = true }
         release?.resume(returning: true)
         for _ in 0..<10 { await Task.yield() }
         #expect(ticks == 0)
-        blocked = false
+        blocked.withLock { $0 = false }
         scheduler.buttonsReleased(gestureEnded: true)
         timer.advance(by: 0.1)
         for _ in 0..<10 { await Task.yield() }
@@ -543,12 +543,13 @@ extension Spec149SchedulerTests {
 extension Spec149SchedulerTests {
     @Test func repeatedRejectedAcquisitionsHaveABoundedRateAndRemainPending() async {
         let timer = ManualTimer()
-        var reads = 0, ticks = 0, ready = false
+        var reads = 0, ticks = 0
+        let ready = OSAllocatedUnfairLock(initialState: false)
         let scheduler = TickScheduler(tick: { _ in
             ticks += 1
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }, nextDeadline: { _ in nil }, isBlocked: { false }, now: { timer.clock.now },
-            schedule: timer.schedule, events: nil, prepare: { reads += 1; return ready })
+            schedule: timer.schedule, events: nil, prepare: { reads += 1; return ready.withLock { $0 } })
         scheduler.request(cause: "ax:AXWindowMoved")
         for _ in 0..<200 {
             timer.advance(by: 0.05)
@@ -556,7 +557,7 @@ extension Spec149SchedulerTests {
         }
         #expect(reads < 15)
         #expect(ticks == 0)
-        ready = true
+        ready.withLock { $0 = true }
         timer.advance(by: 2.1)
         for _ in 0..<10 { await Task.yield() }
         #expect(ticks == 1)

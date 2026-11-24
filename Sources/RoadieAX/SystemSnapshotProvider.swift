@@ -318,12 +318,11 @@ enum AXMessaging {
 /// cas de délai dépassé). Pendant ce temps, aucun appel AX ne lui est envoyé et ses fenêtres
 /// gardent leur dernier état connu. Chaque chemin abandonne au premier échec pour ce pid :
 /// une application gelée coûte au plus un délai (0,5 s) par période de mise de côté.
-public final class AXUnresponsiveApps: @unchecked Sendable {
+public final class AXUnresponsiveApps: Sendable {
     public static let shared = AXUnresponsiveApps()
     public static let quarantineDuration: TimeInterval = 5
 
-    private let lock = NSLock()
-    private var resumeAt: [pid_t: Date] = [:]
+    private let resumeAt = OSAllocatedUnfairLock(initialState: [pid_t: Date]())
     private let now: @Sendable () -> Date
 
     init(now: @escaping @Sendable () -> Date = { Date() }) {
@@ -332,22 +331,22 @@ public final class AXUnresponsiveApps: @unchecked Sendable {
 
     /// Vrai si l'application est mise de côté. O(1).
     public func isQuarantined(_ pid: pid_t) -> Bool {
-        lock.withLock {
-            guard let date = resumeAt[pid] else { return false }
+        resumeAt.withLock { map in
+            guard let date = map[pid] else { return false }
             if now() < date { return true }
-            resumeAt[pid] = nil
+            map[pid] = nil
             return false
         }
     }
 
     func markUnresponsive(_ pid: pid_t) {
-        lock.withLock { resumeAt[pid] = now().addingTimeInterval(Self.quarantineDuration) }
+        resumeAt.withLock { $0[pid] = now().addingTimeInterval(Self.quarantineDuration) }
     }
 
     /// Sort immédiatement une application de quarantaine lorsqu'elle émet de nouveau un événement
     /// AX vivant (Lot H) : évite jusqu'à 5 s d'échecs inutiles après reprise de réactivité. O(1).
     public func markResponsive(_ pid: pid_t) {
-        lock.withLock { resumeAt[pid] = nil }
+        resumeAt.withLock { $0[pid] = nil }
     }
 
     /// Enregistre le résultat d'un appel AX. Retourne vrai si l'appel a échoué par délai ou

@@ -1,28 +1,32 @@
 import Foundation
+import os
 import RoadieAX
 import RoadieCore
 
 /// Permission commune à une session native. Une commande externe ou une annulation
 /// révoque aussi les lots déjà partis, entre deux attributs AX. O(1) sous verrou.
-final class InteractiveWritePermit: @unchecked Sendable {
-    private let lock = NSLock()
-    private var valid = true
-    private var expected: UInt64
+final class InteractiveWritePermit: Sendable {
+    private struct State: Sendable {
+        var valid = true
+        var expected: UInt64
+    }
+
+    private let state: OSAllocatedUnfairLock<State>
     private let generations: PlacementGeneration
 
     init(generations: PlacementGeneration) {
         self.generations = generations
-        expected = generations.current
+        self.state = OSAllocatedUnfairLock(initialState: State(expected: generations.current))
     }
 
-    var isCurrent: Bool { lock.withLock { valid && expected == generations.current } }
+    var isCurrent: Bool { state.withLock { $0.valid && $0.expected == generations.current } }
     func advance() -> UInt64 {
-        lock.withLock {
-            expected = generations.next()
-            return expected
+        state.withLock { state in
+            state.expected = generations.next()
+            return state.expected
         }
     }
-    func invalidate() { lock.withLock { valid = false } }
+    func invalidate() { state.withLock { $0.valid = false } }
 }
 
 /// Une opération active et un dernier lot par PID, via le writer commun. L'attente

@@ -73,7 +73,7 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
             }
             calls.append("set \(attribute)")
             if simulatesFrameAttributes, setErrors[attribute] == nil {
-                let ax = unsafeBitCast(value, to: AXValue.self)
+                let ax = value as! AXValue
                 if attribute == kAXPositionAttribute {
                     var point = CGPoint.zero
                     if AXValueGetValue(ax, .cgPoint, &point) { readBack.origin = point }

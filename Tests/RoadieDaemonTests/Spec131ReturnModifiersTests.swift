@@ -28,7 +28,7 @@ struct Spec131ReturnModifiersTests {
         #expect(action.verb == .reveal)
         #expect(LauncherVariant.of(.file(file), modifier: .control, query: "", newStageHome: home, activeStage: nil, effect: .verbs)?.effect
                 == .verbs(.file(file)))
-        #expect(LauncherVariant.of(.file(file), modifier: .control, query: "", newStageHome: home, activeStage: nil, effect: .none) == nil)
+        #expect(LauncherVariant.of(.file(file), modifier: .control, query: "", newStageHome: home, activeStage: nil, effect: LauncherReturnEffect.none) == nil)
         // Un effet sans objet pour cette ligne laisse Retour faire l'action normale.
         #expect(LauncherVariant.of(.text("x"), modifier: .command, query: "", newStageHome: home, activeStage: nil, effect: .quicklook) == nil)
     }

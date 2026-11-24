@@ -71,7 +71,14 @@ enum LauncherTerminal {
                    "warp": "dev.warp.Warp-Stable", "kitty": "net.kovidgoyal.kitty", "wezterm": "com.github.wez.wezterm",
                    "alacritty": "org.alacritty"]
         if let id = ids[setting], NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) != nil { return true }
-        return NSWorkspace.shared.fullPath(forApplication: appName(setting)) != nil
+        let bundle = "\(appName(setting)).app"
+        let roots = [
+            "/Applications",
+            "/System/Applications",
+            "/System/Applications/Utilities",
+            ("~/Applications" as NSString).expandingTildeInPath,
+        ]
+        return roots.contains { FileManager.default.fileExists(atPath: "\($0)/\(bundle)") }
     }
 
     /// Lance la commande ; faux si le lancement a échoué tout de suite.
