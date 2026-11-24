@@ -242,7 +242,7 @@ struct Spec157ErgonomieTests {
             activeDisplayID: displayA
         ))
 
-        let writer = Spec157RecordingWriter()
+        let writer = Spec157RecordingWriter(recallSucceedingWindowIDs: [win2.id])
         let service = SnapshotService(
             provider: Spec157FakeProvider(displays: [snapA], windows: [win1, win2], focusedID: win1.id),
             frameWriter: writer,
@@ -253,9 +253,11 @@ struct Spec157ErgonomieTests {
         let stageService = StageCommandService(service: service, store: store, events: events)
         let result = stageService.switchAndFocus(StageID(rawValue: "2"), windowID: missingWin3ID, bundleID: "org.mozilla.firefox", displayID: displayA)
         #expect(result.changed)
-        // Ne doit PAS avoir basculé le focus sur win2 : doit rappeler org.mozilla.firefox.
+        // Ne doit PAS avoir basculé le focus ni tenté le rappel sur win2 (iTerm2) :
+        // seule la cible explicite (Firefox) est tentée puis activée en repli.
         #expect(!writer.focusedWindowIDs.contains(win2.id))
-        #expect(writer.activatedBundleIDs.contains("org.mozilla.firefox"))
+        #expect(writer.recalledWindowIDs == [missingWin3ID])
+        #expect(writer.activatedBundleIDs == ["org.mozilla.firefox"])
     }
 
     @Test
@@ -532,13 +534,23 @@ private struct Spec157FakeProvider: SystemSnapshotProviding {
 }
 
 private final class Spec157RecordingWriter: WindowFrameWriting, @unchecked Sendable {
+    private let recallSucceedingWindowIDs: Set<WindowID>
     private(set) var focusedWindowIDs: [WindowID] = []
+    private(set) var recalledWindowIDs: [WindowID] = []
     private(set) var activatedBundleIDs: [String] = []
+
+    init(recallSucceedingWindowIDs: Set<WindowID> = []) {
+        self.recallSucceedingWindowIDs = recallSucceedingWindowIDs
+    }
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? { frame }
     func focus(_ window: WindowSnapshot) -> Bool {
         focusedWindowIDs.append(window.id)
         return true
+    }
+    func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool {
+        recalledWindowIDs.append(windowID)
+        return recallSucceedingWindowIDs.contains(windowID)
     }
     func activateApplication(bundleID: String) -> Bool {
         activatedBundleIDs.append(bundleID)

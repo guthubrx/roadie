@@ -1714,7 +1714,16 @@ public struct StageCommandService {
                     events: events
                 ).result
                 hidden = result.applied + result.clamped
-                recall = recallMissingWindows(in: transition.targetStage, preferredWindowID: preferredWindowID)
+                recall = recallMissingWindows(
+                    in: transition.targetStage,
+                    preferredWindowID: preferredWindowID,
+                    includeMaximized: preferredWindowID != nil,
+                    onlyPreferred: preferredWindowID != nil
+                )
+                if let preferredBundleID, !preferredBundleID.isEmpty,
+                   preferredWindowID != nil, recall.focusedWindowID == nil, !recall.activatedApplication {
+                    recall.activatedApplication = service.activateApplication(bundleID: preferredBundleID)
+                }
                 focusedApplicationWindow = recall.focusedWindowID != nil
                 activatedApplication = recall.activatedApplication
             }
@@ -1791,7 +1800,12 @@ public struct StageCommandService {
             }
             if !deferred { _ = service.focus(focusedWindow) }
         } else if let preferredWindowID {
-            let recall = recallMissingWindows(in: transition.targetStage, preferredWindowID: preferredWindowID)
+            let recall = recallMissingWindows(
+                in: transition.targetStage,
+                preferredWindowID: preferredWindowID,
+                includeMaximized: true,
+                onlyPreferred: true
+            )
             if recall.focusedWindowID == nil, !recall.activatedApplication,
                let bundleID = preferredBundleID, !bundleID.isEmpty {
                 _ = service.activateApplication(bundleID: bundleID)
@@ -1868,8 +1882,18 @@ public struct StageCommandService {
     }
 
     /// Chaque membre éligible est essayé au plus une fois ; arrêt au premier focus réussi.
-    private func recallMissingWindows(in stage: PersistentStage?, preferredWindowID: WindowID? = nil, includeMaximized: Bool = false) -> MissingWindowRecall {
-        let candidates = Self.missingFocusCandidates(in: stage, preferredWindowID: preferredWindowID, includeMaximized: includeMaximized)
+    /// Si `onlyPreferred` est vrai, seule la fenêtre demandée explicitement est sollicitée (clic sur
+    /// une icône précise du rail), sans jamais dévier le focus vers une autre application de la stage.
+    private func recallMissingWindows(
+        in stage: PersistentStage?,
+        preferredWindowID: WindowID? = nil,
+        includeMaximized: Bool = false,
+        onlyPreferred: Bool = false
+    ) -> MissingWindowRecall {
+        var candidates = Self.missingFocusCandidates(in: stage, preferredWindowID: preferredWindowID, includeMaximized: includeMaximized)
+        if onlyPreferred, let preferredWindowID {
+            candidates = candidates.filter { $0.windowID == preferredWindowID }
+        }
         var result = MissingWindowRecall()
         for member in candidates {
             result.attempted.append(member.windowID)
