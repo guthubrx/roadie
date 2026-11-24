@@ -214,6 +214,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "windows list [--json]"),
         CLICommandSpec(usage: "display list|current [--json]"),
         CLICommandSpec(usage: "display focus N|left|right|up|down"),
+        CLICommandSpec(usage: "display swap [N|left|right|up|down]"),
         CLICommandSpec(usage: "state dump|audit|heal [--json]"),
         CLICommandSpec(usage: "tree dump [--json]"),
         CLICommandSpec(usage: "layout plan [--json]"),
@@ -275,6 +276,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "desktop move N POSITION"),
         CLICommandSpec(usage: "stage list"),
         CLICommandSpec(usage: "stage create|delete N"),
+        CLICommandSpec(usage: "stage prune-empty"),
         CLICommandSpec(usage: "stage rename N NAME"),
         CLICommandSpec(usage: "stage reorder N POSITION"),
         CLICommandSpec(usage: "stage switch|assign N"),
@@ -393,7 +395,7 @@ public final class CLICommandRouter {
             }
         case "display":
             let verb = args.dropFirst().first
-            guard verb == "list" || verb == "current" || verb == "focus" else {
+            guard verb == "list" || verb == "current" || verb == "focus" || verb == "swap" else {
                 return usageError()
             }
             if verb == "focus" {
@@ -410,6 +412,23 @@ public final class CLICommandRouter {
                 } else {
                     err("roadie: display focus requires N|left|right|up|down")
                     return 64
+                }
+                return finish(result)
+            }
+            if verb == "swap" {
+                let commandService = DisplayCommandService(service: service)
+                let result: StageCommandResult
+                if let target = args.dropFirst(2).first {
+                    if let index = Int(target), index > 0 {
+                        result = commandService.swap(index: index)
+                    } else if let direction = Direction(rawValue: target) {
+                        result = commandService.swap(direction)
+                    } else {
+                        err("roadie: display swap requires [N|left|right|up|down]")
+                        return 64
+                    }
+                } else {
+                    result = commandService.swapDefault()
                 }
                 return finish(result)
             }
@@ -1477,6 +1496,9 @@ public final class CLICommandRouter {
                 return 64
             }
             let result = StageCommandService(service: service).delete(stageID)
+            return finish(result)
+        case "prune-empty":
+            let result = StageCommandService(service: service).pruneEmpty()
             return finish(result)
         case "mode":
             return try runModeCommand(args.dropFirst().first)

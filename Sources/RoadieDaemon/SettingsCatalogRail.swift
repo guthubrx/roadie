@@ -47,6 +47,8 @@ extension SettingsCatalog {
                   tr("Distance autour des cartes où un clic n'est pas compté comme un clic dans le vide.", "Distance around the cards where a click does not count as a click on empty space."), .double(0...80), .double(12)),
             entry(.rail, t, "hide_on_maximized", tr("Masquer devant une fenêtre agrandie", "Hide in front of a maximized window"),
                   tr("Cache aussi le rail devant une fenêtre agrandie, pas seulement en plein écran natif.", "Also hides the rail in front of a maximized window, not only in native full screen."), .bool, .bool(false)),
+            entry(.rail, t, "show_app_icons_row", tr("Icônes d'applications sous chaque carte", "App icons strip on each card"),
+                  tr("Affiche côte à côte les icônes des applications présentes dans la stage au bas de sa carte, pour repérer toutes les apps même lorsqu'une fenêtre est agrandie.", "Displays the icons of apps in each stage side by side at the bottom of its card, so every app stays visible even when one window is zoomed."), .bool, .bool(true)),
         ]
     }()
 

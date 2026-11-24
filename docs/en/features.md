@@ -36,6 +36,18 @@ roadie mode float
 roadie balance
 ```
 
+**Equalize proportions** (`roadie balance`) is also available from the launcher ("Equalize proportions") and the navigation rail context menu, on any display (4K, 5K, etc.).
+
+### Automatic floating for Picture-in-Picture
+
+By default (`tiling.float_picture_in_picture = true`, toggleable in **Settings > Tiling**), Roadie keeps Picture-in-Picture video windows (`com.apple.PIPAgent` and browser PiP windows) floating so they do not disturb tiled grids. An explicit `action.manage = true` rule can still override this behavior.
+
+### Navigation rail: app icons row and ergonomics
+
+- **App icons strip** (`fx.rail.show_app_icons_row = true`, toggleable in **Settings > Rail**): each rail card displays the icons of the distinct apps present in the stage side by side (keeping the white native-fullscreen border and white zoom corners intact).
+- **Swap two displays in one key**: `roadie display swap [N|left|right|up|down]` swaps the active stages of two displays in one step (also available in the launcher and rail context menu).
+- **One-click empty stages cleanup**: `roadie stage prune-empty` deletes inactive, empty, unparked, unnamed stages on the active display (also available in the launcher and rail context menu; named stages are always preserved).
+
 Use cases:
 
 - development with an editor as master and terminals in the stack;

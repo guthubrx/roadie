@@ -723,9 +723,56 @@ public final class RailController {
         moveItem.submenu = moveMenu
         menu.addItem(moveItem)
 
+        let balanceTarget = RailMenuActionTarget { [weak self] in
+            self?.perform(.balanceLayout, displayID: displayID)
+            self?.rebuildPanels()
+        }
+        let balanceItem = NSMenuItem(
+            title: tr("Égaliser les proportions", "Equalize proportions"),
+            action: #selector(RailMenuActionTarget.choose(_:)),
+            keyEquivalent: ""
+        )
+        balanceItem.target = balanceTarget
+        stageMenuTargets.append(balanceTarget)
+        menu.addItem(balanceItem)
+
+        if targets.count == 1, let other = targets.first {
+            let swapTarget = RailMenuActionTarget { [weak self] in
+                self?.perform(.swapDisplay(other.id), displayID: displayID)
+                self?.rebuildPanels()
+            }
+            let swapItem = NSMenuItem(
+                title: tr("Échanger avec Ecran \(other.index) - \(other.name)", "Swap with Display \(other.index) - \(other.name)"),
+                action: #selector(RailMenuActionTarget.choose(_:)),
+                keyEquivalent: ""
+            )
+            swapItem.target = swapTarget
+            stageMenuTargets.append(swapTarget)
+            menu.addItem(swapItem)
+        } else if targets.count > 1 {
+            let swapMenu = NSMenu(title: tr("Échanger avec l'écran", "Swap with display"))
+            for targetDisplay in targets {
+                let title = tr("Ecran \(targetDisplay.index) - \(targetDisplay.name)", "Display \(targetDisplay.index) - \(targetDisplay.name)")
+                let item = NSMenuItem(title: title, action: #selector(RailStageMoveMenuTarget.choose(_:)), keyEquivalent: "")
+                item.representedObject = targetDisplay.id.rawValue
+                let target = RailStageMoveMenuTarget { [weak self] selectedDisplayID in
+                    guard let self else { return }
+                    self.perform(.swapDisplay(selectedDisplayID), displayID: displayID)
+                    self.rebuildPanels()
+                }
+                item.target = target
+                stageMenuTargets.append(target)
+                swapMenu.addItem(item)
+            }
+            let swapItem = NSMenuItem(title: tr("Échanger avec l'écran", "Swap with display"), action: nil, keyEquivalent: "")
+            swapItem.submenu = swapMenu
+            menu.addItem(swapItem)
+        }
+
         menu.addItem(.separator())
+        let liveWindowIDs = snapshotService.railWindowIDs(in: snapshot)
         let refusal = Self.deleteStageRefusal(stageID: stageID, displayID: displayID, store: store,
-                                              liveWindowIDs: snapshotService.railWindowIDs(in: snapshot))
+                                              liveWindowIDs: liveWindowIDs)
         let deleteItem = NSMenuItem(title: tr("Supprimer la stage", "Delete stage") + (refusal.map { " (\($0))" } ?? ""), action: nil, keyEquivalent: "")
         if refusal == nil {
             let deleteTarget = RailMenuActionTarget { [weak self] in
@@ -739,6 +786,24 @@ public final class RailController {
             deleteItem.isEnabled = false
         }
         menu.addItem(deleteItem)
+
+        let prunableCount = Self.prunableEmptyStageCount(displayID: displayID, store: store, liveWindowIDs: liveWindowIDs)
+        let pruneTitle = prunableCount > 0
+            ? tr("Nettoyer les stages vides (\(prunableCount))", "Clean up empty stages (\(prunableCount))")
+            : tr("Nettoyer les stages vides (aucune)", "Clean up empty stages (none)")
+        let pruneItem = NSMenuItem(title: pruneTitle, action: nil, keyEquivalent: "")
+        if prunableCount > 0 {
+            let pruneTarget = RailMenuActionTarget { [weak self] in
+                self?.perform(.pruneEmptyStages, displayID: displayID)
+                self?.rebuildPanels()
+            }
+            pruneItem.action = #selector(RailMenuActionTarget.choose(_:))
+            pruneItem.target = pruneTarget
+            stageMenuTargets.append(pruneTarget)
+        } else {
+            pruneItem.isEnabled = false
+        }
+        menu.addItem(pruneItem)
 
         applyFont(to: menu, font: currentStageTextConfig.font)
         menu.popUp(positioning: nil, at: panel.convertPoint(fromScreen: screenPoint), in: panel.contentView)
@@ -755,6 +820,18 @@ public final class RailController {
             return nil
         }
         return stage.parkingState == .parked ? tr("écran absent", "display missing") : tr("contient des fenêtres", "has windows")
+    }
+
+    /// Nombre de stages vides non nommées supprimables sur cet écran (SPEC-157).
+    static func prunableEmptyStageCount(
+        displayID: DisplayID,
+        store: StageStore,
+        liveWindowIDs: Set<WindowID>,
+        now: Date = Date()
+    ) -> Int {
+        var state = store.state()
+        let scope = state.scope(displayID: displayID, desktopID: state.currentDesktopID(for: displayID))
+        return StageCommandService.prunableEmptyStageIDs(in: scope, liveWindowIDs: liveWindowIDs, now: now).count
     }
 
     private var currentStageTextConfig: RailStageLabelConfig {
@@ -1028,6 +1105,28 @@ public final class RailController {
                 targetDisplayID: targetDisplayID,
                 source: "rail"
             )
+        case .balanceLayout:
+            events.append(RoadieEvent(
+                type: "rail_layout_balance",
+                details: ["displayID": displayID.rawValue]
+            ))
+            _ = LayoutCommandService(service: snapshotService, events: events).balance()
+        case .swapDisplay(let targetDisplayID):
+            events.append(RoadieEvent(
+                type: "rail_display_swap",
+                details: [
+                    "displayID": displayID.rawValue,
+                    "targetDisplayID": targetDisplayID.rawValue
+                ]
+            ))
+            _ = DisplayCommandService(service: snapshotService, store: store, events: events)
+                .swap(targetDisplayID: targetDisplayID, sourceDisplayID: displayID)
+        case .pruneEmptyStages:
+            events.append(RoadieEvent(
+                type: "rail_stage_prune_empty",
+                details: ["displayID": displayID.rawValue]
+            ))
+            _ = commandService.pruneEmpty(displayID: displayID)
         }
     }
 
@@ -1757,6 +1856,9 @@ enum RailAction {
     case renameStage(StageID, String)
     case deleteStage(StageID)
     case moveStageToDisplay(StageID, DisplayID)
+    case balanceLayout
+    case swapDisplay(DisplayID)
+    case pruneEmptyStages
 }
 
 struct RailWindowDropTarget {

@@ -217,6 +217,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     /// close/fullscreen/min/zoom et non focused/main). Inspire d'aerospace isWindowHeuristic.
     /// Cible : tooltips, context menus, "Sonoma keyboard layout switch", IntelliJ context menus.
     public var popupFilter: Bool
+    /// Quand true (defaut), laisse flotter automatiquement les fenetres Picture-in-Picture (Spec 157).
+    public var floatPictureInPicture: Bool
 
     public init(
         defaultStrategy: WindowManagementMode = .bsp,
@@ -236,7 +238,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         smartGapsSolo: Bool = false,
         smartGapsSoloSides: [GapSide] = GapSide.allCases,
         allowedSubroles: [String] = ["AXStandardWindow"],
-        popupFilter: Bool = true
+        popupFilter: Bool = true,
+        floatPictureInPicture: Bool = true
     ) {
         self.defaultStrategy = defaultStrategy
         self.splitPolicy = splitPolicy
@@ -256,6 +259,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.smartGapsSoloSides = smartGapsSoloSides
         self.allowedSubroles = allowedSubroles
         self.popupFilter = popupFilter
+        self.floatPictureInPicture = floatPictureInPicture
     }
 
     enum CodingKeys: String, CodingKey {
@@ -277,6 +281,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         case smartGapsSoloSides = "smart_gaps_solo_sides"
         case allowedSubroles = "allowed_subroles"
         case popupFilter = "popup_filter"
+        case floatPictureInPicture = "float_picture_in_picture"
     }
 
     public init(from decoder: Decoder) throws {
@@ -309,6 +314,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.smartGapsSoloSides = sides.compactMap(GapSide.init(rawValue:))
         self.allowedSubroles = try c.decodeIfPresent([String].self, forKey: .allowedSubroles) ?? ["AXStandardWindow"]
         self.popupFilter = try c.decodeIfPresent(Bool.self, forKey: .popupFilter) ?? true
+        self.floatPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .floatPictureInPicture) ?? true
     }
 }
 
@@ -1936,7 +1942,7 @@ private enum ConfigValidationRules {
             "fx.animations.overview": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
 
             "interface": ["settings_text_font_size", "settings_help_font_size", "settings_title_font_size", "language"],
-            "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "live_drag_preview", "drag_move_modifier", "drag_resize_modifier", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter"]),
+            "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "live_drag_preview", "drag_move_modifier", "drag_resize_modifier", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter", "float_picture_in_picture"]),
             "tiling.display_overrides": gapKeys.union(["display_id", "display_name"]),
             "desktops": ["enabled", "count", "back_and_forth", "mode"],
             "stage_manager": ["enabled", "hide_strategy", "default_stage", "workspaces"],
@@ -1945,7 +1951,7 @@ private enum ConfigValidationRules {
             "exclusions.floating_windows": ["app", "title", "remember_frame"],
             "fx.borders": ["enabled", "thickness", "corner_radius", "active_color", "inactive_color", "pulse_on_focus", "stage_overrides"],
             "fx.borders.stage_overrides": ["stage_id", "active_color"],
-            "fx.rail": ["renderer", "width", "background_color", "background_opacity", "auto_hide", "edge_hit_width", "edge_magnetism_width", "animation_ms", "hide_delay_ms", "layout_mode", "dynamic_left_gap", "empty_click_hide_active", "empty_click_safety_margin", "hide_on_maximized"],
+            "fx.rail": ["renderer", "width", "background_color", "background_opacity", "auto_hide", "edge_hit_width", "edge_magnetism_width", "animation_ms", "hide_delay_ms", "layout_mode", "dynamic_left_gap", "empty_click_hide_active", "empty_click_safety_margin", "hide_on_maximized", "show_app_icons_row"],
             "fx.rail.layout": ["header_position", "stages_position", "spacing", "top_padding", "bottom_padding"],
             "fx.rail.header": ["enabled", "placement", "alignment", "top_padding", "bottom_padding", "height", "width", "title_color", "subtitle_color", "title_font_size", "subtitle_font_size", "font_family", "title_weight", "subtitle_weight", "title_template", "subtitle_template"],
             "fx.rail.header.display": labelKeys,

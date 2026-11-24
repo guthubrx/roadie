@@ -5,6 +5,10 @@ jour et les limites connues ; les README décrivent la version courante.
 
 ## Non publié
 
+- Rail de navigation : rangée horizontale d'icônes des applications présentes dans chaque stage (conservant la bordure blanche plein écran natif et les coins blancs zoom), réglable via `fx.rail.show_app_icons_row` (activé par défaut).
+- Écrans et stages : `roadie display swap [N|left|right|up|down]` échange les stages actives de deux écrans en une touche ; `roadie stage prune-empty` nettoie les stages vides non nommées en un clic ; ces deux actions et « Égaliser les proportions » (`balance`) sont accessibles depuis le menu contextuel du rail et le lanceur.
+- Picture-in-Picture : maintien automatique en flottant des vidéos incrustées (`com.apple.PIPAgent` et navigateurs), réglable via `tiling.float_picture_in_picture` (activé par défaut, surchargeable par une règle `action.manage = true`).
+
 ## 0.14.0 - 2026-11-10
 
 - Licence Apache-2.0, notices des dépendances incluses dans l'application.

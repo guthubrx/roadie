@@ -22,7 +22,7 @@ import Testing
 
     @Test func subcommandsComeFromTheSecondWord() {
         let all = lines()
-        #expect(all.contains("      display) compadd list current focus ;;"))
+        #expect(all.contains("      display) compadd list current focus swap ;;"))
         #expect(all.contains("      completion) compadd zsh ;;"))
     }
 

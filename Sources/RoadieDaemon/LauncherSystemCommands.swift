@@ -84,6 +84,16 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             // Navigateur SF Symbols d'Alfred 6.
             .init(id: "sf-symbols:", fr: "Navigateur SF Symbols", en: "SF Symbols browser", keywords: ["symbols", "symboles", "icônes", "icons", "sf"],
                   symbol: "square.grid.3x3", confirms: false),
+            // Session 173 (SPEC-157) : commandes Roadie d'ergonomie directe depuis le lanceur.
+            .init(id: "roadie-balance", fr: "Égaliser les proportions", en: "Equalize proportions",
+                  keywords: ["egaliser", "equalize", "equilibrer", "balance", "proportions", "fenetres", "windows", "tuiles"],
+                  symbol: "rectangle.split.2x1", confirms: false),
+            .init(id: "roadie-display-swap", fr: "Échanger les écrans", en: "Swap displays",
+                  keywords: ["echanger", "swap", "ecrans", "displays", "inverser", "switch displays"],
+                  symbol: "rectangle.2.swap", confirms: false),
+            .init(id: "roadie-prune-empty", fr: "Nettoyer les stages vides", en: "Clean up empty stages",
+                  keywords: ["nettoyer", "prune", "vides", "empty", "stages", "bureaux", "clean"],
+                  symbol: "sparkles", confirms: false),
         ]
     }
 
@@ -153,6 +163,12 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
                 try? await Task.sleep(for: .milliseconds(350))
                 process("/usr/sbin/screencapture", arguments)
             }
+        case "roadie-balance":
+            Task.detached(priority: .userInitiated) { _ = LayoutCommandService().balance() }
+        case "roadie-display-swap":
+            Task.detached(priority: .userInitiated) { _ = DisplayCommandService().swapDefault() }
+        case "roadie-prune-empty":
+            Task.detached(priority: .userInitiated) { _ = StageCommandService().pruneEmpty() }
         default:
             // Navigateur SF Symbols (session 131), avec la recherche tapée après `symbols`.
             if id.hasPrefix("sf-symbols:") {

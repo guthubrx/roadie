@@ -225,6 +225,7 @@ final class StageCardView: NSControl {
             drawStageLabel()
         }
         drawStagePreview(in: rect, preview: preview)
+        drawAppIconsRow()
         if config.stageLabel.enabled, config.stageLabel.zOrder == .above {
             drawStageLabel()
         }
@@ -577,7 +578,7 @@ final class StageCardView: NSControl {
             color(for: member, index: index).withAlphaComponent(opacity(for: index)).setFill()
             path.fill()
         }
-        if let member {
+        if let member, !(config.showAppIconsRow && config.mode != .mosaic && index == 0) {
             drawAppIcon(for: member, in: rect, opacity: opacity(for: index))
         }
         NSColor.white.withAlphaComponent(isActive ? 0.34 : 0.18).setStroke()
@@ -671,6 +672,117 @@ final class StageCardView: NSControl {
             operation: .sourceOver,
             fraction: min(1, 0.92 * opacity)
         )
+    }
+
+    /// Liste dédupliquée des identifiants d'applications présents dans la stage, en préservant l'ordre
+    /// d'affichage (fenêtre active en tête via `visualMembers`). O(m).
+    static func distinctAppBundleIDs(
+        for members: [PersistentStageMember],
+        maxCount: Int = 6
+    ) -> (bundleIDs: [String], overflow: Int) {
+        guard maxCount > 0 else { return ([], 0) }
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for member in members {
+            let bundleID = member.bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !bundleID.isEmpty, seen.insert(bundleID).inserted else { continue }
+            ordered.append(bundleID)
+        }
+        if ordered.count <= maxCount {
+            return (ordered, 0)
+        }
+        return (Array(ordered.prefix(maxCount)), ordered.count - maxCount)
+    }
+
+    /// Géométrie de la rangée horizontale d'icônes d'applications en bas de la carte (SPEC-157).
+    /// Ancrée à l'intérieur du bord bas de l'aperçu de premier plan pour ne jamais modifier la hauteur
+    /// du slot ni chevaucher la légende ou les bordures plein écran. O(m).
+    func appIconsRowLayout() -> (pillRect: CGRect, iconRects: [CGRect], bundleIDs: [String], overflow: Int)? {
+        guard config.showAppIconsRow, config.mode != .icons, !visualMembers.isEmpty else { return nil }
+        let preview = previewArea(in: cardContentRect)
+        let previews = hitPreviewItems().map(\.rect)
+        let rawFront: CGRect
+        if config.mode == .mosaic {
+            rawFront = previews.dropFirst().reduce(previews.first ?? preview) { $0.union($1) }
+        } else {
+            rawFront = previews.first ?? preview
+        }
+        let anchor = config.mode == .parallax ? rawFront.applying(parallaxProjection(for: rawFront)) : rawFront
+        guard anchor.width >= 28, anchor.height >= 28 else { return nil }
+
+        let maxIcons = max(1, min(6, Int((anchor.width - 14) / 17)))
+        let distinct = Self.distinctAppBundleIDs(for: visualMembers, maxCount: maxIcons)
+        guard !distinct.bundleIDs.isEmpty else { return nil }
+
+        let count = distinct.bundleIDs.count
+        let spacing: CGFloat = 3
+        let horizontalPadding: CGFloat = 5
+        let verticalPadding: CGFloat = 2.5
+        let overflowWidth: CGFloat = distinct.overflow > 0 ? 18 : 0
+        let maxContentWidth = max(12, anchor.width - 10 - 2 * horizontalPadding - overflowWidth)
+        let idealIconSize: CGFloat = 15
+        let fittedIconSize = min(
+            idealIconSize,
+            max(11, floor((maxContentWidth - CGFloat(max(0, count - 1)) * spacing) / CGFloat(count)))
+        )
+        let iconsWidth = CGFloat(count) * fittedIconSize + CGFloat(max(0, count - 1)) * spacing
+        let pillWidth = min(anchor.width - 8, iconsWidth + overflowWidth + 2 * horizontalPadding)
+        let pillHeight = fittedIconSize + 2 * verticalPadding
+        let bottomInset: CGFloat = 4
+        let pillRect = CGRect(
+            x: anchor.midX - pillWidth / 2,
+            y: anchor.minY + bottomInset,
+            width: pillWidth,
+            height: pillHeight
+        )
+        let startX = pillRect.minX + horizontalPadding
+        let iconY = pillRect.midY - fittedIconSize / 2
+        let iconRects = (0..<count).map { index in
+            CGRect(
+                x: startX + CGFloat(index) * (fittedIconSize + spacing),
+                y: iconY,
+                width: fittedIconSize,
+                height: fittedIconSize
+            )
+        }
+        return (pillRect, iconRects, distinct.bundleIDs, distinct.overflow)
+    }
+
+    private func drawAppIconsRow() {
+        guard let layout = appIconsRowLayout() else { return }
+        let radius = layout.pillRect.height / 2
+        let pill = NSBezierPath(roundedRect: layout.pillRect, xRadius: radius, yRadius: radius)
+        NSColor.black.withAlphaComponent(isActive ? 0.62 : 0.52).setFill()
+        pill.fill()
+        NSColor.white.withAlphaComponent(isActive ? 0.24 : 0.16).setStroke()
+        pill.lineWidth = 0.75
+        pill.stroke()
+
+        let alpha: CGFloat = isActive ? 0.96 : 0.86
+        for (bundleID, iconRect) in zip(layout.bundleIDs, layout.iconRects) {
+            guard let icon = Self.appIcon(for: bundleID) else { continue }
+            icon.draw(
+                in: iconRect,
+                from: CGRect(origin: .zero, size: icon.size),
+                operation: .sourceOver,
+                fraction: alpha
+            )
+        }
+        if layout.overflow > 0, let lastRect = layout.iconRects.last {
+            let badgeRect = CGRect(
+                x: lastRect.maxX + 2,
+                y: layout.pillRect.minY + 2,
+                width: max(0, layout.pillRect.maxX - lastRect.maxX - 4),
+                height: layout.pillRect.height - 4
+            )
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            ("+\(layout.overflow)" as NSString).draw(in: badgeRect, withAttributes: [
+                .foregroundColor: NSColor.white.withAlphaComponent(0.90),
+                .font: NSFont.systemFont(ofSize: 9, weight: .semibold),
+                .paragraphStyle: paragraph,
+            ])
+        }
     }
 
     private static func appIcon(for bundleID: String) -> NSImage? {

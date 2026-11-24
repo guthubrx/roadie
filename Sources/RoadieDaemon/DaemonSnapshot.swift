@@ -1140,6 +1140,9 @@ public struct SnapshotService: Sendable {
         let popups = config.tiling.popupFilter
         if popups, window.role == "AXSheet" { return float(tr("feuille (AXSheet)", "sheet (AXSheet)")) }
         if context.floatingBundles.contains(window.bundleID) { return float(tr("application dans floating_bundles", "app in floating_bundles")) }
+        if config.tiling.floatPictureInPicture, isPictureInPictureWindow(window) {
+            return float(tr("fenêtre Picture-in-Picture", "Picture-in-Picture window"))
+        }
         // Popup gate (aerospace-like) : une fenetre modale bloque son app, hors tuilage.
         if popups, let furniture = window.furniture, furniture.isModal { return float(tr("fenêtre modale", "modal window")) }
         if popups, isLikelyTransientSettingsWindow(window) { return float(tr("petite fenêtre de réglages sans plein écran", "small settings window without full screen")) }
@@ -1163,6 +1166,32 @@ public struct SnapshotService: Sendable {
         // AX absent -> on laisse passer (non-regression apps non-AX)
         return TilingDecision(tile: true, reason: window.subrole == nil ? tr("accessibilité illisible : tuilée par défaut", "accessibility unreadable: tiled by default") : tr("fenêtre standard", "standard window"))
     }
+
+    /// Détecte une fenêtre Picture-in-Picture (macOS `com.apple.PIPAgent` ou navigateur en mode incrustation),
+    /// afin qu'elle reste flottante sans perturber le tuilage (SPEC-157). Une fenêtre plein écran natif est exclue. O(1).
+    static func isPictureInPictureWindow(_ window: WindowSnapshot) -> Bool {
+        if window.furniture?.isNativeFullscreen == true {
+            return false
+        }
+        if window.bundleID == "com.apple.PIPAgent" {
+            return true
+        }
+        let normalizedTitle = window.title
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalizedTitle.isEmpty else { return false }
+        return Self.pictureInPictureTitles.contains(normalizedTitle)
+    }
+
+    private static let pictureInPictureTitles: Set<String> = [
+        "picture-in-picture",
+        "picture in picture",
+        "incrustation",
+        "incrustation vidéo",
+        "incrustation video",
+        "bild-in-bild",
+        "bild im bild",
+    ]
 
     private static func isLikelyTransientSettingsWindow(_ window: WindowSnapshot) -> Bool {
         let frame = window.frame.cgRect

@@ -463,6 +463,67 @@ public struct StageCommandService {
             && RailController.railDisplayStage(stage, liveWindowIDs: liveWindowIDs, now: now).members.isEmpty
     }
 
+    /// Une stage vide est nettoyable en un clic si elle est supprimable (`isDeletable`) et n'a pas de
+    /// nom personnalisé (`!StagePresentationOrder.isNamed`). Les stages nommées sont toujours préservées (SPEC-157). O(m).
+    static func isPrunableEmpty(
+        _ stage: PersistentStage,
+        activeStageID: StageID,
+        liveWindowIDs: Set<WindowID>,
+        now: Date = Date()
+    ) -> Bool {
+        isDeletable(stage, activeStageID: activeStageID, liveWindowIDs: liveWindowIDs, now: now)
+            && !StagePresentationOrder.isNamed(stage)
+    }
+
+    static func prunableEmptyStageIDs(
+        in scope: PersistentStageScope,
+        liveWindowIDs: Set<WindowID>,
+        now: Date = Date()
+    ) -> [StageID] {
+        scope.stages
+            .filter { isPrunableEmpty($0, activeStageID: scope.activeStageID, liveWindowIDs: liveWindowIDs, now: now) }
+            .map(\.id)
+    }
+
+    /// Supprime en une passe les stages inactives, vides, non parquées et non nommées de l'écran ciblé (SPEC-157).
+    /// `displayID` nil : écran actif (CLI / Lanceur). Sinon l'écran du rail cliqué.
+    public func pruneEmpty(displayID: DisplayID? = nil) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        let display = displayID == nil ? activeDisplay(in: snapshot) : snapshot.displays.first { $0.id == displayID }
+        guard let display else {
+            return StageCommandResult(message: "stage prune-empty: no display", changed: false, outcome: .noOp)
+        }
+        let live = liveWindowIDs(in: snapshot)
+        let removedIDs: [StageID]
+        do {
+            removedIDs = try store.mutateChecked { state -> [StageID] in
+                var scope = activeScope(displayID: display.id, in: &state)
+                let toRemove = Self.prunableEmptyStageIDs(in: scope, liveWindowIDs: live)
+                guard !toRemove.isEmpty else { return [] }
+                let removeSet = Set(toRemove)
+                scope.stages.removeAll { removeSet.contains($0.id) }
+                state.update(scope)
+                return toRemove
+            }
+        } catch {
+            return .persistenceFailure("stage prune-empty", error)
+        }
+        guard !removedIDs.isEmpty else {
+            return StageCommandResult(message: "stage prune-empty: removed=0", changed: false, outcome: .noOp)
+        }
+        let idsText = removedIDs.map(\.rawValue).joined(separator: ",")
+        events.append(RoadieEvent(type: "stage_prune_empty", details: [
+            "displayID": display.id.rawValue,
+            "removed": String(removedIDs.count),
+            "stageIDs": idsText
+        ]))
+        return StageCommandResult(
+            message: "stage prune-empty: removed=\(removedIDs.count) ids=\(idsText)",
+            changed: true,
+            outcome: .changed
+        )
+    }
+
     /// `displayID` nil : écran actif (CLI). Sinon l'écran du rail cliqué.
     public func delete(_ rawStageID: String, displayID: DisplayID? = nil) -> StageCommandResult {
         let snapshot = service.snapshot()
