@@ -22,8 +22,8 @@ public struct LayoutRequest: Equatable, Sendable {
     /// Part initiale du panneau principal en mode `.masterStack` (`[tiling] master_ratio`,
     /// REL-030). Ignorée par les autres modes ; bornée à 0,1...0,9 par la stratégie.
     public var masterRatio: Double
-    /// Tailles minimales observées par fenêtre (Lot C) : les stratégies BSP ajustent les splits
-    /// dès la planification lorsque les minimums tiennent dans le conteneur, évitant les refus répétés.
+    /// Tailles minimales confirmées par fenêtre (Lot C) : `SpatialBSPLayoutStrategy` (`BSPTree`)
+    /// ajuste les splits dès la planification lorsque les minimums tiennent dans le conteneur.
     public var minimumSizes: [WindowID: CGSize]
 
     public init(
