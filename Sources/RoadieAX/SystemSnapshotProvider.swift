@@ -108,13 +108,18 @@ public struct WindowFrameUpdate: Sendable {
     public var preservesSize: Bool
     /// Première disposition : rejoindre la destination avant de grandir sur l'écran de naissance.
     public var positionsBeforeResizing: Bool
+    /// Frame intermédiaire d'animation (Lot E) : écriture allégée (1 position + au plus 1 taille,
+    /// sans relecture `AXFullScreen` ni `readBack` synchrone ni double relayout `sizeBefore/sizeAfter`).
+    /// La frame finale conserve intégralement le contrat de vérification et d'enregistrement Spec043.
+    public var isIntermediateAnimationFrame: Bool
 
     public init(window: WindowSnapshot, frame: CGRect, preservesSize: Bool = false,
-                positionsBeforeResizing: Bool = false) {
+                positionsBeforeResizing: Bool = false, isIntermediateAnimationFrame: Bool = false) {
         self.window = window
         self.frame = frame
         self.preservesSize = preservesSize
         self.positionsBeforeResizing = positionsBeforeResizing
+        self.isIntermediateAnimationFrame = isIntermediateAnimationFrame
     }
 }
 
@@ -1298,25 +1303,37 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
                    !registry.isQuarantined(pid),
                    let element = element(pid: pid, id: update.window.id, title: update.window.title,
                                          frame: update.window.frame, windows: &windows, reserved: reserved) {
-                    // Le snapshot peut précéder l'entrée en plein écran natif. Un état vrai
-                    // relu interdit toute écriture et ne consomme pas le budget de placement.
-                    let (nativeError, nativeValue) = io.value(of: "AXFullScreen", on: element)
-                    let nativeFullscreen = nativeError == .success ? nativeValue.flatMap(AXReadValue.flag) : nil
-                    if !registry.noteResult(nativeError, pid: pid), nativeFullscreen != true, isCurrent() {
+                    if update.isIntermediateAnimationFrame {
                         if enhancedUI == nil {
                             let app = AXMessaging.application(pid)
                             enhancedUI = (app, disableEnhancedUserInterface(app, pid: pid))
                         }
                         if !registry.isQuarantined(pid) {
-                            applied = write(
-                                update, generation: generation, on: element, pid: pid,
-                                nativeCode: nativeError.rawValue, nativeFullscreen: nativeFullscreen,
-                                isCurrent: isCurrent
-                            )
-                            // Une écriture partielle peut avoir changé le cadre même en échec.
-                            // La relecture réussie est réutilisable ; sinon la prochaine résolution relira.
+                            applied = writeIntermediate(update, on: element, pid: pid, isCurrent: isCurrent)
                             if let applied { windows?.observations.frames.updateValue(applied, forKey: element) }
                             else { windows?.observations.frames.removeValue(forKey: element) }
+                        }
+                    } else {
+                        // Le snapshot peut précéder l'entrée en plein écran natif. Un état vrai
+                        // relu interdit toute écriture et ne consomme pas le budget de placement.
+                        let (nativeError, nativeValue) = io.value(of: "AXFullScreen", on: element)
+                        let nativeFullscreen = nativeError == .success ? nativeValue.flatMap(AXReadValue.flag) : nil
+                        if !registry.noteResult(nativeError, pid: pid), nativeFullscreen != true, isCurrent() {
+                            if enhancedUI == nil {
+                                let app = AXMessaging.application(pid)
+                                enhancedUI = (app, disableEnhancedUserInterface(app, pid: pid))
+                            }
+                            if !registry.isQuarantined(pid) {
+                                applied = write(
+                                    update, generation: generation, on: element, pid: pid,
+                                    nativeCode: nativeError.rawValue, nativeFullscreen: nativeFullscreen,
+                                    isCurrent: isCurrent
+                                )
+                                // Une écriture partielle peut avoir changé le cadre même en échec.
+                                // La relecture réussie est réutilisable ; sinon la prochaine résolution relira.
+                                if let applied { windows?.observations.frames.updateValue(applied, forKey: element) }
+                                else { windows?.observations.frames.removeValue(forKey: element) }
+                            }
                         }
                     }
                 }
@@ -1647,6 +1664,52 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         let setError = io.setValue(kCFBooleanFalse, of: Self.enhancedUserInterface, on: app)
         registry.noteResult(setError, pid: pid)
         return setError == .success
+    }
+
+    /// Écriture légère d'une image intermédiaire d'animation (Lot E) : au plus une écriture de
+    /// position et une de taille (jamais le double redimensionnement `sizeBefore`/`sizeAfter`),
+    /// sans lecture `AXFullScreen`, sans relecture synchrone ni écriture dans `WrittenFrameRegistry`.
+    /// Le contrat complet Spec043 (`write`) reste intégralement appliqué à l'image finale.
+    private func writeIntermediate(
+        _ update: WindowFrameUpdate, on element: AXUIElement, pid: pid_t,
+        isCurrent: @Sendable () -> Bool = { true }
+    ) -> CGRect? {
+        var position = update.frame.origin
+        var size = update.frame.size
+        guard let axPosition = AXValueCreate(.cgPoint, &position),
+              let axSize = AXValueCreate(.cgSize, &size)
+        else { return nil }
+
+        let needsPosition = abs(position.x - update.window.frame.x) > 0.5
+            || abs(position.y - update.window.frame.y) > 0.5
+        let needsSize = !update.preservesSize && (
+            abs(size.width - update.window.frame.width) > 0.5
+            || abs(size.height - update.window.frame.height) > 0.5
+        )
+        var phases: [(String, AXValue)] = []
+        if needsPosition || !needsSize {
+            phases.append((kAXPositionAttribute, axPosition))
+        }
+        if needsSize {
+            phases.append((kAXSizeAttribute, axSize))
+        }
+        var wroteAny = false
+        for (attribute, value) in phases {
+            guard isCurrent() else { return nil }
+            let error = io.setValue(value, of: attribute, on: element)
+            guard isCurrent() else { return nil }
+            if registry.noteResult(error, pid: pid) { return nil }
+            if error == .invalidUIElement {
+                windowIndex.invalidate(pid: pid)
+                return nil
+            }
+            if error == .success {
+                wroteAny = true
+            } else if attribute == kAXPositionAttribute {
+                return nil
+            }
+        }
+        return wroteAny ? update.frame : nil
     }
 
     /// Taille, position puis taille, comme yabai (`window_manager.c:729-762`) : la premiere taille

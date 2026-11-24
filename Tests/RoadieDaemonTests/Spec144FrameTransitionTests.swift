@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import RoadieAX
 import RoadieCore
 @testable import RoadieDaemon
 
@@ -178,5 +179,64 @@ extension Spec144FrameTransitionTests {
         runtime.cancel()
         try await Task.sleep(for: .milliseconds(150))
         #expect(finals.count == 1)
+    }
+
+    @Test func lotETransitionRunsAt60HzAndNotifiesWhenLayoutHoldEnds() async throws {
+        #expect(abs(FrameTransitionRuntime.frameInterval - (1.0 / 60)) < 0.0001)
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let path = try #require(f.configService.state.activePath)
+        try "[fx.animations]\nenabled=true\nduration_ms=80\n".write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
+        f.live.invalidate()
+        let window = try #require(f.context.snapshot.windows.first?.window)
+        let plan = ApplyPlan(commands: [ApplyCommand(window: window, frame: f.target)])
+        let runtime = FrameTransitionRuntime(generations: f.generations, isMouseDown: { false })
+        defer { runtime.cancel() }
+        var endedCount = 0
+        var holdingAtNotification: [Bool] = []
+        runtime.onTransitionEnded = {
+            endedCount += 1
+            holdingAtNotification.append(runtime.isHoldingLayout)
+        }
+        _ = runtime.schedule(plan, service: f.service, generation: f.generations.current, action: .move)
+        // Remplacement par une génération plus récente : ne doit pas notifier une fin factice.
+        let nextGeneration = f.generations.next()
+        _ = runtime.schedule(plan, service: f.service, generation: nextGeneration, action: .move)
+        #expect(endedCount == 0)
+        #expect(await f.waitFor { !runtime.isHoldingLayout })
+        #expect(endedCount == 1)
+        #expect(holdingAtNotification == [false])
+        #expect(f.backend.frame(window.id) == f.target.cgRect)
+        let updates = f.backend.frameUpdates.filter { $0.window.id == window.id }
+        let lastUpdate = try #require(updates.last)
+        #expect(lastUpdate.frame == f.target.cgRect)
+        #expect(!lastUpdate.isIntermediateAnimationFrame)
+        #expect(updates.dropLast().allSatisfy { $0.isIntermediateAnimationFrame })
+    }
+
+    @Test func lotEDispatcherPreservesPendingFinalBatchAgainstIntermediateOverwrite() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let source = try #require(f.context.snapshot.windows.first { $0.window.id == f.source }?.window)
+        f.backend.blockedPID = source.pid
+        let permit = InteractiveWritePermit(generations: f.generations)
+        let dispatcher = InteractiveFrameDispatcher(service: f.service, permit: permit) { _, _ in }
+        let midA = Rect(x: 100, y: 100, width: 500, height: 500)
+        let midB = Rect(x: 200, y: 100, width: 500, height: 500)
+        // 1. Premier lot intermédiaire actif (bloqué sur le sémaphore).
+        dispatcher.submit([ApplyCommand(window: source, frame: midA)],
+                          generation: PlacementGeneration.outsideBudget, intermediate: true)
+        // 2. Lot final mis en file d'attente pour le même PID.
+        dispatcher.submit([ApplyCommand(window: source, frame: f.target)],
+                          generation: f.generations.current, intermediate: false)
+        // 3. Un lot intermédiaire tardif ne doit pas écraser le lot final en attente.
+        dispatcher.submit([ApplyCommand(window: source, frame: midB)],
+                          generation: PlacementGeneration.outsideBudget, intermediate: true)
+        f.backend.blockedPID = nil
+        f.backend.gate.signal()
+        #expect(await f.waitFor { dispatcher.isIdle })
+        let updates = f.backend.frameUpdates.filter { $0.window.id == source.id }
+        #expect(updates.count == 2)
+        #expect(updates[0].isIntermediateAnimationFrame && updates[0].frame == midA.cgRect)
+        #expect(!updates[1].isIntermediateAnimationFrame && updates[1].frame == f.target.cgRect)
     }
 }

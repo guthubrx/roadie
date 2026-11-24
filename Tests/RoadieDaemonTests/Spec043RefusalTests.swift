@@ -29,6 +29,7 @@ private final class Refusal043Writer: WindowFrameWriting, @unchecked Sendable {
     let clock: Refusal043Clock
     var minimums: [WindowID: CGSize] = [:]
     var attempts: [UInt64: [WindowID: Int]] = [:]
+    var lastPositionsBeforeResizing: [WindowID: Bool] = [:]
 
     init(provider: PowerUserProvider, registry: WrittenFrameRegistry, clock: Refusal043Clock) {
         base = PowerUserWriter(provider: provider)
@@ -48,6 +49,7 @@ private final class Refusal043Writer: WindowFrameWriting, @unchecked Sendable {
         var results: [WindowID: CGRect?] = [:]
         for update in updates {
             attempts[generation, default: [:]][update.window.id, default: 0] += 1
+            lastPositionsBeforeResizing[update.window.id] = update.positionsBeforeResizing
             let actual = setFrame(update.frame, of: update.window)
             registry.record(windowID: update.window.id.rawValue, requested: update.frame,
                 readBack: actual, generation: generation, at: clock.now)
@@ -412,5 +414,27 @@ struct Spec043RefusalTests {
         h.clock.mouseDown = false
         _ = h.maintainer.tick(cause: "deadline")
         #expect(h.repairCount == 1)
+    }
+
+    @Test
+    func lotEMinimumRepairMarksRepairedWindowsImmediate() throws {
+        let h = try Refusal043Harness()
+        defer { h.cleanup() }
+        h.writer.minimums[WindowID(rawValue: 1)] = CGSize(width: 700, height: 0)
+        // Première passe : écriture initiale (immediate = true), fenêtre 1 clampée à 700.
+        _ = h.maintainer.tick(cause: "command:startup")
+        h.writer.lastPositionsBeforeResizing.removeAll()
+        // Passe de réparation post-refus dans la même génération : immédiate (pas de 2e animation).
+        h.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        _ = h.maintainer.tick(cause: "deadline")
+        #expect(h.repairCount == 1)
+        #expect(h.writer.lastPositionsBeforeResizing[WindowID(rawValue: 2)] == true)
+        // Génération suivante (geste utilisateur) : animation normale autorisée (immediate = false).
+        h.writer.minimums.removeAll()
+        h.writer.lastPositionsBeforeResizing.removeAll()
+        h.clock.advance(0.2)
+        try h.resize(1, to: Rect(x: 0, y: 0, width: 400, height: 800))
+        _ = h.maintainer.tick(cause: "drag")
+        #expect(h.writer.lastPositionsBeforeResizing[WindowID(rawValue: 2)] == false)
     }
 }

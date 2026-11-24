@@ -1030,13 +1030,16 @@ public final class LayoutMaintainer {
                 && scopesByID[id].flatMap { snapshot.state.stage(scope: $0)?.mode.usesTreeEngine } != true
         }
         let before = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id.rawValue, writtenFrames.entry(for: $0.window.id.rawValue)) })
-        // Première disposition tuilée : aucune animation depuis le cadre choisi par l'app.
+        // Première disposition tuilée et passe de réparation post-refus (Lot E) : aucune animation
+        // depuis le cadre choisi par l'app ou après un `layout_clamped` déjà animé.
         // Le registre commun reste l'unique mémoire d'écriture ; O(k) commandes.
-        let initialWindowIDs = Set(plan.commands.compactMap { command in
-            layoutWindowIDs.contains(command.window.id) && !command.preservesSize
-                && writtenFrames.entry(for: command.window.id.rawValue) == nil ? command.window.id : nil
+        let immediateWindowIDs = Set(plan.commands.compactMap { command -> WindowID? in
+            guard layoutWindowIDs.contains(command.window.id), !command.preservesSize else { return nil }
+            let isInitial = writtenFrames.entry(for: command.window.id.rawValue) == nil
+            let isMinimumRepair = scopesByID[command.window.id].flatMap { minimumRepairs[$0]?.generation } == generation
+            return (isInitial || isMinimumRepair) ? command.window.id : nil
         })
-        let firstResult = service.apply(plan, generation: generation, immediateWindowIDs: initialWindowIDs)
+        let firstResult = service.apply(plan, generation: generation, immediateWindowIDs: immediateWindowIDs)
         recordWrites(firstResult, before: before, generation: generation)
 
         // Les fenêtres qui refusent de grandir restent hors des réparations, comme du plan (A3).

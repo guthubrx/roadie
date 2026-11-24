@@ -86,7 +86,7 @@ private final class DragPointerPanel: NSPanel {
 
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        isReleasedWhenClosed = false; isOpaque = false; backgroundColor = .clear
+        isReleasedWhenClosed = false; isOpaque = false; backgroundColor = .clear; colorSpace = .sRGB
         level = .floating; isFloatingPanel = true; hidesOnDeactivate = false
         ignoresMouseEvents = true; hasShadow = true
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]

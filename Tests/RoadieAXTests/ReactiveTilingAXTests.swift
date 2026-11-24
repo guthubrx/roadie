@@ -135,6 +135,55 @@ struct AXWindowFrameWriterTests {
         #expect(f.io.resizeOrigins.allSatisfy { $0 == target.origin })
         #expect(f.frames.entry(for: 1)?.writesInGeneration == 1)
     }
+
+    @Test func lotEIntermediateAnimationFrameUsesMinimalAXWritesAndSkipsReadBackAndRegistry() {
+        // 1. Position + taille modifiées : au plus une écriture position + une écriture taille,
+        // sans AXFullScreen, sans relecture synchrone et sans polluer WrittenFrameRegistry.
+        let both = WriterFixture()
+        both.io.windows[50] = index(pid: 50, ids: [1])
+        let movedAndResized = CGRect(x: 120, y: 40, width: 620, height: 480)
+        let bothResult = both.writer.setFrames([
+            WindowFrameUpdate(window: window(1, pid: 50), frame: movedAndResized, isIntermediateAnimationFrame: true),
+        ], generation: PlacementGeneration.outsideBudget)
+        #expect(bothResult[WindowID(rawValue: 1)] == movedAndResized)
+        #expect(both.io.frameWrites == ["set AXPosition", "set AXSize"])
+        #expect(!both.io.calls.contains("get AXFullScreen"))
+        #expect(!both.io.calls.contains("read AXPosition,AXSize"))
+        #expect(both.frames.entry(for: 1) == nil)
+
+        // 2. Déplacement seul (taille identique à 0,5 pt près) : zéro set AXSize (zéro relayout).
+        let posOnly = WriterFixture()
+        posOnly.io.windows[50] = index(pid: 50, ids: [1])
+        let movedOnly = CGRect(x: 240, y: 0, width: 400, height: 300)
+        let posResult = posOnly.writer.setFrames([
+            WindowFrameUpdate(window: window(1, pid: 50), frame: movedOnly, isIntermediateAnimationFrame: true),
+        ], generation: PlacementGeneration.outsideBudget)
+        #expect(posResult[WindowID(rawValue: 1)] == movedOnly)
+        #expect(posOnly.io.frameWrites == ["set AXPosition"])
+
+        // 3. Redimensionnement seul (position identique à 0,5 pt près) : zéro set AXPosition.
+        let sizeOnly = WriterFixture()
+        sizeOnly.io.windows[50] = index(pid: 50, ids: [1])
+        let resizedOnly = CGRect(x: 0, y: 0, width: 640, height: 300)
+        let sizeResult = sizeOnly.writer.setFrames([
+            WindowFrameUpdate(window: window(1, pid: 50), frame: resizedOnly, isIntermediateAnimationFrame: true),
+        ], generation: PlacementGeneration.outsideBudget)
+        #expect(sizeResult[WindowID(rawValue: 1)] == resizedOnly)
+        #expect(sizeOnly.io.frameWrites == ["set AXSize"])
+
+        // 4. Image finale (isIntermediateAnimationFrame == false) : contrat complet Spec043 préservé.
+        let finalFixture = WriterFixture()
+        finalFixture.io.windows[50] = index(pid: 50, ids: [1])
+        finalFixture.io.simulatesFrameAttributes = true
+        let finalResult = finalFixture.writer.setFrames([
+            WindowFrameUpdate(window: window(1, pid: 50), frame: movedAndResized, isIntermediateAnimationFrame: false),
+        ], generation: 1)
+        #expect(finalResult[WindowID(rawValue: 1)] == movedAndResized)
+        #expect(finalFixture.io.calls.contains("get AXFullScreen"))
+        #expect(finalFixture.io.frameWrites == ["set AXSize", "set AXPosition", "set AXSize"])
+        #expect(finalFixture.io.calls.contains("read AXPosition,AXSize"))
+        #expect(finalFixture.frames.entry(for: 1)?.writesInGeneration == 1)
+    }
     @Test func spec142RevokedBatchDoesNotReachAX() {
         let fixture = WriterFixture()
         fixture.io.windows[50] = index(pid: 50, ids: [1])

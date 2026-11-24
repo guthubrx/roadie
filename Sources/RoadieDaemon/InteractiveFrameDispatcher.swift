@@ -33,6 +33,7 @@ final class InteractiveFrameDispatcher {
         let plan: ApplyPlan
         let generation: UInt64
         let windowIDs: Set<WindowID>
+        let intermediate: Bool
     }
     private let service: SnapshotService
     let permit: InteractiveWritePermit
@@ -56,11 +57,14 @@ final class InteractiveFrameDispatcher {
     }
 
     /// Remplace les anciens lots, y compris quand une fenêtre revient à son cadre initial.
-    func submit(_ commands: [ApplyCommand], generation: UInt64) {
+    func submit(_ commands: [ApplyCommand], generation: UInt64, intermediate: Bool = false) {
         guard permit.isCurrent else { invalidate(); return }
         let groups = Dictionary(grouping: commands, by: { $0.window.pid })
-        pending = groups.mapValues { Batch(plan: ApplyPlan(commands: $0), generation: generation,
-                                          windowIDs: Set($0.map { $0.window.id })) }
+        for (pid, group) in groups {
+            if intermediate, let existing = pending[pid], !existing.intermediate { continue }
+            pending[pid] = Batch(plan: ApplyPlan(commands: group), generation: generation,
+                                 windowIDs: Set(group.map { $0.window.id }), intermediate: intermediate)
+        }
         for pid in Array(pending.keys) where active[pid] == nil { start(pid) }
     }
 
@@ -75,7 +79,7 @@ final class InteractiveFrameDispatcher {
         let service = service, permit = permit
         let work = Task.detached(priority: .userInitiated) {
             service.apply(batch.plan, generation: batch.generation, isCurrent: { permit.isCurrent }, publish: false,
-                          respectLastingRefusals: true)
+                          respectLastingRefusals: true, intermediate: batch.intermediate)
         }
         Task { [weak self] in
             let result = await work.value

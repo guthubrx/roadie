@@ -280,7 +280,8 @@ final class RailThumbnailStore {
         config.showsCursor = false; config.scalesToFit = true
         let excluded = sceneApplications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
         let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
-        return try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        guard let raw = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) else { return nil }
+        return raw.detachedSRGBBitmapCopy() ?? raw
     }
 
     /// Une image initiale par glisser : le ratio du viewport est conservé, même si
@@ -305,7 +306,8 @@ final class RailThumbnailStore {
         config.colorSpaceName = CGColorSpace.sRGB
         config.showsCursor = false; config.scalesToFit = true; config.preservesAspectRatio = true
         config.ignoreShadowsSingleWindow = true
-        return try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config)
+        guard let raw = try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config) else { return nil }
+        return raw.detachedSRGBBitmapCopy() ?? raw
     }
 
     private func screenshot(of window: SCWindow, size: CGSize, displayWidth: CGFloat) async -> CGImage? {

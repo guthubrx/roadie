@@ -1136,6 +1136,7 @@ final class DropPreviewOverlayWindow: NSPanel {
         )
         isOpaque = false
         backgroundColor = .clear
+        colorSpace = .sRGB
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         ignoresMouseEvents = true

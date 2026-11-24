@@ -39,6 +39,11 @@ public final class FrameTransitionRuntime {
     private var timer: Timer?
     /// Résultats finaux seulement : les images intermédiaires ne sont pas des placements.
     public var onFinalResult: ((ApplyResult, ApplyPlan, UInt64) -> Void)?
+    /// Appelé dès que la session se termine et que `isHoldingLayout` redevient faux (Lot E : réarme
+    /// immédiatement `TickScheduler` pour les échéances `refusal_confirm` et événements retenus).
+    public var onTransitionEnded: (() -> Void)?
+    /// Cadence de publication vers le dispatcher AX (alignée sur `EffectAnimator` à 60 Hz, Lot E).
+    static let frameInterval: TimeInterval = 1.0 / 60
     private(set) var acceptsCommands = false
     public func start() { acceptsCommands = true }
     public var isHoldingLayout: Bool { session.map { $0.permit.isCurrent && ProcessInfo.processInfo.systemUptime - $0.started < 1.5 } ?? false }
@@ -71,7 +76,7 @@ public final class FrameTransitionRuntime {
         if session?.generation != generation || session?.finalSubmitted == true || session?.scene != nil {
             let retained = Set(plan.commands.map { "ax-\(ObjectIdentifier(self))-\($0.window.pid)-\($0.window.id.rawValue)" })
             // Révoquer les anciens lots sans perdre la vitesse des fenêtres reprises.
-            cancel(preserving: retained)
+            cancel(preserving: retained, notifyEnded: false)
         }
         let current: Session
         if let existing = session { current = existing }
@@ -96,8 +101,11 @@ public final class FrameTransitionRuntime {
                         failed: final.filter { $0.status == .failed }.count, items: final)
                     self?.onFinalResult?(result, ApplyPlan(commands: Array(current.commands.values)), current.generation)
                 }
+                if let self, self.session === current, current.finalSubmitted, current.dispatcher.isIdle, current.scene == nil {
+                    self.cancel(completed: true)
+                }
             }
-            let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            let timer = Timer(timeInterval: Self.frameInterval, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.pulse() }
             }
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
@@ -165,7 +173,11 @@ public final class FrameTransitionRuntime {
             EffectAnimator.shared.animate(id: animationID, from: [from.minX, from.minY, from.width, from.height],
                 to: [to.minX, to.minY, to.width, to.height], policy: policy) { [weak current] values in
                 current?.frames[id] = Rect(x: values[0], y: values[1], width: max(1, values[2]), height: max(1, values[3]))
-            } completion: { [weak current] in current?.finished.insert(id) }
+            } completion: { [weak self, weak current] in
+                guard let self, let current, self.session === current else { return }
+                current.finished.insert(id)
+                if current.finished.count == current.commands.count { self.pulse() }
+            }
         }
         // La première cible part dès maintenant par le writer asynchrone commun.
         if !immediateWindowIDs.isEmpty { pulse() }
@@ -224,14 +236,17 @@ public final class FrameTransitionRuntime {
                 return ApplyCommand(window: window, frame: frame, preservesSize: final.preservesSize,
                                     positionsBeforeResizing: final.positionsBeforeResizing)
             }
-            if !commands.isEmpty { current.dispatcher.submit(commands, generation: PlacementGeneration.outsideBudget) }
+            if !commands.isEmpty {
+                current.dispatcher.submit(commands, generation: PlacementGeneration.outsideBudget, intermediate: true)
+            }
         }
     }
 
     public func stop() { acceptsCommands = false; cancel(); EffectAnimator.shared.stop() }
 
-    public func cancel(completed: Bool = false, preserving: Set<String> = []) {
+    public func cancel(completed: Bool = false, preserving: Set<String> = [], notifyEnded: Bool = true) {
         timer?.invalidate(); timer = nil
+        let hadSession = session != nil
         if let current = session {
             events.append(RoadieEvent(type: completed ? "effects.frames_completed" : "effects.frames_cancelled", details: [
                 "generation": String(current.generation), "windows": String(current.commands.count),
@@ -245,5 +260,8 @@ public final class FrameTransitionRuntime {
             for id in current.ids.subtracting(preserving) { EffectAnimator.shared.cancel(id) }
         }
         session = nil
+        if hadSession, notifyEnded {
+            onTransitionEnded?()
+        }
     }
 }

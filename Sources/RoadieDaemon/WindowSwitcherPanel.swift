@@ -442,6 +442,7 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         self.switcherAppearance = appearance
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isReleasedWhenClosed = false
+        colorSpace = .sRGB
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true

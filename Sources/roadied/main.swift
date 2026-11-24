@@ -419,9 +419,6 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
 
     FrameTransitionRuntime.shared.start()
     let maintainer = LayoutMaintainer()
-    FrameTransitionRuntime.shared.onFinalResult = { [weak maintainer] result, plan, generation in
-        maintainer?.recordTransition(result, from: plan, generation: generation)
-    }
     let nativeResize = NativeResizeRuntime(service: service, minimums: { scope, snapshot in
         maintainer.dividerMinimums(for: scope, in: snapshot)
     })
@@ -466,6 +463,13 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
         prepare: { await maintainer.prepareTick() }
     )
     ShutdownRegistry.register { scheduler.stop() }
+    FrameTransitionRuntime.shared.onFinalResult = { [weak maintainer, weak scheduler] result, plan, generation in
+        maintainer?.recordTransition(result, from: plan, generation: generation)
+        scheduler?.rearm()
+    }
+    FrameTransitionRuntime.shared.onTransitionEnded = { [weak scheduler] in
+        scheduler?.rearm()
+    }
     nativeResize.setCompletion { scheduler.buttonsReleased(gestureEnded: true) }
 
     // Un seul capteur pour les gestes depuis le contenu : uniquement dans le processus écrivain.

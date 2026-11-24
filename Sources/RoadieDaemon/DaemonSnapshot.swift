@@ -2212,7 +2212,8 @@ public extension SnapshotService {
     // O(n) - n = commandes.
     func apply(_ plan: ApplyPlan, generation: UInt64 = PlacementGeneration.shared.current,
                isCurrent: @Sendable () -> Bool = { true }, publish: Bool = true,
-               respectLastingRefusals: Bool = false, animation: AnimationAction = .move,
+               respectLastingRefusals: Bool = false, intermediate: Bool = false,
+               animation: AnimationAction = .move,
                immediateWindowIDs: Set<WindowID> = [], transitionDirection: Direction? = nil,
                animationDisplays: [DisplaySnapshot]? = nil, stageScene: StageSceneContext? = nil) -> ApplyResult {
         // Les appels interactifs publish=false gardent leur contrat immédiat. Les commandes
@@ -2237,7 +2238,8 @@ public extension SnapshotService {
         }
         let updates = commands.map { command in
             WindowFrameUpdate(window: command.window, frame: command.frame.cgRect, preservesSize: command.preservesSize,
-                              positionsBeforeResizing: command.positionsBeforeResizing || immediateWindowIDs.contains(command.window.id))
+                              positionsBeforeResizing: command.positionsBeforeResizing || immediateWindowIDs.contains(command.window.id),
+                              isIntermediateAnimationFrame: intermediate)
         }
         let actualFrames = updates.isEmpty ? [:] : frameWriter.setFrames(updates, generation: generation, isCurrent: isCurrent)
 

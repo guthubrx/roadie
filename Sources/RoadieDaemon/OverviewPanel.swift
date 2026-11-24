@@ -30,7 +30,7 @@ final class OverviewPanel: NSPanel, NSWindowDelegate {
         let root = NSView()
         contentView = root
         root.wantsLayer = true
-        isOpaque = false; backgroundColor = .clear; hasShadow = true
+        isOpaque = false; backgroundColor = .clear; hasShadow = true; colorSpace = .sRGB
         // Fond : le fond d’écran flouté de l’utilisateur, qui masque les icônes du bureau comme Mission Control.
         // Sans image lisible, le flou système de ce qui est sous l’overlay prend le relais.
         blur.material = .hudWindow; blur.blendingMode = .behindWindow; blur.state = .active

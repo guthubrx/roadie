@@ -170,7 +170,7 @@ private final class StageScenePanel: NSPanel {
         size = context.frame.size
         super.init(contentRect: RoadieScreenCoordinate.axRectToNS(context.frame),
                    styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        isReleasedWhenClosed = false; isOpaque = false; backgroundColor = .clear
+        isReleasedWhenClosed = false; isOpaque = false; backgroundColor = .clear; colorSpace = .sRGB
         hasShadow = false; ignoresMouseEvents = true; level = .floating
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         let view = NSView(frame: CGRect(origin: .zero, size: size))
