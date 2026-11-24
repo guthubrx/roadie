@@ -115,24 +115,29 @@ struct Spec088LauncherTests {
         let cachedResponse = AlfredScriptFilterResponse(items: [AlfredItem(title: "v1")], cacheSeconds: 60)
         let modifiedKey = "wf:\(wfV1.id):SF\u{1F}q"
         let untouchedKey = "wf:other-wf:SF\u{1F}q"
-        cache.store(cachedResponse, for: modifiedKey)
-        cache.store(cachedResponse, for: untouchedKey)
+        let genBeforeInvalidate = cache.generation(for: wfV1.id)
+        let otherGenBeforeInvalidate = cache.generation(for: "other-wf")
+        cache.store(cachedResponse, for: modifiedKey, workflowID: wfV1.id, expectedGeneration: genBeforeInvalidate)
+        cache.store(cachedResponse, for: untouchedKey, workflowID: "other-wf", expectedGeneration: otherGenBeforeInvalidate)
         cache.invalidate(workflowIDs: changed)
         #expect(cache.response(for: modifiedKey) == nil)
         #expect(cache.response(for: untouchedKey) != nil)
 
+        // Atomique : une écriture tardive portant l'ancienne génération du workflow invalidé est
+        // rejetée directement sous le verrou du cache, tandis qu'un workflow inchangé reste accepté.
+        cache.store(cachedResponse, for: modifiedKey, workflowID: wfV1.id, expectedGeneration: genBeforeInvalidate)
+        #expect(cache.response(for: modifiedKey) == nil)
+        cache.store(cachedResponse, for: "wf:other-wf:SF\u{1F}q2", workflowID: "other-wf", expectedGeneration: otherGenBeforeInvalidate)
+        #expect(cache.response(for: "wf:other-wf:SF\u{1F}q2") != nil)
+
         // Garde de génération : une réponse ou un `rerun` d'une ancienne génération à argument
-        // identique est rejeté et ne peut pas repeupler `AlfredScriptFilterCache`.
+        // identique est rejeté, tandis qu'une autre génération inchangée continue.
         let sessionStore = TargetModeRuntimeController.WorkflowSessionStore([wfV1])
         let runV1 = try #require(sessionStore.snapshotForRun(workflowID: wfV1.id))
         #expect(sessionStore.isCurrent(runV1.generation))
         let replaced = sessionStore.replace(with: [wfV2])
         #expect(replaced == [wfV1.id])
         #expect(!sessionStore.isCurrent(runV1.generation))
-        if sessionStore.isCurrent(runV1.generation) {
-            cache.store(cachedResponse, for: modifiedKey)
-        }
-        #expect(cache.response(for: modifiedKey) == nil)
 
         // Même argument "q", génération courante incrémentée après rafraîchissement -> rejeté.
         #expect(!WorkflowCallbackGuard.acceptsResponse(

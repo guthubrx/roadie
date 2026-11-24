@@ -232,6 +232,12 @@ final class AlfredScriptFilterCache: @unchecked Sendable {
     static let limit = 200
     private let lock = NSLock()
     private var entries: [String: (expires: Date, response: AlfredScriptFilterResponse)] = [:]
+    private var workflowGenerations: [String: UInt64] = [:]
+
+    /// Génération courante d'un workflow pour lier atomiquement invalidation et écriture (Lot D). O(1).
+    func generation(for workflowID: String) -> UInt64 {
+        lock.withLock { workflowGenerations[workflowID, default: 0] }
+    }
 
     /// Réponse encore valable, sinon nil. O(1).
     func response(for key: String, now: Date = Date()) -> AlfredScriptFilterResponse? {
@@ -243,21 +249,36 @@ final class AlfredScriptFilterCache: @unchecked Sendable {
         }
     }
 
-    /// Efface les réponses en cache appartenant aux workflows modifiés ou retirés (Lot D). O(n).
+    /// Efface les réponses en cache et incrémente la génération des workflows modifiés ou retirés
+    /// sous le même verrou que `store`, rendant l'invalidation atomique (Lot D). O(n).
     func invalidate(workflowIDs: Set<String>) {
         guard !workflowIDs.isEmpty else { return }
         let prefixes = workflowIDs.map { "wf:\($0):" }
         lock.withLock {
+            for id in workflowIDs {
+                workflowGenerations[id, default: 0] &+= 1
+            }
             for key in Array(entries.keys) where prefixes.contains(where: { key.hasPrefix($0) }) {
                 entries.removeValue(forKey: key)
             }
         }
     }
 
-    /// Garde la réponse si elle demande un cache. O(n) quand la borne est atteinte.
-    func store(_ response: AlfredScriptFilterResponse, for key: String, now: Date = Date()) {
+    /// Garde la réponse si elle demande un cache et si la génération attendue du workflow n'a pas
+    /// été invalidée entre le lancement et la fin du script. O(n) quand la borne est atteinte.
+    func store(
+        _ response: AlfredScriptFilterResponse,
+        for key: String,
+        workflowID: String? = nil,
+        expectedGeneration: UInt64? = nil,
+        now: Date = Date()
+    ) {
         guard let seconds = response.cacheSeconds else { return }
         lock.withLock {
+            if let workflowID, let expectedGeneration,
+               workflowGenerations[workflowID, default: 0] != expectedGeneration {
+                return
+            }
             entries[key] = (now.addingTimeInterval(seconds), response)
             if entries.count > Self.limit, let oldest = entries.min(by: { $0.value.expires < $1.value.expires }) { entries[oldest.key] = nil }
         }

@@ -997,13 +997,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private let pathListing = LauncherPathListing()
     private var pathFiles: [LauncherFile] = []
     private var pathFor: String?
-    /// Workflows (SPEC-088) : script en cours, saisie demandée, génération active et dernière réponse, par entrée.
+    /// Workflows (SPEC-088) : script en cours, saisie demandée, générations par workflow et dernière réponse, par entrée.
     private var workflowRuns: [String: AlfredProcess] = [:]
     private var workflowRequested: [String: String] = [:]
     private var workflowResponses: [String: (argument: String, response: AlfredScriptFilterResponse?, error: String?)] = [:]
     private var workflowPending: [String: DispatchWorkItem] = [:]
     private var workflowReruns: [String: DispatchWorkItem] = [:]
-    private var workflowGeneration: UInt64 = 0
+    private var workflowGenerations: [String: UInt64] = [:]
     /// Aperçu actif (SPEC-078) : demande envoyée au contrôleur, attente de 150 ms, fantôme rendu.
     private var sentPreview: LauncherPreviewRequest?
     private var pendingPreview: LauncherPreviewRequest?
@@ -1770,10 +1770,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     /// Invalide les processus, délais, relances `rerun` et réponses Script Filter des workflows
-    /// modifiés ou retirés lors d'un rafraîchissement asynchrone, et incrémente la génération pour
-    /// écarter tout callback encore en file sur le fil principal (Lot D).
+    /// modifiés ou retirés lors d'un rafraîchissement asynchrone, et incrémente la génération par
+    /// `workflowID` (les workflows inchangés poursuivent normalement leur exécution) (Lot D).
     private func invalidateWorkflowState(for workflowIDs: Set<String>) {
-        workflowGeneration &+= 1
+        for id in workflowIDs {
+            workflowGenerations[id, default: 0] &+= 1
+        }
         let prefixes = workflowIDs.map { "wf:\($0):" }
         let keys = Set(workflowRuns.keys)
             .union(workflowResponses.keys)
@@ -1913,11 +1915,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         workflowPending.removeValue(forKey: key)?.cancel()
         workflowReruns.removeValue(forKey: key)?.cancel()
         let query = model.query
-        let generation = workflowGeneration
+        let workflowID = entry.workflowID
+        let generation = workflowGenerations[workflowID, default: 0]
         let start: @MainActor () -> Void = { [weak self] in
             guard let self, !self.finished,
                   WorkflowCallbackGuard.acceptsResponse(
-                      currentGeneration: self.workflowGeneration,
+                      currentGeneration: self.workflowGenerations[workflowID, default: 0],
                       callbackGeneration: generation,
                       currentArgument: self.workflowRequested[key],
                       callbackArgument: argument
@@ -1925,7 +1928,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             self.workflowRuns[key] = self.launcher.runScriptFilter(entry, argument) { [weak self] response, error in
                 guard let self, !self.finished,
                       WorkflowCallbackGuard.acceptsResponse(
-                          currentGeneration: self.workflowGeneration,
+                          currentGeneration: self.workflowGenerations[workflowID, default: 0],
                           callbackGeneration: generation,
                           currentArgument: self.workflowRequested[key],
                           callbackArgument: argument
@@ -1940,7 +1943,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                         MainActor.assumeIsolated {
                             guard let self, !self.finished,
                                   WorkflowCallbackGuard.acceptsRerun(
-                                      currentGeneration: self.workflowGeneration,
+                                      currentGeneration: self.workflowGenerations[workflowID, default: 0],
                                       rerunGeneration: generation,
                                       currentQuery: self.model.query,
                                       rerunQuery: query,

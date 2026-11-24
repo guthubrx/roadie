@@ -968,7 +968,7 @@ public final class TargetModeRuntimeController: NSObject {
                 return nil
             }
             let workflow = run.workflow
-            let launchGeneration = run.generation
+            let cacheGeneration = AlfredScriptFilterCache.shared.generation(for: entry.workflowID)
             // Cache demandé par le script (session 120) : même entrée, même saisie, réponse encore valable.
             let cacheKey = "\(entry.id)\u{1F}\(argument)"
             if let cached = AlfredScriptFilterCache.shared.response(for: cacheKey) {
@@ -981,9 +981,14 @@ public final class TargetModeRuntimeController: NSObject {
                                             variables: workflow.configuredVariables, keyword: entry.keyword) { result in
                 let response = entry.kind == .fileFilter ? AlfredFileFilter.response(result.text)
                     : result.output.isEmpty ? nil : AlfredScriptFilterResponse.parse(result.output)
-                // Ne jamais repeupler le cache partagé avec une réponse d'une génération remplacée (Lot D).
-                if let response, !result.cancelled, store.isCurrent(launchGeneration) {
-                    AlfredScriptFilterCache.shared.store(response, for: cacheKey)
+                // Validation + écriture atomiques sous le verrou de `AlfredScriptFilterCache` (Lot D).
+                if let response, !result.cancelled {
+                    AlfredScriptFilterCache.shared.store(
+                        response,
+                        for: cacheKey,
+                        workflowID: entry.workflowID,
+                        expectedGeneration: cacheGeneration
+                    )
                 }
                 events.append(RoadieEvent(type: "launcher.workflow_filter", details: [
                     "workflow": workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID,
