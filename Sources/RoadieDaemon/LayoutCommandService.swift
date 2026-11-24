@@ -267,13 +267,13 @@ public struct LayoutCommandService {
         insert(direction, verb: "join-with")
     }
 
-    /// Rotation horaire (90, 180 ou 270°) de l'arbre BSP de la stage active (Spec 160).
-    public func rotate(_ degrees: Int) -> LayoutCommandResult {
+    /// Rotation horaire (90, 180 ou 270°) de l'arbre BSP de la stage ciblée ou active (Spec 160).
+    public func rotate(_ degrees: Int, scope explicitScope: StageScope? = nil) -> LayoutCommandResult {
         guard degrees == 90 || degrees == 180 || degrees == 270 else {
             return LayoutCommandResult(message: "layout rotate: requires 90|180|270", changed: false, outcome: .failed)
         }
         let generation = PlacementGeneration.shared.next()
-        guard let context = activeContext() else {
+        guard let context = resolvedContext(for: explicitScope) else {
             return LayoutCommandResult(message: "layout rotate \(degrees): no active scope", changed: false, outcome: .noOp)
         }
         guard context.stage.mode.usesTreeEngine else {
@@ -290,13 +290,13 @@ public struct LayoutCommandService {
         }
     }
 
-    /// Miroir horizontal (`x`) ou vertical (`y`) de l'arbre BSP de la stage active (Spec 160).
-    public func mirror(_ rawAxis: String) -> LayoutCommandResult {
+    /// Miroir horizontal (`x`) ou vertical (`y`) de l'arbre BSP de la stage ciblée ou active (Spec 160).
+    public func mirror(_ rawAxis: String, scope explicitScope: StageScope? = nil) -> LayoutCommandResult {
         guard let axis = BSPMirrorAxis(rawValue: rawAxis.lowercased()) else {
             return LayoutCommandResult(message: "layout mirror: requires x|y", changed: false, outcome: .failed)
         }
         let generation = PlacementGeneration.shared.next()
-        guard let context = activeContext() else {
+        guard let context = resolvedContext(for: explicitScope) else {
             return LayoutCommandResult(message: "layout mirror \(axis.rawValue): no active scope", changed: false, outcome: .noOp)
         }
         guard context.stage.mode.usesTreeEngine else {
@@ -313,12 +313,19 @@ public struct LayoutCommandService {
         }
     }
 
+    private func resolvedContext(for explicitScope: StageScope?) -> (snapshot: DaemonSnapshot, scope: StageScope, stage: RoadieStages.StageState)? {
+        guard let explicitScope else { return activeContext() }
+        let snapshot = service.snapshot()
+        guard let stage = snapshot.state.stage(scope: explicitScope) else { return nil }
+        return (snapshot, explicitScope, stage)
+    }
+
     private func activeWindowID(in context: (snapshot: DaemonSnapshot, scope: StageScope, stage: RoadieStages.StageState)) -> WindowID? {
         context.snapshot.focusedWindowID ?? context.stage.focusedWindowID ?? context.stage.windowIDs.last
     }
 
     /// Commande sur l'arbre d'une stage (SPEC-017 R12, T091) : mutation de l'arbre persisté, puis
-    /// une seule application immédiate par `applyTreeScope`, dans une nouvelle génération.
+    /// une seule application immédiate par `applyTreeScope` si le scope est actif, dans une nouvelle génération.
     /// `mutation` reçoit les feuilles absentes du snapshot (A9), à exclure de la géométrie.
     // O(n²) au pire - n = feuilles de l'arbre, borné (voir BSPTree).
     private func treeCommand(
@@ -343,6 +350,14 @@ public struct LayoutCommandService {
             }
         } catch {
             return .persistenceFailure(label, error)
+        }
+        let isActiveScope = snapshot.state.activeScope(on: scope.displayID) == scope
+        if !isActiveScope {
+            emit(command: command, changed: treeChanged)
+            return LayoutCommandResult.changedOrFailed(
+                "\(label): tree changed=\(treeChanged) commands=0 applied=0 clamped=0 failed=0",
+                changed: treeChanged
+            )
         }
         let tick = service.applyTreeScope(scope, cause: command, generation: generation)
         let changed = treeChanged || tick.applied + tick.clamped > 0

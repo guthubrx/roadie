@@ -902,7 +902,7 @@ public extension BSPTree {
             case .horizontal:
                 return .split(
                     orientation: .vertical,
-                    ratio: (1.0 - ratio).clamped(to: 0.1...0.9),
+                    ratio: 1.0 - ratio,
                     first: second.rotated90(),
                     second: first.rotated90()
                 )
@@ -931,7 +931,7 @@ public extension BSPTree {
             if flipsThisNode {
                 return .split(
                     orientation: orientation,
-                    ratio: (1.0 - ratio).clamped(to: 0.1...0.9),
+                    ratio: 1.0 - ratio,
                     first: second.mirrored(axis),
                     second: first.mirrored(axis)
                 )

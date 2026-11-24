@@ -162,6 +162,19 @@ struct Spec160QuickWinsWMRailTests {
             #expect(abs(rx.minX - orig.minX) < 1)
             #expect(abs(ry.minY - orig.minY) < 1)
         }
+
+        // Ratios extrêmes autorisés (0.05..0.95) : double miroir et 90°+270° préservent le ratio exact.
+        let extreme = BSPTree.split(orientation: .vertical, ratio: 0.05, first: .leaf(w1), second: .leaf(w2))
+        if case .split(_, let rAfterMirror, _, _) = extreme.mirrored(.x).mirrored(.x) {
+            #expect(abs(rAfterMirror - 0.05) < 1e-9)
+        } else {
+            Issue.record("Expected split after double mirror")
+        }
+        if case .split(_, let rAfterRot, _, _) = extreme.rotated(degrees: 90)?.rotated(degrees: 270) {
+            #expect(abs(rAfterRot - 0.05) < 1e-9)
+        } else {
+            Issue.record("Expected split after 90° + 270° rotation")
+        }
     }
 
     // MARK: - LayoutCommandService & CLI rotate / mirror
@@ -215,6 +228,27 @@ struct Spec160QuickWinsWMRailTests {
         #expect(router.run(["layout", "mirror", "z"]).exitCode == 64)
         #expect(router.run(["layout", "rotate", "90"]).exitCode == 0)
         #expect(router.run(["layout", "mirror", "x"]).exitCode == 0)
+
+        // Périmètre explicite (ex. clic droit sur une stage inactive) : mute la stage ciblée sans toucher l'active.
+        let inactiveScopeKey = StageScope(displayID: d1.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
+        let w3 = window(3)
+        let w4 = window(4)
+        let inactiveTree = BSPTree.split(orientation: .horizontal, ratio: 0.25, first: .leaf(w3.id), second: .leaf(w4.id))
+        try store.mutateChecked { state in
+            var scope = state.scope(displayID: d1.id, desktopID: DesktopID(rawValue: 1))
+            scope.assign(window: w3, to: StageID(rawValue: "2"), defaultMode: .spatialBsp)
+            scope.assign(window: w4, to: StageID(rawValue: "2"), defaultMode: .spatialBsp)
+            if let idx = scope.stages.firstIndex(where: { $0.id == StageID(rawValue: "2") }) {
+                scope.stages[idx].mode = .spatialBsp
+            }
+            scope.activeStageID = StageID(rawValue: "1")
+            state.update(scope)
+            state.setBSPTree(inactiveTree, for: inactiveScopeKey)
+        }
+        let activeBefore = store.state().bspTree(for: scopeKey)
+        #expect(commands.rotate(90, scope: inactiveScopeKey).changed)
+        #expect(store.state().bspTree(for: inactiveScopeKey) == inactiveTree.rotated(degrees: 90))
+        #expect(store.state().bspTree(for: scopeKey) == activeBefore)
     }
 
     // MARK: - Window close & gather-app
@@ -226,9 +260,19 @@ struct Spec160QuickWinsWMRailTests {
 
         let d1 = display()
         let w1 = window(10, bundleID: "com.example.editor")
+        let floating = WindowSnapshot(
+            id: WindowID(rawValue: 11),
+            pid: 501,
+            appName: "Dialog",
+            bundleID: "com.example.dialog",
+            title: "Preferences",
+            frame: Rect(x: 300, y: 200, width: 400, height: 300),
+            isOnScreen: true,
+            isTileCandidate: false
+        )
         let writer = SpyWriter()
         let service = SnapshotService(
-            provider: StaticProvider(displaysList: [d1], windowsList: [w1], focusedID: w1.id),
+            provider: StaticProvider(displaysList: [d1], windowsList: [w1, floating], focusedID: floating.id),
             frameWriter: writer,
             config: bspConfig(),
             intentStore: LayoutIntentStore(path: dir.appendingPathComponent("intents.json").path),
@@ -238,7 +282,11 @@ struct Spec160QuickWinsWMRailTests {
         let router = CLICommandRouter(makeService: { _ in service })
         let response = router.run(["window", "close"])
         #expect(response.exitCode == 0)
-        #expect(writer.closedWindowIDs == [w1.id])
+        // La fenêtre réellement focalisée (même flottante) est fermée, jamais une fenêtre tuilée en arrière-plan.
+        #expect(writer.closedWindowIDs == [floating.id])
+
+        #expect(router.run(["window", "close", "10"]).exitCode == 0)
+        #expect(writer.closedWindowIDs == [floating.id, w1.id])
 
         #expect(router.run(["window", "close", "not-a-number"]).exitCode == 64)
         #expect(CLICommandRouter.commandTable.contains { $0.usage == "window close [WINDOW_ID]" && $0.implemented })
@@ -309,12 +357,13 @@ struct Spec160QuickWinsWMRailTests {
         let d2 = display("d2", index: 2, x: 1600)
         let w1 = window(1, frame: Rect(x: 100, y: 100, width: 600, height: 400))
         let w2 = window(2, frame: Rect(x: 1800, y: 120, width: 500, height: 400))
-        let w3 = window(3, frame: Rect(x: 200, y: 140, width: 600, height: 400))
+        let w3Saved = window(3, frame: Rect(x: 200, y: 140, width: 600, height: 400))
+        let w3Hidden = window(3, frame: Rect(x: -4000, y: 140, width: 600, height: 400))
         let store = StageStore(path: dir.appendingPathComponent("stages.json").path)
         try store.mutateChecked { state in
             var s1 = state.scope(displayID: d1.id, desktopID: DesktopID(rawValue: 1))
             s1.assign(window: w1, to: StageID(rawValue: "1"), defaultMode: .spatialBsp)
-            s1.assign(window: w3, to: StageID(rawValue: "2"), defaultMode: .spatialBsp)
+            s1.assign(window: w3Saved, to: StageID(rawValue: "2"), defaultMode: .spatialBsp)
             s1.activeStageID = StageID(rawValue: "1")
             state.update(s1)
             var s2 = state.scope(displayID: d2.id, desktopID: DesktopID(rawValue: 1))
@@ -324,7 +373,7 @@ struct Spec160QuickWinsWMRailTests {
 
         let writer = SpyWriter()
         let service = SnapshotService(
-            provider: StaticProvider(displaysList: [d1, d2], windowsList: [w1, w2, w3], focusedID: w1.id),
+            provider: StaticProvider(displaysList: [d1, d2], windowsList: [w1, w2, w3Hidden], focusedID: w1.id),
             frameWriter: writer,
             config: bspConfig(),
             intentStore: LayoutIntentStore(path: dir.appendingPathComponent("intents.json").path),
@@ -357,6 +406,8 @@ struct Spec160QuickWinsWMRailTests {
         )
         _ = stageCmdEnabled.switchTo("2", displayID: d1.id)
         #expect(enabledRecorder.points.count == 2)
+        // Le curseur suit le cadre restauré à l'écran, jamais les anciennes coordonnées masquées (-4000).
+        #expect(try #require(enabledRecorder.points.last).x > 0)
 
         let displayCmdDisabled = DisplayCommandService(
             service: service,

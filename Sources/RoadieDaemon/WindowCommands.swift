@@ -487,11 +487,11 @@ public struct WindowCommandService {
         let entry: ScopedWindowSnapshot?
         if let windowID {
             entry = snapshot.windows.first { $0.window.id == windowID }
+        } else if let focusedID = service.focusedWindowID() ?? snapshot.focusedWindowID,
+                  let focusedEntry = snapshot.windows.first(where: { $0.window.id == focusedID }) {
+            entry = focusedEntry
         } else {
             entry = activeWindow(in: snapshot)
-                ?? snapshot.focusedWindowID.flatMap { focusedID in
-                    snapshot.windows.first { $0.window.id == focusedID }
-                }
         }
         guard let target = entry else {
             let suffix = windowID.map { " \($0.rawValue): unknown window" } ?? ": no active window"

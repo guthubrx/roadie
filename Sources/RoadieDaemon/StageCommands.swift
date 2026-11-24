@@ -1801,17 +1801,25 @@ public struct StageCommandService {
         let focusStartedAt = Date()
         if let focusedID = transition.targetFocusedWindowID,
            let focusedWindow = windowsByID[focusedID] {
+            let followedWindow: WindowSnapshot = {
+                var updated = focusedWindow
+                if let finalFrame = layoutPlan.commands.first(where: { $0.window.id == focusedID })?.frame
+                    ?? placement.restoring[focusedID].map(Rect.init) {
+                    updated.frame = finalFrame
+                }
+                return updated
+            }()
             let focusService = service
             let follower = mouseFollower
             let deferred = Thread.isMainThread && MainActor.assumeIsolated {
                 FrameTransitionRuntime.shared.deferStageFocus(generation: generation) {
                     if focusService.focus(focusedWindow) {
-                        follower.follow(focusedWindow)
+                        follower.follow(followedWindow)
                     }
                 }
             }
             if !deferred, service.focus(focusedWindow) {
-                mouseFollower.follow(focusedWindow)
+                mouseFollower.follow(followedWindow)
             }
         } else if let preferredWindowID {
             _ = focusRecall.focusOrRecallPreferred(
