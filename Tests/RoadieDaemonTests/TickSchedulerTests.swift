@@ -603,4 +603,47 @@ extension Spec149SchedulerTests {
         let latencyMs = Double(rawLatency ?? "") ?? .greatestFiniteMagnitude
         #expect(latencyMs < 100)
     }
+
+    @Test func staleInFlightPreparationResumingAfterSuspendDoesNotRearmOrClearNewPreparation() async {
+        let timer = ManualTimer()
+        var continuations: [CheckedContinuation<Bool, Never>] = []
+        var ticks: [String] = []
+        let scheduler = TickScheduler(
+            tick: { cause in
+                ticks.append(cause)
+                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+            },
+            nextDeadline: { _ in nil },
+            isBlocked: { false },
+            now: { timer.clock.now },
+            schedule: timer.schedule,
+            events: nil,
+            prepare: {
+                await withCheckedContinuation { continuation in
+                    continuations.append(continuation)
+                }
+            }
+        )
+        // 1) Préparation en vol annulée par `suspend()` : sa reprise tardive avec `false` ne doit rien réarmer.
+        scheduler.request(cause: "ax:didActivateApplication")
+        timer.advance(by: 0.02)
+        for _ in 0..<4 { await Task.yield() }
+        #expect(continuations.count == 1)
+
+        scheduler.suspend()
+        continuations[0].resume(returning: false)
+        for _ in 0..<4 { await Task.yield() }
+        #expect(timer.armedCount == 0)
+        #expect(ticks.isEmpty)
+
+        // 2) Si une nouvelle préparation démarre après `suspend()`, la reprise d'une ancienne ne la perturbe pas.
+        scheduler.request(cause: "ax:didWake")
+        timer.advance(by: 0.02)
+        for _ in 0..<4 { await Task.yield() }
+        #expect(continuations.count == 2)
+        continuations[1].resume(returning: true)
+        for _ in 0..<4 { await Task.yield() }
+        #expect(ticks == ["ax:didWake"])
+        scheduler.stop()
+    }
 }

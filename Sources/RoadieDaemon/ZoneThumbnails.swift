@@ -167,7 +167,13 @@ final class ZoneThumbnails {
     /// si `remove(key)` invalide `token` pendant la capture ou l'écriture, seul le fichier temporaire
     /// est retiré et aucune nouvelle capture sur la même clé n'est écrasée.
     @discardableResult
-    func store(_ image: (cgImage: CGImage, size: CGSize), key: String, crop: CGRect, token: UInt64) async -> Bool {
+    func store(
+        _ image: (cgImage: CGImage, size: CGSize),
+        key: String,
+        crop: CGRect,
+        token: UInt64,
+        afterTemporaryWrite: (@MainActor () -> Void)? = nil
+    ) async -> Bool {
         guard isCaptureValid(token, for: key) else { return false }
         let target = path(for: key)
         let temporary = "\(target).tmp-\(UUID().uuidString)"
@@ -185,6 +191,7 @@ final class ZoneThumbnails {
             }
         }.value
         guard wrote else { return false }
+        afterTemporaryWrite?()
         guard isCaptureValid(token, for: key) else {
             try? FileManager.default.removeItem(atPath: temporary)
             return false

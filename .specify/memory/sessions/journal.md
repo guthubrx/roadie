@@ -457,4 +457,5 @@ Session 159, 24 novembre 2026. Correctifs issus de l'analyse des 70 175 événem
 (6) suppression des coordonnées de clic brutes sur `stderr` (`titlebar-context-menu`) et dans `modifier_gesture.started` ;
 (7) garde par jeton de génération et renommage atomique dans `ZoneThumbnails` contre les miniatures orphelines lors d'une suppression en cours de capture ;
 (8) lecture de la fenêtre focalisée hors du fil principal à l'ouverture du lanceur.
-2 577 tests Swift dans 391 suites et 29 tests de scripts réussis.
+Revue indépendante traitée (garde d'époque sur `TickScheduler.suspend()`, test de suppression pendant l'écriture détachée de `ZoneThumbnails`, propagation du statut de persistance dans `ZoneHistory.setThumbnail`).
+2 578 tests Swift dans 391 suites et 29 tests de scripts réussis.

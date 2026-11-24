@@ -191,12 +191,12 @@ final class ZoneHistory {
     @discardableResult
     func setThumbnail(_ crop: CGRect, for key: String) -> Bool {
         var updated = false
-        _ = update { saved in
+        let persisted = update { saved in
             guard let index = saved.firstIndex(where: { $0.key == key }) else { return }
             saved[index].thumbnailCrop = Rect(crop)
             updated = true
         }
-        return updated
+        return persisted != nil && updated
     }
 
     func element(for record: ZoneRecord) -> AXUIElement? { elements[record.key] }

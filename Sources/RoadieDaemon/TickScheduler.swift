@@ -58,6 +58,7 @@ public final class TickScheduler {
     private var preparationMs: Double = 0
     private var preparationStartedAt: Date?
     private var preparationTask: Task<Void, Never>?
+    private var preparationEpoch: UInt64 = 0
     private var stopped = false
     private var preparationFailures = 0
     private var preparationRetries = 0
@@ -167,6 +168,7 @@ public final class TickScheduler {
     /// Mise en veille ou verrouillage : abandonne la demande et la préparation pré-veille.
     /// Le réveil déclenche une réconciliation fraîche, sans latence gonflée par la veille.
     public func suspend() {
+        preparationEpoch &+= 1
         cancelTimer?()
         cancelTimer = nil
         preparationTask?.cancel()
@@ -200,13 +202,14 @@ public final class TickScheduler {
                 preparationRetries = 0
                 AXCallTimings.shared.reset()
             }
+            preparationEpoch &+= 1
+            let epoch = preparationEpoch
             preparationTask = Task { [weak self] in
                 let start = Date()
                 self?.preparationStartedAt = self?.now()
                 let ready = await prepare()
-                guard let self else { return }
+                guard let self, !Task.isCancelled, !self.stopped, self.preparationEpoch == epoch else { return }
                 self.preparationTask = nil
-                guard !self.stopped else { return }
                 self.preparationMs += Date().timeIntervalSince(start) * 1000
                 if ready {
                     self.preparationRetries = self.preparationFailures

@@ -102,6 +102,20 @@ struct Spec135ZoneHistoryTests {
         #expect(!FileManager.default.fileExists(atPath: thumbs.path(for: key)))
         #expect(thumbs.image(for: key) == nil)
 
+        // Suppression pendant l'écriture détachée : le fichier temporaire est nettoyé, rien n'est publié.
+        let midFlightToken = thumbs.beginCapture(for: key)
+        let midFlightStored = await thumbs.store(
+            (cgImage, CGSize(width: 8, height: 8)),
+            key: key,
+            crop: CGRect(x: 0, y: 0, width: 8, height: 8),
+            token: midFlightToken,
+            afterTemporaryWrite: { thumbs.remove(key) }
+        )
+        #expect(!midFlightStored)
+        #expect(!FileManager.default.fileExists(atPath: thumbs.path(for: key)))
+        #expect((try FileManager.default.contentsOfDirectory(atPath: dir.path)).isEmpty)
+        #expect(thumbs.image(for: key) == nil)
+
         // Une nouvelle capture valide sur la même clé n'est pas effacée par un ancien jeton obsolète.
         let freshToken = thumbs.beginCapture(for: key)
         #expect(await thumbs.store((cgImage, CGSize(width: 8, height: 8)), key: key, crop: CGRect(x: 0, y: 0, width: 8, height: 8), token: freshToken))
@@ -109,12 +123,14 @@ struct Spec135ZoneHistoryTests {
         #expect(FileManager.default.fileExists(atPath: thumbs.path(for: key)))
         #expect(thumbs.image(for: key) != nil)
 
-        // Et `setThumbnail` renvoie false si la zone a déjà été oubliée.
+        // Et `setThumbnail` renvoie false si la zone a déjà été oubliée ou si le fichier est illisible.
         let historyPath = dir.appendingPathComponent("zones.json").path
         let history = ZoneHistory(path: historyPath)
         let z = zone("Zone supprimée")
         _ = history.record(z, element: nil, policy: ZonePolicy())
         #expect(history.forget(z))
+        #expect(!history.setThumbnail(CGRect(x: 0, y: 0, width: 8, height: 8), for: z.key))
+        try Data("{".utf8).write(to: URL(fileURLWithPath: historyPath))
         #expect(!history.setThumbnail(CGRect(x: 0, y: 0, width: 8, height: 8), for: z.key))
     }
 }
