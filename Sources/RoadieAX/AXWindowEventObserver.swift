@@ -160,6 +160,11 @@ public final class AXWindowEventObserver {
         var pid: pid_t = 0
         guard AXUIElementGetPid(element, &pid) == .success else { return }
         let isDestroyed = name == kAXUIElementDestroyedNotification as String
+        if !isDestroyed {
+            // Une notification AX vivante prouve que l'application répond de nouveau (Lot H) ;
+            // levée avant les lectures AX de cet événement pour préserver une quarantaine fraîche.
+            AXUnresponsiveApps.shared.markResponsive(pid)
+        }
         // L'identité déjà suivie est locale, même quand l'application ne répond plus.
         // Un élément détruit ne doit jamais recevoir une nouvelle requête AX.
         let knownID = watchedWindowIDs[pid]?[element]
@@ -167,10 +172,6 @@ public final class AXWindowEventObserver {
         if isDestroyed { watchedWindowIDs[pid]?[element] = nil }
         if name == kAXWindowCreatedNotification as String {
             watchDestruction(of: element, id: windowID, observer: observer, pid: pid)
-        }
-        if !isDestroyed {
-            // Une notification AX vivante prouve que l'application répond de nouveau (Lot H).
-            AXUnresponsiveApps.shared.markResponsive(pid)
         }
         AXAttributeCache.shared.invalidateVolatile(pid: pid)
         if Self.cacheInvalidatingNotifications.contains(name) {
