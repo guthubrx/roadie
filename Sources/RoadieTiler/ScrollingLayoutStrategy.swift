@@ -26,11 +26,28 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
     }
 
     private static func isFinite(_ rect: CGRect) -> Bool {
-        rect.origin.x.isFinite && rect.origin.y.isFinite && rect.size.width.isFinite && rect.size.height.isFinite
+        let limit: CGFloat = 1_000_000
+        return rect.origin.x.isFinite && rect.origin.y.isFinite
+            && rect.size.width.isFinite && rect.size.height.isFinite
+            && abs(rect.origin.x) < limit && abs(rect.origin.y) < limit
+            && rect.size.width < limit && rect.size.height < limit
     }
 
     private static func isFinite(_ insets: Insets) -> Bool {
         insets.top.isFinite && insets.right.isFinite && insets.bottom.isFinite && insets.left.isFinite
+    }
+
+    /// Répartition entière exacte sur `[start, end]` sans dérive flottante IEEE-754 :
+    /// garantit un pas >= 1 pt entre positions consécutives dès que `end - start >= count - 1`.
+    private static func distributeIntegral(from start: CGFloat, to end: CGFloat, count: Int) -> [CGFloat] {
+        guard count > 1 else { return count == 1 ? [start] : [] }
+        let startInt = Int(start.rounded())
+        let endInt = Int(end.rounded())
+        let spanInt = max(0, endInt - startInt)
+        let divisor = count - 1
+        return (0..<count).map { offset in
+            CGFloat(startInt + (spanInt * offset) / divisor)
+        }
     }
 
     public func plan(_ request: LayoutRequest) -> LayoutPlan {
@@ -104,9 +121,9 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
                     max(requiredMinSpan, floor(rect.width / 3))
                 )
                 let bandEnd = min(comfortableEnd, bandStart + preferredSpan)
-                let divisor = CGFloat(leftOverflow.count - 1)
+                let positions = Self.distributeIntegral(from: bandStart, to: bandEnd, count: leftOverflow.count)
                 for (offset, idx) in leftOverflow.enumerated() {
-                    resolvedXs[idx] = floor(bandStart + max(0, bandEnd - bandStart) * (CGFloat(offset) / divisor))
+                    resolvedXs[idx] = positions[offset]
                 }
             }
 
@@ -127,9 +144,9 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
                     max(requiredMinSpan, floor(rect.width / 3))
                 )
                 let bandStart = max(comfortableStart, bandEnd - preferredSpan)
-                let divisor = CGFloat(rightOverflow.count - 1)
+                let positions = Self.distributeIntegral(from: bandStart, to: bandEnd, count: rightOverflow.count)
                 for (offset, idx) in rightOverflow.enumerated() {
-                    resolvedXs[idx] = floor(bandStart + max(0, bandEnd - bandStart) * (CGFloat(offset) / divisor))
+                    resolvedXs[idx] = positions[offset]
                 }
             }
         }

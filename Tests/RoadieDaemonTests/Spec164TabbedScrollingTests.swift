@@ -384,6 +384,38 @@ struct Spec164TabbedScrollingTests {
             }
         }
 
+        // Cas limite IEEE-754 : 69 fenêtres sur 120 pt aux deux extrémités (68 colonnes débordantes
+        // dans 68 positions entières exactes) -> strictement croissantes sans doublon d'arrondi.
+        let denseDisp = DisplaySnapshot(
+            id: DisplayID(rawValue: "dense"),
+            index: 1,
+            name: "Dense",
+            frame: Rect(x: 0, y: 0, width: 120, height: 900),
+            visibleFrame: Rect(x: 0, y: 0, width: 120, height: 900),
+            isMain: true
+        )
+        let denseIDs = (1...69).map { WindowID(rawValue: UInt32($0)) }
+        for focusID in [denseIDs[0], denseIDs[68]] {
+            let densePlan = LayoutPlanner.plan(LayoutRequest(
+                scope: testScope,
+                mode: .scrolling,
+                container: denseDisp.visibleFrame.cgRect,
+                windowIDs: denseIDs,
+                outerGaps: .zero,
+                innerGap: 8,
+                focusedWindowID: focusID,
+                scrollingColumnWidth: 0.65
+            ))
+            let denseXs = try denseIDs.map { try #require(densePlan.placements[$0]).minX }
+            for i in 0..<(denseXs.count - 1) {
+                #expect(denseXs[i] < denseXs[i + 1])
+            }
+            for id in denseIDs {
+                let rect = try #require(densePlan.placements[id])
+                #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(rect, in: [denseDisp]))
+            }
+        }
+
         // Petit conteneur (32 pt < minimumRibbonWidth) avec 6 fenêtres aux deux extrémités :
         // repli explicite plein cadre, ne doit jamais déclencher de faux masquage.
         let tinyDisp = DisplaySnapshot(
