@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import RoadieAX
@@ -156,6 +157,28 @@ struct Spec073LauncherListTests {
         #expect(LauncherBookmark.matches("tiling", in: index).map(\.url) == [bookmark.url])
         let history = LauncherWebHistory.matches("roadie", in: index, excluding: ["https://example.org/roadie/guide"])
         #expect(history.isEmpty)
+    }
+
+    @MainActor
+    @Test func lotLLauncherIconRasterLRUEvictionAndTransientThumbnailPurge() {
+        LauncherIconRaster.resetForTesting()
+        defer { LauncherIconRaster.resetForTesting() }
+        let icon = NSImage(size: NSSize(width: 16, height: 16))
+        LauncherIconRaster.store(icon, for: .init(id: "file:/Applications/A.app", width: 32, height: 32), maxLimit: 3)
+        LauncherIconRaster.store(icon, for: .init(id: "window:10:1", width: 64, height: 64), maxLimit: 3)
+        LauncherIconRaster.store(icon, for: .init(id: "image:/tmp/pic.png", width: 64, height: 64), maxLimit: 3)
+        // Toucher `file:A` pour que `window:10:1` devienne la plus ancienne lors de l'éviction LRU.
+        LauncherIconRaster.store(icon, for: .init(id: "file:/Applications/A.app", width: 32, height: 32), maxLimit: 3)
+        LauncherIconRaster.store(icon, for: .init(id: "file:/Applications/B.app", width: 32, height: 32), maxLimit: 3)
+        #expect(LauncherIconRaster.cachedCount == 3)
+        #expect(!LauncherIconRaster.contains(id: "window:10:1"))
+        #expect(LauncherIconRaster.contains(id: "file:/Applications/A.app"))
+        #expect(LauncherIconRaster.contains(id: "image:/tmp/pic.png"))
+
+        LauncherIconRaster.purgeTransientThumbnails()
+        #expect(!LauncherIconRaster.contains(id: "image:/tmp/pic.png"))
+        #expect(LauncherIconRaster.contains(id: "file:/Applications/A.app"))
+        #expect(LauncherIconRaster.contains(id: "file:/Applications/B.app"))
     }
 }
 

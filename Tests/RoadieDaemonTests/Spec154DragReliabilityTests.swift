@@ -137,6 +137,16 @@ import RoadieCore
         #expect(FocusFollowsMousePicker.gestureTargetWindow(at: point, in: snapshot) == nil)
         #expect(FocusFollowsMousePicker.targetWindow(at: point, in: snapshot) == nil)
     }
+
+    @Test func lotLDropPreviewMakeContextReusesCachedGestureSnapshotWhenAvailable() throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        // Préchauffer le cache gestuel via un relevé partagé.
+        let initial = f.service.sharedSnapshot()
+        let engine = DropPreviewEngine(service: f.service)
+        let cachedContext = engine.makeContext(preferCachedSnapshot: true)
+        #expect(cachedContext.snapshot.displays == initial.displays)
+        #expect(cachedContext.snapshot.windows.map(\.window.id) == initial.windows.map(\.window.id))
+    }
 }
 
 @Suite(.serialized) @MainActor struct Spec154ModifierDisplayTests {

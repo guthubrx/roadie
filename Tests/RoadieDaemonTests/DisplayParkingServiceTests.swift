@@ -741,4 +741,67 @@ struct DisplayParkingServiceTests {
             activeDisplayID: hostID
         )
     }
+
+    @Test
+    func lotLPrunesDisconnectedEmptyUnnamedScopesWhilePreservingNamedOccupiedAndReferencedScopes() {
+        let hostID = DisplayID(rawValue: "built-in")
+        let ghostID = DisplayID(rawValue: "old-disconnected-ghost")
+        let namedGoneID = DisplayID(rawValue: "old-named-display")
+        let pinnedGoneID = DisplayID(rawValue: "old-pinned-display")
+        let labeledGoneID = DisplayID(rawValue: "old-labeled-display")
+        var state = PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: hostID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1"),
+                ]),
+                PersistentStageScope(displayID: ghostID, desktopID: DesktopID(rawValue: 2), activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1"),
+                    PersistentStage(id: StageID(rawValue: "2"), name: "Stage 2"),
+                ]),
+                PersistentStageScope(displayID: namedGoneID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Travail"),
+                ]),
+                PersistentStageScope(displayID: pinnedGoneID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1"),
+                ]),
+                PersistentStageScope(displayID: labeledGoneID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1"),
+                ]),
+            ],
+            desktopSelections: [
+                PersistentDesktopSelection(displayID: hostID, currentDesktopID: DesktopID(rawValue: 1)),
+                PersistentDesktopSelection(displayID: ghostID, currentDesktopID: DesktopID(rawValue: 2)),
+            ],
+            desktopLabels: [
+                PersistentDesktopLabel(displayID: labeledGoneID, desktopID: DesktopID(rawValue: 1), label: "Bureau Pro"),
+            ],
+            windowPins: [
+                PersistentWindowPin(
+                    windowID: WindowID(rawValue: 55),
+                    homeScope: StageScope(displayID: pinnedGoneID, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")),
+                    pinScope: .desktop,
+                    bundleID: "com.test.app",
+                    title: "Pinned",
+                    lastFrame: Rect(x: 0, y: 0, width: 200, height: 200)
+                ),
+            ],
+            activeDisplayID: hostID
+        )
+
+        _ = DisplayParkingService().transition(
+            state: &state,
+            liveDisplays: [display("built-in", isMain: true)],
+            windows: [],
+            now: Date(timeIntervalSince1970: 100)
+        )
+
+        let remainingDisplayIDs = Set(state.scopes.map(\.displayID))
+        #expect(remainingDisplayIDs.contains(hostID))
+        #expect(!remainingDisplayIDs.contains(ghostID))
+        #expect(remainingDisplayIDs.contains(namedGoneID))
+        #expect(remainingDisplayIDs.contains(pinnedGoneID))
+        #expect(remainingDisplayIDs.contains(labeledGoneID))
+        #expect(!state.desktopSelections.contains { $0.displayID == ghostID })
+        #expect(state.desktopSelections.contains { $0.displayID == hostID })
+    }
 }

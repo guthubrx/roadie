@@ -29,10 +29,12 @@ final class RailThumbnailStore {
     /// Dernière capture nette de chaque fenêtre (vue d’ensemble), gardée quand le rail recapture plus petit.
     /// Affichée tout de suite à l’ouverture suivante ; une capture fraîche la remplace si elle est aussi nette.
     private var detailed: [WindowID: (image: NSImage, at: Date)] = [:]
-    /// Durée et capacité maximales des captures nettes non suivies (Lot B : évite la dérive RAM).
-    private let detailedRetention: TimeInterval = 180
-    static let detailedMaxCount = 24
+    /// Durée et capacité maximales des captures nettes non suivies (Lot B / Lot L : maîtrise la RAM au repos).
+    private let detailedRetention: TimeInterval = 90
+    static let detailedMaxCount = 12
     static let iconsMaxCount = 64
+    /// Plafond de pixels des captures de scène/glisser (Lot L : 1,2 Mpx au lieu de 2 Mpx, ~40 % plus rapide sur 4K/5K).
+    nonisolated static let sceneCapturePixelBudget: CGFloat = 1_200_000
     private var fallbacks: [WindowID: NSImage] = [:]
     private var icons: [String: NSImage] = [:]
     private var signatures: [WindowID: String] = [:]
@@ -269,7 +271,7 @@ final class RailThumbnailStore {
         defer { sceneCaptureBusy = false }
         let frame = context.frame
         guard frame.width > 0, frame.height > 0 else { return nil }
-        let scale = min(2, sqrt(2_000_000 / (frame.width * frame.height)))
+        let scale = min(2, sqrt(Self.sceneCapturePixelBudget / (frame.width * frame.height)))
         let config = SCStreamConfiguration()
         config.width = max(1, Int(frame.width * scale))
         config.height = max(1, Int(frame.height * scale))
@@ -412,22 +414,24 @@ extension CGImage {
     /// Copie autonome en sRGB 8 bits BGRA (CPU uniquement) : détache immédiatement les
     /// `IOSurface` ScreenCaptureKit (`PURGE=N`) ainsi que les images parents retenues par `cropping(to:)`.
     func detachedSRGBBitmapCopy() -> CGImage? {
-        guard width > 0, height > 0,
-              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
-        else { return nil }
-        let bitmapInfo = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo
-        ) else { return nil }
-        context.interpolationQuality = .high
-        context.draw(self, in: CGRect(x: 0, y: 0, width: width, height: height))
-        return context.makeImage()
+        autoreleasepool {
+            guard width > 0, height > 0,
+                  let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
+            else { return nil }
+            let bitmapInfo = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+            guard let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: bitmapInfo
+            ) else { return nil }
+            context.interpolationQuality = .high
+            context.draw(self, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return context.makeImage()
+        }
     }
 
     /// Vrai pour une capture sans contenu utile : quasi transparente, ou presque entièrement noire et uniforme.

@@ -12,9 +12,13 @@ enum LauncherIconRaster {
         let height: Int
     }
 
-    /// Au-delà, le cache repart de zéro : quelques centaines d'icônes de 64 pixels, moins de 10 Mo.
-    static let limit = 800
+    /// Capacité LRU bornée (Lot L) : évite de garder 800 bitmaps/vignettes en RAM au repos.
+    static let limit = 160
+    /// Nombre maximal d'icônes préchauffées au démarrage (les autres sont préparées en fond à la demande).
+    static let prewarmLimit = 40
     private static var images: [Key: NSImage] = [:]
+    private static var lastUsed: [Key: UInt64] = [:]
+    private static var useClock: UInt64 = 0
     private static var pending: Set<Key> = []
     private static var redrawScheduled = false
     private static let queue = DispatchQueue(label: "roadie.launcher.icon-raster", qos: .userInitiated)
@@ -28,16 +32,60 @@ enum LauncherIconRaster {
     /// O(1) sur le fil principal.
     static func image(_ id: String, size: CGSize, source: @escaping @Sendable () -> NSImage?) -> NSImage? {
         let key = Key(id: id, width: max(1, Int((size.width * scale).rounded())), height: max(1, Int((size.height * scale).rounded())))
-        if let ready = images[key] { return ready }
+        if let ready = images[key] {
+            useClock &+= 1
+            lastUsed[key] = useClock
+            return ready
+        }
         request(key, size: size, source: source)
         return nil
     }
 
-    /// Prépare d'avance les icônes de fichiers (applications du catalogue) à la taille des lignes. O(n) en fond.
-    static func prewarm(paths: [String], side: CGFloat) {
+    /// Prépare d'avance au plus `prewarmLimit` icônes de fichiers (applications prioritaires) à la taille des lignes. O(min(n, limit)) en fond.
+    static func prewarm(paths: [String], side: CGFloat, maxCount: Int = prewarmLimit) {
         let size = CGSize(width: side, height: side)
-        for path in paths {
+        for path in paths.prefix(max(0, maxCount)) {
             _ = image("file:\(path)", size: size) { fileIcon(path) }
+        }
+    }
+
+    /// Libère immédiatement les vignettes temporaires (`window:*`, `image:*`) à la fermeture de la barre,
+    /// en conservant les petites icônes d'applications (`file:*`) en cache LRU (Lot L).
+    static func purgeTransientThumbnails() {
+        let transient = images.keys.filter { $0.id.hasPrefix("window:") || $0.id.hasPrefix("image:") }
+        for key in transient {
+            images.removeValue(forKey: key)
+            lastUsed.removeValue(forKey: key)
+        }
+    }
+
+    /// Insère une entrée dans le cache LRU borné (exposé pour tests unitaires).
+    static func store(_ image: NSImage, for key: Key, maxLimit: Int = limit) {
+        useClock &+= 1
+        images[key] = image
+        lastUsed[key] = useClock
+        evictIfNeeded(maxLimit: maxLimit)
+    }
+
+    static var cachedCount: Int { images.count }
+
+    static func contains(id: String) -> Bool {
+        images.keys.contains { $0.id == id }
+    }
+
+    static func resetForTesting() {
+        images.removeAll()
+        lastUsed.removeAll()
+        pending.removeAll()
+        useClock = 0
+    }
+
+    private static func evictIfNeeded(maxLimit: Int = limit) {
+        let cap = max(1, maxLimit)
+        while images.count > cap {
+            guard let oldest = lastUsed.min(by: { $0.value < $1.value })?.key ?? images.keys.first else { break }
+            images.removeValue(forKey: oldest)
+            lastUsed.removeValue(forKey: oldest)
         }
     }
 
@@ -49,13 +97,14 @@ enum LauncherIconRaster {
     private static func request(_ key: Key, size: CGSize, source: @escaping @Sendable () -> NSImage?) {
         guard pending.insert(key).inserted else { return }
         queue.async {
-            let raster = source().flatMap { rasterize($0, width: key.width, height: key.height) }
+            let raster: CGImage? = autoreleasepool {
+                source().flatMap { rasterize($0, width: key.width, height: key.height) }
+            }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     pending.remove(key)
                     guard let raster else { return }
-                    if images.count >= limit { images.removeAll(keepingCapacity: true) }
-                    images[key] = NSImage(cgImage: raster, size: size)
+                    store(NSImage(cgImage: raster, size: size), for: key)
                     scheduleRedraw()
                 }
             }

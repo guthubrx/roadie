@@ -62,8 +62,8 @@ final class DropPreviewController {
     }
 
     /// Snapshot de depart d'un drag de fenetre, partage avec la recherche de la fenetre source.
-    func makeContext() -> DropPreviewContext {
-        engine.makeContext()
+    func makeContext(preferCachedSnapshot: Bool = false) -> DropPreviewContext {
+        engine.makeContext(preferCachedSnapshot: preferCachedSnapshot)
     }
 
     /// Frontière du tap : relevé déjà publié uniquement, jamais de snapshot AX/disque.
@@ -168,8 +168,13 @@ struct DropPreviewEngine {
     }
 
     /// Lit l'etat persiste puis le snapshot partage (lecture seule pendant le drag). Cout : au plus un snapshot.
-    func makeContext() -> DropPreviewContext {
+    /// Avec `preferCachedSnapshot` (Lot L), réutilise immédiatement le dernier relevé gestuel publié (0 IPC AX)
+    /// lorsqu'il existe et comporte des écrans, pour que `pending` soit prêt avant les 8 px d'un glisser rapide.
+    func makeContext(preferCachedSnapshot: Bool = false) -> DropPreviewContext {
         let persistedStateBeforeSnapshot = service.effectiveStageStore.state()
+        if preferCachedSnapshot, let cached = service.cachedGestureSnapshot(), !cached.displays.isEmpty {
+            return DropPreviewContext(snapshot: cached, persistedStateBeforeSnapshot: persistedStateBeforeSnapshot)
+        }
         return DropPreviewContext(snapshot: service.sharedSnapshot(), persistedStateBeforeSnapshot: persistedStateBeforeSnapshot)
     }
 
@@ -839,7 +844,7 @@ final class WindowDragReorderController {
         initialAXPoint = ScreenCoordinate.nsPointToAX(point)
         dragPrimaryHeight = point.y + (initialAXPoint?.y ?? 0)
         preview.invalidate()
-        var context = preview.makeContext()
+        var context = preview.makeContext(preferCachedSnapshot: true)
         // Le vrai glisser peut avoir commencé pendant l'acquisition. Garder sa frame de départ.
         if let pressWindow, let index = context.snapshot.windows.firstIndex(where: {
             $0.window.id == pressWindow.id && $0.window.pid == pressWindow.pid

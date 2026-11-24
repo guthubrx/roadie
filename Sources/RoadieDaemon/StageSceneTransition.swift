@@ -36,6 +36,9 @@ public struct StageSceneContext: Sendable {
 @MainActor
 final class StageSceneTransition {
     enum Phase { case source, applying, target, animating, finished }
+    /// Budget dédié à la capture cible après présentation WindowServer (Lot L : 180 ms au lieu de 120 ms
+    /// pour absorber le délai de capture sur écrans haute résolution 4K/5K sans dégrader en `source_only`).
+    nonisolated static let targetCaptureBudget: TimeInterval = 0.18
     private(set) var phase: Phase = .source
     private let context: StageSceneContext
     private let direction: Direction
@@ -95,7 +98,7 @@ final class StageSceneTransition {
         guard phase == .applying, applied else { return }
         phase = .target
         // Le temps d'écriture n'est pas consommé une seconde fois par la capture.
-        deadline = clock() + 0.12
+        deadline = clock() + Self.targetCaptureBudget
         Task { [weak self] in
             guard let self else { return }
             // Laisser WindowServer présenter les dernières écritures AX.

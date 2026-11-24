@@ -3211,6 +3211,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         model.cancelPendingReturn()
         searchBarLayout = nil
+        LauncherIconRaster.purgeTransientThumbnails()
         timer?.invalidate()
         timer = nil
         inputPanel?.endEditing()

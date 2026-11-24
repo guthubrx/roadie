@@ -540,7 +540,7 @@ public final class RailController {
     func acceptMouseDown(timestamp: TimeInterval, at point: CGPoint) -> Bool {
         guard timestamp > 0 else { return true } // Identité absente : ne pas avaler un clic synthétique.
         if let previous = lastLeftPress, previous.timestamp == timestamp, previous.point == point {
-            events.append(RoadieEvent(type: "drag.duplicate_press", details: ["timestamp": String(timestamp)]))
+            // Double livraison normale des moniteurs local + global AppKit : filtrée silencieusement (Lot L).
             return false
         }
         lastLeftPress = (timestamp, point)

@@ -392,7 +392,11 @@ public final class TargetModeRuntimeController: NSObject {
         // Index des applications prêt avant la première ouverture de la barre (SPEC-073), et leurs icônes
         // réduites en fond à la taille des lignes (session 123).
         let rowIcon = LauncherRowMetrics(fontSize: TargetOverlayStyle.launcher(service.effectiveConfig.experimental.targetMode).commandTextFontSize).icon
-        LauncherAppCatalog.shared.refresh { apps in LauncherIconRaster.prewarm(paths: apps.map(\.path), side: rowIcon) }
+        LauncherAppCatalog.shared.refresh { apps in
+            let running = RunningApplicationsCache.shared.regularBundleIDs(triggerBackgroundRefresh: false)
+            let prioritized = apps.filter { running.contains($0.bundleID) } + apps.filter { !running.contains($0.bundleID) }
+            LauncherIconRaster.prewarm(paths: prioritized.map(\.path), side: rowIcon)
+        }
         let barConfig = service.effectiveConfig.experimental.targetMode
         LauncherRecentFiles.shared.refresh(extraTypes: barConfig.fileTypes, excluded: barConfig.fileExcludedFolders)
         // Premier dessin de la barre fait hors écran : polices et moteur de dessin prêts avant la première ouverture.

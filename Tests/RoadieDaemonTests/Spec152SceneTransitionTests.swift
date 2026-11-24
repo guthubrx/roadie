@@ -224,4 +224,30 @@ import RoadieCore
         #expect(scene.phase == .finished && captures == 0 && submissions == 0)
     }
 
+    @Test func lotLTargetCaptureBudgetAbsorbsHighDPICaptureLatency() async {
+        #expect(RailThumbnailStore.sceneCapturePixelBudget == 1_200_000)
+        var now = 0.0, captures = 0
+        var pending: CheckedContinuation<CGImage?, Never>?
+        let image = image()
+        let events = EventLog(path: tempPath("spec152-lot-l"))
+        let scene = StageSceneTransition(context: context(), direction: .up, policy: MotionPolicy(duration: 0.2),
+            events: events, valid: { true }, submit: {}, presents: false, clock: { now },
+            capture: { _ in
+                captures += 1
+                if captures == 1 { return image }
+                return await withCheckedContinuation { pending = $0 }
+            })
+        scene.start()
+        #expect(await wait { scene.phase == .applying })
+        now = 0.05; scene.pulse(applied: true)
+        #expect(await wait { pending != nil })
+        // 150 ms après la fin d'écriture (< 180 ms Lot L, > ancien 120 ms) : pas de dégradation `target_late`.
+        now = 0.20
+        pending?.resume(returning: image)
+        #expect(await wait { scene.phase == .animating || scene.phase == .finished })
+        #expect(scene.phase == .animating)
+        #expect(!events.tail(limit: 20).contains { $0.contains("effects.scene_degraded") })
+        scene.cancel()
+    }
+
 }
