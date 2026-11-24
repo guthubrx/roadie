@@ -123,14 +123,21 @@ struct Spec135ZoneHistoryTests {
         #expect(FileManager.default.fileExists(atPath: thumbs.path(for: key)))
         #expect(thumbs.image(for: key) != nil)
 
-        // Et `setThumbnail` renvoie false si la zone a déjà été oubliée ou si le fichier est illisible.
-        let historyPath = dir.appendingPathComponent("zones.json").path
+        // Et `setThumbnail` renvoie false si la zone a déjà été oubliée ou si l'écriture échoue après édition.
+        let roDir = dir.appendingPathComponent("ro-history")
+        try FileManager.default.createDirectory(at: roDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: roDir.path) }
+        let historyPath = roDir.appendingPathComponent("zones.json").path
         let history = ZoneHistory(path: historyPath)
         let z = zone("Zone supprimée")
+        let kept = zone("Zone existante", y: 120)
         _ = history.record(z, element: nil, policy: ZonePolicy())
+        _ = history.record(kept, element: nil, policy: ZonePolicy())
         #expect(history.forget(z))
         #expect(!history.setThumbnail(CGRect(x: 0, y: 0, width: 8, height: 8), for: z.key))
-        try Data("{".utf8).write(to: URL(fileURLWithPath: historyPath))
-        #expect(!history.setThumbnail(CGRect(x: 0, y: 0, width: 8, height: 8), for: z.key))
+        // Dossier en lecture seule : la zone existe (mutation effectuée) mais la sauvegarde atomique échoue → false.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: roDir.path)
+        #expect(!history.setThumbnail(CGRect(x: 0, y: 0, width: 8, height: 8), for: kept.key))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: roDir.path)
     }
 }

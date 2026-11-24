@@ -624,23 +624,31 @@ extension Spec149SchedulerTests {
                 }
             }
         )
-        // 1) Préparation en vol annulée par `suspend()` : sa reprise tardive avec `false` ne doit rien réarmer.
+        // 1) Préparation en vol annulée par `suspend()` puis nouvelle préparation démarrée au réveil :
+        // la reprise tardive de l'ancienne préparation (avec `false`) pendant que la nouvelle est
+        // encore en vol ne doit ni réarmer ni effacer la nouvelle préparation.
         scheduler.request(cause: "ax:didActivateApplication")
         timer.advance(by: 0.02)
         for _ in 0..<4 { await Task.yield() }
         #expect(continuations.count == 1)
 
         scheduler.suspend()
-        continuations[0].resume(returning: false)
-        for _ in 0..<4 { await Task.yield() }
-        #expect(timer.armedCount == 0)
-        #expect(ticks.isEmpty)
-
-        // 2) Si une nouvelle préparation démarre après `suspend()`, la reprise d'une ancienne ne la perturbe pas.
         scheduler.request(cause: "ax:didWake")
         timer.advance(by: 0.02)
         for _ in 0..<4 { await Task.yield() }
         #expect(continuations.count == 2)
+
+        continuations[0].resume(returning: false)
+        for _ in 0..<4 { await Task.yield() }
+        #expect(timer.armedCount == 0)
+        #expect(ticks.isEmpty)
+        // Une demande concurrente pendant la préparation #2 ne démarre pas de 3e préparation
+        // (preuve que l'ancienne continuation n'a pas effacé `preparationTask`).
+        scheduler.request(cause: "ax:AXWindowMoved")
+        timer.advance(by: 0.05)
+        for _ in 0..<4 { await Task.yield() }
+        #expect(continuations.count == 2)
+
         continuations[1].resume(returning: true)
         for _ in 0..<4 { await Task.yield() }
         #expect(ticks == ["ax:didWake"])
