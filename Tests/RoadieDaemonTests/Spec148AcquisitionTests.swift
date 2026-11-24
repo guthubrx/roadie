@@ -140,4 +140,36 @@ private final class Acquisition148Provider: SystemSnapshotProviding, Sendable {
         panel.showAcquisitionError()
         #expect(panel.renderedWindowIDs == [entry.id])
     }
+
+    @Test func lotGReadOnlyReaderPublicationDoesNotInvalidateConcurrentProducerAcquisition() async throws {
+        let provider = Acquisition148Provider(invalidations: 1)
+        let service = fixture(provider)
+        let entered = OSAllocatedUnfairLock(initialState: false)
+        let releaseProducer = DispatchSemaphore(value: 0)
+        provider.state.withLock {
+            $0.onScan = {
+                entered.withLock { $0 = true }
+                releaseProducer.wait()
+            }
+        }
+        // 1. Le producteur démarre son relevé AX (en pause sur le sémaphore).
+        let producerTask = Task { await service.readerSnapshot(followFocus: true, producerCycle: 60) }
+        try await waitUntil { entered.withLock { $0 } }
+        // 2. Un lecteur (bordure/rail) publie en lecture seule pendant ce temps :
+        //    publicationRevision avance, mais stateMutationRevision reste inchangée.
+        let revisionBefore = service.publicationRevision
+        let readerResult = await service.readerSnapshot(followFocus: true, producerCycle: nil)
+        #expect(readerResult != nil)
+        #expect(service.publicationRevision > revisionBefore)
+        // 3. Le producteur reprend et réussit du premier coup sans rejet parasite.
+        releaseProducer.signal()
+        let producerResult = await producerTask.value
+        #expect(producerResult != nil)
+
+        // 4. Une vraie invalidation (commande/écriture) continue d'invalider le producteur.
+        let invalidatedProvider = Acquisition148Provider(invalidations: 1)
+        let invalidatedService = fixture(invalidatedProvider)
+        let failedProducer = await invalidatedService.readerSnapshot(followFocus: true, producerCycle: 60)
+        #expect(failedProducer == nil)
+    }
 }

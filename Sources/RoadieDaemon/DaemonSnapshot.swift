@@ -284,7 +284,7 @@ public struct SnapshotService: Sendable {
         } else {
             let provider = self.provider
             let clock = self.clock
-            acquisition = .init(revision: processState.publicationRevision, observation: processState.observationGeneration,
+            acquisition = .init(mutation: processState.stateMutationRevision, observation: processState.observationGeneration,
                                 stateStamp: stamp, config: expectedConfig, displays: displays, task: Task.detached(priority: .userInitiated) {
                 let windows = provider.windows()
                 let inventory = provider.existingWindowPIDs()
@@ -300,7 +300,7 @@ public struct SnapshotService: Sendable {
         guard !Task.isCancelled, isCurrent() else { return nil }
         // Un autre lecteur ou le producteur peut avoir publié pendant l'attente.
         if producerCycle == nil, let snapshot = recent() { return snapshot }
-        guard processState.publicationRevision == acquisition.revision,
+        guard processState.stateMutationRevision == acquisition.mutation,
               producerCycle == nil || processState.observationGeneration == acquisition.observation,
               acquisition.config == config, acquisition.stateStamp == fileModificationStamp(stageStore.fileURL.path),
               acquisition.displays == provider.displays(),
@@ -520,7 +520,8 @@ public struct SnapshotService: Sendable {
             at: prepared?.observation.completedAt ?? clock(),
             stateStamp: fileModificationStamp(stageStore.fileURL.path),
             config: config,
-            observationGeneration: observationGeneration
+            observationGeneration: observationGeneration,
+            marksMutation: producer
         )
         return snapshot
     }
@@ -2625,7 +2626,7 @@ final class SnapshotProcessState: @unchecked Sendable {
 
     struct ReaderAcquisition {
         let id = UUID()
-        let revision: UInt64
+        let mutation: UInt64
         let observation: UInt64
         let stateStamp: [Int64]
         let config: RoadieConfig
@@ -2635,6 +2636,10 @@ final class SnapshotProcessState: @unchecked Sendable {
     @MainActor var readerAcquisition: ReaderAcquisition?
     private var revision: UInt64 = 0
     var publicationRevision: UInt64 { lock.withLock { revision } }
+    /// Révision des mutations réelles (invalidations, écritures, destructions, producteur) :
+    /// une publication lecture seule (bordure/rail/sélecteur) n'invalide pas un `prepareTick()` en cours (Lot G).
+    private var mutationRevision: UInt64 = 0
+    var stateMutationRevision: UInt64 { lock.withLock { mutationRevision } }
     private var observation: UInt64 = 0
     /// Génération d'observation : incrémentée à chaque changement signalé (SPEC-048). O(1).
     var observationGeneration: UInt64 { lock.withLock { observation } }
@@ -2718,7 +2723,7 @@ final class SnapshotProcessState: @unchecked Sendable {
     }
 
     func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, maxAge: TimeInterval, at date: Date, stateStamp: [Int64],
-                 config: RoadieConfig, observationGeneration: UInt64) {
+                 config: RoadieConfig, observationGeneration: UInt64, marksMutation: Bool = false) {
         if followFocus, let focused = snapshot.focusedWindowID,
            snapshot.windows.contains(where: { $0.window.id == focused }) {
             WindowSwitcherFocusHistory.shared.observe(focused)
@@ -2726,6 +2731,7 @@ final class SnapshotProcessState: @unchecked Sendable {
         }
         let publishedRevision: UInt64 = lock.withLock {
             revision &+= 1
+            if marksMutation { mutationRevision &+= 1 }
             gestureSnapshot = snapshot
             published[followFocus] = Published(snapshot: snapshot, maxAge: maxAge, at: date, stateStamp: stateStamp,
                                                config: config, observationGeneration: observationGeneration)
@@ -2761,6 +2767,7 @@ final class SnapshotProcessState: @unchecked Sendable {
     func invalidatePublished(preservingGesture: Bool = false) {
         lock.withLock {
             revision &+= 1
+            mutationRevision &+= 1
             published.removeAll()
             if !preservingGesture { gestureSnapshot = nil }
         }
@@ -2817,6 +2824,7 @@ final class SnapshotProcessState: @unchecked Sendable {
         guard !frames.isEmpty else { return }
         let publishedRevision: UInt64 = lock.withLock {
             revision &+= 1
+            mutationRevision &+= 1
             if var cached = gestureSnapshot {
                 for index in cached.windows.indices {
                     if let frame = frames[cached.windows[index].window.id] { cached.windows[index].window.frame = frame }
@@ -2850,6 +2858,7 @@ final class SnapshotProcessState: @unchecked Sendable {
             confirmedMinimums.removeValue(forKey: id)
             guard destroyed.insert(id).inserted else { return }
             revision &+= 1
+            mutationRevision &+= 1
             published.removeAll()
             gestureSnapshot = nil
             destroyedEvidence[id] = DestroyedWindowEvidence(

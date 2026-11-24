@@ -361,4 +361,69 @@ extension Spec144FrameTransitionTests {
         #expect(finalUpdate.frame == retargetSameInitialSize.cgRect)
         #expect(f.backend.frame(source.id) == retargetSameInitialSize.cgRect)
     }
+
+    @Test func lotGAdaptiveBudgetDropsDoomedIntermediateAndNeverDropsFinal() async throws {
+        // 1. Prédicat pur : apps rapides et ressorts jamais freinés ; apps lentes (> 40 ms)
+        //    coupées si leur durée dépasse le temps restant.
+        #expect(FrameTransitionRuntime.shouldRunIntermediate(estimatedWriteDuration: 0.015, remaining: 0.005))
+        #expect(FrameTransitionRuntime.shouldRunIntermediate(estimatedWriteDuration: 0.2, remaining: .infinity))
+        #expect(FrameTransitionRuntime.shouldRunIntermediate(estimatedWriteDuration: 0.15, remaining: 0.2))
+        #expect(!FrameTransitionRuntime.shouldRunIntermediate(estimatedWriteDuration: 0.15, remaining: 0.08))
+
+        // 2. Dispatcher : un lot intermédiaire en attente refusé par `allowIntermediateStart`
+        //    est abandonné, mais un lot final (`intermediate: false`) s'exécute toujours.
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let source = try #require(f.context.snapshot.windows.first { $0.window.id == f.source }?.window)
+        f.backend.blockedPID = source.pid
+        let permit = InteractiveWritePermit(generations: f.generations)
+        var allowNextIntermediate = true
+        let dispatcher = InteractiveFrameDispatcher(
+            service: f.service,
+            permit: permit,
+            allowIntermediateStart: { _, _ in allowNextIntermediate }
+        ) { _, _ in }
+        let midA = Rect(x: 80, y: 80, width: 500, height: 500)
+        let midB = Rect(x: 160, y: 80, width: 500, height: 500)
+        dispatcher.submit([ApplyCommand(window: source, frame: midA)],
+                          generation: PlacementGeneration.outsideBudget, intermediate: true)
+        // En file pendant que midA est bloqué, puis la politique coupe les intermédiaires tardifs.
+        dispatcher.submit([ApplyCommand(window: source, frame: midB)],
+                          generation: PlacementGeneration.outsideBudget, intermediate: true)
+        allowNextIntermediate = false
+        f.backend.blockedPID = nil
+        f.backend.gate.signal()
+        #expect(await f.waitFor { dispatcher.isIdle })
+        let afterMid = f.backend.frameUpdates.filter { $0.window.id == source.id }
+        #expect(afterMid.count == 1 && afterMid[0].frame == midA.cgRect)
+
+        // Le lot final n'est jamais bloqué par `allowIntermediateStart == false`.
+        dispatcher.submit([ApplyCommand(window: source, frame: f.target)],
+                          generation: f.generations.current, intermediate: false)
+        #expect(await f.waitFor { dispatcher.isIdle })
+        let finalUpdate = try #require(f.backend.frameUpdates.last { $0.window.id == source.id })
+        #expect(!finalUpdate.isIntermediateAnimationFrame && finalUpdate.frame == f.target.cgRect)
+    }
+
+    @Test func lotGOptimizedFinalCommandsPreservesSizeOnlyWhenSafe() {
+        let win = WindowSnapshot(
+            id: WindowID(rawValue: 7), pid: 70, appName: "App", bundleID: "app", title: "W",
+            frame: Rect(x: 5639, y: -1228, width: 1837, height: 2114), isOnScreen: true, isTileCandidate: true
+        )
+        let unparkSameSize = ApplyCommand(window: win, frame: Rect(x: 1950, y: -1228, width: 1837, height: 2114))
+        let resized = ApplyCommand(window: win, frame: Rect(x: 1950, y: -1228, width: 914, height: 2114))
+        let initialPlacement = ApplyCommand(window: win, frame: Rect(x: 1950, y: -1228, width: 1837, height: 2114),
+                                            positionsBeforeResizing: true)
+
+        let unparkOptimized = FrameTransitionRuntime.optimizedFinalCommands([unparkSameSize], windows: [win.id: win], mayChange: { _ in false })
+        #expect(unparkOptimized.first?.preservesSize == true)
+
+        let inFlight = FrameTransitionRuntime.optimizedFinalCommands([unparkSameSize], windows: [win.id: win], mayChange: { _ in true })
+        #expect(inFlight.first?.preservesSize == false)
+
+        let resizedOut = FrameTransitionRuntime.optimizedFinalCommands([resized], windows: [win.id: win], mayChange: { _ in false })
+        #expect(resizedOut.first?.preservesSize == false)
+
+        let initialOut = FrameTransitionRuntime.optimizedFinalCommands([initialPlacement], windows: [win.id: win], mayChange: { _ in false })
+        #expect(initialOut.first?.preservesSize == false)
+    }
 }

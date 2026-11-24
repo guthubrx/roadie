@@ -13,6 +13,8 @@ public final class FrameTransitionRuntime {
         let permit: InteractiveWritePermit
         let config: AnimationsConfig
         let started = ProcessInfo.processInfo.systemUptime
+        /// Échéance attendue de la courbe temporelle (0 = ressort sans borne fixe, Lot G).
+        var expectedEnd: TimeInterval = 0
         var dispatcher: InteractiveFrameDispatcher!
         var commands: [WindowID: ApplyCommand] = [:]
         var windows: [WindowID: WindowSnapshot] = [:]
@@ -47,6 +49,37 @@ public final class FrameTransitionRuntime {
     static let frameInterval: TimeInterval = 1.0 / 60
     /// Garde-fou léger hors transition de scène (les images sont poussées en phase par `EffectAnimator`, Lot F).
     static let watchdogInterval: TimeInterval = 0.1
+    /// Budget adaptatif d'images intermédiaires (Lot G) : une application lente (> 40 ms par lot,
+    /// ex. redimensionnement Electron/web 5K) ne démarre pas d'écriture intermédiaire si sa durée
+    /// mesurée dépasse le temps restant avant la cible finale.
+    static let slowWriteThreshold: TimeInterval = 0.04
+    static func shouldRunIntermediate(estimatedWriteDuration: TimeInterval, remaining: TimeInterval) -> Bool {
+        guard estimatedWriteDuration > slowWriteThreshold, remaining.isFinite else { return true }
+        return estimatedWriteDuration <= remaining
+    }
+
+    static func optimizedFinalCommands(
+        _ commands: [ApplyCommand],
+        windows: [WindowID: WindowSnapshot],
+        mayChange: (WindowSnapshot) -> Bool
+    ) -> [ApplyCommand] {
+        commands.map { command in
+            var value = command
+            let latest = windows[command.window.id] ?? command.window
+            value.window = latest
+            // Si aucun lot intermédiaire ne peut encore modifier la fenêtre et que la taille
+            // observée correspond déjà à la cible finale (ex. échange de même taille ou déparquage
+            // de stage), éviter le double `AXSize` tout en conservant position + relecture + Spec043.
+            if !value.preservesSize, !value.positionsBeforeResizing,
+               !mayChange(latest),
+               abs(latest.frame.width - value.frame.width) <= 0.5,
+               abs(latest.frame.height - value.frame.height) <= 0.5 {
+                value.preservesSize = true
+            }
+            return value
+        }
+    }
+
     private(set) var acceptsCommands = false
     public func start() { acceptsCommands = true }
     public var isHoldingLayout: Bool { session.map { $0.permit.isCurrent && ProcessInfo.processInfo.systemUptime - $0.started < 1.5 } ?? false }
@@ -88,7 +121,17 @@ public final class FrameTransitionRuntime {
             current = Session(service: service, generation: generation, generations: generations)
             session = current
             events.append(RoadieEvent(type: "effects.frames_started", details: ["generation": String(generation), "action": action.rawValue]))
-            current.dispatcher = InteractiveFrameDispatcher(service: service, permit: current.permit) { [weak self, weak current] result, generation in
+            current.dispatcher = InteractiveFrameDispatcher(
+                service: service,
+                permit: current.permit,
+                allowIntermediateStart: { [weak current] _, estimated in
+                    guard let current else { return false }
+                    let remaining = current.expectedEnd > 0
+                        ? max(0, current.expectedEnd - ProcessInfo.processInfo.systemUptime)
+                        : .infinity
+                    return Self.shouldRunIntermediate(estimatedWriteDuration: estimated, remaining: remaining)
+                }
+            ) { [weak self, weak current] result, generation in
                 guard let current else { return }
                 var final: [ApplyResultItem] = []
                 for item in result.items {
@@ -134,11 +177,21 @@ public final class FrameTransitionRuntime {
                 events: events, valid: { [weak current] in current?.permit.isCurrent == true }, submit: { [weak current] in
                     guard let current, current.permit.isCurrent else { return }
                     current.finalSubmitted = true
-                    current.dispatcher.submit(Array(current.commands.values), generation: current.generation)
+                    let commands = Self.optimizedFinalCommands(
+                        Array(current.commands.values),
+                        windows: current.windows,
+                        mayChange: { current.dispatcher.mayChange($0) }
+                    )
+                    current.dispatcher.submit(commands, generation: current.generation)
                 }, presents: presentsScenes, capture: sceneCapture)
             current.scene = scene; scene.start()
             return ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0,
                 items: plan.commands.map { ApplyResultItem(windowID: $0.window.id, status: .deferred, requested: $0.frame, actual: nil) })
+        }
+        if policy.curve == .spring {
+            current.expectedEnd = 0
+        } else {
+            current.expectedEnd = max(current.expectedEnd, ProcessInfo.processInfo.systemUptime + policy.duration)
         }
         let animationDisplays = displays ?? service.cachedGestureSnapshot()?.displays ?? []
         let distance = 40 * policy.intensity
@@ -223,7 +276,12 @@ public final class FrameTransitionRuntime {
         if let scene = current.scene {
             if needsImmediateEnd { scene.cancel(); if !current.finalSubmitted {
                 current.finalSubmitted = true
-                current.dispatcher.submit(Array(current.commands.values), generation: current.generation)
+                let commands = Self.optimizedFinalCommands(
+                    Array(current.commands.values),
+                    windows: current.windows,
+                    mayChange: { current.dispatcher.mayChange($0) }
+                )
+                current.dispatcher.submit(commands, generation: current.generation)
             } }
             let applied = current.finalSubmitted && current.dispatcher.isIdle
             scene.pulse(applied: applied)
@@ -245,27 +303,21 @@ public final class FrameTransitionRuntime {
         if current.finished.count == current.commands.count || elapsed >= 1 || needsImmediateEnd {
             current.finalSubmitted = true
             for id in current.ids { EffectAnimator.shared.cancel(id) }
-            let commands = current.commands.values.map { command -> ApplyCommand in
-                var value = command
-                let latest = current.windows[command.window.id] ?? command.window
-                value.window = latest
-                // Si aucun lot intermédiaire ne peut encore modifier la fenêtre et que la taille
-                // observée correspond déjà à la cible finale (ex. échange de deux fenêtres de même
-                // taille ou déplacement pur), éviter le double `AXSize` en fin de course tout en
-                // conservant position + relecture + enregistrement Spec043 (Lot F).
-                if !value.preservesSize, !value.positionsBeforeResizing,
-                   !current.dispatcher.mayChange(latest),
-                   abs(latest.frame.width - value.frame.width) <= 0.5,
-                   abs(latest.frame.height - value.frame.height) <= 0.5 {
-                    value.preservesSize = true
-                }
-                return value
-            }
+            let commands = Self.optimizedFinalCommands(
+                Array(current.commands.values),
+                windows: current.windows,
+                mayChange: { current.dispatcher.mayChange($0) }
+            )
             current.dispatcher.submit(commands, generation: current.generation)
         } else {
+            let remaining = current.expectedEnd > 0
+                ? max(0, current.expectedEnd - ProcessInfo.processInfo.systemUptime)
+                : .infinity
             let commands = current.frames.compactMap { id, frame -> ApplyCommand? in
                 guard let window = current.windows[id], let final = current.commands[id],
                       !window.frame.cgRect.matchesFrame(frame.cgRect) || current.dispatcher.mayChange(window) else { return nil }
+                let estimated = current.dispatcher.lastWriteDuration(for: window.pid)
+                guard Self.shouldRunIntermediate(estimatedWriteDuration: estimated, remaining: remaining) else { return nil }
                 return ApplyCommand(window: window, frame: frame, preservesSize: final.preservesSize,
                                     positionsBeforeResizing: final.positionsBeforeResizing)
             }
