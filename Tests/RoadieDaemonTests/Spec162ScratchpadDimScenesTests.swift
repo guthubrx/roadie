@@ -237,10 +237,14 @@ struct Spec162ScratchpadDimScenesTests {
         // La politique de tuilage protège la fenêtre tant qu'elle est dans le scratchpad
         let protectedContext = SnapshotService.TilingPolicyContext(
             config: config,
-            scratchpadWindowIDs: scratchStore.load().windowIDs
+            scratchpadWindows: scratchStore.load().protectedWindows
         )
         let protectedDecision = SnapshotService.tilingDecision(for: w1, config: config, context: protectedContext)
         #expect(protectedDecision.tile == false)
+
+        // Un identifiant CGWindowID recyclé par une autre app (bundleID différent) n'est PAS protégé
+        let recycledWindow = window(101, bundleID: "com.other.app", title: "Other")
+        #expect(SnapshotService.tilingDecision(for: recycledWindow, config: config, context: protectedContext).tile == true)
 
         // Basculer (toggle) masque la fenêtre hors écran
         let toggledHide = cmd.toggle(name: "notes")
@@ -263,7 +267,7 @@ struct Spec162ScratchpadDimScenesTests {
         #expect(cmd.list().isEmpty)
         let releasedContext = SnapshotService.TilingPolicyContext(
             config: config,
-            scratchpadWindowIDs: scratchStore.load().windowIDs
+            scratchpadWindows: scratchStore.load().protectedWindows
         )
         #expect(SnapshotService.tilingDecision(for: w1, config: config, context: releasedContext).tile == true)
     }
@@ -506,5 +510,223 @@ struct Spec162ScratchpadDimScenesTests {
         #expect(plan.urlsToOpen == ["https://docs.swift.org", "~/Projects"])
         #expect(plan.windowCount == 1)
         #expect(plan.hasTree == false)
+
+        // Application indiquée par chemin `.app` déjà lancée : reconnue par chemin ou bundleID résolu
+        let pathScene = StageProject(
+            name: "Paths",
+            savedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            windows: [],
+            tree: nil,
+            launchApps: ["/Applications/Notes.app", "/Applications/Safari.app", "/Applications/Xcode.app"]
+        )
+        let pathPlan = pathScene.launchPlan(
+            runningBundleIDs: ["com.apple.Notes"],
+            runningAppPaths: ["/Applications/Safari.app"],
+            bundleIDResolver: { path in
+                if path == "/Applications/Notes.app" { return "com.apple.Notes" }
+                if path == "/Applications/Xcode.app" { return "com.apple.dt.Xcode" }
+                return nil
+            }
+        )
+        #expect(pathPlan.missingApps == ["/Applications/Xcode.app"])
+
+        // Encodage/décodage JSON sans ambiguïté pour des chemins contenant un saut de ligne
+        let weirdPaths = ["/tmp/line1\nline2/doc.txt", "https://example.org"]
+        let encoded = StageProject.encodeStringList(weirdPaths)
+        #expect(StageProject.decodeStringList(encoded) == weirdPaths)
+    }
+
+    // MARK: - Durcissements R1 (atomicité, cache, recyclage ID, hystérésis, plein écran, observateurs)
+
+    @Test func scratchpadCacheNotPoisonedOnWriteFailureAndAssignRollsBack() throws {
+        let dir = try tempDir("scratchpad-atomic")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        let scratchFile = dir.appendingPathComponent("scratchpads.json")
+        let scratchStore = ScratchpadStore(path: scratchFile.path)
+        let entry = PersistentScratchpadEntry(
+            name: "keep",
+            windowID: WindowID(rawValue: 77),
+            bundleID: "com.apple.Notes",
+            title: "Keep",
+            isVisible: true,
+            floatingFrame: Rect(x: 100, y: 100, width: 600, height: 400)
+        )
+        try scratchStore.mutateChecked { $0.entries["keep"] = entry }
+        #expect(ScratchpadStore.protectedWindows(for: scratchFile.path)[WindowID(rawValue: 77)] == "com.apple.Notes")
+
+        // Rendre le répertoire en lecture seule pour provoquer un échec d'écriture atomique
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
+        #expect(throws: (any Error).self) {
+            try scratchStore.mutateChecked { $0.entries.removeAll() }
+        }
+        // Le cache mémoire doit toujours refléter l'état persisté intact
+        #expect(ScratchpadStore.protectedWindows(for: scratchFile.path)[WindowID(rawValue: 77)] == "com.apple.Notes")
+
+        // Assignation atomique : si stages.json échoue, le livre scratchpads est restauré
+        let writableDir = try tempDir("scratchpad-rollback")
+        defer { try? FileManager.default.removeItem(at: writableDir) }
+        let roStagesDir = dir.appendingPathComponent("stages.json")
+        let stageStore = StageStore(path: roStagesDir.path)
+        let writableScratch = ScratchpadStore(path: writableDir.appendingPathComponent("scratchpads.json").path)
+        let w1 = window(401, bundleID: "com.apple.Notes", title: "Rollback")
+        let provider = MutableProvider(displays: [display()], windows: [w1], focused: w1.id)
+        let writer = SpyWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore,
+            events: EventLog(path: writableDir.appendingPathComponent("events.jsonl").path),
+            persistStateChanges: false
+        )
+        let cmd = ScratchpadCommandService(
+            service: service,
+            stageStore: stageStore,
+            scratchpadStore: writableScratch,
+            events: EventLog(path: writableDir.appendingPathComponent("events.jsonl").path)
+        )
+        let failed = cmd.assign(name: "notes")
+        #expect(!failed.changed)
+        #expect(failed.outcome == CommandOutcome.failed)
+        #expect(writableScratch.load().entries.isEmpty)
+        #expect(ScratchpadStore.protectedWindows(for: writableScratch.url.path).isEmpty)
+    }
+
+    @Test func scratchpadRejectsNativeFullscreenOnToggleAndRestoresHiddenOnRelease() throws {
+        let dir = try tempDir("scratchpad-fs-release")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let stageStore = StageStore(path: dir.appendingPathComponent("stages.json").path)
+        let scratchStore = ScratchpadStore(path: dir.appendingPathComponent("scratchpads.json").path)
+        let eventLog = EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+
+        // 1. Repli sur règle refusé si fenêtre en plein écran natif
+        let fsWin = window(501, bundleID: "com.googlecode.iterm2", title: "Full", nativeFullscreen: true)
+        var ruleConfig = RoadieConfig()
+        ruleConfig.rules = [
+            WindowRule(id: "r-fs", match: RuleMatch(appRegex: "iterm2"), action: RuleAction(scratchpad: "term"))
+        ]
+        let fsProvider = MutableProvider(displays: [display()], windows: [fsWin], focused: fsWin.id)
+        let fsWriter = SpyWriter()
+        let fsService = SnapshotService(
+            provider: fsProvider,
+            frameWriter: fsWriter,
+            config: ruleConfig,
+            stageStore: stageStore,
+            events: eventLog
+        )
+        let fsCmd = ScratchpadCommandService(
+            service: fsService,
+            stageStore: stageStore,
+            scratchpadStore: scratchStore,
+            events: eventLog
+        )
+        let refused = fsCmd.toggle(name: "term")
+        #expect(!refused.changed)
+        #expect(refused.outcome == CommandOutcome.failed)
+        #expect(scratchStore.load().entries.isEmpty)
+
+        // 2. Release sur un scratchpad masqué le ramène à l'écran
+        let normalWin = window(502, bundleID: "com.apple.Notes", title: "HiddenNotes")
+        let provider = MutableProvider(displays: [display()], windows: [normalWin], focused: normalWin.id)
+        let writer = SpyWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore,
+            events: eventLog
+        )
+        let cmd = ScratchpadCommandService(
+            service: service,
+            stageStore: stageStore,
+            scratchpadStore: scratchStore,
+            events: eventLog
+        )
+        _ = cmd.assign(name: "notes")
+        _ = cmd.hide(name: "notes")
+        let hiddenFrame = try #require(writer.lastFrame(for: normalWin.id))
+        provider.updateWindowFrame(normalWin.id, to: hiddenFrame)
+        #expect(HiddenWindowPlacement.isHiddenOrLegacyOffscreen(hiddenFrame, in: [display()]))
+
+        let released = cmd.release(name: "notes")
+        #expect(released.changed)
+        let restoredFrame = try #require(writer.lastFrame(for: normalWin.id))
+        #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(restoredFrame, in: [display()]))
+    }
+
+    @Test func scratchpadHysteresisNeverRetilesProtectedWindow() {
+        let state = SnapshotProcessState()
+        let winID = WindowID(rawValue: 601)
+        let readable = WindowSnapshot(
+            id: winID,
+            pid: 500,
+            appName: "Notes",
+            bundleID: "com.apple.Notes",
+            title: "Note",
+            frame: Rect(x: 40, y: 60, width: 700, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true,
+            subrole: "AXStandardWindow",
+            role: "AXWindow"
+        )
+        // Passe 1 : fenêtre normale tuilable, enregistrée en mémoire d'hystérésis
+        let pass1 = state.stabilizedClassification([(raw: readable, classified: readable)])
+        #expect(pass1.first?.isTileCandidate == true)
+
+        // Passe 2 : la fenêtre est protégée en scratchpad mais ses attributs AX deviennent transitoirement illisibles
+        let unreadable = WindowSnapshot(
+            id: winID,
+            pid: 500,
+            appName: "Notes",
+            bundleID: "com.apple.Notes",
+            title: "Note",
+            frame: Rect(x: 40, y: 60, width: 700, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true,
+            subrole: nil,
+            role: nil,
+            furniture: nil
+        )
+        var classifiedFalse = unreadable
+        classifiedFalse.isTileCandidate = false
+        let pass2 = state.stabilizedClassification(
+            [(raw: unreadable, classified: classifiedFalse)],
+            protectedScratchpads: [winID: "com.apple.Notes"]
+        )
+        #expect(pass2.first?.isTileCandidate == false)
+    }
+
+    @Test @MainActor func dimInactiveInstallsRuntimeObserversOnlyWhenEnabled() throws {
+        let dir = try tempDir("dim-observers")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let service = SnapshotService(
+            provider: MutableProvider(displays: [display()], windows: [], focused: nil),
+            config: RoadieConfig(),
+            stageStore: StageStore(path: dir.appendingPathComponent("stages.json").path),
+            events: EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+        )
+        let spy = SpyDimRenderer()
+        var currentConfig = RoadieConfig()
+        currentConfig.fx.dimInactive.enabled = false
+        let controller = DimInactiveController(
+            snapshotService: service,
+            configLoader: { currentConfig },
+            renderer: spy
+        )
+        defer { controller.stop() }
+
+        controller.start()
+        #expect(!controller.hasActiveRuntimeObservers)
+
+        currentConfig.fx.dimInactive.enabled = true
+        controller.syncRuntimeObserversForCurrentConfig()
+        #expect(controller.hasActiveRuntimeObservers)
+
+        currentConfig.fx.dimInactive.enabled = false
+        controller.syncRuntimeObserversForCurrentConfig()
+        #expect(!controller.hasActiveRuntimeObservers)
     }
 }

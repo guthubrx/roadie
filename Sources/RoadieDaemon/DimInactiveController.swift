@@ -32,13 +32,16 @@ public final class DimInactiveController {
     private let snapshotService: SnapshotService
     private let configLoader: () -> RoadieConfig
     private let renderer: DimInactiveRendering
-    private var observers: [NSObjectProtocol] = []
+    private var configObservers: [NSObjectProtocol] = []
+    private var runtimeObservers: [NSObjectProtocol] = []
     private var workspaceObservers: [NSObjectProtocol] = []
     private var started = false
     private var isRefreshing = false
     private var needsAnotherRefresh = false
     private var lastObservedRevision: UInt64 = 0
     private var lifecycleGeneration: UInt64 = 0
+    /// Exposé pour les tests : indique si les observateurs runtime (snapshots/frames/workspace) sont actifs.
+    var hasActiveRuntimeObservers: Bool { !runtimeObservers.isEmpty || !workspaceObservers.isEmpty }
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
@@ -64,19 +67,18 @@ public final class DimInactiveController {
         if !started {
             started = true
             lifecycleGeneration &+= 1
-            installObservers()
+            installConfigObservers()
         }
-        requestRefresh()
+        syncRuntimeObserversForCurrentConfig()
     }
 
     public func stop() {
         started = false
         lifecycleGeneration &+= 1
         needsAnotherRefresh = false
-        observers.forEach { NotificationCenter.default.removeObserver($0) }
-        observers.removeAll()
-        workspaceObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
-        workspaceObservers.removeAll()
+        configObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        configObservers.removeAll()
+        uninstallRuntimeObservers()
         renderer.hideAll()
     }
 
@@ -119,12 +121,46 @@ public final class DimInactiveController {
         return targets
     }
 
-    private func installObservers() {
+    private func installConfigObservers() {
+        for name: Notification.Name in [.roadieConfigDidReload, .roadieSettingsDidChange] {
+            configObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.started else { return }
+                    self.syncRuntimeObserversForCurrentConfig()
+                }
+            })
+        }
+    }
+
+    /// Installe les observateurs snapshots/workspace uniquement quand `fx.dim_inactive.enabled == true` ;
+    /// les retire entièrement et ferme tout panneau dès que le réglage repasse à `false` (zéro charge au repos).
+    func syncRuntimeObserversForCurrentConfig() {
+        let enabled = configLoader().fx.dimInactive.enabled
+        guard enabled else {
+            uninstallRuntimeObservers()
+            needsAnotherRefresh = false
+            renderer.hideAll()
+            return
+        }
+        if runtimeObservers.isEmpty && workspaceObservers.isEmpty {
+            installRuntimeObservers()
+        }
+        requestRefresh()
+    }
+
+    private func uninstallRuntimeObservers() {
+        runtimeObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        runtimeObservers.removeAll()
+        workspaceObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+        workspaceObservers.removeAll()
+    }
+
+    private func installRuntimeObservers() {
         let trigger: @MainActor () -> Void = { [weak self] in
             guard let self, self.started else { return }
             self.requestRefresh()
         }
-        observers.append(NotificationCenter.default.addObserver(
+        runtimeObservers.append(NotificationCenter.default.addObserver(
             forName: .roadieWindowFramesDidRepublish, object: nil, queue: nil
         ) { [weak self] _ in
             let apply: @MainActor () -> Void = {
@@ -137,7 +173,7 @@ public final class DimInactiveController {
                 Task { @MainActor in apply() }
             }
         })
-        observers.append(NotificationCenter.default.addObserver(
+        runtimeObservers.append(NotificationCenter.default.addObserver(
             forName: .roadieSnapshotDidPublish, object: nil, queue: .main
         ) { [weak self] notification in
             let revision = notification.userInfo?["revision"] as? UInt64
@@ -147,15 +183,11 @@ public final class DimInactiveController {
                 self.requestRefresh()
             }
         })
-        for name: Notification.Name in [
-            .roadieConfigDidReload,
-            .roadieSettingsDidChange,
-            NSApplication.didChangeScreenParametersNotification,
-        ] {
-            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
-                Task { @MainActor in trigger() }
-            })
-        }
+        runtimeObservers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in trigger() }
+        })
         for name: Notification.Name in [
             NSWorkspace.didActivateApplicationNotification,
             NSWorkspace.activeSpaceDidChangeNotification,

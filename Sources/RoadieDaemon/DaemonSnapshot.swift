@@ -441,10 +441,13 @@ public struct SnapshotService: Sendable {
         // par snapshot pour eviter O(n_windows) recompactations dans applyTilingPolicy.
         let policyContext = TilingPolicyContext(config: config)
         let initialFrames = processState.initialFrames(rawWindows)
-        let windows = processState.stabilizedClassification(rawWindows.map { window in
-            (raw: window, classified: Self.applyTilingPolicy(to: window, config: config, context: policyContext,
-                                                             initialFrame: initialFrames[window.id]))
-        })
+        let windows = processState.stabilizedClassification(
+            rawWindows.map { window in
+                (raw: window, classified: Self.applyTilingPolicy(to: window, config: config, context: policyContext,
+                                                                 initialFrame: initialFrames[window.id]))
+            },
+            protectedScratchpads: config.tiling.scratchpadEnabled ? policyContext.scratchpadWindows : [:]
+        )
         let stageManagedWindowIDs = Set(windows.compactMap { window in
             window.isTileCandidate ? window.id : nil
         })
@@ -1057,9 +1060,9 @@ public struct SnapshotService: Sendable {
         let allowedSubroles: Set<String>
         let floatingBundles: Set<String>
         let sortedRules: [WindowRule]
-        let scratchpadWindowIDs: Set<WindowID>
+        let scratchpadWindows: [WindowID: String]
 
-        init(config: RoadieConfig, scratchpadWindowIDs: Set<WindowID>? = nil) {
+        init(config: RoadieConfig, scratchpadWindows: [WindowID: String]? = nil) {
             self.allowedSubroles = Set(config.tiling.allowedSubroles)
             self.floatingBundles = Set(config.exclusions.floatingBundles)
             self.sortedRules = config.rules
@@ -1070,8 +1073,8 @@ public struct SnapshotService: Sendable {
                     }
                     return lhs.priority > rhs.priority
                 }
-            self.scratchpadWindowIDs = scratchpadWindowIDs
-                ?? (config.tiling.scratchpadEnabled ? ScratchpadStore.protectedWindowIDs() : [])
+            self.scratchpadWindows = scratchpadWindows
+                ?? (config.tiling.scratchpadEnabled ? ScratchpadStore.protectedWindows() : [:])
         }
     }
 
@@ -1122,8 +1125,11 @@ public struct SnapshotService: Sendable {
                 decision = TilingDecision(tile: false, reason: tr("règle \(rule.id) : \(kind)", "rule \(rule.id): \(kind)"))
             }
         }
-        // Spec 162 : une fenêtre affectée au scratchpad flottant reste toujours hors du tuilage.
-        if config.tiling.scratchpadEnabled, context.scratchpadWindowIDs.contains(window.id) {
+        // Spec 162 : une fenêtre affectée au scratchpad flottant reste toujours hors du tuilage
+        // (vérification `windowID` + `bundleID` pour résister au recyclage de CGWindowID).
+        if config.tiling.scratchpadEnabled,
+           let expectedBundleID = context.scratchpadWindows[window.id],
+           expectedBundleID == window.bundleID {
             return TilingDecision(tile: false, reason: tr("scratchpad flottant", "floating scratchpad"))
         }
         return decision
@@ -3069,11 +3075,22 @@ final class SnapshotProcessState: @unchecked Sendable {
         lock.withLock { firstFrames[id] }
     }
 
-    func stabilizedClassification(_ windows: [(raw: WindowSnapshot, classified: WindowSnapshot)]) -> [WindowSnapshot] {
+    func stabilizedClassification(
+        _ windows: [(raw: WindowSnapshot, classified: WindowSnapshot)],
+        protectedScratchpads: [WindowID: String] = [:]
+    ) -> [WindowSnapshot] {
         lock.withLock {
             var next: [WindowID: Bool] = [:]
             let result = windows.map { pair -> WindowSnapshot in
                 var window = pair.classified
+                // Spec 162 R1 : un scratchpad protégé reste flottant même si les attributs AX
+                // deviennent transitoirement illisibles (l'hystérésis ne le retuile jamais).
+                if let expectedBundleID = protectedScratchpads[window.id],
+                   expectedBundleID == window.bundleID {
+                    window.isTileCandidate = false
+                    next[window.id] = false
+                    return window
+                }
                 let unreadable = pair.raw.role == nil && pair.raw.subrole == nil && pair.raw.furniture == nil
                 if !unreadable {
                     next[window.id] = window.isTileCandidate

@@ -465,14 +465,8 @@ public final class TargetModeRuntimeController: NSObject {
         // `roadie project …` (SPEC-080) : de même.
         switch command.name {
         case "project.save":
-            let urls = (command.string("urls") ?? "")
-                .split(separator: "\n")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            let apps = (command.string("apps") ?? "")
-                .split(separator: "\n")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
+            let urls = StageProject.decodeStringList(command.string("urls"))
+            let apps = StageProject.decodeStringList(command.string("apps"))
             let result = saveProject(named: command.string("name"), extraURLs: urls, launchApps: apps, notes: command.string("note"))
             events.append(RoadieEvent(type: "project.command", details: ["command": "save", "message": result.message]))
             return
@@ -1893,8 +1887,10 @@ public final class TargetModeRuntimeController: NSObject {
         let store = service.effectiveStageStore
         Task { @MainActor in
             let switcher = WindowSwitcherService(service: service)
-            let runningBundles = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-            let launchPlan = project.launchPlan(runningBundleIDs: runningBundles)
+            let runningApps = NSWorkspace.shared.runningApplications
+            let runningBundles = Set(runningApps.compactMap(\.bundleIdentifier))
+            let runningPaths = Set(runningApps.compactMap { $0.bundleURL?.standardizedFileURL.path })
+            let launchPlan = project.launchPlan(runningBundleIDs: runningBundles, runningAppPaths: runningPaths)
             let context = "stage:\(LauncherMatch.fold(project.name))"
             if let scope = LauncherSearchContext.stage(for: context, in: store.state()),
                let entry = await switcher.load().entries.first(where: { $0.scope == scope }) {

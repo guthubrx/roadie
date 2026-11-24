@@ -102,12 +102,30 @@ struct StageProject: Codable, Equatable, Sendable {
     }
 
     /// Calcule les applications absentes à lancer et les URLs/dossiers supplémentaires à ouvrir (Spec 162).
-    func launchPlan(runningBundleIDs: Set<String>) -> StageProjectLaunchPlan {
+    /// Résout l'identité d'une application fournie par chemin `.app` afin d'éviter un double lancement.
+    func launchPlan(
+        runningBundleIDs: Set<String>,
+        runningAppPaths: Set<String> = [],
+        bundleIDResolver: (String) -> String? = { Bundle(path: $0)?.bundleIdentifier }
+    ) -> StageProjectLaunchPlan {
+        let normalizedRunningPaths = Set(runningAppPaths.map {
+            URL(fileURLWithPath: NSString(string: $0).expandingTildeInPath).standardizedFileURL.path
+        })
         var missing: [String] = []
-        var seen = Set<String>()
+        var seenKeys = Set<String>()
         for app in launchApps {
             let trimmed = app.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !runningBundleIDs.contains(trimmed), seen.insert(trimmed).inserted else { continue }
+            guard !trimmed.isEmpty else { continue }
+            let looksLikePath = trimmed.hasPrefix("/") || trimmed.hasPrefix("~") || trimmed.hasSuffix(".app")
+            let standardizedPath: String? = looksLikePath
+                ? URL(fileURLWithPath: NSString(string: trimmed).expandingTildeInPath).standardizedFileURL.path
+                : nil
+            let resolvedBundleID = standardizedPath.flatMap(bundleIDResolver)
+            if runningBundleIDs.contains(trimmed) { continue }
+            if let resolvedBundleID, runningBundleIDs.contains(resolvedBundleID) { continue }
+            if let standardizedPath, normalizedRunningPaths.contains(standardizedPath) { continue }
+            let dedupKey = resolvedBundleID ?? standardizedPath ?? trimmed
+            guard seenKeys.insert(dedupKey).inserted else { continue }
             missing.append(trimmed)
         }
         let urls = extraURLs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
@@ -117,6 +135,23 @@ struct StageProject: Codable, Equatable, Sendable {
             windowCount: windows.count,
             hasTree: tree != nil
         )
+    }
+
+    /// Encode une liste de chaînes sans ambiguïté (JSON array) pour le transport de commandes runtime.
+    static func encodeStringList(_ values: [String]) -> String? {
+        guard !values.isEmpty, let data = try? JSONEncoder().encode(values) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Décode une liste encodée en tableau JSON (avec repli sur une chaîne simple non vide).
+    static func decodeStringList(_ raw: String?) -> [String] {
+        guard let raw, !raw.isEmpty else { return [] }
+        if let data = raw.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([String].self, from: data) {
+            return decoded.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? [] : [trimmed]
     }
 
     /// Arbre remis sur les fenêtres rouvertes, rang pour rang ; nil s'il en manque une. O(f).

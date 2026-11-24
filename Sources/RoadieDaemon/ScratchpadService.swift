@@ -41,14 +41,26 @@ public struct PersistentScratchpadBook: Codable, Equatable, Sendable {
     public var windowIDs: Set<WindowID> {
         Set(entries.values.map(\.windowID))
     }
+
+    /// Table `windowID -> bundleID` garantissant qu'un identifiant CGWindowID réutilisé par une
+    /// autre application ne soit jamais confondu avec un scratchpad enregistré (Spec 162 R1).
+    public var protectedWindows: [WindowID: String] {
+        var map: [WindowID: String] = [:]
+        map.reserveCapacity(entries.count)
+        for entry in entries.values {
+            map[entry.windowID] = entry.bundleID
+        }
+        return map
+    }
 }
 
 /// Persistance locale des scratchpads nommés (`~/.roadies/scratchpads.json`, isolée en tests via `TestEnvironment`).
 public final class ScratchpadStore: Sendable {
     public let url: URL
 
-    /// Cache en mémoire des identifiants protégés par fichier, évitant toute lecture disque par snapshot.
-    private static let cachedIDsByPath = OSAllocatedUnfairLock(initialState: [String: Set<WindowID>]())
+    /// Cache en mémoire des paires `windowID -> bundleID` par fichier, publié uniquement après
+    /// persistance disque réussie (Spec 162 R1).
+    private static let cachedWindowsByPath = OSAllocatedUnfairLock(initialState: [String: [WindowID: String]]())
 
     public init(path: String? = nil) {
         let resolvedPath = path ?? TestEnvironment.launcherFile("scratchpads.json")
@@ -57,13 +69,14 @@ public final class ScratchpadStore: Sendable {
 
     public func load() -> PersistentScratchpadBook {
         let book = JSONPersistence.load(PersistentScratchpadBook.self, from: url, default: PersistentScratchpadBook())
-        let ids = book.windowIDs
-        Self.cachedIDsByPath.withLock { $0[url.path] = ids }
+        let protected = book.protectedWindows
+        Self.cachedWindowsByPath.withLock { $0[url.path] = protected }
         return book
     }
 
     @discardableResult
     public func mutateChecked<T>(_ body: (inout PersistentScratchpadBook) throws -> T) throws -> T {
+        var committedProtected: [WindowID: String]?
         let result = try JSONPersistence.mutateChecked(
             PersistentScratchpadBook.self,
             at: url,
@@ -71,28 +84,36 @@ public final class ScratchpadStore: Sendable {
             label: "scratchpads"
         ) { book in
             let output = try body(&book)
-            let ids = book.windowIDs
-            Self.cachedIDsByPath.withLock { $0[url.path] = ids }
+            committedProtected = book.protectedWindows
             return output
+        }
+        // Publier le cache seulement une fois l'écriture atomique sur disque réussie.
+        if let committedProtected {
+            Self.cachedWindowsByPath.withLock { $0[url.path] = committedProtected }
         }
         return result
     }
 
-    /// Identifiants actuellement enregistrés en scratchpad (lecture O(1) en mémoire ; charge au premier accès).
-    public static func protectedWindowIDs(for path: String? = nil) -> Set<WindowID> {
+    /// Fenêtres protégées (`windowID -> bundleID`), lecture O(1) en mémoire ; charge au premier accès.
+    public static func protectedWindows(for path: String? = nil) -> [WindowID: String] {
         let resolvedPath = path ?? TestEnvironment.launcherFile("scratchpads.json")
         let resolved = URL(fileURLWithPath: NSString(string: resolvedPath).expandingTildeInPath).path
-        if let existing = cachedIDsByPath.withLock({ $0[resolved] }) {
+        if let existing = cachedWindowsByPath.withLock({ $0[resolved] }) {
             return existing
         }
         guard FileManager.default.fileExists(atPath: resolved) else {
-            cachedIDsByPath.withLock { $0[resolved] = [] }
-            return []
+            cachedWindowsByPath.withLock { $0[resolved] = [:] }
+            return [:]
         }
         let book = JSONPersistence.load(PersistentScratchpadBook.self, from: URL(fileURLWithPath: resolved), default: PersistentScratchpadBook())
-        let ids = book.windowIDs
-        cachedIDsByPath.withLock { $0[resolved] = ids }
-        return ids
+        let protected = book.protectedWindows
+        cachedWindowsByPath.withLock { $0[resolved] = protected }
+        return protected
+    }
+
+    /// Identifiants actuellement enregistrés en scratchpad (lecture O(1) en mémoire).
+    public static func protectedWindowIDs(for path: String? = nil) -> Set<WindowID> {
+        Set(protectedWindows(for: path).keys)
     }
 
     public static func normalizedName(_ raw: String?) -> String {
@@ -168,17 +189,12 @@ public struct ScratchpadCommandService {
         let frame = Self.centeredFrame(saved: nil, in: display.visibleFrame.cgRect)
         let sourceScope = targetEntry.scope
 
+        // Persistance atomique : enregistrer le scratchpad d'abord, puis détacher de la stage ;
+        // en cas d'échec sur stages.json, restaurer intégralement le livre scratchpads.
+        let previousBook: PersistentScratchpadBook
         do {
-            try stageStore.mutateChecked { state in
-                for idx in state.scopes.indices {
-                    state.scopes[idx].remove(windowID: window.id)
-                }
-                if let sourceScope, let tree = state.bspTree(for: sourceScope) {
-                    state.setBSPTree(tree.removing(window.id), for: sourceScope)
-                }
-                state.suppressRulePlacement(window: window)
-            }
-            try scratchpadStore.mutateChecked { book in
+            previousBook = try scratchpadStore.mutateChecked { book in
+                let before = book
                 // Une fenêtre ne peut appartenir qu'à un seul scratchpad à la fois.
                 for (existingName, entry) in book.entries where entry.windowID == window.id && existingName != name {
                     book.entries.removeValue(forKey: existingName)
@@ -191,8 +207,30 @@ public struct ScratchpadCommandService {
                     isVisible: true,
                     floatingFrame: Rect(frame)
                 )
+                return before
             }
         } catch {
+            return .persistenceFailure("scratchpad assign \(name)", error)
+        }
+
+        do {
+            try stageStore.mutateChecked { state in
+                for idx in state.scopes.indices {
+                    state.scopes[idx].remove(windowID: window.id)
+                }
+                if let sourceScope, let tree = state.bspTree(for: sourceScope) {
+                    state.setBSPTree(tree.removing(window.id), for: sourceScope)
+                }
+                state.suppressRulePlacement(window: window)
+            }
+        } catch {
+            do {
+                try scratchpadStore.mutateChecked { book in
+                    book = previousBook
+                }
+            } catch let rollbackError {
+                return .partial("scratchpad assign \(name): stage persistence failed (\(error)) and rollback failed (\(rollbackError))")
+            }
             return .persistenceFailure("scratchpad assign \(name)", error)
         }
 
@@ -262,6 +300,7 @@ public struct ScratchpadCommandService {
     }
 
     /// Détache le scratchpad `name` pour laisser la fenêtre revenir dans le cycle normal.
+    /// Si la fenêtre était masquée hors écran, la ramène centrée sur l'écran actif avant libération.
     public func release(name rawName: String? = nil) -> WindowCommandResult {
         let name = ScratchpadStore.normalizedName(rawName)
         let removed: PersistentScratchpadEntry?
@@ -274,6 +313,17 @@ public struct ScratchpadCommandService {
         }
         guard let removed else {
             return WindowCommandResult(message: "scratchpad release \(name): unknown", changed: false, outcome: .noOp)
+        }
+        let snapshot = service.snapshot()
+        if let live = snapshot.windows.first(where: {
+            $0.window.id == removed.windowID && $0.window.bundleID == removed.bundleID
+        })?.window,
+           live.furniture?.isNativeFullscreen != true,
+           HiddenWindowPlacement.isHiddenOrLegacyOffscreen(live.frame.cgRect, in: snapshot.displays),
+           let display = activeDisplay(in: snapshot, fallbackWindow: live) {
+            let restoredFrame = Self.centeredFrame(saved: removed.floatingFrame, in: display.visibleFrame.cgRect)
+            _ = service.setFrame(restoredFrame, of: live)
+            _ = service.focus(live)
         }
         events.append(RoadieEvent(type: "scratchpad_release", details: [
             "name": name,
@@ -294,6 +344,9 @@ public struct ScratchpadCommandService {
         resolved: (entry: PersistentScratchpadEntry, window: WindowSnapshot, fromBook: Bool),
         display: DisplaySnapshot
     ) -> WindowCommandResult {
+        guard resolved.window.furniture?.isNativeFullscreen != true else {
+            return .failure("scratchpad show \(name): window is in native fullscreen")
+        }
         if !resolved.fromBook {
             detachFromStagesIfNeeded(window: resolved.window, in: snapshot)
         }
@@ -331,6 +384,9 @@ public struct ScratchpadCommandService {
         resolved: (entry: PersistentScratchpadEntry, window: WindowSnapshot, fromBook: Bool),
         display: DisplaySnapshot
     ) -> WindowCommandResult {
+        guard resolved.window.furniture?.isNativeFullscreen != true else {
+            return .failure("scratchpad hide \(name): window is in native fullscreen")
+        }
         if !resolved.fromBook {
             detachFromStagesIfNeeded(window: resolved.window, in: snapshot)
         }
@@ -387,7 +443,9 @@ public struct ScratchpadCommandService {
     ) -> (entry: PersistentScratchpadEntry, window: WindowSnapshot, fromBook: Bool)? {
         let book = scratchpadStore.load()
         if let entry = book.entries[name],
-           let live = snapshot.windows.first(where: { $0.window.id == entry.windowID })?.window {
+           let live = snapshot.windows.first(where: {
+               $0.window.id == entry.windowID && $0.window.bundleID == entry.bundleID
+           })?.window {
             return (entry, live, true)
         }
         // Repli sur les règles `action.scratchpad = "<name>"` si la fenêtre correspond à une règle configurée.

@@ -741,8 +741,8 @@ public final class CLICommandRouter {
                         return usageError()
                     }
                 }
-                if !urls.isEmpty { payload["urls"] = urls.joined(separator: "\n") }
-                if !apps.isEmpty { payload["apps"] = apps.joined(separator: "\n") }
+                if let encodedURLs = StageProject.encodeStringList(urls) { payload["urls"] = encodedURLs }
+                if let encodedApps = StageProject.encodeStringList(apps) { payload["apps"] = encodedApps }
                 if let note { payload["note"] = note }
                 return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "project.save", arguments: payload),
                                                          json: args.contains("--json"))
