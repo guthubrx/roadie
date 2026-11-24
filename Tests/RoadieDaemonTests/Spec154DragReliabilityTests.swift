@@ -148,7 +148,19 @@ import RoadieCore
         #expect(cachedContext.snapshot.displays == initial.displays)
         #expect(cachedContext.snapshot.windows.map(\.window.id) == initial.windows.map(\.window.id))
 
-        // Après invalidation, le cache n'est plus réutilisé et `makeContext` retombe sur un relevé frais.
+        // Après un changement d'observation (`noteObservationChange`), même immédiatement dans `maxAge`,
+        // `validCachedSnapshot` est refusé et `makeContext(preferCachedSnapshot: true)` relit un relevé frais
+        // qui reflète le nouveau cadre (sans reprendre l'ancien relevé via `sharedSnapshot()`).
+        let sourceWindow = try #require(initial.windows.first { $0.window.id == f.source }?.window)
+        let moved = CGRect(x: 120, y: 80, width: 420, height: 360)
+        _ = f.backend.setFrame(moved, of: sourceWindow)
+        f.service.noteObservationChange()
+        #expect(f.service.validCachedSnapshot(followFocus: false) == nil)
+        let afterObservationChange = engine.makeContext(preferCachedSnapshot: true)
+        #expect(afterObservationChange.snapshot.windows.first { $0.window.id == f.source }?.window.frame.cgRect == moved)
+        #expect(f.service.validCachedSnapshot(followFocus: false) != nil)
+
+        // Après invalidation explicite, le cache n'est plus réutilisé et `makeContext` retombe sur un relevé frais.
         f.service.invalidateSharedSnapshot()
         #expect(f.service.validCachedSnapshot(followFocus: false) == nil)
         let refreshedContext = engine.makeContext(preferCachedSnapshot: true)

@@ -258,7 +258,8 @@ public struct SnapshotService: Sendable {
             stateStamp: fileModificationStamp(stageStore.fileURL.path),
             config: config,
             allowQuietReuse: true,
-            reuseAnyRecent: true
+            reuseAnyRecent: true,
+            requireUnchangedObservation: true
         )
     }
 
@@ -2769,10 +2770,12 @@ final class SnapshotProcessState: @unchecked Sendable {
     /// `reuseAnyRecent` (Lot I) : autorise un lecteur `followFocus: false` à réutiliser un relevé
     /// `followFocus: true` déjà valide (lecture pure sans mutation). O(1).
     func recentSnapshot(followFocus: Bool, now: Date, stateStamp: [Int64], config: RoadieConfig,
-                        allowQuietReuse: Bool = false, reuseAnyRecent: Bool = false) -> DaemonSnapshot? {
+                        allowQuietReuse: Bool = false, reuseAnyRecent: Bool = false,
+                        requireUnchangedObservation: Bool = false) -> DaemonSnapshot? {
         lock.withLock {
             func valid(_ entry: Published?) -> DaemonSnapshot? {
                 guard let entry else { return nil }
+                if requireUnchangedObservation, entry.observationGeneration != observation { return nil }
                 let age = now.timeIntervalSince(entry.at)
                 let quiet = allowQuietReuse && entry.observationGeneration == observation && age < quietReuseCap
                 guard age >= 0, age < entry.maxAge || quiet,

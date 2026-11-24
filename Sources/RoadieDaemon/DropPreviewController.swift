@@ -173,8 +173,11 @@ struct DropPreviewEngine {
     /// `sharedSnapshot()` frais.
     func makeContext(preferCachedSnapshot: Bool = false) -> DropPreviewContext {
         let persistedStateBeforeSnapshot = service.effectiveStageStore.state()
-        if preferCachedSnapshot, let cached = service.validCachedSnapshot(followFocus: false), !cached.displays.isEmpty {
-            return DropPreviewContext(snapshot: cached, persistedStateBeforeSnapshot: persistedStateBeforeSnapshot)
+        if preferCachedSnapshot {
+            if let cached = service.validCachedSnapshot(followFocus: false), !cached.displays.isEmpty {
+                return DropPreviewContext(snapshot: cached, persistedStateBeforeSnapshot: persistedStateBeforeSnapshot)
+            }
+            return DropPreviewContext(snapshot: service.snapshot(followFocus: false), persistedStateBeforeSnapshot: persistedStateBeforeSnapshot)
         }
         return DropPreviewContext(snapshot: service.sharedSnapshot(), persistedStateBeforeSnapshot: persistedStateBeforeSnapshot)
     }
