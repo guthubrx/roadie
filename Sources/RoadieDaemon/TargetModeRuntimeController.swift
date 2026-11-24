@@ -527,23 +527,36 @@ public final class TargetModeRuntimeController: NSObject {
             let settingsInSearch = config.settingsInSearch
             // Lot I : lecture du focus et préchargement des stores JSON en parallèle du snapshot (0 I/O disque sur MainActor).
             let focusedTask: Task<WindowID?, Never>? = readFocused.map { reader in
-                Task.detached(priority: .userInitiated) { reader() }
+                Task.detached(priority: .userInitiated) {
+                    guard !Task.isCancelled else { return nil }
+                    return reader()
+                }
             }
-            let storesTask: Task<PreloadedLauncherStores, Never>? = isScreenOnly ? nil : Task.detached(priority: .userInitiated) {
+            let storesTask: Task<PreloadedLauncherStores?, Never>? = isScreenOnly ? nil : Task.detached(priority: .userInitiated) {
+                guard !Task.isCancelled else { return nil }
                 let statePath = stageStore.fileURL.path
                 let stampBefore = fileModificationStamp(statePath)
                 let state = stageStore.state()
                 let stampAfter = fileModificationStamp(statePath)
                 let stateStamp = stampBefore == stampAfter ? stampAfter : []
+                guard !Task.isCancelled else { return nil }
                 let ranking = learns ? LauncherRankingStore().load() : nil
+                guard !Task.isCancelled else { return nil }
                 let aliases = LauncherAliasStore().load()
+                guard !Task.isCancelled else { return nil }
                 let projects = StageProjectStore().load().projects.values
                     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                guard !Task.isCancelled else { return nil }
                 let memory = memoryStore.load()
+                guard !Task.isCancelled else { return nil }
                 let history = LauncherHistoryStore().load()
+                guard !Task.isCancelled else { return nil }
                 let viewBook = LauncherViewStore().load()
+                guard !Task.isCancelled else { return nil }
                 let barPlacement = savePosition ? LauncherPositionStore().load() : nil
+                guard !Task.isCancelled else { return nil }
                 let settingPanes = settingsInSearch ? LauncherSettingTargetsCache.shared.systemPanes() : nil
+                guard !Task.isCancelled else { return nil }
                 return PreloadedLauncherStores(
                     state: state, stateStamp: stateStamp, ranking: ranking, aliases: aliases, projects: projects,
                     memory: memory, history: history, viewBook: viewBook,
@@ -551,40 +564,43 @@ public final class TargetModeRuntimeController: NSObject {
                     settingPanes: settingPanes
                 )
             }
-            var snapshot: DaemonSnapshot?
-            for attempt in 0..<4 {
-                if Task.isCancelled {
+            let outcome: (snapshot: DaemonSnapshot?, focused: WindowID?, preloaded: PreloadedLauncherStores?)? = await withTaskCancellationHandler {
+                var snapshot: DaemonSnapshot?
+                for attempt in 0..<4 {
+                    guard !Task.isCancelled else { return nil }
+                    snapshot = await self.service.readerSnapshot(followFocus: false, reuseAnyRecent: true)
+                    if snapshot != nil { break }
+                    if attempt < 3 { try? await Task.sleep(for: .milliseconds(100)) }
+                }
+                guard !Task.isCancelled, self.currentCommand == command.name else {
                     focusedTask?.cancel()
                     storesTask?.cancel()
-                    return
+                    return nil
                 }
-                snapshot = await self.service.readerSnapshot(followFocus: false, reuseAnyRecent: true)
-                if snapshot != nil { break }
-                if attempt < 3 { try? await Task.sleep(for: .milliseconds(100)) }
-            }
-            guard !Task.isCancelled, self.currentCommand == command.name else {
+                guard let snapshot else {
+                    focusedTask?.cancel()
+                    storesTask?.cancel()
+                    return (nil, nil, nil)
+                }
+                let focusedWindowID: WindowID? = (await focusedTask?.value) ?? nil
+                let preloaded: PreloadedLauncherStores? = (await storesTask?.value) ?? nil
+                guard !Task.isCancelled, self.currentCommand == command.name else { return nil }
+                return (snapshot, focusedWindowID, preloaded)
+            } onCancel: {
                 focusedTask?.cancel()
                 storesTask?.cancel()
-                return
             }
-            guard let snapshot else {
-                focusedTask?.cancel()
-                storesTask?.cancel()
-                self.searchEscapeMonitors.forEach(NSEvent.removeMonitor)
-                self.searchEscapeMonitors.removeAll()
-                self.searchOpening = nil
+            guard let outcome, !Task.isCancelled, self.currentCommand == command.name else { return }
+            self.searchEscapeMonitors.forEach(NSEvent.removeMonitor)
+            self.searchEscapeMonitors.removeAll()
+            self.searchOpening = nil
+            guard let snapshot = outcome.snapshot else {
                 clock.finish(events: self.events)
                 self.finish(TargetActionResult(changed: false, message: "snapshot_unavailable", error: "snapshot_unavailable"), command: command.name)
                 return
             }
-            let focusedWindowID = await focusedTask?.value
-            let preloaded = await storesTask?.value
-            guard !Task.isCancelled, self.currentCommand == command.name else { return }
-            self.searchEscapeMonitors.forEach(NSEvent.removeMonitor)
-            self.searchEscapeMonitors.removeAll()
-            self.searchOpening = nil
-            self.showTargetsSearch(command, snapshot: snapshot, focusedWindowID: focusedWindowID,
-                                   preloaded: preloaded, clock: clock)
+            self.showTargetsSearch(command, snapshot: snapshot, focusedWindowID: outcome.focused,
+                                   preloaded: outcome.preloaded, clock: clock)
         }
     }
 
