@@ -3437,6 +3437,7 @@ public final class LayoutMaintainer {
             guard let stage = snapshot.state.stage(scope: scope),
                   stage.mode != .float,
                   !stage.mode.usesTreeEngine,
+                  !stage.mode.allowsWindowOverlapOrOverflow,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID })
             else { continue }
 

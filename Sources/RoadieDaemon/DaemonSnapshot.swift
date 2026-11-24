@@ -812,6 +812,7 @@ public struct SnapshotService: Sendable {
         persistedStages.updateWindowObservations(observedWindows, scopes: observedScopes,
             presentationStates: observedPresentations, now: now)
         var focusedID: WindowID?
+        var liveFocusedScope: StageScope?
         if input.followFocus,
            let providerFocusedID,
            let focusedEntry = scopedWindows.first(where: { $0.window.id == providerFocusedID }),
@@ -841,11 +842,13 @@ public struct SnapshotService: Sendable {
             try? state.switchStage(focusedScope.stageID, in: focusedScope.displayID, desktopID: focusedScope.desktopID)
             try? state.setFocusedWindow(providerFocusedID, for: focusedScope)
             focusedID = providerFocusedID
-        } else {
-            focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
+            liveFocusedScope = focusedScope
         }
         reconcileTrees(in: &persistedStages, input: input)
-        applyPersistedMetadata(to: &state, from: persistedStages)
+        applyPersistedMetadata(to: &state, from: persistedStages, liveFocusedScope: liveFocusedScope)
+        if liveFocusedScope == nil {
+            focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
+        }
         return Reconciliation(
             state: state,
             scopedWindows: scopedWindows,
@@ -860,10 +863,16 @@ public struct SnapshotService: Sendable {
     /// persistés (nom et mode), stages vides comprises. Sans cela, il ne contient que la stage
     /// active et celles des fenêtres vivantes, sous un nom générique. Une stage déjà créée (stage 1
     /// par défaut d'un desktop, stage d'une fenêtre vivante) reçoit aussi le nom et le mode
-    /// persistés ; ses fenêtres et son focus ne changent pas. Un desktop non courant reprend sa
-    /// stage active persistée ; celle du desktop courant reste celle décidée plus haut (focus suivi).
+    /// persistés ; ses fenêtres et son focus ne changent pas (sauf en modes ordonnés `tabbed` /
+    /// `scrolling` hors scope du focus courant, où `initializeWindowIDs` place sinon le dernier membre).
+    /// Un desktop non courant reprend sa stage active persistée ; celle du desktop courant reste
+    /// celle décidée plus haut (focus suivi).
     // O(s + d·l) - s stages persistées, d desktops runtime, l labels persistés (bornés).
-    private func applyPersistedMetadata(to state: inout RoadieState, from persistedStages: PersistentStageState) {
+    private func applyPersistedMetadata(
+        to state: inout RoadieState,
+        from persistedStages: PersistentStageState,
+        liveFocusedScope: StageScope? = nil
+    ) {
         var displays = state.displays
         for scope in persistedStages.scopes {
             guard let display = displays[scope.displayID] else { continue }
@@ -875,8 +884,9 @@ public struct SnapshotService: Sendable {
                 } else {
                     desktop.stages[persisted.id]?.name = persisted.name
                     desktop.stages[persisted.id]?.mode = persisted.mode
+                    let stageScope = StageScope(displayID: scope.displayID, desktopID: scope.desktopID, stageID: persisted.id)
                     if persisted.mode.allowsWindowOverlapOrOverflow,
-                       desktop.stages[persisted.id]?.focusedWindowID == nil,
+                       stageScope != liveFocusedScope,
                        let persistedFocus = persisted.focusedWindowID,
                        desktop.stages[persisted.id]?.windowIDs.contains(persistedFocus) == true {
                         desktop.stages[persisted.id]?.focusedWindowID = persistedFocus

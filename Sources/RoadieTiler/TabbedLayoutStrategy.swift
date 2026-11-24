@@ -9,20 +9,29 @@ public struct TabbedLayoutStrategy: LayoutStrategy {
     public var barHeight: CGFloat
 
     public init(barHeight: CGFloat = 28) {
-        self.barHeight = barHeight.clamped(to: 20...44)
+        let finiteHeight = barHeight.isFinite ? barHeight : 28
+        self.barHeight = finiteHeight.clamped(to: 20...44)
+    }
+
+    private static func isFinite(_ rect: CGRect) -> Bool {
+        rect.origin.x.isFinite && rect.origin.y.isFinite && rect.size.width.isFinite && rect.size.height.isFinite
+    }
+
+    private static func isFinite(_ insets: Insets) -> Bool {
+        insets.top.isFinite && insets.right.isFinite && insets.bottom.isFinite && insets.left.isFinite
     }
 
     /// Rectangle de la barre d'onglets en coordonnées AX (source unique partagée avec `StageTabBarController`).
-    /// Retourne `nil` lorsqu'il y a moins de 2 fenêtres ou un conteneur trop petit.
+    /// Retourne `nil` lorsqu'il y a moins de 2 fenêtres ou un conteneur trop petit ou non fini.
     public static func tabBarFrame(
         in container: CGRect,
         outerGaps: Insets,
         barHeight: Double,
         windowCount: Int
     ) -> CGRect? {
-        guard windowCount >= 2 else { return nil }
+        guard windowCount >= 2, Self.isFinite(container), Self.isFinite(outerGaps) else { return nil }
         let inset = container.inset(by: outerGaps)
-        guard inset.width >= 80, inset.height >= 80 else { return nil }
+        guard Self.isFinite(inset), inset.width >= 80, inset.height >= 80 else { return nil }
         let clampedHeight = CGFloat(barHeight.isFinite ? barHeight : 28).clamped(to: 20...44)
         let effectiveHeight = min(clampedHeight, max(20, inset.height - 60))
         return CGRect(
@@ -35,9 +44,13 @@ public struct TabbedLayoutStrategy: LayoutStrategy {
 
     public func plan(_ request: LayoutRequest) -> LayoutPlan {
         let windows = request.windowIDs
-        guard !windows.isEmpty else { return LayoutPlan(placements: [:]) }
+        guard !windows.isEmpty,
+              Self.isFinite(request.container),
+              Self.isFinite(request.outerGaps),
+              request.innerGap.isFinite
+        else { return LayoutPlan(placements: [:]) }
         let inset = request.container.inset(by: request.outerGaps)
-        guard inset.width > 0, inset.height > 0 else { return LayoutPlan(placements: [:]) }
+        guard Self.isFinite(inset), inset.width > 0, inset.height > 0 else { return LayoutPlan(placements: [:]) }
 
         let contentRect: CGRect
         if let bar = Self.tabBarFrame(
@@ -46,7 +59,7 @@ public struct TabbedLayoutStrategy: LayoutStrategy {
             barHeight: Double(barHeight),
             windowCount: windows.count
         ) {
-            let separator = min(CGFloat(request.innerGap), 6)
+            let separator = max(0, min(CGFloat(request.innerGap), 6))
             let reserved = min(bar.height + separator, max(0, inset.height - 40))
             contentRect = CGRect(
                 x: inset.minX,

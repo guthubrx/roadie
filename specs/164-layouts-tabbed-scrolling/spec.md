@@ -14,7 +14,7 @@ Ajouter deux nouveaux modes de disposition tuilée à Roadie, accessibles global
 2. **Mode Ruban défilant (`scrolling` ; alias `scroll`, `ribbon`, `niri`, `ruban`)**
    - Aligne les fenêtres côte à côte en colonnes de largeur `floor(container.width * tiling.scrolling_column_width)` (`tiling.scrolling_column_width` défaut `0.65`, borné `0.25...1.0`) séparées par `gaps_inner` (`ScrollingLayoutStrategy`).
    - Centre le ruban lorsque la largeur totale tient dans l'écran ; sinon défile horizontalement pour centrer la colonne focalisée (borné aux bords du ruban pour éviter tout vide aux extrémités), tout en gardant un débord minimal cliquable (24 pt) pour les colonnes hors fenêtre afin de respecter les limites macOS et éviter tout faux déclenchement de `HiddenWindowPlacement`.
-   - Navigation clavier : `roadie focus left|right` déplace le focus vers la colonne précédente/suivante et recentre immédiatement le ruban ; `roadie move left|right` échange la colonne avec sa voisine ; `roadie layout width ...` ajuste la largeur.
+   - Navigation clavier : `roadie focus left|right` déplace le focus vers la colonne précédente/suivante et recentre immédiatement le ruban ; `roadie move left|right` échange la colonne avec sa voisine ; la largeur des colonnes est pilotée de façon persistante par `tiling.scrolling_column_width`.
 
 ## Réglages TOML & Paramètres
 

@@ -8,9 +8,8 @@
    - Étendre `LayoutRequest` (`focusedWindowID`, `tabbedBarHeight`, `scrollingColumnWidth`) et `LayoutPlanner.plan`.
    - Créer `TabbedLayoutStrategy.swift` (empilement + `tabBarFrame` source unique de vérité) et `ScrollingLayoutStrategy.swift` (ruban horizontal centré sur le focus + clamp 24 pt sûr vis-à-vis de `HiddenWindowPlacement`).
 3. **Daemon, Navigation, Barre d'onglets & UI (`RoadieDaemon` + `roadied`)**
-   - `DaemonSnapshot.swift` & `LayoutMaintainer.swift` : transmettre `focusedWindowID`, `tabbedBarHeight`, `scrollingColumnWidth` dans `LayoutRequest`, et ne pas rejeter ni masquer les stages `allowsWindowOverlapOrOverflow` comme chevauchements invalides.
-   - `WindowCommands.swift` : navigation `focus` (cyclage onglets en `tabbed`, défilement + réapplication ruban en `scrolling`) et `move left|right` (réordonnancement des membres dans `stageStore`).
-   - `WidthAdjustmentService.swift` : autoriser `.scrolling`.
+   - `DaemonSnapshot.swift` & `LayoutMaintainer.swift` : transmettre `focusedWindowID`, `tabbedBarHeight`, `scrollingColumnWidth` dans `LayoutRequest`, préserver l'ordre et le focus persistés, et exclure `allowsWindowOverlapOrOverflow` des détecteurs de recouvrement BSP et de la réparation de voisines (`clampedSiblingRepairPlan`).
+   - `WindowCommands.swift` : navigation `focus` (cyclage onglets en `tabbed`, défilement + réapplication ruban en `scrolling` y compris sur `focusBackAndForth` et `focus(windowID:)`) et `move left|right` (réordonnancement durable des membres dans `stageStore`).
    - `StageTabBarController.swift` (NEW) : barre d'onglets flottante cliquable (zéro panneau quand aucune stage `.tabbed` ≥ 2 fenêtres), démarrée/arrêtée dans `startBorderComponent()` (`Sources/roadied/main.swift`).
    - `RailController.swift` : sous-menu « Mode de disposition » dans le menu contextuel de stage (`RailAction.setStageMode`).
    - `CLICommandRouter.swift` & `LauncherSystemCommands.swift` : aide CLI, validation mode et commandes lanceur `roadie-mode-tabbed` / `roadie-mode-scrolling`.

@@ -318,15 +318,99 @@ struct Spec164TabbedScrollingTests {
         let afterMoveOrder = stageStore.state().scopes.first?.stages.first?.members.map(\.windowID)
         #expect(afterMoveOrder == [w2.id, w1.id, w3.id])
 
-        // Basculer en mode scrolling et naviguer à droite (w1 -> w3) recentre le ruban sur w3
+        // Basculer en mode scrolling (ordre actuel : [w2, w1, w3]) et naviguer vers la fenêtre DU MILIEU (w1)
+        // depuis w2 : le ruban doit recentrer sur w1 (et non retomber sur le dernier membre w3).
         let setScrolling = stageCmd.setMode(.scrolling)
         #expect(setScrolling.changed)
-        provider.setFocused(w1.id)
-        let scrollRight = winCmd.focus(.right)
-        #expect(scrollRight.changed)
+        provider.setFocused(w2.id)
+        let scrollToMiddle = winCmd.focus(.right)
+        #expect(scrollToMiddle.changed)
+        #expect(writer.lastFocused() == w1.id)
+        let middleW1Frame = try #require(writer.lastFrame(for: w1.id))
+        let middleW2Frame = try #require(writer.lastFrame(for: w2.id))
+        let middleW3Frame = try #require(writer.lastFrame(for: w3.id))
+        // w1 est centrée dans 1600 px (avec outerGaps 8 -> [8..1592], centre = 800)
+        #expect(abs(middleW1Frame.midX - 800) <= 2)
+        #expect(middleW2Frame.minX < middleW1Frame.minX)
+        #expect(middleW1Frame.minX < middleW3Frame.minX)
+
+        // focus(windowID:) sur la dernière colonne (w3) recentre ensuite sur w3 collée à droite
+        let focusByID = winCmd.focus(windowID: w3.id)
+        #expect(focusByID.changed)
         #expect(writer.lastFocused() == w3.id)
         let w3Frame = try #require(writer.lastFrame(for: w3.id))
         #expect(w3Frame.maxX >= 1580)
+
+        // WidthAdjustmentService ne doit pas désorganiser le ruban scrolling (piloté par tiling.scrolling_column_width)
+        let widthResult = WidthAdjustmentService(service: service, config: config, events: eventLog)
+            .apply(WidthAdjustmentIntent(scope: .activeWindow, mode: .explicitRatio, targetRatio: 0.5))
+        #expect(!widthResult.changed)
+    }
+
+    @Test func scrollingSixWindowsStaggersOverflowColumnsWithoutOverlapOrHiddenCollision() throws {
+        let testScope = StageScope(displayID: DisplayID(rawValue: "d1"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let disp = DisplaySnapshot(
+            id: DisplayID(rawValue: "d1"),
+            index: 1,
+            name: "Display 1",
+            frame: Rect(x: 0, y: 0, width: 1580, height: 900),
+            visibleFrame: Rect(x: 0, y: 0, width: 1580, height: 900),
+            isMain: true
+        )
+        let container = disp.visibleFrame.cgRect
+        let ids = (1...6).map { WindowID(rawValue: UInt32($0)) }
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: testScope,
+            mode: .scrolling,
+            container: container,
+            windowIDs: ids,
+            outerGaps: .zero,
+            innerGap: 8,
+            focusedWindowID: ids[0],
+            scrollingColumnWidth: 0.65
+        ))
+        let xs = try ids.map { try #require(plan.placements[$0]).minX }
+        // Strictement croissantes : zéro superposition exacte de colonnes hors écran
+        for i in 0..<(xs.count - 1) {
+            #expect(xs[i] < xs[i + 1])
+        }
+        // Aucune colonne ne satisfait HiddenWindowPlacement.isHiddenOrLegacyOffscreen
+        for id in ids {
+            let rect = try #require(plan.placements[id])
+            #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(rect, in: [disp]))
+        }
+
+        // Petit conteneur (32 pt) : ne doit jamais déclencher de faux masquage
+        let tinyDisp = DisplaySnapshot(
+            id: DisplayID(rawValue: "tiny"),
+            index: 1,
+            name: "Tiny",
+            frame: Rect(x: 0, y: 0, width: 32, height: 32),
+            visibleFrame: Rect(x: 0, y: 0, width: 32, height: 32),
+            isMain: true
+        )
+        let tinyPlan = LayoutPlanner.plan(LayoutRequest(
+            scope: testScope,
+            mode: .scrolling,
+            container: tinyDisp.visibleFrame.cgRect,
+            windowIDs: [ids[0], ids[1], ids[2]],
+            outerGaps: .zero,
+            innerGap: 4,
+            focusedWindowID: ids[0],
+            scrollingColumnWidth: 0.65
+        ))
+        for id in [ids[0], ids[1], ids[2]] {
+            let rect = try #require(tinyPlan.placements[id])
+            #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(rect, in: [tinyDisp]))
+        }
+
+        // Cadres non finis (NaN / Inf) rejetés proprement par les deux stratégies
+        let nanContainer = CGRect(x: CGFloat.nan, y: 0, width: 1000, height: 800)
+        let infContainer = CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 800)
+        #expect(TabbedLayoutStrategy().plan(LayoutRequest(scope: testScope, mode: .tabbed, container: nanContainer, windowIDs: [ids[0], ids[1]])).placements.isEmpty)
+        #expect(TabbedLayoutStrategy().plan(LayoutRequest(scope: testScope, mode: .tabbed, container: infContainer, windowIDs: [ids[0], ids[1]])).placements.isEmpty)
+        #expect(ScrollingLayoutStrategy().plan(LayoutRequest(scope: testScope, mode: .scrolling, container: nanContainer, windowIDs: [ids[0], ids[1]])).placements.isEmpty)
+        #expect(ScrollingLayoutStrategy().plan(LayoutRequest(scope: testScope, mode: .scrolling, container: infContainer, windowIDs: [ids[0], ids[1]])).placements.isEmpty)
     }
 
     // MARK: - StageTabBarController

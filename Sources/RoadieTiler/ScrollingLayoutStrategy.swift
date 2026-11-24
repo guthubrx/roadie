@@ -3,23 +3,55 @@ import RoadieCore
 
 /// Stratégie de placement en ruban défilant horizontal (`scrolling`, inspiré de Niri / PaperWM, Spec 164).
 /// Place les fenêtres en colonnes côte à côte de largeur `columnWidthRatio * rect.width`, centrées sur
-/// la fenêtre focalisée tout en maintenant un débord cliquable minimal (`24 pt`) aux bords de l'écran.
+/// la fenêtre focalisée tout en maintenant un débord cliquable échelonné aux bords de l'écran, strictement
+/// distinct des coordonnées `HiddenWindowPlacement`.
 public struct ScrollingLayoutStrategy: LayoutStrategy {
     public var columnWidthRatio: CGFloat
 
-    /// Largeur minimale visible en bord d'écran pour les colonnes hors fenêtre : évite le repositionnement
-    /// arbitraire de macOS et reste strictement distinct des coordonnées `HiddenWindowPlacement`.
+    /// Largeur minimale visible en bord d'écran pour une colonne unique hors fenêtre.
     public static let minimumEdgePeek: CGFloat = 24
 
+    /// Garde absolue vis-à-vis de `HiddenWindowPlacement.isPreferred` (tolérance 8 pt autour de `maxX - 1`).
+    public static let safeHiddenClearance: CGFloat = 16
+
+    /// Pas idéal entre colonnes lointaines échelonnées en éventail au bord de l'écran.
+    private static let overflowCascadeStep: CGFloat = 16
+
     public init(columnWidthRatio: CGFloat = 0.65) {
-        self.columnWidthRatio = columnWidthRatio.clamped(to: 0.25...1.0)
+        let finiteRatio = columnWidthRatio.isFinite ? columnWidthRatio : 0.65
+        self.columnWidthRatio = finiteRatio.clamped(to: 0.25...1.0)
+    }
+
+    private static func isFinite(_ rect: CGRect) -> Bool {
+        rect.origin.x.isFinite && rect.origin.y.isFinite && rect.size.width.isFinite && rect.size.height.isFinite
+    }
+
+    private static func isFinite(_ insets: Insets) -> Bool {
+        insets.top.isFinite && insets.right.isFinite && insets.bottom.isFinite && insets.left.isFinite
     }
 
     public func plan(_ request: LayoutRequest) -> LayoutPlan {
         let windows = request.windowIDs
-        guard !windows.isEmpty else { return LayoutPlan(placements: [:]) }
+        guard !windows.isEmpty,
+              Self.isFinite(request.container),
+              Self.isFinite(request.outerGaps),
+              request.innerGap.isFinite,
+              columnWidthRatio.isFinite
+        else { return LayoutPlan(placements: [:]) }
+
         let rect = request.container.inset(by: request.outerGaps)
-        guard rect.width > 0, rect.height > 0 else { return LayoutPlan(placements: [:]) }
+        guard Self.isFinite(rect), rect.width > 0, rect.height > 0 else { return LayoutPlan(placements: [:]) }
+
+        // Très petit conteneur : aucune colonne ne déborde, évitant tout faux positif `HiddenWindowPlacement`.
+        if rect.width < Self.safeHiddenClearance * 2 {
+            let full = rect.integral
+            var placements: [WindowID: CGRect] = [:]
+            placements.reserveCapacity(windows.count)
+            for id in windows {
+                placements[id] = full
+            }
+            return LayoutPlan(placements: placements)
+        }
 
         let colWidth: CGFloat
         if rect.width <= 120 {
@@ -27,7 +59,7 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
         } else {
             colWidth = min(rect.width, max(120, floor(rect.width * columnWidthRatio)))
         }
-        let gap = min(CGFloat(request.innerGap), max(0, rect.width / 8))
+        let gap = max(0, min(CGFloat(request.innerGap), rect.width / 8))
         let step = colWidth + gap
         let totalWidth = CGFloat(windows.count) * colWidth + CGFloat(max(0, windows.count - 1)) * gap
 
@@ -42,17 +74,69 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
             scrollX = desired.clamped(to: 0...(totalWidth - rect.width))
         }
 
-        let peek = min(Self.minimumEdgePeek, colWidth / 2, rect.width / 4)
-        let minAllowedX = rect.minX - colWidth + peek
-        let maxAllowedX = rect.maxX - peek
+        let rawXs = windows.indices.map { index in
+            rect.minX + CGFloat(index) * step - scrollX
+        }
+
+        var resolvedXs = rawXs
+        if totalWidth > rect.width {
+            let singlePeek = min(Self.minimumEdgePeek, max(Self.safeHiddenClearance, rect.width / 4))
+            let minAllowedX = rect.minX - colWidth + singlePeek
+            let maxAllowedX = rect.maxX - singlePeek
+
+            let leftOverflow = windows.indices.filter { rawXs[$0] < minAllowedX }
+            let inRange = windows.indices.filter { rawXs[$0] >= minAllowedX && rawXs[$0] <= maxAllowedX }
+            let rightOverflow = windows.indices.filter { rawXs[$0] > maxAllowedX }
+
+            // Colonnes hors-écran à gauche : échelonnées de façon strictement croissante,
+            // jamais superposées et toujours >= `safeHiddenClearance` du bord gauche.
+            if leftOverflow.count == 1, let idx = leftOverflow.first {
+                resolvedXs[idx] = minAllowedX
+            } else if leftOverflow.count > 1 {
+                let bandStart = rect.minX - colWidth + Self.safeHiddenClearance
+                let nextVisibleX = inRange.first.map { rawXs[$0] } ?? (rect.maxX - colWidth)
+                let maxBandEnd = max(bandStart, nextVisibleX - Self.safeHiddenClearance)
+                let desiredSpan = min(
+                    CGFloat(leftOverflow.count - 1) * Self.overflowCascadeStep,
+                    max(0, maxBandEnd - bandStart),
+                    max(0, rect.width / 3)
+                )
+                let bandEnd = min(maxBandEnd, bandStart + desiredSpan)
+                let divisor = CGFloat(leftOverflow.count - 1)
+                for (offset, idx) in leftOverflow.enumerated() {
+                    resolvedXs[idx] = bandStart + (bandEnd - bandStart) * (CGFloat(offset) / divisor)
+                }
+            }
+
+            // Colonnes hors-écran à droite : échelonnées de façon strictement croissante,
+            // jamais superposées et toujours <= `rect.maxX - safeHiddenClearance` (écart >= 15 pt
+            // avec le marqueur `HiddenWindowPlacement` à `maxX - 1`, tolérance 8 pt).
+            if rightOverflow.count == 1, let idx = rightOverflow.first {
+                resolvedXs[idx] = maxAllowedX
+            } else if rightOverflow.count > 1 {
+                let bandEnd = floor(rect.maxX) - Self.safeHiddenClearance
+                let prevVisibleX = inRange.last.map { rawXs[$0] } ?? rect.minX
+                let minBandStart = min(bandEnd, prevVisibleX + Self.safeHiddenClearance)
+                let desiredSpan = min(
+                    CGFloat(rightOverflow.count - 1) * Self.overflowCascadeStep,
+                    max(0, bandEnd - minBandStart),
+                    max(0, rect.width / 3)
+                )
+                let bandStart = max(minBandStart, bandEnd - desiredSpan)
+                let divisor = CGFloat(rightOverflow.count - 1)
+                for (offset, idx) in rightOverflow.enumerated() {
+                    resolvedXs[idx] = floor(bandStart + (bandEnd - bandStart) * (CGFloat(offset) / divisor))
+                }
+            }
+        }
 
         var placements: [WindowID: CGRect] = [:]
         placements.reserveCapacity(windows.count)
+        let maxSafeX = floor(rect.maxX) - Self.safeHiddenClearance
         for (index, id) in windows.enumerated() {
-            let rawX = rect.minX + CGFloat(index) * step - scrollX
-            let clampedX = totalWidth <= rect.width ? rawX : rawX.clamped(to: minAllowedX...maxAllowedX)
+            let finalX = totalWidth <= rect.width ? resolvedXs[index] : min(resolvedXs[index], maxSafeX)
             placements[id] = CGRect(
-                x: clampedX,
+                x: finalX,
                 y: rect.minY,
                 width: colWidth,
                 height: rect.height
