@@ -561,3 +561,8 @@ Session 174, 24 novembre 2026. Ajustement Spec 157 — icônes du NavRail sous l
 (2) `StageCardView.appIconMember(at:)` inverse la matrice de perspective pour le hit-testing exact ; cliquer sur une icône d'application déclenche `.focusStageWindow(stageID, windowID, bundleID)` (ou `.focusNativeFullscreen` si plein écran natif) sans démarrer de drag ;
 (3) `StageCommandService.switchAndFocus` (appelé hors `@MainActor` depuis `RailController`) bascule sur la stage ciblée, sort d'un éventuel zoom Roadie portant sur une autre fenêtre de cette stage, et donne directement le focus clavier à l'application cliquée (y compris lorsque la stage est déjà active).
 2 637 tests Swift dans 392 suites et 29 tests de scripts réussis.
+
+Session 175, 24 novembre 2026. Agrandissement et réglage de taille des icônes sous les cartes du NavRail :
+(1) `fx.rail.app_icons_row_size` (défaut `26` pt, plage `14...40` pt) ajouté dans `Config.swift`, `RailSettings.swift`, `RailVisualConfig.swift` et `SettingsCatalogRail.swift` (Paramètres > Rail) ;
+(2) `StageCardView.appIconsRowLayout()` passe la taille par défaut à `26` pt et compense partiellement la compression horizontale `cos(angle)` en mode 3D `parallax` (`min(1.35, 1 / sqrt(xScale))`), tout en conservant l'inclinaison en perspective, le hit-testing cliquable et la séparation avec la légende.
+2 637 tests Swift dans 392 suites et 29 tests de scripts réussis.

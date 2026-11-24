@@ -44,7 +44,7 @@ By default (`tiling.float_picture_in_picture = true`, toggleable in **Settings >
 
 ### Navigation rail: app icons row and ergonomics
 
-- **App icons strip** (`fx.rail.show_app_icons_row = true`, toggleable in **Settings > Rail**): each rail card displays the icons of the distinct apps present in the stage side by side (keeping the white native-fullscreen border and white zoom corners intact).
+- **App icons strip** (`fx.rail.show_app_icons_row = true` and `fx.rail.app_icons_row_size = 26`, 14–40 pt, configurable in **Settings > Rail**): each rail card displays clickable app icons below its thumbnail (following 3D perspective in parallax mode) while keeping the white native-fullscreen border and white zoom corners intact.
 - **Swap two displays in one key**: `roadie display swap [N|left|right|up|down]` swaps the active stages of two displays in one step (also available in the launcher and rail context menu).
 - **One-click empty stages cleanup**: `roadie stage prune-empty` deletes inactive, empty, unparked, unnamed stages on the active display (also available in the launcher and rail context menu; named stages are always preserved).
 

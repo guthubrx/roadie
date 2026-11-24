@@ -736,8 +736,12 @@ final class StageCardView: NSControl {
         }
         guard rawFront.width >= 28, rawFront.height >= 24 else { return nil }
 
-        let spacing: CGFloat = 5
-        let idealIconSize: CGFloat = 20
+        let usePerspective = config.mode == .parallax
+        let spacing: CGFloat = usePerspective ? 4 : 5
+        let idealIconSize: CGFloat = max(14, config.appIconsRowSize)
+        // En mode 3D (parallax), compenser partiellement la compression horizontale `cos(angle)`
+        // pour garder des icônes lisibles et équilibrées tout en conservant la perspective.
+        let iconWidthRatio: CGFloat = usePerspective ? min(1.35, 1 / sqrt(max(0.45, parallaxXScale))) : 1
         let maxIcons = max(1, min(6, Int((rawFront.width + spacing) / (18 + spacing))))
         let distinct = Self.distinctAppMembers(for: visualMembers, maxCount: maxIcons)
         guard !distinct.members.isEmpty else { return nil }
@@ -745,7 +749,6 @@ final class StageCardView: NSControl {
         let count = distinct.members.count
         let overflowWidth: CGFloat = distinct.overflow > 0 ? 18 : 0
         let maxContentWidth = max(12, rawFront.width - overflowWidth)
-        let usePerspective = config.mode == .parallax
 
         // Si la légende est actuellement visible sous la vignette, réserver sa bande et placer la
         // rangée d'icônes en dessous sans jamais la chevaucher (si la hauteur restante est insuffisante
@@ -770,15 +773,18 @@ final class StageCardView: NSControl {
             maxHeightByCaption = idealIconSize
         }
 
+        let maxWidthPerIcon = max(11, (maxContentWidth - CGFloat(max(0, count - 1)) * spacing) / CGFloat(count))
+        let maxHeightByWidth = floor(maxWidthPerIcon / iconWidthRatio)
         let fittedIconSize = min(
             idealIconSize,
             maxHeightByCaption,
-            max(11, floor((maxContentWidth - CGFloat(max(0, count - 1)) * spacing) / CGFloat(count)))
+            max(11, maxHeightByWidth)
         )
-        let iconsWidth = CGFloat(count) * fittedIconSize + CGFloat(max(0, count - 1)) * spacing
+        let iconWidth = min(maxWidthPerIcon, floor(fittedIconSize * iconWidthRatio))
+        let iconsWidth = CGFloat(count) * iconWidth + CGFloat(max(0, count - 1)) * spacing
         let rowWidth = min(rawFront.width, iconsWidth + overflowWidth)
         let rowHeight = fittedIconSize
-        let gap: CGFloat = 6
+        let gap: CGFloat = usePerspective ? 4 : 6
 
         var rowRect: CGRect
         if let captionFrame = visibleCaptionFrame {
@@ -816,9 +822,9 @@ final class StageCardView: NSControl {
 
         let items = distinct.members.enumerated().map { index, member in
             let rect = CGRect(
-                x: rowRect.minX + CGFloat(index) * (fittedIconSize + spacing),
+                x: rowRect.minX + CGFloat(index) * (iconWidth + spacing),
                 y: rowRect.minY,
-                width: fittedIconSize,
+                width: iconWidth,
                 height: fittedIconSize
             )
             return (member: member, rect: rect)

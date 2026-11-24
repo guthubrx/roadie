@@ -46,7 +46,7 @@ Par défaut (`tiling.float_picture_in_picture = true`, désactivable dans **Para
 
 ### Rail de navigation : icônes d'applications et ergonomie
 
-- **Rangée d'icônes d'applications** (`fx.rail.show_app_icons_row = true`, réglable dans **Paramètres > Rail**) : chaque carte du rail affiche côte à côte les icônes des applications présentes dans la stage (en conservant la bordure blanche plein écran natif et les coins blancs du zoom Roadie).
+- **Rangée d'icônes d'applications** (`fx.rail.show_app_icons_row = true` et `fx.rail.app_icons_row_size = 26`, 14–40 pt, réglables dans **Paramètres > Rail**) : chaque carte du rail affiche en dessous de sa vignette (et en perspective en mode 3D) les icônes cliquables des applications présentes dans la stage (en conservant la bordure blanche plein écran natif et les coins blancs du zoom Roadie).
 - **Échanger deux écrans en une touche** : `roadie display swap [N|left|right|up|down]` échange les stages actives de deux écrans en une opération (également disponible dans le lanceur et le menu contextuel du rail).
 - **Nettoyage des stages vides** : `roadie stage prune-empty` supprime les stages inactives, vides, non parquées et non nommées de l'écran actif (également disponible dans le lanceur et le menu contextuel du rail ; les stages nommées sont toujours conservées).
 

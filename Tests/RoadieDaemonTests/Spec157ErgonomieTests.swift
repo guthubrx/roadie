@@ -113,6 +113,9 @@ struct Spec157ErgonomieTests {
         #expect(!parallaxLayout.transform.isIdentity)
         #expect(parallaxLayout.transform == StageCardView.parallaxTransform(for: parallaxLayout.rowRect, rotation: 35))
         let secondLocal = try #require(parallaxLayout.items.last?.rect)
+        // En 3D parallax, la taille par défaut (26 pt) compense partiellement la compression horizontale cos(angle).
+        #expect(secondLocal.height == 26)
+        #expect(secondLocal.width > secondLocal.height)
         let projectedClick = CGPoint(x: secondLocal.midX, y: secondLocal.midY).applying(parallaxLayout.transform)
         #expect(parallaxCard.dragPayload(at: projectedClick) == nil)
         if case .focusStageWindow(let sID, let wID, let bID) = parallaxCard.action(at: projectedClick) {
@@ -376,6 +379,10 @@ struct Spec157ErgonomieTests {
         #expect(RailSettings.load(raw: "").showAppIconsRow == true)
         #expect(RailSettings.load(raw: "[fx.rail]\nshow_app_icons_row = false\n").showAppIconsRow == false)
         #expect(RailSettings.load(raw: "[fx.rail]\nshow_app_icons_row = true\n").showAppIconsRow == true)
+        #expect(RailSettings.load(raw: "").appIconsRowSize == 26)
+        #expect(RailSettings.load(raw: "[fx.rail]\napp_icons_row_size = 32\n").appIconsRowSize == 32)
+        #expect(RailSettings.load(raw: "[fx.rail]\napp_icons_row_size = 5\n").appIconsRowSize == 14)
+        #expect(RailSettings.load(raw: "[fx.rail]\napp_icons_row_size = 90\n").appIconsRowSize == 40)
     }
 
     // MARK: - US2, US3, US4 : Commandes Lanceur

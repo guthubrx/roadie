@@ -23,8 +23,8 @@ struct SettingsCatalogTests {
         // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
         // terminal, signets, tri, apprentissage, confirmation). Session 108 : douze touches de la barre.
         // Session 110 : Calculette ouverte par un calcul. Session 111 : ordre appris des verbes. Session 113 : mots-clés in et tags. Session 114 : historique web. Session 115 : réglages dans la barre et touche ⌘,. Session 119 : cinq réglages simples de la barre. Session 121 : icône du sélecteur et sa taille. Session 127 : langue de l'interface. Session 131 : trois modificateurs de Retour et style des fenêtres de workflow. Session 132 : fenêtres flottantes hors du rail. Session 133 : raccourci de la recherche à l'écran. Session 134 : fautes de frappe rattrapées, éléments à l'écran dans le lanceur. Session 136 : trois réglages des zones (le raccourci de la 135 retiré).
-        #expect(simple.count == 315) // Session 173 (Spec 157) : float_picture_in_picture + show_app_icons_row.
-        #expect(railSimple.count == 81)
+        #expect(simple.count == 316) // Session 175 : app_icons_row_size.
+        #expect(railSimple.count == 82)
         #expect(simple.count - railSimple.count == 234)
     }
 
@@ -168,7 +168,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 315)
+        #expect(expected.count == 316)
     }
 
     // MARK: - Défauts
@@ -229,8 +229,8 @@ struct SettingsCatalogTests {
             #expect(high.flatMap(Double.init) == range.upperBound, "borne haute : \(descriptor.id)")
             checked += 1
         }
-        // 80 clés du rail, dont 49 numériques.
-        #expect(checked == 49)
+        // 82 clés du rail, dont 50 numériques.
+        #expect(checked == 50)
     }
 
     @Test

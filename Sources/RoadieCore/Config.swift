@@ -1951,7 +1951,7 @@ private enum ConfigValidationRules {
             "exclusions.floating_windows": ["app", "title", "remember_frame"],
             "fx.borders": ["enabled", "thickness", "corner_radius", "active_color", "inactive_color", "pulse_on_focus", "stage_overrides"],
             "fx.borders.stage_overrides": ["stage_id", "active_color"],
-            "fx.rail": ["renderer", "width", "background_color", "background_opacity", "auto_hide", "edge_hit_width", "edge_magnetism_width", "animation_ms", "hide_delay_ms", "layout_mode", "dynamic_left_gap", "empty_click_hide_active", "empty_click_safety_margin", "hide_on_maximized", "show_app_icons_row"],
+            "fx.rail": ["renderer", "width", "background_color", "background_opacity", "auto_hide", "edge_hit_width", "edge_magnetism_width", "animation_ms", "hide_delay_ms", "layout_mode", "dynamic_left_gap", "empty_click_hide_active", "empty_click_safety_margin", "hide_on_maximized", "show_app_icons_row", "app_icons_row_size"],
             "fx.rail.layout": ["header_position", "stages_position", "spacing", "top_padding", "bottom_padding"],
             "fx.rail.header": ["enabled", "placement", "alignment", "top_padding", "bottom_padding", "height", "width", "title_color", "subtitle_color", "title_font_size", "subtitle_font_size", "font_family", "title_weight", "subtitle_weight", "title_template", "subtitle_template"],
             "fx.rail.header.display": labelKeys,

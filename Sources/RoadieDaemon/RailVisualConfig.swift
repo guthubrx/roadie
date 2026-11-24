@@ -32,6 +32,7 @@ struct RailVisualConfig {
     var emptyClickSafetyMargin: CGFloat = 12
     var hideOnMaximized: Bool = false
     var showAppIconsRow: Bool = true
+    var appIconsRowSize: CGFloat = 26
     var previewWidth: CGFloat = 160
     var previewHeight: CGFloat = 104
     var leadingPadding: CGFloat = 8
@@ -95,6 +96,7 @@ struct RailVisualConfig {
             emptyClickSafetyMargin: CGFloat(settings.emptyClickSafetyMargin),
             hideOnMaximized: settings.hideOnMaximized,
             showAppIconsRow: settings.showAppIconsRow,
+            appIconsRowSize: CGFloat(settings.appIconsRowSize),
             previewWidth: CGFloat(useParallaxGeometry ? parallax.width : preview.width),
             previewHeight: CGFloat(useParallaxGeometry ? parallax.height : preview.height),
             leadingPadding: CGFloat(useParallaxGeometry ? parallax.leadingPadding : preview.leadingPadding),
