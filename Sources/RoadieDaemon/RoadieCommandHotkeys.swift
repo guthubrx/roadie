@@ -79,6 +79,11 @@ public final class RoadieCommandHotkeys {
         configWatcher = RailFileWatcher(
             path: {
                 let active = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+                let expanded = NSString(string: active).expandingTildeInPath
+                return URL(fileURLWithPath: expanded).deletingLastPathComponent().path
+            },
+            observedFile: {
+                let active = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
                 return NSString(string: active).expandingTildeInPath
             },
             onChange: { [weak self] in

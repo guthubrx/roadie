@@ -35,6 +35,8 @@ public final class RailController {
     /// changement, ou quand le processus enregistreur a disparu ; sinon aucune lecture par tick.
     private var recordingStatusCache: TargetRecordingStatus?
     private var recordingStatusDirty = true
+    private var started = false
+    private var lastObservedSnapshotRevision: UInt64 = 0
     private var refreshTimer: Timer?
     private var hoverTimer: Timer?
     private var hoverCoalesceWorkItem: DispatchWorkItem?
@@ -87,6 +89,7 @@ public final class RailController {
     }
 
     public func start() {
+        started = true
         NSApplication.shared.setActivationPolicy(.accessory)
         Task { await RailThumbnailStore.shared.refreshSceneMetadata() }
         rebuildPanels(reason: "start")
@@ -126,6 +129,7 @@ public final class RailController {
     /// Arrete tout ce que `start()` a mis en place : timers, surveillances de fichiers, moniteurs souris,
     /// observateur d'ecran et panneaux. Appelable plusieurs fois ; `start()` peut ensuite etre rappele.
     public func stop() {
+        started = false
         windowDragController.stopMouseCapture()
         rebuildTask?.cancel()
         rebuildTask = nil
@@ -314,26 +318,42 @@ public final class RailController {
         if let snapshotObserver { NotificationCenter.default.removeObserver(snapshotObserver) }
         snapshotObserver = NotificationCenter.default.addObserver(
             forName: .roadieSnapshotDidPublish, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.rebuildPanels(reason: "snapshot") }
+        ) { [weak self] notification in
+            let revision = notification.userInfo?["revision"] as? UInt64
+            Task { @MainActor in
+                guard let self, self.started else { return }
+                if let revision, revision == self.lastObservedSnapshotRevision { return }
+                self.rebuildPanels(reason: "snapshot")
+            }
         }
         if let configReloadObserver { NotificationCenter.default.removeObserver(configReloadObserver) }
         configReloadObserver = NotificationCenter.default.addObserver(
             forName: .roadieConfigDidReload, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.refreshPanelsForConfigChange(reason: "config") }
+            Task { @MainActor in
+                guard let self, self.started else { return }
+                self.refreshPanelsForConfigChange(reason: "config")
+            }
         }
         if let thumbnailObserver { NotificationCenter.default.removeObserver(thumbnailObserver) }
         thumbnailObserver = NotificationCenter.default.addObserver(
             forName: .roadieThumbnailsDidUpdate, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.rebuildPanels(reason: "thumbnail") }
+            Task { @MainActor in
+                guard let self, self.started else { return }
+                self.rebuildPanels(reason: "thumbnail")
+            }
         }
     }
 
     /// Minuterie de rafraîchissement des vignettes : 5 s avec tolérance quand au moins un panneau
     /// est visible et déplié, 0 réveil sinon (les autres changements sont événementiels).
     private func syncRefreshTimer(hasExpandedVisiblePanel: Bool) {
+        guard started else {
+            refreshTimer?.invalidate()
+            refreshTimer = nil
+            return
+        }
         let interval: TimeInterval = snapshotService.isQuietReaderReuseEnabled ? 5 : 1
         let needsTimer = hasExpandedVisiblePanel || !snapshotService.isQuietReaderReuseEnabled
         guard needsTimer else {
@@ -394,6 +414,11 @@ public final class RailController {
     /// Minuterie à 80 ms armée uniquement pendant un glisser en cours ou un compte à rebours
     /// d'auto-masquage ; coupée immédiatement dès le retour au repos (0 réveil/s).
     private func syncHoverTimer() {
+        guard started else {
+            hoverTimer?.invalidate()
+            hoverTimer = nil
+            return
+        }
         let needsTimer = pendingDrag != nil
             || pendingStageReorder != nil
             || windowDragController.hasActiveDrag
@@ -1139,7 +1164,7 @@ public final class RailController {
     /// stages, membres, etats de presentation, ecrans masques, configuration, vignettes.
     // Complexite : O(d * (s + n)) - d = ecrans, s = stages, n = fenetres du snapshot.
     private func rebuildPanels(reason: String = "direct", requestedAt: Date? = nil, railSignature: String? = nil) {
-        guard !defersPanelRebuild else { return }
+        guard started, !defersPanelRebuild else { return }
         pendingRebuild = (reason, requestedAt)
         guard rebuildTask == nil else { return }
         let service = snapshotService
@@ -1150,7 +1175,8 @@ public final class RailController {
                 self?.rebuildTask = nil
                 return
             }
-            guard let self else { return }
+            guard let self, self.started else { return }
+            self.lastObservedSnapshotRevision = service.publicationRevision
             let request = self.pendingRebuild ?? (reason, requestedAt)
             self.pendingRebuild = nil
             self.rebuildTask = nil

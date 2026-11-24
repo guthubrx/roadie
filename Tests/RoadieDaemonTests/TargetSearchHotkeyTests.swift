@@ -2,6 +2,7 @@ import AppKit
 import Carbon
 import Foundation
 import Testing
+import RoadieAX
 import RoadieCore
 @testable import RoadieDaemon
 
@@ -113,6 +114,108 @@ struct TargetSearchHotkeyTests {
         NotificationCenter.default.post(name: .roadieConfigDidReload, object: nil, userInfo: ["path": config.path])
         await drainNotifications()
         #expect(reads == 2)
+    }
+
+    @Test @MainActor
+    func configWatcherSurvivesFileDeleteAndRecreate() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-160-recreate-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let config = directory.appendingPathComponent("roadies.toml")
+        try "[experimental.target_mode]\nenabled = false\n".write(to: config, atomically: true, encoding: .utf8)
+        let events = directory.appendingPathComponent("events.jsonl")
+        var reads = 0
+        let hotkey = TargetSearchHotkey(
+            events: EventLog(path: events.path),
+            configLoader: { reads += 1; return TargetModeConfig(enabled: false) },
+            configPathLoader: { config.path },
+            onPress: {}
+        )
+        hotkey.start()
+        defer { hotkey.stop() }
+        #expect(reads == 1)
+
+        try FileManager.default.removeItem(at: config)
+        for _ in 0..<20 where reads < 2 {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        let readsAfterDelete = reads
+        #expect(readsAfterDelete >= 2)
+
+        try "[experimental.target_mode]\nenabled = false\n# recreated\n".write(to: config, atomically: true, encoding: .utf8)
+        for _ in 0..<20 where reads <= readsAfterDelete {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        #expect(reads > readsAfterDelete)
+    }
+
+    @Test @MainActor
+    func borderControllerStopCancelsDeferredNotificationAndAvoidsSnapshotEchoLoop() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-160-border-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        final class CountingPanel: BorderRendering {
+            var renderCount = 0
+            var hideCount = 0
+            func render(_ model: BorderRenderModel) { renderCount += 1 }
+            func hide() { hideCount += 1 }
+        }
+        final class CountingProvider: SystemSnapshotProviding, @unchecked Sendable {
+            private let lock = NSLock()
+            private var count = 0
+            var windowScans: Int { lock.withLock { count } }
+            let display = DisplaySnapshot(id: DisplayID(rawValue: "d1"), index: 1, name: "Main",
+                                          frame: Rect(x: 0, y: 0, width: 1440, height: 900),
+                                          visibleFrame: Rect(x: 0, y: 0, width: 1440, height: 900), isMain: true)
+            let window = WindowSnapshot(id: WindowID(rawValue: 77), pid: 77, appName: "App", bundleID: "test.app",
+                                        title: "Win", frame: Rect(x: 100, y: 100, width: 600, height: 400),
+                                        isOnScreen: true, isTileCandidate: true)
+            func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: true) }
+            func displays() -> [DisplaySnapshot] { [display] }
+            func focusedWindowID() -> WindowID? { window.id }
+            func windows() -> [WindowSnapshot] {
+                lock.withLock { count += 1 }
+                return [window]
+            }
+        }
+
+        struct NoopWriter: WindowFrameWriting {
+            func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? { frame }
+        }
+        let provider = CountingProvider()
+        var config = RoadieConfig()
+        config.fx.borders.enabled = true
+        let store = StageStore(path: directory.appendingPathComponent("stages.json").path)
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: NoopWriter(),
+            config: config,
+            intentStore: LayoutIntentStore(path: directory.appendingPathComponent("intents.json").path),
+            stageStore: store,
+            events: EventLog(path: directory.appendingPathComponent("events.jsonl").path),
+            persistStateChanges: false
+        )
+        service.enableQuietReaderReuse(cap: 60)
+        let panel = CountingPanel()
+        let controller = BorderController(snapshotService: service, configLoader: { config }, panel: panel)
+        controller.start()
+        for _ in 0..<20 where panel.renderCount == 0 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(panel.renderCount == 1)
+        #expect(provider.windowScans == 1)
+
+        // Notification publiée juste avant stop() : la tâche différée ne doit rien réafficher.
+        let rendersBeforeStop = panel.renderCount
+        NotificationCenter.default.post(name: .roadieConfigDidReload, object: nil)
+        controller.stop()
+        await drainNotifications()
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(panel.renderCount == rendersBeforeStop)
     }
 
     @MainActor

@@ -42,6 +42,11 @@ public final class FocusFollowsMouseController {
             configWatcher = RailFileWatcher(
                 path: {
                     let active = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+                    let expanded = NSString(string: active).expandingTildeInPath
+                    return URL(fileURLWithPath: expanded).deletingLastPathComponent().path
+                },
+                observedFile: {
+                    let active = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
                     return NSString(string: active).expandingTildeInPath
                 },
                 onChange: onConfigChange
@@ -67,6 +72,7 @@ public final class FocusFollowsMouseController {
     }
 
     private func syncActivation() {
+        guard started else { return }
         let enabled = configLoader().focus.focusFollowsMouse
         if enabled {
             activateTrackingIfNeeded()
@@ -76,7 +82,8 @@ public final class FocusFollowsMouseController {
     }
 
     private func activateTrackingIfNeeded() {
-        guard mouseMonitors.isEmpty else { return }
+        guard started, mouseMonitors.isEmpty else { return }
+        lastMousePoint = CGEvent(source: nil)?.location
         let interval = Self.timerInterval(enabled: true)
         let onMove: @MainActor () -> Void = { [weak self] in
             self?.scheduleOneShotTick(after: interval)
@@ -99,11 +106,12 @@ public final class FocusFollowsMouseController {
     }
 
     private func scheduleOneShotTick(after interval: TimeInterval) {
-        guard timer == nil else { return }
+        guard started, timer == nil else { return }
         let newTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.timer = nil
+                guard self.started else { return }
                 await self.tick()
             }
         }
@@ -113,7 +121,7 @@ public final class FocusFollowsMouseController {
     }
 
     private func tick() async {
-        guard !isReading else { return }
+        guard started, !isReading else { return }
         let enabled = configLoader().focus.focusFollowsMouse
         guard enabled else {
             deactivateTracking()
@@ -133,6 +141,7 @@ public final class FocusFollowsMouseController {
         isReading = true
         defer { isReading = false }
         guard let snapshot = await snapshotService.readerSnapshot(),
+              started,
               configLoader().focus.focusFollowsMouse, !UserInputActivity.shared.isCapturedPointerHeld,
               NSEvent.pressedMouseButtons == 0,
               !WindowDragActivity.shared.isActive(includingReleaseGrace: false),

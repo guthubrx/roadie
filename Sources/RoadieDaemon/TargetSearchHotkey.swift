@@ -94,7 +94,11 @@ public final class TargetSearchHotkey {
         }
         let pathLoader = configPathLoader
         configWatcher = RailFileWatcher(
-            path: { NSString(string: pathLoader()).expandingTildeInPath },
+            path: {
+                let expanded = NSString(string: pathLoader()).expandingTildeInPath
+                return URL(fileURLWithPath: expanded).deletingLastPathComponent().path
+            },
+            observedFile: { NSString(string: pathLoader()).expandingTildeInPath },
             onChange: { [weak self] in
                 guard let self, self.started else { return }
                 self.refresh()

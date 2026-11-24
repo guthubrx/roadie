@@ -339,6 +339,11 @@ public struct SnapshotService: Sendable {
         processState.isQuietReuseEnabled
     }
 
+    /// Révision courante de publication dans le processus (permet d'ignorer son propre écho).
+    var publicationRevision: UInt64 {
+        processState.publicationRevision
+    }
+
     /// Oublie le snapshot partagé (après une commande qui change fenêtres ou focus).
     public func invalidateSharedSnapshot() {
         processState.invalidatePublished()
@@ -2636,17 +2641,19 @@ final class SnapshotProcessState: @unchecked Sendable {
             WindowSwitcherFocusHistory.shared.observe(focused)
             WindowSwitcherRuntimeBridge.publishFocus(focused)
         }
-        lock.withLock {
+        let publishedRevision: UInt64 = lock.withLock {
             revision &+= 1
             gestureSnapshot = snapshot
             published[followFocus] = Published(snapshot: snapshot, maxAge: maxAge, at: date, stateStamp: stateStamp,
                                                config: config, observationGeneration: observationGeneration)
+            return revision
         }
+        let info: [AnyHashable: Any] = ["revision": publishedRevision]
         if Thread.isMainThread {
-            NotificationCenter.default.post(name: .roadieSnapshotDidPublish, object: nil)
+            NotificationCenter.default.post(name: .roadieSnapshotDidPublish, object: nil, userInfo: info)
         } else {
             DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .roadieSnapshotDidPublish, object: nil)
+                NotificationCenter.default.post(name: .roadieSnapshotDidPublish, object: nil, userInfo: info)
             }
         }
     }

@@ -33,6 +33,8 @@ public final class BorderController {
     private var started = false
     private var isRefreshing = false
     private var needsAnotherRefresh = false
+    private var lastObservedRevision: UInt64 = 0
+    private var lifecycleGeneration: UInt64 = 0
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
@@ -58,6 +60,7 @@ public final class BorderController {
         UserInputActivity.shared.startMonitoring()
         if !started {
             started = true
+            lifecycleGeneration &+= 1
             installObservers()
         }
         requestRefresh()
@@ -66,6 +69,8 @@ public final class BorderController {
 
     public func stop() {
         started = false
+        lifecycleGeneration &+= 1
+        needsAnotherRefresh = false
         refreshTimer?.invalidate()
         refreshTimer = nil
         dragTimer?.invalidate()
@@ -78,15 +83,27 @@ public final class BorderController {
         workspaceObservers.removeAll()
         dragMonitors.forEach { NSEvent.removeMonitor($0) }
         dragMonitors.removeAll()
+        hidePanel()
     }
 
     private func installObservers() {
         let trigger: @MainActor () -> Void = { [weak self] in
-            self?.syncPollingFallback()
-            self?.requestRefresh()
+            guard let self, self.started else { return }
+            self.syncPollingFallback()
+            self.requestRefresh()
         }
+        observers.append(NotificationCenter.default.addObserver(
+            forName: .roadieSnapshotDidPublish, object: nil, queue: .main
+        ) { [weak self] notification in
+            let revision = notification.userInfo?["revision"] as? UInt64
+            Task { @MainActor in
+                guard let self, self.started else { return }
+                if let revision, revision == self.lastObservedRevision { return }
+                self.syncPollingFallback()
+                self.requestRefresh()
+            }
+        })
         for name: Notification.Name in [
-            .roadieSnapshotDidPublish,
             .roadieConfigDidReload,
             .roadieSettingsDidChange,
             NSApplication.didChangeScreenParametersNotification,
@@ -108,6 +125,11 @@ public final class BorderController {
         configWatcher = RailFileWatcher(
             path: {
                 let active = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+                let expanded = NSString(string: active).expandingTildeInPath
+                return URL(fileURLWithPath: expanded).deletingLastPathComponent().path
+            },
+            observedFile: {
+                let active = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
                 return NSString(string: active).expandingTildeInPath
             },
             onChange: trigger
@@ -123,7 +145,7 @@ public final class BorderController {
     }
 
     private func handlePointerEvent(_ type: NSEvent.EventType) {
-        guard configLoader().fx.borders.enabled else {
+        guard started, configLoader().fx.borders.enabled else {
             dragTimer?.invalidate()
             dragTimer = nil
             return
@@ -132,7 +154,7 @@ public final class BorderController {
             guard dragTimer == nil else { return }
             let newTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    guard let self else { return }
+                    guard let self, self.started else { return }
                     if NSEvent.pressedMouseButtons == 0 && !UserInputActivity.shared.isCapturedPointerHeld {
                         self.dragTimer?.invalidate()
                         self.dragTimer = nil
@@ -154,6 +176,11 @@ public final class BorderController {
     /// aucun polling permanent au repos. En mode modulaire (processus `border` isolé), un timer
     /// à 120 ms avec tolérance reste actif tant que les bordures sont activées.
     private func syncPollingFallback() {
+        guard started else {
+            refreshTimer?.invalidate()
+            refreshTimer = nil
+            return
+        }
         let needsPolling = !snapshotService.isQuietReaderReuseEnabled && configLoader().fx.borders.enabled
         if needsPolling {
             guard refreshTimer == nil else { return }
@@ -170,26 +197,33 @@ public final class BorderController {
     }
 
     private func requestRefresh() {
+        guard started else { return }
         if isRefreshing {
             needsAnotherRefresh = true
             return
         }
+        let generation = lifecycleGeneration
         Task { @MainActor [weak self] in
-            await self?.refresh()
+            guard let self, self.started, self.lifecycleGeneration == generation else { return }
+            await self.refresh()
         }
     }
 
     func refresh() async {
         guard !isRefreshing else {
-            needsAnotherRefresh = true
+            if started { needsAnotherRefresh = true }
             return
         }
+        let generation = lifecycleGeneration
+        let wasStarted = started
         isRefreshing = true
         defer {
             isRefreshing = false
-            if needsAnotherRefresh {
+            if needsAnotherRefresh, started, lifecycleGeneration == generation {
                 needsAnotherRefresh = false
                 requestRefresh()
+            } else {
+                needsAnotherRefresh = false
             }
         }
         let config = configLoader().fx.borders
@@ -199,6 +233,9 @@ public final class BorderController {
         }
 
         guard let snapshot = await snapshotService.readerSnapshot() else { return }
+        // Si `start()` a été utilisé puis `stop()` pendant l'acquisition, ne rien réafficher.
+        if wasStarted { guard started, lifecycleGeneration == generation else { return } }
+        lastObservedRevision = snapshotService.publicationRevision
         guard configLoader().fx.borders == config else { return }
         guard let focusedWindowID = snapshot.focusedWindowID,
               let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
