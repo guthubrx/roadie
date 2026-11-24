@@ -331,16 +331,18 @@ public final class AXUnresponsiveApps: Sendable {
 
     /// Vrai si l'application est mise de côté. O(1).
     public func isQuarantined(_ pid: pid_t) -> Bool {
-        resumeAt.withLock { map in
+        let current = now()
+        return resumeAt.withLock { map in
             guard let date = map[pid] else { return false }
-            if now() < date { return true }
+            if current < date { return true }
             map[pid] = nil
             return false
         }
     }
 
     func markUnresponsive(_ pid: pid_t) {
-        resumeAt.withLock { $0[pid] = now().addingTimeInterval(Self.quarantineDuration) }
+        let until = now().addingTimeInterval(Self.quarantineDuration)
+        resumeAt.withLock { $0[pid] = until }
     }
 
     /// Sort immédiatement une application de quarantaine lorsqu'elle émet de nouveau un événement

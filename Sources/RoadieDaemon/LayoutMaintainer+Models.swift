@@ -243,4 +243,3 @@ private extension Rect {
         isClose(to: other, positionTolerance: tolerance, sizeTolerance: tolerance)
     }
 }
-

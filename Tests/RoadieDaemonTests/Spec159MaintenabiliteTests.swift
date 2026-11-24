@@ -196,28 +196,69 @@ struct Spec159MaintenabiliteTests {
         #expect(fallback.recall.focusedWindowID == w1.id)
     }
 
-    @Test func strictSendablePrimitivesAreSafeUnderConcurrentAccess() {
+    @Test func strictSendablePrimitivesAreSafeUnderConcurrentAccess() throws {
         let generation = PlacementGeneration()
         let permit = InteractiveWritePermit(generations: generation)
         let hold = LayoutPreviewHold()
-        let unresponsive = AXUnresponsiveApps()
         let now = Date(timeIntervalSince1970: 5_000)
+        let unresponsive = AXUnresponsiveApps(now: { now })
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("spec159-railcache-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let railConfigPath = tempDir.appendingPathComponent("roadies.toml").path
+        try "[fx.rail]\nwidth = 160\n".write(toFile: railConfigPath, atomically: true, encoding: .utf8)
 
         DispatchQueue.concurrentPerform(iterations: 64) { index in
-            _ = generation.next()
+            _ = permit.advance()
             _ = permit.isCurrent
             hold.hold(for: 1.0, now: now)
             _ = hold.isHeld(at: now)
             let pid = pid_t(1000 + (index % 8))
+            unresponsive.markUnresponsive(pid)
             _ = unresponsive.isQuarantined(pid)
-            unresponsive.markResponsive(pid)
+            if index % 2 == 0 { unresponsive.markResponsive(pid) }
+            let loaded = RailSettings.load(path: railConfigPath)
+            #expect(loaded.width == 160)
         }
 
         #expect(generation.current == 64)
         #expect(hold.isHeld(at: now))
         hold.release()
         #expect(!hold.isHeld(at: now))
+        unresponsive.markUnresponsive(4242)
+        #expect(unresponsive.isQuarantined(4242))
+        unresponsive.markResponsive(4242)
+        #expect(!unresponsive.isQuarantined(4242))
         permit.invalidate()
         #expect(!permit.isCurrent)
+    }
+
+    @Test @MainActor func launcherTerminalValidatesBundlesAndResolvesFallbackTerminal() throws {
+        // Terminal.app système (et tout réglage inconnu qui retombe sur Terminal) résolus via LaunchServices.
+        #expect(LauncherTerminal.isInstalled("terminal"))
+        #expect(LauncherTerminal.isInstalled("unknown_fallback"))
+        #expect(LauncherTerminal.bundleIdentifiers(forAppName: "Terminal") == ["com.apple.Terminal"])
+
+        // Un dossier vide ou un simple fichier nommé `.app` n'est pas considéré comme un paquet valide.
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("spec159-bundle-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let fakeApp = tempDir.appendingPathComponent("Fake.app")
+        try FileManager.default.createDirectory(at: fakeApp, withIntermediateDirectories: true)
+        #expect(!LauncherTerminal.isValidAppBundle(at: fakeApp.path))
+
+        let validApp = tempDir.appendingPathComponent("Valid.app")
+        let contents = validApp.appendingPathComponent("Contents")
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        let plist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+            <key>CFBundleIdentifier</key><string>com.example.valid-terminal</string>
+        </dict></plist>
+        """
+        try plist.write(to: contents.appendingPathComponent("Info.plist"), atomically: true, encoding: .utf8)
+        #expect(LauncherTerminal.isValidAppBundle(at: validApp.path))
     }
 }

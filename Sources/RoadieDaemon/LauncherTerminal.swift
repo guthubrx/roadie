@@ -65,20 +65,47 @@ enum LauncherTerminal {
         }
     }
 
-    /// Le terminal est-il installé ? O(1) par appel à Launch Services.
+    /// Identifiants de bundle connus pour chaque nom d'application résolu par `appName(_:)`.
+    static func bundleIdentifiers(forAppName name: String) -> [String] {
+        switch name {
+        case "iTerm": ["com.googlecode.iterm2"]
+        case "Ghostty": ["com.mitchellh.ghostty"]
+        case "Warp": ["dev.warp.Warp-Stable", "dev.warp.Warp-Preview"]
+        case "kitty": ["net.kovidgoyal.kitty"]
+        case "WezTerm": ["com.github.wez.wezterm"]
+        case "Alacritty": ["org.alacritty", "io.alacritty"]
+        default: ["com.apple.Terminal"]
+        }
+    }
+
+    /// Vérifie qu'un chemin `.app` désigne bien un paquet d'application valide (et non un dossier/fichier factice).
+    static func isValidAppBundle(at path: String) -> Bool {
+        guard let bundle = Bundle(path: path),
+              let identifier = bundle.bundleIdentifier,
+              !identifier.isEmpty
+        else { return false }
+        return true
+    }
+
+    /// Le terminal est-il installé ? Résolution Launch Services par identifiant de bundle (indépendante
+    /// du dossier d'installation), puis repli sur les applications en cours et les dossiers d'applications
+    /// système/utilisateur avec validation du paquet.
     @MainActor static func isInstalled(_ setting: String) -> Bool {
-        let ids = ["terminal": "com.apple.Terminal", "iterm": "com.googlecode.iterm2", "ghostty": "com.mitchellh.ghostty",
-                   "warp": "dev.warp.Warp-Stable", "kitty": "net.kovidgoyal.kitty", "wezterm": "com.github.wez.wezterm",
-                   "alacritty": "org.alacritty"]
-        if let id = ids[setting], NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) != nil { return true }
-        let bundle = "\(appName(setting)).app"
-        let roots = [
-            "/Applications",
-            "/System/Applications",
-            "/System/Applications/Utilities",
-            ("~/Applications" as NSString).expandingTildeInPath,
-        ]
-        return roots.contains { FileManager.default.fileExists(atPath: "\($0)/\(bundle)") }
+        let name = appName(setting)
+        for id in bundleIdentifiers(forAppName: name) {
+            if NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) != nil {
+                return true
+            }
+        }
+        if NSWorkspace.shared.runningApplications.contains(where: { app in
+            app.localizedName == name || app.bundleURL?.deletingPathExtension().lastPathComponent == name
+        }) {
+            return true
+        }
+        let bundle = "\(name).app"
+        var roots = NSSearchPathForDirectoriesInDomains(.applicationDirectory, .allDomainsMask, true)
+        roots.append(contentsOf: ["/System/Applications/Utilities", "/Applications/Utilities"])
+        return roots.contains { isValidAppBundle(at: "\($0)/\(bundle)") }
     }
 
     /// Lance la commande ; faux si le lancement a échoué tout de suite.
