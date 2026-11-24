@@ -910,11 +910,14 @@ public final class TargetModeRuntimeController: NSObject {
             self.byID = Dictionary(workflows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         }
 
-        func update(_ workflows: [AlfredWorkflow]) {
-            let map = Dictionary(workflows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            lock.withLock {
-                self.workflows = workflows
+        @discardableResult
+        func replace(with next: [AlfredWorkflow]) -> Set<String> {
+            let map = Dictionary(next.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            return lock.withLock {
+                let changed = AlfredWorkflowIndex.changedWorkflowIDs(from: self.workflows, to: next)
+                self.workflows = next
                 self.byID = map
+                return changed
             }
         }
 
@@ -922,24 +925,32 @@ public final class TargetModeRuntimeController: NSObject {
         func all() -> [AlfredWorkflow] { lock.withLock { workflows } }
     }
 
-    /// Workflows de la barre : instantané en mémoire immédiat (0 ms d'I/O sur `@MainActor`) puis
-    /// rafraîchissement asynchrone hors du fil principal (Lot D) ; Script Filter lancé en fond,
-    /// schéma exécuté après la fermeture avec les vrais effets. Le journal ne garde ni saisie ni résultat (FR-011).
+    /// Workflows de la barre : instantané pré-calculé en mémoire immédiat (0 ms d'I/O sur `@MainActor`,
+    /// y compris sans `fileExists` d'icônes) puis bascule atomique sur `@MainActor` après relecture
+    /// asynchrone (Lot D) ; Script Filter lancé en fond, schéma exécuté après la fermeture avec les
+    /// vrais effets. Le journal ne garde ni saisie ni résultat (FR-011).
     private func workflowContext(_ context: inout LauncherSearchContext, webSearchURL: String) {
         let config = service.effectiveConfig.experimental.targetMode
         guard config.workflowsEnabled else { return }
         let alfredEnabled = config.alfredWorkflows
-        let initial = AlfredWorkflowIndex.shared.cachedWorkflows(alfred: alfredEnabled) ?? []
-        let store = WorkflowSessionStore(initial)
+        let initial = AlfredWorkflowIndex.shared.cachedSnapshot(alfred: alfredEnabled) ?? .empty
+        let store = WorkflowSessionStore(initial.workflows)
         let events = events
-        context.workflowEntries = AlfredWorkflowIndex.entries(initial)
-        context.workflowTriggers = AlfredWorkflowIndex.triggers(initial)
+        context.workflowEntries = initial.entries
+        context.workflowTriggers = initial.triggers
         context.loadWorkflows = { done in
             AlfredWorkflowIndex.shared.refreshAsync(alfred: alfredEnabled) { fresh in
-                store.update(fresh)
-                let entries = AlfredWorkflowIndex.entries(fresh)
-                let triggers = AlfredWorkflowIndex.triggers(fresh)
-                DispatchQueue.main.async { MainActor.assumeIsolated { done(entries, triggers) } }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        // Bascule atomique sur `@MainActor` : le graphe et les entrées/déclencheurs
+                        // publiés restent toujours de la même génération.
+                        let changed = store.replace(with: fresh.workflows)
+                        if !changed.isEmpty {
+                            AlfredScriptFilterCache.shared.invalidate(workflowIDs: changed)
+                        }
+                        done(fresh.entries, fresh.triggers, changed)
+                    }
+                }
             }
         }
         context.runScriptFilter = { entry, argument, done in

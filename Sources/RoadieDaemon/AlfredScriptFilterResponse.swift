@@ -243,6 +243,17 @@ final class AlfredScriptFilterCache: @unchecked Sendable {
         }
     }
 
+    /// Efface les réponses en cache appartenant aux workflows modifiés ou retirés (Lot D). O(n).
+    func invalidate(workflowIDs: Set<String>) {
+        guard !workflowIDs.isEmpty else { return }
+        let prefixes = workflowIDs.map { "wf:\($0):" }
+        lock.withLock {
+            for key in Array(entries.keys) where prefixes.contains(where: { key.hasPrefix($0) }) {
+                entries.removeValue(forKey: key)
+            }
+        }
+    }
+
     /// Garde la réponse si elle demande un cache. O(n) quand la borne est atteinte.
     func store(_ response: AlfredScriptFilterResponse, for key: String, now: Date = Date()) {
         guard let seconds = response.cacheSeconds else { return }

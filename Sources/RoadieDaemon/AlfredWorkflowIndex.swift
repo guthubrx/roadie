@@ -112,27 +112,72 @@ final class AlfredWorkflowIndex: @unchecked Sendable {
         return FileManager.default.fileExists(atPath: fallback.path) ? fallback : nil
     }
 
+    /// Instantané pré-calculé hors du fil principal (Lot D) : workflows, entrées et déclencheurs
+    /// déjà résolus (y compris `icon(for:)`) afin qu'aucun `fileExists` ne tourne sur `@MainActor`.
+    struct PreparedSnapshot: Equatable, Sendable {
+        let workflows: [AlfredWorkflow]
+        let entries: [AlfredEntry]
+        let triggers: [AlfredEntry]
+
+        static let empty = PreparedSnapshot(workflows: [], entries: [], triggers: [])
+
+        static func build(from workflows: [AlfredWorkflow]) -> PreparedSnapshot {
+            PreparedSnapshot(
+                workflows: workflows,
+                entries: AlfredWorkflowIndex.entries(workflows),
+                triggers: AlfredWorkflowIndex.triggers(workflows)
+            )
+        }
+    }
+
+    /// Identifiants des workflows ajoutés, retirés ou modifiés (script, connexions, réglages…)
+    /// entre deux instantanés, même si leurs métadonnées d'entrée n'ont pas changé. O(W).
+    static func changedWorkflowIDs(from previous: [AlfredWorkflow], to next: [AlfredWorkflow]) -> Set<String> {
+        let prevByID = Dictionary(previous.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let nextByID = Dictionary(next.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var changed = Set<String>()
+        for (id, prev) in prevByID where nextByID[id] != prev {
+            changed.insert(id)
+        }
+        for (id, curr) in nextByID where prevByID[id] != curr {
+            changed.insert(id)
+        }
+        return changed
+    }
+
     private struct Cached { let stamp: [Date?]; let workflow: AlfredWorkflow }
     private let lock = NSLock()
     private var cache: [String: Cached] = [:]
     // Verrou distinct pour les instantanés en mémoire (Lot D) : jamais tenu pendant les lectures
-    // disque, afin que `cachedWorkflows` reste O(1) non bloquant sur le fil principal.
+    // disque, afin que `cachedSnapshot` reste O(1) non bloquant sur le fil principal.
     private let snapshotLock = NSLock()
-    private var lastLoaded: [String: [AlfredWorkflow]] = [:]
+    private var lastLoaded: [String: PreparedSnapshot] = [:]
     private var refreshing: Set<String> = []
-    private var waiters: [String: [@Sendable ([AlfredWorkflow]) -> Void]] = [:]
+    private var waiters: [String: [@Sendable (PreparedSnapshot) -> Void]] = [:]
 
     private static func sourceKey(alfred: Bool, roadie: Bool) -> String { "\(alfred ? 1 : 0):\(roadie ? 1 : 0)" }
 
-    /// Dernier index déjà chargé en mémoire pour ces sources, sans aucun accès disque. O(1).
-    func cachedWorkflows(alfred: Bool, roadie: Bool = true) -> [AlfredWorkflow]? {
+    /// Dernier instantané pré-calculé en mémoire pour ces sources, sans aucun accès disque. O(1).
+    func cachedSnapshot(alfred: Bool, roadie: Bool = true) -> PreparedSnapshot? {
         let key = Self.sourceKey(alfred: alfred, roadie: roadie)
         return snapshotLock.withLock { lastLoaded[key] }
     }
 
-    /// Relit l'index hors du fil appelant et coalescera les demandes concurrentes pour les mêmes sources.
-    func refreshAsync(alfred: Bool, roadie: Bool = true, done: (@Sendable ([AlfredWorkflow]) -> Void)? = nil) {
+    /// Relit l'index et prépare entrées/déclencheurs hors du fil appelant, en coalesçant les
+    /// demandes concurrentes pour les mêmes sources.
+    func refreshAsync(alfred: Bool, roadie: Bool = true, done: (@Sendable (PreparedSnapshot) -> Void)? = nil) {
         let key = Self.sourceKey(alfred: alfred, roadie: roadie)
+        refreshAsync(key: key, loader: { [self] in
+            PreparedSnapshot.build(from: self.loadWorkflows(alfred: alfred, roadie: roadie))
+        }, done: done)
+    }
+
+    /// Point interne de coalescence testable sans toucher aux dossiers utilisateur.
+    func refreshAsync(
+        key: String,
+        loader: @escaping @Sendable () -> PreparedSnapshot,
+        done: (@Sendable (PreparedSnapshot) -> Void)? = nil
+    ) {
         let shouldStart = snapshotLock.withLock { () -> Bool in
             if let done { waiters[key, default: []].append(done) }
             if refreshing.contains(key) { return false }
@@ -141,27 +186,32 @@ final class AlfredWorkflowIndex: @unchecked Sendable {
         }
         guard shouldStart else { return }
         DispatchQueue.global(qos: .userInitiated).async { [self] in
-            let loaded = workflows(alfred: alfred, roadie: roadie)
-            let callbacks = snapshotLock.withLock { () -> [@Sendable ([AlfredWorkflow]) -> Void] in
-                lastLoaded[key] = loaded
+            let prepared = loader()
+            let callbacks = snapshotLock.withLock { () -> [@Sendable (PreparedSnapshot) -> Void] in
+                lastLoaded[key] = prepared
                 refreshing.remove(key)
                 return waiters.removeValue(forKey: key) ?? []
             }
-            for callback in callbacks { callback(loaded) }
+            for callback in callbacks { callback(prepared) }
         }
     }
 
     /// Workflows actifs des sources demandées, triés par nom. O(W) dates lues, O(W × o) au rechargement.
     func workflows(alfred: Bool, roadie: Bool = true) -> [AlfredWorkflow] {
+        let loaded = loadWorkflows(alfred: alfred, roadie: roadie)
+        let key = Self.sourceKey(alfred: alfred, roadie: roadie)
+        let prepared = PreparedSnapshot.build(from: loaded)
+        snapshotLock.withLock { lastLoaded[key] = prepared }
+        return loaded
+    }
+
+    private func loadWorkflows(alfred: Bool, roadie: Bool) -> [AlfredWorkflow] {
         var folders: [(URL, AlfredWorkflow.Source)] = []
         if alfred, let preferences = Self.alfredPreferences() {
             folders += Self.children(of: preferences.appendingPathComponent("workflows")).map { ($0, .alfred) }
         }
         if roadie { folders += Self.children(of: Self.roadieFolder).map { ($0, .roadie) } }
-        let loaded = workflows(in: folders)
-        let key = Self.sourceKey(alfred: alfred, roadie: roadie)
-        snapshotLock.withLock { lastLoaded[key] = loaded }
-        return loaded
+        return workflows(in: folders)
     }
 
     /// Workflows de ces dossiers, relus seulement s'ils ont changé.

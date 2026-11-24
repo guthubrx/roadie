@@ -1126,12 +1126,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             self.launcherQuery = nil
             self.render()
         }
-        launcher.loadWorkflows { [weak self] entries, triggers in
+        launcher.loadWorkflows { [weak self] entries, triggers, changedWorkflowIDs in
             guard let self, !self.finished else { return }
             LauncherOpenClock.current?.mark("workflows_refreshed")
-            guard entries != self.launcher.workflowEntries || triggers != self.launcher.workflowTriggers else { return }
+            let entriesChanged = entries != self.launcher.workflowEntries || triggers != self.launcher.workflowTriggers
+            guard entriesChanged || !changedWorkflowIDs.isEmpty else { return }
             self.launcher.workflowEntries = entries
             self.launcher.workflowTriggers = triggers
+            if !changedWorkflowIDs.isEmpty {
+                self.invalidateWorkflowState(for: changedWorkflowIDs)
+            }
             self.launcherQuery = nil
             self.filesChanged = true
             self.render()
@@ -1751,6 +1755,19 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// Entrées qui ne correspondent plus à la saisie : leur script s'arrête, leur réponse est oubliée.
     private func pruneWorkflows(keeping active: Set<String>) {
         for key in Set(workflowRuns.keys).union(workflowResponses.keys).union(workflowPending.keys) where !active.contains(key) {
+            workflowRuns.removeValue(forKey: key)?.cancel()
+            workflowPending.removeValue(forKey: key)?.cancel()
+            workflowResponses[key] = nil
+            workflowRequested[key] = nil
+        }
+    }
+
+    /// Invalide les processus, délais et réponses Script Filter des workflows modifiés ou retirés
+    /// lors d'un rafraîchissement asynchrone, afin qu'aucune ancienne réponse ne soit réutilisée (Lot D).
+    private func invalidateWorkflowState(for workflowIDs: Set<String>) {
+        let prefixes = workflowIDs.map { "wf:\($0):" }
+        let keys = Set(workflowRuns.keys).union(workflowResponses.keys).union(workflowPending.keys).union(workflowRequested.keys)
+        for key in keys where prefixes.contains(where: { key.hasPrefix($0) }) {
             workflowRuns.removeValue(forKey: key)?.cancel()
             workflowPending.removeValue(forKey: key)?.cancel()
             workflowResponses[key] = nil

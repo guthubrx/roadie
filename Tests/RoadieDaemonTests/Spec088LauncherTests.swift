@@ -50,17 +50,89 @@ struct Spec088LauncherTests {
         #expect(effects.calls == ["copy::coeur:"])
     }
 
-    /// Lot D : `cachedWorkflows` renvoie immédiatement l'instantané déjà chargé sans I/O disque,
-    /// et `refreshAsync` alimente le cache hors du fil principal tout en coalesçant les appels concurrents.
-    @Test func workflowIndexCachesAndRefreshesAsynchronously() async {
+    /// Lot D : `cachedSnapshot` renvoie immédiatement l'instantané pré-calculé sans I/O disque,
+    /// `refreshAsync` coalesce les appels concurrents, et `changedWorkflowIDs` / `invalidate`
+    /// détectent un changement interne de script même à métadonnées d'entrée identiques.
+    @Test func workflowIndexCachesCoalescesAndInvalidatesModifiedWorkflows() throws {
         let index = AlfredWorkflowIndex()
-        #expect(index.cachedWorkflows(alfred: false, roadie: false) == nil)
-        let loaded = await withCheckedContinuation { continuation in
-            index.refreshAsync(alfred: false, roadie: false) { workflows in
-                continuation.resume(returning: workflows)
-            }
+        #expect(index.cachedSnapshot(alfred: false, roadie: false) == nil)
+
+        var fixture1 = WorkflowFixture(name: "Alpha")
+        fixture1.add("SF", "input.scriptfilter", ["keyword": "al", "withspace": true, "argumenttype": 1, "type": 0, "script": "echo v1"])
+        let wfV1 = try fixture1.write()
+
+        var fixture2 = WorkflowFixture(name: "Alpha")
+        fixture2.add("SF", "input.scriptfilter", ["keyword": "al", "withspace": true, "argumenttype": 1, "type": 0, "script": "echo v2"])
+        let wfV2Raw = try fixture2.write()
+        // Même identifiant de workflow, même mot-clé/titre, mais script modifié.
+        let wfV2 = AlfredWorkflow(
+            id: wfV1.id, bundleID: wfV1.bundleID, name: wfV1.name, description: wfV1.description,
+            version: wfV1.version, folder: wfV1.folder, source: wfV1.source, disabled: false,
+            objects: wfV2Raw.objects, connections: wfV2Raw.connections, variables: wfV2Raw.variables,
+            userSettings: wfV2Raw.userSettings, prefs: wfV2Raw.prefs
+        )
+
+        // Coalescence de deux rafraîchissements concurrents sur la même clé : un seul chargement.
+        let counter = CounterBox()
+        let results = ResultsBox()
+        let gate = DispatchSemaphore(value: 0)
+        let entered = DispatchSemaphore(value: 0)
+        let group = DispatchGroup()
+        group.enter()
+        index.refreshAsync(key: "test-coalesce", loader: {
+            counter.increment()
+            entered.signal()
+            gate.wait()
+            return AlfredWorkflowIndex.PreparedSnapshot.build(from: [wfV1])
+        }) { snapshot in
+            results.append(snapshot)
+            group.leave()
         }
-        #expect(loaded.isEmpty)
-        #expect(index.cachedWorkflows(alfred: false, roadie: false) == [])
+        try #require(entered.wait(timeout: .now() + 5) == .success)
+        group.enter()
+        index.refreshAsync(key: "test-coalesce", loader: {
+            counter.increment()
+            return AlfredWorkflowIndex.PreparedSnapshot.build(from: [wfV1])
+        }) { snapshot in
+            results.append(snapshot)
+            group.leave()
+        }
+        gate.signal()
+        try #require(group.wait(timeout: .now() + 5) == .success)
+        let snapshots = results.all
+        #expect(counter.value == 1)
+        #expect(snapshots.count == 2)
+        #expect(snapshots[0] == snapshots[1])
+        #expect(snapshots[0].entries.count == 1)
+
+        // Changement interne de script : entrées égales mais `changedWorkflowIDs` détecte le workflow
+        // et `AlfredScriptFilterCache.invalidate` purge uniquement ses réponses.
+        #expect(AlfredWorkflowIndex.entries([wfV1]) == AlfredWorkflowIndex.entries([wfV2]))
+        let changed = AlfredWorkflowIndex.changedWorkflowIDs(from: [wfV1], to: [wfV2])
+        #expect(changed == [wfV1.id])
+
+        let cache = AlfredScriptFilterCache()
+        let cachedResponse = AlfredScriptFilterResponse(items: [AlfredItem(title: "v1")], cacheSeconds: 60)
+        let modifiedKey = "wf:\(wfV1.id):SF\u{1F}q"
+        let untouchedKey = "wf:other-wf:SF\u{1F}q"
+        cache.store(cachedResponse, for: modifiedKey)
+        cache.store(cachedResponse, for: untouchedKey)
+        cache.invalidate(workflowIDs: changed)
+        #expect(cache.response(for: modifiedKey) == nil)
+        #expect(cache.response(for: untouchedKey) != nil)
     }
+}
+
+private final class CounterBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func increment() { lock.withLock { count += 1 } }
+}
+
+private final class ResultsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [AlfredWorkflowIndex.PreparedSnapshot] = []
+    var all: [AlfredWorkflowIndex.PreparedSnapshot] { lock.withLock { items } }
+    func append(_ snapshot: AlfredWorkflowIndex.PreparedSnapshot) { lock.withLock { items.append(snapshot) } }
 }
