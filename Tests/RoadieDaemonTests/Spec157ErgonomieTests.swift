@@ -168,9 +168,10 @@ struct Spec157ErgonomieTests {
             activeDisplayID: displayA
         ))
 
+        let writer = Spec157RecordingWriter()
         let service = SnapshotService(
             provider: Spec157FakeProvider(displays: [snapA, snapB], windows: [winA, winB], focusedID: winA.id),
-            frameWriter: Spec157RecordingWriter(),
+            frameWriter: writer,
             config: RoadieConfig(),
             intentStore: intentStore,
             stageStore: store,
@@ -192,6 +193,7 @@ struct Spec157ErgonomieTests {
         #expect(activeB?.mode == .spatialBsp)
         #expect(activeB?.members.map(\.windowID) == [winA.id])
         #expect(state.activeDisplayID == displayA)
+        #expect(writer.focusedWindowIDs == [winB.id])
     }
 
     @Test
@@ -381,6 +383,11 @@ private struct Spec157FakeProvider: SystemSnapshotProviding {
 }
 
 private final class Spec157RecordingWriter: WindowFrameWriting, @unchecked Sendable {
+    private(set) var focusedWindowIDs: [WindowID] = []
+
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? { frame }
-    func focus(_ window: WindowSnapshot) -> Bool { true }
+    func focus(_ window: WindowSnapshot) -> Bool {
+        focusedWindowIDs.append(window.id)
+        return true
+    }
 }

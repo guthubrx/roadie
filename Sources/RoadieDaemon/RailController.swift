@@ -725,7 +725,6 @@ public final class RailController {
 
         let balanceTarget = RailMenuActionTarget { [weak self] in
             self?.perform(.balanceLayout, displayID: displayID)
-            self?.rebuildPanels()
         }
         let balanceItem = NSMenuItem(
             title: tr("Égaliser les proportions", "Equalize proportions"),
@@ -739,7 +738,6 @@ public final class RailController {
         if targets.count == 1, let other = targets.first {
             let swapTarget = RailMenuActionTarget { [weak self] in
                 self?.perform(.swapDisplay(other.id), displayID: displayID)
-                self?.rebuildPanels()
             }
             let swapItem = NSMenuItem(
                 title: tr("Échanger avec Ecran \(other.index) - \(other.name)", "Swap with Display \(other.index) - \(other.name)"),
@@ -756,9 +754,7 @@ public final class RailController {
                 let item = NSMenuItem(title: title, action: #selector(RailStageMoveMenuTarget.choose(_:)), keyEquivalent: "")
                 item.representedObject = targetDisplay.id.rawValue
                 let target = RailStageMoveMenuTarget { [weak self] selectedDisplayID in
-                    guard let self else { return }
-                    self.perform(.swapDisplay(selectedDisplayID), displayID: displayID)
-                    self.rebuildPanels()
+                    self?.perform(.swapDisplay(selectedDisplayID), displayID: displayID)
                 }
                 item.target = target
                 stageMenuTargets.append(target)
@@ -795,7 +791,6 @@ public final class RailController {
         if prunableCount > 0 {
             let pruneTarget = RailMenuActionTarget { [weak self] in
                 self?.perform(.pruneEmptyStages, displayID: displayID)
-                self?.rebuildPanels()
             }
             pruneItem.action = #selector(RailMenuActionTarget.choose(_:))
             pruneItem.target = pruneTarget
@@ -1110,7 +1105,12 @@ public final class RailController {
                 type: "rail_layout_balance",
                 details: ["displayID": displayID.rawValue]
             ))
-            _ = LayoutCommandService(service: snapshotService, events: events).balance()
+            let service = snapshotService
+            let eventLog = events
+            Task.detached(priority: .userInitiated) {
+                _ = LayoutCommandService(service: service, events: eventLog).balance()
+                await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.balance") }
+            }
         case .swapDisplay(let targetDisplayID):
             events.append(RoadieEvent(
                 type: "rail_display_swap",
@@ -1119,14 +1119,27 @@ public final class RailController {
                     "targetDisplayID": targetDisplayID.rawValue
                 ]
             ))
-            _ = DisplayCommandService(service: snapshotService, store: store, events: events)
-                .swap(targetDisplayID: targetDisplayID, sourceDisplayID: displayID)
+            let service = snapshotService
+            let stageStore = store
+            let eventLog = events
+            Task.detached(priority: .userInitiated) {
+                _ = DisplayCommandService(service: service, store: stageStore, events: eventLog)
+                    .swap(targetDisplayID: targetDisplayID, sourceDisplayID: displayID)
+                await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.swap_display") }
+            }
         case .pruneEmptyStages:
             events.append(RoadieEvent(
                 type: "rail_stage_prune_empty",
                 details: ["displayID": displayID.rawValue]
             ))
-            _ = commandService.pruneEmpty(displayID: displayID)
+            let service = snapshotService
+            let stageStore = store
+            let eventLog = events
+            Task.detached(priority: .userInitiated) {
+                _ = StageCommandService(service: service, store: stageStore, events: eventLog)
+                    .pruneEmpty(displayID: displayID)
+                await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.prune_empty") }
+            }
         }
     }
 

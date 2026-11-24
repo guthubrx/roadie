@@ -205,17 +205,25 @@ public struct DisplayCommandService {
         }
         let applyResult = service.applyCommandPlacement(placement, cause: "display.swap", generation: generation, events: events).result
 
+        // Aligner le focus clavier réel sur la stage désormais active de l'écran source
+        // (évite que la fenêtre transférée sur l'écran cible garde le clavier et fasse basculer l'écran actif).
+        let focusedCandidateID = transaction.stageOnSource.focusedWindowID
+            ?? transaction.stageOnSource.members.last?.windowID
+        let focusedWindow = focusedCandidateID.flatMap { windowsByID[$0] }
+        let focusedResult = focusedWindow.map { service.focus($0) } ?? false
+
         events.append(RoadieEvent(type: "display_swap", details: [
             "sourceDisplayID": source.id.rawValue,
             "targetDisplayID": target.id.rawValue,
             "sourceStageID": transaction.stageOnSource.id.rawValue,
             "targetStageID": transaction.stageOnTarget.id.rawValue,
             "movedWindows": String(moved),
-            "failed": String(applyResult.failed)
+            "failed": String(applyResult.failed),
+            "focused": String(focusedResult)
         ]))
 
         return StageCommandResult(
-            message: "display swap \(label): \(source.name) <-> \(target.name) moved=\(moved) failed=\(applyResult.failed)",
+            message: "display swap \(label): \(source.name) <-> \(target.name) moved=\(moved) failed=\(applyResult.failed) focused=\(focusedResult)",
             changed: true,
             outcome: .changed
         )
