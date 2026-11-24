@@ -87,8 +87,32 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
                 }
             }
             entries[windowID] = entry
-            remember(windowID: windowID, frames: [requested, readBack].compactMap { $0 }, generation: generation, at: date)
+            remember(windowID: windowID, frames: deduplicatedFrames(requested, readBack), generation: generation, at: date)
         }
+    }
+
+    /// Mémorise uniquement l'historique d'écho d'une image intermédiaire d'animation (Lot F), sans
+    /// toucher à l'entrée courante, ni au budget, ni au refus de la génération. Les notifications AX
+    /// ou lectures WindowServer retardées d'une image sont ainsi absorbées comme `.echo` et jamais
+    /// prises pour une `app_response` ni un refus durable. O(1).
+    public func recordIntermediateEcho(
+        windowID: UInt32, requested: CGRect, readBack: CGRect?, at date: Date,
+        isCurrent: @Sendable () -> Bool = { true }
+    ) {
+        lock.withLock {
+            guard isCurrent() else { return }
+            remember(
+                windowID: windowID,
+                frames: deduplicatedFrames(requested, readBack),
+                generation: PlacementGeneration.outsideBudget,
+                at: date
+            )
+        }
+    }
+
+    private func deduplicatedFrames(_ requested: CGRect, _ readBack: CGRect?) -> [CGRect] {
+        guard let readBack, !Self.matches(requested, readBack) else { return [requested] }
+        return [requested, readBack]
     }
 
     /// Accepte une frame pour la génération courante de la fenêtre. Sans écriture connue : sans effet. O(1).
@@ -206,10 +230,10 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
     }
 
     private func classifyLocked(windowID: UInt32, observed: CGRect, now: Date) -> Classification {
+        if (history[windowID] ?? []).contains(where: { Self.matches($0.frame, observed) }) { return .echo }
         guard let entry = entries[windowID] else { return .external }
         let known = [entry.requested, entry.readBack, entry.accepted].compactMap { $0 }
-        if known.contains(where: { Self.matches($0, observed) })
-            || (history[windowID] ?? []).contains(where: { Self.matches($0.frame, observed) }) { return .echo }
+        if known.contains(where: { Self.matches($0, observed) }) { return .echo }
         // SPEC-062 : écriture sans relecture (délai AX dépassé −25204, fenêtre illisible) : l’application
         // n’a pas répondu, la frame observée n’est pas sa réponse. Écart à reprendre, pas à accepter.
         guard entry.readBack != nil else { return .external }

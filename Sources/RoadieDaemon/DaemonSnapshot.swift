@@ -8,6 +8,9 @@ import RoadieTiler
 public extension Notification.Name {
     /// Publié sur le fil principal lorsqu'un snapshot partagé vient d'être mis à jour dans le processus.
     static let roadieSnapshotDidPublish = Notification.Name("roadie.snapshot.didPublish")
+    /// Publié sur le fil principal lorsqu'une écriture interactive ou d'animation republie des cadres
+    /// dans le snapshot en cache (suivi 60 FPS de la bordure active sans réveiller le rail).
+    static let roadieWindowFramesDidRepublish = Notification.Name("roadie.windowFrames.didRepublish")
 }
 
 public struct DaemonSnapshot: Equatable, Codable, Sendable {
@@ -2812,7 +2815,7 @@ final class SnapshotProcessState: @unchecked Sendable {
     /// Remplace les frames des fenêtres écrites dans les snapshots publiés, sans changer leur âge. O(w).
     func republish(frames: [WindowID: Rect]) {
         guard !frames.isEmpty else { return }
-        lock.withLock {
+        let publishedRevision: UInt64 = lock.withLock {
             revision &+= 1
             if var cached = gestureSnapshot {
                 for index in cached.windows.indices {
@@ -2829,6 +2832,15 @@ final class SnapshotProcessState: @unchecked Sendable {
                 }
                 published[key] = Published(snapshot: snapshot, maxAge: entry.maxAge, at: entry.at, stateStamp: entry.stateStamp,
                                            config: entry.config, observationGeneration: entry.observationGeneration)
+            }
+            return revision
+        }
+        let info: [AnyHashable: Any] = ["revision": publishedRevision]
+        if Thread.isMainThread {
+            NotificationCenter.default.post(name: .roadieWindowFramesDidRepublish, object: nil, userInfo: info)
+        } else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .roadieWindowFramesDidRepublish, object: nil, userInfo: info)
             }
         }
     }

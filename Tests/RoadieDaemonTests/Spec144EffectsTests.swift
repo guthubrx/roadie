@@ -109,6 +109,24 @@ import RoadieCore
         animator.animate(id: "test", from: [0], to: [20], policy: MotionPolicy(enabled: false)) { shown = $0[0] }
         #expect(shown == 20 && animator.activeCount == 0 && !animator.hasTimer)
     }
+    @Test func lotFTickObserverFiresInPhaseAfterAllTransitionsUpdate() {
+        var now = 0.0
+        let animator = EffectAnimator(schedulesTimer: false, clock: { now })
+        var a = 0.0, b = 0.0
+        var observedPairs: [(Double, Double)] = []
+        let token = NSObject()
+        animator.addTickObserver(id: ObjectIdentifier(token)) {
+            observedPairs.append((a, b))
+        }
+        animator.animate(id: "a", from: [0], to: [100], policy: MotionPolicy(curve: .linear, duration: 0.2)) { a = $0[0] }
+        animator.animate(id: "b", from: [0], to: [200], policy: MotionPolicy(curve: .linear, duration: 0.2)) { b = $0[0] }
+        now = 0.1; animator.tick()
+        #expect(observedPairs.count == 1)
+        #expect(abs(observedPairs[0].0 - 50) < 0.01 && abs(observedPairs[0].1 - 100) < 0.01)
+        animator.removeTickObserver(id: ObjectIdentifier(token))
+        now = 0.2; animator.tick()
+        #expect(observedPairs.count == 1)
+    }
 }
 
 extension Spec144AnimatorTests {

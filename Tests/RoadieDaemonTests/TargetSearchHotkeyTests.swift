@@ -209,6 +209,21 @@ struct TargetSearchHotkeyTests {
         #expect(panel.renderCount == 1)
         #expect(provider.windowScans == 1)
 
+        // Lot F : une republication de cadre d'animation met à jour la bordure synchroniquement
+        // sans relancer de relevé AX.
+        let movedFrame = Rect(x: 240, y: 80, width: 700, height: 500)
+        let movedWindow = WindowSnapshot(
+            id: WindowID(rawValue: 42), pid: 42, appName: "Notes", bundleID: "com.apple.Notes",
+            title: "Note", frame: Rect(x: 100, y: 100, width: 700, height: 500), isOnScreen: true, isTileCandidate: true
+        )
+        let interactiveResult = ApplyResult(
+            attempted: 1, applied: 1, clamped: 0, failed: 0,
+            items: [ApplyResultItem(windowID: movedWindow.id, status: .applied, requested: movedFrame, actual: movedFrame)]
+        )
+        service.publishInteractive(interactiveResult, commands: [ApplyCommand(window: movedWindow, frame: movedFrame)])
+        #expect(panel.renderCount == 2)
+        #expect(provider.windowScans == 1)
+
         // Notification publiée juste avant stop() : la tâche différée ne doit rien réafficher.
         let rendersBeforeStop = panel.renderCount
         NotificationCenter.default.post(name: .roadieConfigDidReload, object: nil)

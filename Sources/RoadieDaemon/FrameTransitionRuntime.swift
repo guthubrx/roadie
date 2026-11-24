@@ -45,6 +45,8 @@ public final class FrameTransitionRuntime {
     public var onTransitionEnded: (() -> Void)?
     /// Cadence de publication vers le dispatcher AX (alignée sur `EffectAnimator` à 60 Hz, Lot E).
     static let frameInterval: TimeInterval = 1.0 / 60
+    /// Garde-fou léger hors transition de scène (les images sont poussées en phase par `EffectAnimator`, Lot F).
+    static let watchdogInterval: TimeInterval = 0.1
     private(set) var acceptsCommands = false
     public func start() { acceptsCommands = true }
     public var isHoldingLayout: Bool { session.map { $0.permit.isCurrent && ProcessInfo.processInfo.systemUptime - $0.started < 1.5 } ?? false }
@@ -74,7 +76,8 @@ public final class FrameTransitionRuntime {
                 return "\(command.window.id.rawValue):\(from.x),\(from.y),\(from.width),\(from.height)->\(to.x),\(to.y),\(to.width),\(to.height);preservesSize=\(command.preservesSize)"
             }.joined(separator: "|")
         ]))
-        if session?.generation != generation || session?.finalSubmitted == true || session?.scene != nil {
+        let isScene = stageScene != nil && transitionDirection != nil && action == .stage
+        if session?.generation != generation || session?.finalSubmitted == true || session?.scene != nil || isScene {
             let retained = Set(plan.commands.map { "ax-\(ObjectIdentifier(self))-\($0.window.pid)-\($0.window.id.rawValue)" })
             // Révoquer les anciens lots sans perdre la vitesse des fenêtres reprises.
             cancel(preserving: retained, notifyEnded: false)
@@ -106,7 +109,14 @@ public final class FrameTransitionRuntime {
                     self.cancel(completed: true)
                 }
             }
-            let timer = Timer(timeInterval: Self.frameInterval, repeats: true) { [weak self] _ in
+            if !isScene {
+                // Horloge 60 Hz unique en phase avec EffectAnimator : zéro gigue inter-timers (Lot F).
+                EffectAnimator.shared.addTickObserver(id: ObjectIdentifier(self)) { [weak self] in
+                    self?.pulse()
+                }
+            }
+            let interval = isScene ? Self.frameInterval : Self.watchdogInterval
+            let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.pulse() }
             }
             self.timer = timer; RunLoop.main.add(timer, forMode: .common)
@@ -237,7 +247,16 @@ public final class FrameTransitionRuntime {
             for id in current.ids { EffectAnimator.shared.cancel(id) }
             let commands = current.commands.values.map { command -> ApplyCommand in
                 var value = command
-                value.window = current.windows[command.window.id] ?? command.window
+                let latest = current.windows[command.window.id] ?? command.window
+                value.window = latest
+                // Si la taille observée correspond déjà à la cible finale (ex. échange de deux
+                // fenêtres de même taille ou déplacement pur), éviter le double `AXSize` en fin de
+                // course tout en conservant position + relecture + enregistrement Spec043 (Lot F).
+                if !value.preservesSize, !value.positionsBeforeResizing,
+                   abs(latest.frame.width - value.frame.width) <= 0.5,
+                   abs(latest.frame.height - value.frame.height) <= 0.5 {
+                    value.preservesSize = true
+                }
                 return value
             }
             current.dispatcher.submit(commands, generation: current.generation)
@@ -258,6 +277,7 @@ public final class FrameTransitionRuntime {
 
     public func cancel(completed: Bool = false, preserving: Set<String> = [], notifyEnded: Bool = true) {
         timer?.invalidate(); timer = nil
+        EffectAnimator.shared.removeTickObserver(id: ObjectIdentifier(self))
         let hadSession = session != nil
         if let current = session {
             events.append(RoadieEvent(type: completed ? "effects.frames_completed" : "effects.frames_cancelled", details: [

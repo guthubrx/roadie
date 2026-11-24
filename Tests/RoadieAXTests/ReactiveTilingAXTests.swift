@@ -153,6 +153,17 @@ struct AXWindowFrameWriterTests {
         #expect(both.io.frameWrites == ["set AXPosition", "set AXSize"])
         #expect(both.io.calls.contains("read AXPosition,AXSize"))
         #expect(both.frames.entry(for: 1) == nil)
+        // Lot F : l'historique d'écho absorbe l'image intermédiaire retardée sans toucher à l'entrée
+        // ni au budget, même après une écriture finale dans la génération courante.
+        #expect(both.frames.classify(windowID: 1, observed: movedAndResized, now: both.clock.now) == .echo)
+        #expect(both.frames.classify(windowID: 1, observed: silentlyClamped, now: both.clock.now) == .echo)
+        let finalTarget = CGRect(x: 300, y: 40, width: 700, height: 480)
+        both.io.readBack = finalTarget
+        _ = both.writer.setFrames([
+            WindowFrameUpdate(window: window(1, pid: 50), frame: finalTarget, isIntermediateAnimationFrame: false),
+        ], generation: 1)
+        #expect(both.frames.entry(for: 1)?.writesInGeneration == 1)
+        #expect(both.frames.classify(windowID: 1, observed: silentlyClamped, now: both.clock.now) == .echo)
 
         // 2. Déplacement seul (taille identique à 0,5 pt près) : zéro set AXSize (zéro relayout).
         let posOnly = WriterFixture()

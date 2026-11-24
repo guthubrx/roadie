@@ -1706,6 +1706,13 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         guard wroteAny else { return nil }
         let readBack = frame(of: element, pid: pid)
         guard isCurrent() else { return nil }
+        writtenFrames.recordIntermediateEcho(
+            windowID: update.window.id.rawValue,
+            requested: update.frame,
+            readBack: readBack,
+            at: now(),
+            isCurrent: isCurrent
+        )
         return readBack
     }
 

@@ -17,11 +17,20 @@ final class EffectAnimator {
         var completion: () -> Void
     }
     private var transitions: [String: Transition] = [:]
+    private var tickObservers: [ObjectIdentifier: () -> Void] = [:]
     private var timer: Timer?
     private let clock: () -> Double
     private let schedulesTimer: Bool
     var activeCount: Int { transitions.count }
     var hasTimer: Bool { timer != nil }
+
+    func addTickObserver(id: ObjectIdentifier, _ observer: @escaping () -> Void) {
+        tickObservers[id] = observer
+    }
+
+    func removeTickObserver(id: ObjectIdentifier) {
+        tickObservers.removeValue(forKey: id)
+    }
 
     init(schedulesTimer: Bool = true, clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }) {
         self.schedulesTimer = schedulesTimer; self.clock = clock
@@ -96,6 +105,9 @@ final class EffectAnimator {
             if done { item.completion() }
         }
         stopTimerIfIdle()
+        for observer in Array(tickObservers.values) {
+            observer()
+        }
     }
 
     private func stopTimerIfIdle() {

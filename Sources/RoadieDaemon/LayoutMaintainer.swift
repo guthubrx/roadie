@@ -168,6 +168,9 @@ public final class LayoutMaintainer {
         let proposed: BSPTree
     }
     private var minimumRepairs: [StageScope: MinimumRepair] = [:]
+    /// Générations dont la passe de réparation ou de restauration d'arbre (post-refus) doit
+    /// s'appliquer immédiatement sans seconde animation (Lots E & F).
+    private var immediateRepairGenerations: [StageScope: UInt64] = [:]
     private var reportedEchoWrites: [UInt32: Date] = [:]
     /// Lecture échouée d'un refus en attente : prochaine tentative (T218).
     private var refusalReadRetryAt: [UInt32: Date] = [:]
@@ -1036,7 +1039,7 @@ public final class LayoutMaintainer {
         let immediateWindowIDs = Set(plan.commands.compactMap { command -> WindowID? in
             guard layoutWindowIDs.contains(command.window.id), !command.preservesSize else { return nil }
             let isInitial = writtenFrames.entry(for: command.window.id.rawValue) == nil
-            let isMinimumRepair = scopesByID[command.window.id].flatMap { minimumRepairs[$0]?.generation } == generation
+            let isMinimumRepair = scopesByID[command.window.id].flatMap { immediateRepairGenerations[$0] } == generation
             return (isInitial || isMinimumRepair) ? command.window.id : nil
         })
         let firstResult = service.apply(plan, generation: generation, immediateWindowIDs: immediateWindowIDs)
@@ -1722,6 +1725,7 @@ public final class LayoutMaintainer {
     /// la frame obtenue est acceptée (chevauchement, comme yabai). O(r · n).
     private func correctConfirmedRefusals(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, generation: UInt64) {
         minimumRepairs = minimumRepairs.filter { $0.value.generation == generation }
+        immediateRepairGenerations = immediateRepairGenerations.filter { $0.value == generation }
 
         // Toutes les contraintes confirmées par ce relevé sont connues avant la première redistribution.
         var refusals: [(WindowID, StageScope, WrittenFrame, CGRect, CGSize)] = []
@@ -1766,6 +1770,7 @@ public final class LayoutMaintainer {
                     let prior = minimumRepairs[scope]
                     let original = prior.flatMap { $0.proposed == tree ? $0.original : nil } ?? tree
                     minimumRepairs[scope] = MinimumRepair(generation: generation, original: original, proposed: corrected)
+                    immediateRepairGenerations[scope] = generation
                     events.append(RoadieEvent(type: "layout_clamped_scope_repaired", scope: scope, details: [
                         "windowIDs": String(id),
                         "source": "tree_minimum_size",
@@ -1788,7 +1793,10 @@ public final class LayoutMaintainer {
                         || readBack.height > written.requested.height + LayoutTolerance.clampShrink && previous.height > proposed.height) {
                         let restored = replaceMinimumRepair(tree, with: repair.original, scope: scope, generation: generation)
                         minimumRepairs[scope] = nil
-                        if restored { reason = "incompatible_neighbour_minimum_restored" }
+                        if restored {
+                            immediateRepairGenerations[scope] = generation
+                            reason = "incompatible_neighbour_minimum_restored"
+                        }
                     }
                 }
             }

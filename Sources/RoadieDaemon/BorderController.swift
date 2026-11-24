@@ -94,6 +94,19 @@ public final class BorderController {
             self.requestRefresh()
         }
         observers.append(NotificationCenter.default.addObserver(
+            forName: .roadieWindowFramesDidRepublish, object: nil, queue: nil
+        ) { [weak self] _ in
+            let apply: @MainActor () -> Void = {
+                guard let self, self.started else { return }
+                self.renderCachedSnapshot()
+            }
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { apply() }
+            } else {
+                Task { @MainActor in apply() }
+            }
+        })
+        observers.append(NotificationCenter.default.addObserver(
             forName: .roadieSnapshotDidPublish, object: nil, queue: .main
         ) { [weak self] notification in
             let revision = notification.userInfo?["revision"] as? UInt64
@@ -238,6 +251,29 @@ public final class BorderController {
         if wasStarted { guard started, lifecycleGeneration == generation else { return } }
         lastObservedRevision = snapshotService.publicationRevision
         guard configLoader().fx.borders == config else { return }
+        render(snapshot: snapshot, config: config)
+    }
+
+    /// Suivi synchrone à 60 FPS pendant une animation ou un redimensionnement interactif (Lot F) :
+    /// lit directement le dernier snapshot republié en mémoire (O(1), zéro appel AX, zéro saut de tâche).
+    private func renderCachedSnapshot() {
+        let currentRevision = snapshotService.publicationRevision
+        guard currentRevision != lastObservedRevision else { return }
+        let config = configLoader().fx.borders
+        guard config.enabled else {
+            lastObservedRevision = currentRevision
+            hidePanel()
+            return
+        }
+        guard let snapshot = snapshotService.cachedGestureSnapshot() else {
+            requestRefresh()
+            return
+        }
+        lastObservedRevision = currentRevision
+        render(snapshot: snapshot, config: config)
+    }
+
+    private func render(snapshot: DaemonSnapshot, config: BorderConfig) {
         guard let focusedWindowID = snapshot.focusedWindowID,
               let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
               entry.window.isTileCandidate,
@@ -367,7 +403,7 @@ private final class BorderPanel: NSPanel, BorderRendering {
         if model.thickness != borderView.thickness { borderView.thickness = model.thickness }
         if model.cornerRadius != borderView.cornerRadius { borderView.cornerRadius = model.cornerRadius }
         if model.groupLabel != borderView.groupLabel { borderView.groupLabel = model.groupLabel }
-        if expanded != self.frame { setFrame(expanded, display: true) }
+        if expanded != self.frame { setFrame(expanded, display: false) }
         orderFrontRegardless()
     }
 }

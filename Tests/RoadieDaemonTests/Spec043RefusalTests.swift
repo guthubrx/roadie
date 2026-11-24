@@ -437,4 +437,25 @@ struct Spec043RefusalTests {
         _ = h.maintainer.tick(cause: "drag")
         #expect(h.writer.lastPositionsBeforeResizing[WindowID(rawValue: 2)] == false)
     }
+
+    @Test
+    func lotFIncompatibleNeighbourRollbackMarksRestoredWindowsImmediate() throws {
+        let h = try Refusal043Harness()
+        defer { h.cleanup() }
+        // Fenêtre 2 déjà à sa cible initiale (0 écriture au démarrage, comme une voisine immobile) ;
+        // fenêtre 1 clampée au démarrage (700 > 500), puis réparation réduit fenêtre 2 à 300 (écriture #1,
+        // clampée à 450), puis rollback `incompatible_neighbour_minimum_restored` (écriture #2, immédiate).
+        h.setFrame(2, Rect(x: 500, y: 0, width: 500, height: 800))
+        h.writer.minimums[WindowID(rawValue: 1)] = CGSize(width: 700, height: 0)
+        h.writer.minimums[WindowID(rawValue: 2)] = CGSize(width: 450, height: 0)
+        _ = h.maintainer.tick(cause: "command:startup")
+        // 1re confirmation : fenêtre 1 réparée en réduisant fenêtre 2 à 300 (immédiat), fenêtre 2 refuse (450).
+        h.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        _ = h.maintainer.tick(cause: "deadline")
+        h.writer.lastPositionsBeforeResizing.removeAll()
+        // 2e confirmation : rollback `incompatible_neighbour_minimum_restored` doit rester immédiat.
+        h.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        _ = h.maintainer.tick(cause: "deadline")
+        #expect(h.writer.lastPositionsBeforeResizing[WindowID(rawValue: 2)] == true)
+    }
 }

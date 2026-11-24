@@ -305,4 +305,25 @@ extension Spec144FrameTransitionTests {
         #expect(f.backend.frame(source.id) == sourceTarget.cgRect)
         #expect(f.backend.frame(neighbor.id) == neighborTarget.cgRect)
     }
+
+    @Test func lotFPureMoveFinalFrameSkipsRedundantResize() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let path = try #require(f.configService.state.activePath)
+        try "[fx.animations]\nenabled=true\nduration_ms=60\n".write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
+        f.live.invalidate()
+        let source = try #require(f.context.snapshot.windows.first { $0.window.id == f.source }?.window)
+        // Déplacement pur : même largeur et hauteur que la fenêtre source.
+        let movedSameSize = Rect(x: source.frame.x + 180, y: source.frame.y + 40,
+                                 width: source.frame.width, height: source.frame.height)
+        let runtime = FrameTransitionRuntime(generations: f.generations, isMouseDown: { false })
+        defer { runtime.cancel() }
+        let plan = ApplyPlan(commands: [ApplyCommand(window: source, frame: movedSameSize)])
+        _ = runtime.schedule(plan, service: f.service, generation: f.generations.current, action: .move)
+        #expect(await f.waitFor { !runtime.isHoldingLayout })
+        let finalUpdate = try #require(f.backend.frameUpdates.last { $0.window.id == source.id })
+        #expect(!finalUpdate.isIntermediateAnimationFrame)
+        #expect(finalUpdate.frame == movedSameSize.cgRect)
+        #expect(finalUpdate.preservesSize)
+    }
 }
