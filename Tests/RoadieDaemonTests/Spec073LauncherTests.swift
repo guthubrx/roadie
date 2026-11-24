@@ -124,6 +124,23 @@ struct Spec073LauncherListTests {
         ], expectedGeneration: staleGen)
         #expect(!ignored)
         #expect(cache.regularBundleIDs() == ["com.apple.Notes", "com.apple.Terminal"])
+
+        // Avant le premier seed : les événements arrivant pendant le scan initial incrémentent
+        // la génération et empêchent le résultat périmé d'écraser la fermeture/lancement récent.
+        let coldCache = RunningApplicationsCache(observeWorkspace: false)
+        let initialGen = coldCache.currentGeneration
+        #expect(coldCache.regularBundleIDs(triggerBackgroundRefresh: false).isEmpty)
+        coldCache.noteTerminated(pid: 700)
+        let staleInitialApplied = coldCache.applyReconciled([
+            (pid: 700, bundleID: "com.stale.app", isRegular: true),
+        ], expectedGeneration: initialGen)
+        #expect(!staleInitialApplied)
+        #expect(coldCache.regularBundleIDs(triggerBackgroundRefresh: false).isEmpty)
+        let freshInitialApplied = coldCache.applyReconciled([
+            (pid: 701, bundleID: "com.fresh.app", isRegular: true),
+        ], expectedGeneration: coldCache.currentGeneration)
+        #expect(freshInitialApplied)
+        #expect(coldCache.regularBundleIDs(triggerBackgroundRefresh: false) == ["com.fresh.app"])
     }
 
     @Test func lotKPrecomputedSystemAndBookmarkIndexesPreserveMatchingResults() {

@@ -84,7 +84,7 @@ final class RunningApplicationsCache {
             let bundleID = app?.bundleIdentifier
             let isRegular = app?.activationPolicy == .regular
             MainActor.assumeIsolated {
-                guard let self, self.seeded, pid > 0 else { return }
+                guard let self, pid > 0 else { return }
                 self.noteLaunched(pid: pid, bundleID: bundleID, isRegular: isRegular)
             }
         }
@@ -92,7 +92,7 @@ final class RunningApplicationsCache {
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             let pid = app?.processIdentifier ?? 0
             MainActor.assumeIsolated {
-                guard let self, self.seeded, pid > 0 else { return }
+                guard let self, pid > 0 else { return }
                 self.noteTerminated(pid: pid)
             }
         }
@@ -102,7 +102,7 @@ final class RunningApplicationsCache {
             let bundleID = app?.bundleIdentifier
             let isRegular = app?.activationPolicy == .regular
             MainActor.assumeIsolated {
-                guard let self, self.seeded, pid > 0 else { return }
+                guard let self, pid > 0 else { return }
                 self.noteActivated(pid: pid, bundleID: bundleID, isRegular: isRegular)
             }
         }
@@ -112,7 +112,7 @@ final class RunningApplicationsCache {
             let bundleID = app?.bundleIdentifier
             let isRegular = app?.activationPolicy == .regular
             MainActor.assumeIsolated {
-                guard let self, self.seeded, pid > 0 else { return }
+                guard let self, pid > 0 else { return }
                 self.noteActivated(pid: pid, bundleID: bundleID, isRegular: isRegular)
             }
         }
@@ -135,11 +135,12 @@ final class RunningApplicationsCache {
         lastReconciledAt = now
     }
 
-    /// Applique une réconciliation de fond si aucun événement n'est survenu pendant sa lecture.
+    /// Applique une réconciliation de fond si aucun événement n'est survenu pendant sa lecture
+    /// (y compris pendant le préchauffage initial avant le premier seed).
     /// Retourne `true` si l'état a été appliqué, `false` s'il a été écarté car obsolète.
     @discardableResult
     func applyReconciled(_ entries: [(pid: pid_t, bundleID: String?, isRegular: Bool)], expectedGeneration: UInt64, now: Date = Date()) -> Bool {
-        guard !seeded || mutationGeneration == expectedGeneration else { return false }
+        guard mutationGeneration == expectedGeneration else { return false }
         seed(entries, now: now)
         return true
     }
@@ -165,7 +166,7 @@ final class RunningApplicationsCache {
     }
 
     /// Préchauffe ou réconcilie la liste hors `@MainActor` (0 ms d'IPC LaunchServices sur le fil principal).
-    func refreshInBackground(now: Date = Date()) {
+    func refreshInBackground(now: Date = Date(), retryIfStale: Bool = true) {
         guard !refreshing else { return }
         refreshing = true
         let generation = mutationGeneration
@@ -179,20 +180,22 @@ final class RunningApplicationsCache {
                     self.refreshing = false
                     let applied = self.applyReconciled(entries, expectedGeneration: generation, now: now)
                     if !applied {
-                        // Une notification est arrivée pendant le scan : relancer une réconciliation fraîche plus tard.
                         self.lastReconciledAt = .distantPast
+                        if retryIfStale {
+                            // Un événement est survenu pendant le scan : relancer une seule passe fraîche en fond.
+                            self.refreshInBackground(now: Date(), retryIfStale: false)
+                        }
                     }
                 }
             }
         }
     }
 
-    func regularBundleIDs(now: Date = Date()) -> Set<String> {
-        if !seeded {
-            seed(NSWorkspace.shared.runningApplications.map {
-                ($0.processIdentifier, $0.bundleIdentifier, $0.activationPolicy == .regular)
-            }, now: now)
-        } else if now.timeIntervalSince(lastReconciledAt) >= Self.reconcileInterval {
+    /// Retourne immédiatement les identifiants connus en mémoire sans jamais bloquer `@MainActor` sur LaunchServices.
+    /// Si le préchauffage initial n'est pas encore terminé ou si la réconciliation a plus de `reconcileInterval`,
+    /// déclenche un rafraîchissement asynchrone hors `@MainActor`.
+    func regularBundleIDs(now: Date = Date(), triggerBackgroundRefresh: Bool = true) -> Set<String> {
+        if triggerBackgroundRefresh && (!seeded || now.timeIntervalSince(lastReconciledAt) >= Self.reconcileInterval) {
             refreshInBackground(now: now)
         }
         return Set(regularByPID.values)
