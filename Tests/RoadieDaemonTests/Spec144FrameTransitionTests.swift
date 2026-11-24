@@ -326,4 +326,39 @@ extension Spec144FrameTransitionTests {
         #expect(finalUpdate.frame == movedSameSize.cgRect)
         #expect(finalUpdate.preservesSize)
     }
+
+    @Test func lotFInFlightIntermediateWritePreventsPreservesSizeOnFinalRetarget() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let path = try #require(f.configService.state.activePath)
+        try "[fx.animations]\nenabled=true\nduration_ms=50\n".write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
+        f.live.invalidate()
+        let source = try #require(f.context.snapshot.windows.first { $0.window.id == f.source }?.window)
+        let resizedTarget = Rect(x: source.frame.x + 120, y: source.frame.y,
+                                 width: source.frame.width + 220, height: source.frame.height)
+        // Reciblage vers la taille initialement observée (mais position différente) pendant qu'un
+        // lot intermédiaire qui change la taille est encore bloqué en vol dans le dispatcher.
+        let retargetSameInitialSize = Rect(x: source.frame.x + 160, y: source.frame.y,
+                                           width: source.frame.width, height: source.frame.height)
+        f.backend.blockedPID = source.pid
+        let runtime = FrameTransitionRuntime(generations: f.generations, isMouseDown: { false })
+        defer { runtime.cancel(); f.backend.blockedPID = nil; f.backend.gate.signal() }
+        _ = runtime.schedule(ApplyPlan(commands: [ApplyCommand(window: source, frame: resizedTarget)]),
+                             service: f.service, generation: f.generations.current, action: .move)
+        // Attendre qu'au moins une écriture intermédiaire de redimensionnement soit lancée (bloquée).
+        try await Task.sleep(for: .milliseconds(30))
+        // Reciblage dans la même génération vers la taille initiale, puis fin d'animation pendant le blocage.
+        _ = runtime.schedule(ApplyPlan(commands: [ApplyCommand(window: source, frame: retargetSameInitialSize)]),
+                             service: f.service, generation: f.generations.current, action: .move)
+        try await Task.sleep(for: .milliseconds(80))
+        // Libérer le lot intermédiaire bloqué : le lot final ne doit PAS être en preservesSize.
+        f.backend.blockedPID = nil
+        f.backend.gate.signal()
+        #expect(await f.waitFor { !runtime.isHoldingLayout })
+        let finalUpdate = try #require(f.backend.frameUpdates.last { $0.window.id == source.id })
+        #expect(!finalUpdate.isIntermediateAnimationFrame)
+        #expect(!finalUpdate.preservesSize)
+        #expect(finalUpdate.frame == retargetSameInitialSize.cgRect)
+        #expect(f.backend.frame(source.id) == retargetSameInitialSize.cgRect)
+    }
 }

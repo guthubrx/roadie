@@ -249,10 +249,12 @@ public final class FrameTransitionRuntime {
                 var value = command
                 let latest = current.windows[command.window.id] ?? command.window
                 value.window = latest
-                // Si la taille observée correspond déjà à la cible finale (ex. échange de deux
-                // fenêtres de même taille ou déplacement pur), éviter le double `AXSize` en fin de
-                // course tout en conservant position + relecture + enregistrement Spec043 (Lot F).
+                // Si aucun lot intermédiaire ne peut encore modifier la fenêtre et que la taille
+                // observée correspond déjà à la cible finale (ex. échange de deux fenêtres de même
+                // taille ou déplacement pur), éviter le double `AXSize` en fin de course tout en
+                // conservant position + relecture + enregistrement Spec043 (Lot F).
                 if !value.preservesSize, !value.positionsBeforeResizing,
+                   !current.dispatcher.mayChange(latest),
                    abs(latest.frame.width - value.frame.width) <= 0.5,
                    abs(latest.frame.height - value.frame.height) <= 0.5 {
                     value.preservesSize = true
