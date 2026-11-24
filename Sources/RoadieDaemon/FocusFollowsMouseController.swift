@@ -15,6 +15,7 @@ public final class FocusFollowsMouseController {
     private var configObservers: [NSObjectProtocol] = []
     private var configWatcher: RailFileWatcher?
     private var started = false
+    private var lifecycleGeneration: UInt64 = 0
     private var lastFocusedWindowID: WindowID?
     private var lastMousePoint: CGPoint?
     private var isReading = false
@@ -31,6 +32,7 @@ public final class FocusFollowsMouseController {
         UserInputActivity.shared.startMonitoring()
         if !started {
             started = true
+            lifecycleGeneration &+= 1
             let onConfigChange: @MainActor () -> Void = { [weak self] in
                 self?.syncActivation()
             }
@@ -58,6 +60,7 @@ public final class FocusFollowsMouseController {
 
     public func stop() {
         started = false
+        lifecycleGeneration &+= 1
         deactivateTracking()
         configWatcher?.stop()
         configWatcher = nil
@@ -107,11 +110,12 @@ public final class FocusFollowsMouseController {
 
     private func scheduleOneShotTick(after interval: TimeInterval) {
         guard started, timer == nil else { return }
+        let generation = lifecycleGeneration
         let newTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.timer = nil
-                guard self.started else { return }
+                guard self.started, self.lifecycleGeneration == generation else { return }
                 await self.tick()
             }
         }
@@ -122,6 +126,7 @@ public final class FocusFollowsMouseController {
 
     private func tick() async {
         guard started, !isReading else { return }
+        let generation = lifecycleGeneration
         let enabled = configLoader().focus.focusFollowsMouse
         guard enabled else {
             deactivateTracking()
@@ -141,7 +146,7 @@ public final class FocusFollowsMouseController {
         isReading = true
         defer { isReading = false }
         guard let snapshot = await snapshotService.readerSnapshot(),
-              started,
+              started, lifecycleGeneration == generation,
               configLoader().focus.focusFollowsMouse, !UserInputActivity.shared.isCapturedPointerHeld,
               NSEvent.pressedMouseButtons == 0,
               !WindowDragActivity.shared.isActive(includingReleaseGrace: false),

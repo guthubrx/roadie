@@ -222,6 +222,7 @@ public final class RailController {
 
     /// Notification des réglages et événement vnode portent la même écriture : un seul cycle.
     private func refreshPanelsForConfigChange(reason: String) {
+        guard started else { return }
         dropPreview.refreshLivePreview()
         windowDragController.configureMouseCapture()
         let path = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
