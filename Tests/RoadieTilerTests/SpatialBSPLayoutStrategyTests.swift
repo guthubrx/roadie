@@ -162,4 +162,38 @@ struct SpatialBSPLayoutStrategyTests {
         #expect(infeasible.placements[win(1)]?.width == 700)
         #expect(infeasible.placements[win(2)]?.width == 300)
     }
+
+    @Test
+    func nestedSplitsReserveGapAndComposedMinimumsInBothModes() {
+        // Contre-exemple 1 (BSPTree imbriqué) : deux splits verticaux imbriqués, largeur 1010,
+        // gap 10, ratio racine 0,4, minimum 400 sur la première feuille -> doit obtenir 400 px.
+        let nested = BSPTree.split(
+            orientation: .vertical, ratio: 0.4,
+            first: .split(orientation: .vertical, ratio: 0.5, first: .leaf(win(1)), second: .leaf(win(2))),
+            second: .leaf(win(3))
+        )
+        let nestedPlan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .spatialBsp,
+            container: CGRect(x: 0, y: 0, width: 1010, height: 500),
+            windowIDs: [win(1), win(2), win(3)],
+            bspTree: nested,
+            innerGap: 10,
+            minimumSizes: [win(1): CGSize(width: 400, height: 0)]
+        ))
+        #expect(nestedPlan.placements[win(1)]?.width == 400)
+
+        // Contre-exemple 2 (BSP équilibré sans arbre) : 4 fenêtres dans 1000×200, gap 0,
+        // minimum 300 sur w1 et w2 -> la coupe racine 600/400 permet d'accorder 300 à chacune.
+        let balancedPlan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .bsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 200),
+            windowIDs: [win(1), win(2), win(3), win(4)],
+            innerGap: 0,
+            minimumSizes: [win(1): CGSize(width: 300, height: 0), win(2): CGSize(width: 300, height: 0)]
+        ))
+        #expect(balancedPlan.placements[win(1)]?.width == 300)
+        #expect(balancedPlan.placements[win(2)]?.width == 300)
+    }
 }

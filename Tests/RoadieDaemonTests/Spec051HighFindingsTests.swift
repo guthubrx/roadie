@@ -63,6 +63,7 @@ struct Spec051HighFindingsTests {
         let w1 = powerWindow(1, x: 0)
         let w2 = powerWindow(2, x: 500)
         let provider = PowerUserProvider(windows: [w1])
+        let clockBox = ClockBox(Date(timeIntervalSince1970: 1_700_000_000))
         var config = RoadieConfig()
         config.tiling.defaultStrategy = .spatialBsp
         config.tiling.gapsOuter = 0
@@ -75,7 +76,8 @@ struct Spec051HighFindingsTests {
             intentStore: LayoutIntentStore(path: tempPath("lot-c-min-intents")),
             stageStore: store,
             events: EventLog(path: tempPath("lot-c-min-events")),
-            persistStateChanges: true
+            persistStateChanges: true,
+            clock: { clockBox.now }
         )
         let snap1 = service.snapshot()
         let scope = try #require(snap1.windows.first?.scope)
@@ -94,20 +96,58 @@ struct Spec051HighFindingsTests {
         #expect(firstW1.width >= 900)
         #expect(firstW1.width + firstW2.width == snap2.displays[0].visibleFrame.cgRect.width)
 
-        // Après destruction de w1, son minimum confirmé est purgé.
+        // Après destruction confirmée de w1, son minimum est purgé de `processState` : une nouvelle
+        // insertion réelle impliquant le même identifiant (réutilisé par macOS) repart sur 50/50.
         service.noteWindowDestroyed(w1.id)
-        let cleared = SnapshotService.reconciledTree(
-            .leaf(w1.id),
-            stage: PersistentStage(id: scope.stageID, mode: .spatialBsp, members: [
-                PersistentStageMember(windowID: w1.id, bundleID: w1.bundleID, title: w1.title, frame: w1.frame, pid: w1.pid),
-                PersistentStageMember(windowID: w2.id, bundleID: w2.bundleID, title: w2.title, frame: w2.frame, pid: w2.pid),
-            ]),
-            kept: [w1.id, w2.id], live: [w1.id, w2.id], globalFocus: w1.id, side: .right,
-            container: snap2.displays[0].visibleFrame.cgRect, innerGap: 0
-        )
-        let fallbackFrames = cleared.place(in: snap2.displays[0].visibleFrame.cgRect, innerGap: 0)
-        let fallbackW1 = try #require(fallbackFrames[w1.id])
+        provider.snapshots = []
+        _ = service.snapshot()
+        clockBox.advance(by: 30)
+        provider.snapshots = [w1]
+        let snapReborn = service.snapshot()
+        let rebornScope = try #require(snapReborn.windows.first?.scope)
+        provider.snapshots = [w1, w2]
+        let snap3 = service.snapshot()
+        let plan3 = service.layoutPlan(from: snap3, scope: rebornScope, orderedWindowIDs: [w1.id, w2.id])
+        let fallbackW1 = try #require(plan3.placements[w1.id])
         #expect(fallbackW1.width < 900)
+    }
+
+    /// Lot C : `reconcileTrees` applique les marges extérieures (`outerGaps`) lors de la correction
+    /// prédictive de coupe, afin que le placement final après `outerGaps` atteigne bien le minimum.
+    @Test func confirmedMinimumAccountsForOuterGapsOnNewInsertion() throws {
+        let w1 = powerWindow(10, x: 0)
+        let w2 = powerWindow(11, x: 500)
+        let provider = PowerUserProvider(windows: [w1])
+        var config = RoadieConfig()
+        config.tiling.defaultStrategy = .spatialBsp
+        config.tiling.gapsOuter = 20
+        config.tiling.gapsInner = 10
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: PowerUserWriter(provider: provider),
+            config: config,
+            intentStore: LayoutIntentStore(path: tempPath("lot-c-outer-intents")),
+            stageStore: StageStore(path: tempPath("lot-c-outer-stages")),
+            events: EventLog(path: tempPath("lot-c-outer-events")),
+            persistStateChanges: true
+        )
+        let snap1 = service.snapshot()
+        let scope = try #require(snap1.windows.first?.scope)
+        service.syncConfirmedMinimums([
+            w1.id: SnapshotProcessState.ConfirmedMinimum(
+                pid: w1.pid, bundleID: w1.bundleID, scope: scope, size: CGSize(width: 900, height: 0)
+            )
+        ])
+
+        provider.snapshots = [w1, w2]
+        let snap2 = service.snapshot()
+        let plan2 = service.layoutPlan(from: snap2, scope: scope, orderedWindowIDs: [w1.id, w2.id])
+        let placedW1 = try #require(plan2.placements[w1.id])
+        let placedW2 = try #require(plan2.placements[w2.id])
+        let containerWidth = try #require(service.treeContainer(for: scope, in: snap2)).width
+        #expect(containerWidth < snap2.displays[0].visibleFrame.cgRect.width)
+        #expect(placedW1.width >= 900)
+        #expect(placedW1.width + placedW2.width + 10 == containerWidth)
     }
 }
 
@@ -117,4 +157,12 @@ private final class FlagBox: @unchecked Sendable {
     private var flag = false
     var value: Bool { lock.withLock { flag } }
     func set() { lock.withLock { flag = true } }
+}
+
+private final class ClockBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: Date
+    init(_ initial: Date) { self.current = initial }
+    var now: Date { lock.withLock { current } }
+    func advance(by seconds: TimeInterval) { lock.withLock { current = current.addingTimeInterval(seconds) } }
 }

@@ -105,6 +105,9 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         let leftWidth = clampedFirstExtent(
             proposed: floor(usableWidth * ratio),
             usable: usableWidth,
+            rect: rect,
+            innerGap: innerGap,
+            splitPolicy: splitPolicy,
             first: leftWindows,
             second: rightWindows,
             horizontal: true,
@@ -146,6 +149,9 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         let topHeight = clampedFirstExtent(
             proposed: floor(usableHeight * ratio),
             usable: usableHeight,
+            rect: rect,
+            innerGap: innerGap,
+            splitPolicy: splitPolicy,
             first: topWindows,
             second: bottomWindows,
             horizontal: false,
@@ -162,25 +168,69 @@ public struct BSPLayoutStrategy: LayoutStrategy {
     private func clampedFirstExtent(
         proposed: CGFloat,
         usable: CGFloat,
+        rect: CGRect,
+        innerGap: CGFloat,
+        splitPolicy: String,
         first: ArraySlice<WindowID>,
         second: ArraySlice<WindowID>,
         horizontal: Bool,
         minimumSizes: [WindowID: CGSize]
     ) -> CGFloat {
         guard !minimumSizes.isEmpty, usable > 0 else { return proposed }
-        let minFirst = first.reduce(CGFloat(0)) { best, id in
-            let size = minimumSizes[id] ?? .zero
-            return max(best, horizontal ? size.width : size.height)
-        }
-        let minSecond = second.reduce(CGFloat(0)) { best, id in
-            let size = minimumSizes[id] ?? .zero
-            return max(best, horizontal ? size.width : size.height)
-        }
+        let firstProposed = max(1, proposed)
+        let secondProposed = max(1, usable - proposed)
+        let firstRect = horizontal
+            ? CGRect(x: 0, y: 0, width: firstProposed, height: rect.height)
+            : CGRect(x: 0, y: 0, width: rect.width, height: firstProposed)
+        let secondRect = horizontal
+            ? CGRect(x: 0, y: 0, width: secondProposed, height: rect.height)
+            : CGRect(x: 0, y: 0, width: rect.width, height: secondProposed)
+        let firstMin = requiredMinimum(for: first, in: firstRect, innerGap: innerGap, splitPolicy: splitPolicy, minimumSizes: minimumSizes)
+        let secondMin = requiredMinimum(for: second, in: secondRect, innerGap: innerGap, splitPolicy: splitPolicy, minimumSizes: minimumSizes)
+        let minFirst = horizontal ? firstMin.width : firstMin.height
+        let minSecond = horizontal ? secondMin.width : secondMin.height
         guard minFirst > 0 || minSecond > 0 else { return proposed }
         let lower = ceil(max(0, minFirst))
         let upper = floor(usable - ceil(max(0, minSecond)))
         guard lower <= upper else { return proposed }
         return min(max(proposed, lower), upper)
+    }
+
+    /// Besoin minimal composé d'une sous-liste selon les orientations de coupe descendantes.
+    private func requiredMinimum(
+        for windows: ArraySlice<WindowID>,
+        in rect: CGRect,
+        innerGap: CGFloat,
+        splitPolicy: String,
+        minimumSizes: [WindowID: CGSize]
+    ) -> CGSize {
+        guard let firstID = windows.first else { return .zero }
+        guard windows.count > 1 else {
+            let raw = minimumSizes[firstID] ?? .zero
+            return CGSize(width: max(0, raw.width), height: max(0, raw.height))
+        }
+        let leftCount = splitPolicy == "dwindle" ? 1 : windows.count / 2
+        let left = windows.prefix(leftCount)
+        let right = windows.dropFirst(leftCount)
+        let horizontal = rect.width >= rect.height
+        let orientation: BSPOrientation = horizontal ? .vertical : .horizontal
+        let gap = BSPTree.gap(for: orientation, innerGap: innerGap)
+        let childRect = horizontal
+            ? CGRect(x: 0, y: 0, width: max(1, (rect.width - gap) / 2), height: rect.height)
+            : CGRect(x: 0, y: 0, width: rect.width, height: max(1, (rect.height - gap) / 2))
+        let a = requiredMinimum(for: left, in: childRect, innerGap: innerGap, splitPolicy: splitPolicy, minimumSizes: minimumSizes)
+        let b = requiredMinimum(for: right, in: childRect, innerGap: innerGap, splitPolicy: splitPolicy, minimumSizes: minimumSizes)
+        if horizontal {
+            let width = (a.width > 0 || b.width > 0)
+                ? max(a.width, BSPTree.minimumChildExtent) + max(b.width, BSPTree.minimumChildExtent) + gap
+                : 0
+            return CGSize(width: width, height: max(a.height, b.height))
+        } else {
+            let height = (a.height > 0 || b.height > 0)
+                ? max(a.height, BSPTree.minimumChildExtent) + max(b.height, BSPTree.minimumChildExtent) + gap
+                : 0
+            return CGSize(width: max(a.width, b.width), height: height)
+        }
     }
 
     private func splitRatio(

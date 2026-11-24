@@ -91,8 +91,9 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
 
     /// Calcule la frame de chaque fenêtre en répartissant `rect` selon l'arbre.
     /// `innerGap` est l'espace laissé entre deux enfants d'un split.
-    /// Avec `minimumSizes`, ajuste chaque split lorsque les tailles minimales des deux côtés
-    /// tiennent dans l'étendue disponible ; si le total dépasse, conserve le ratio d'origine.
+    /// Avec `minimumSizes`, pré-calcule en une traversée ascendante O(n) les besoins minimaux
+    /// de chaque sous-arbre (y compris l'écart et le plancher enfant quand un côté porte un minimum),
+    /// puis place en O(n) en contraignant les splits quand les minimums tiennent dans l'étendue.
     public func place(
         in rect: CGRect,
         innerGap: CGFloat,
@@ -102,7 +103,8 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         if minimumSizes.isEmpty {
             place(in: rect, innerGap: innerGap, into: &result)
         } else {
-            place(in: rect, innerGap: innerGap, minimumSizes: minimumSizes, into: &result)
+            let sized = SizedTree.build(from: self, innerGap: innerGap, minimumSizes: minimumSizes)
+            sized.place(in: rect, innerGap: innerGap, into: &result)
         }
         return result
     }
@@ -120,54 +122,81 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         }
     }
 
-    private func place(
-        in rect: CGRect,
-        innerGap: CGFloat,
-        minimumSizes: [WindowID: CGSize],
-        into result: inout [WindowID: CGRect]
-    ) {
-        switch self {
-        case .empty:
-            return
-        case .leaf(let id):
-            result[id] = rect.integral
-        case .split(let orientation, let ratio, let first, let second):
-            let firstMin = first.requiredMinimumSize(innerGap: innerGap, minimumSizes: minimumSizes)
-            let secondMin = second.requiredMinimumSize(innerGap: innerGap, minimumSizes: minimumSizes)
-            let minFirstExtent = orientation == .vertical ? firstMin.width : firstMin.height
-            let minSecondExtent = orientation == .vertical ? secondMin.width : secondMin.height
-            let rects = Self.childRects(
-                of: rect,
-                orientation: orientation,
-                ratio: ratio,
-                innerGap: innerGap,
-                minFirstExtent: minFirstExtent,
-                minSecondExtent: minSecondExtent
-            )
-            first.place(in: rects.first, innerGap: innerGap, minimumSizes: minimumSizes, into: &result)
-            second.place(in: rects.second, innerGap: innerGap, minimumSizes: minimumSizes, into: &result)
-        }
-    }
+    /// Arbre annoté de ses besoins minimaux en une passe ascendante O(n) (Article XVIII).
+    private indirect enum SizedTree {
+        case empty
+        case leaf(WindowID, minSize: CGSize)
+        case split(orientation: BSPOrientation, ratio: Double, first: SizedTree, second: SizedTree, minSize: CGSize)
 
-    /// Borne inférieure géométrique d'un sous-arbre selon les tailles minimales connues. O(n).
-    private func requiredMinimumSize(innerGap: CGFloat, minimumSizes: [WindowID: CGSize]) -> CGSize {
-        switch self {
-        case .empty:
-            return .zero
-        case .leaf(let id):
-            let size = minimumSizes[id] ?? .zero
-            return CGSize(width: max(0, size.width), height: max(0, size.height))
-        case .split(let orientation, _, let first, let second):
-            let a = first.requiredMinimumSize(innerGap: innerGap, minimumSizes: minimumSizes)
-            let b = second.requiredMinimumSize(innerGap: innerGap, minimumSizes: minimumSizes)
-            let splitGap = Self.gap(for: orientation, innerGap: innerGap)
-            switch orientation {
-            case .vertical:
-                let extraGap = (a.width > 0 && b.width > 0) ? splitGap : 0
-                return CGSize(width: a.width + b.width + extraGap, height: max(a.height, b.height))
-            case .horizontal:
-                let extraGap = (a.height > 0 && b.height > 0) ? splitGap : 0
-                return CGSize(width: max(a.width, b.width), height: a.height + b.height + extraGap)
+        var minSize: CGSize {
+            switch self {
+            case .empty: .zero
+            case .leaf(_, let size): size
+            case .split(_, _, _, _, let size): size
+            }
+        }
+
+        var isEmpty: Bool {
+            if case .empty = self { return true }
+            return false
+        }
+
+        static func build(from tree: BSPTree, innerGap: CGFloat, minimumSizes: [WindowID: CGSize]) -> SizedTree {
+            switch tree {
+            case .empty:
+                return .empty
+            case .leaf(let id):
+                let raw = minimumSizes[id] ?? .zero
+                return .leaf(id, minSize: CGSize(width: max(0, raw.width), height: max(0, raw.height)))
+            case .split(let orientation, let ratio, let firstTree, let secondTree):
+                let first = build(from: firstTree, innerGap: innerGap, minimumSizes: minimumSizes)
+                let second = build(from: secondTree, innerGap: innerGap, minimumSizes: minimumSizes)
+                let a = first.minSize
+                let b = second.minSize
+                let splitGap = BSPTree.gap(for: orientation, innerGap: innerGap)
+                let bothPresent = !first.isEmpty && !second.isEmpty
+                let combined: CGSize
+                switch orientation {
+                case .vertical:
+                    let width: CGFloat
+                    if bothPresent && (a.width > 0 || b.width > 0) {
+                        width = max(a.width, BSPTree.minimumChildExtent) + max(b.width, BSPTree.minimumChildExtent) + splitGap
+                    } else {
+                        width = a.width + b.width
+                    }
+                    combined = CGSize(width: width, height: max(a.height, b.height))
+                case .horizontal:
+                    let height: CGFloat
+                    if bothPresent && (a.height > 0 || b.height > 0) {
+                        height = max(a.height, BSPTree.minimumChildExtent) + max(b.height, BSPTree.minimumChildExtent) + splitGap
+                    } else {
+                        height = a.height + b.height
+                    }
+                    combined = CGSize(width: max(a.width, b.width), height: height)
+                }
+                return .split(orientation: orientation, ratio: ratio, first: first, second: second, minSize: combined)
+            }
+        }
+
+        func place(in rect: CGRect, innerGap: CGFloat, into result: inout [WindowID: CGRect]) {
+            switch self {
+            case .empty:
+                return
+            case .leaf(let id, _):
+                result[id] = rect.integral
+            case .split(let orientation, let ratio, let first, let second, _):
+                let minFirst = orientation == .vertical ? first.minSize.width : first.minSize.height
+                let minSecond = orientation == .vertical ? second.minSize.width : second.minSize.height
+                let rects = BSPTree.childRects(
+                    of: rect,
+                    orientation: orientation,
+                    ratio: ratio,
+                    innerGap: innerGap,
+                    minFirstExtent: minFirst,
+                    minSecondExtent: minSecond
+                )
+                first.place(in: rects.first, innerGap: innerGap, into: &result)
+                second.place(in: rects.second, innerGap: innerGap, into: &result)
             }
         }
     }

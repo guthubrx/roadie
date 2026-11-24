@@ -850,15 +850,21 @@ public struct SnapshotService: Sendable {
     private func reconcileTrees(in persistedStages: inout PersistentStageState, input: ReconciliationInput) {
         let side: BSPInsertionSide = input.config.windowPlacement.newWindowSide == "left" ? .left : .right
         let innerGap = CGFloat(input.config.tiling.gapsInner)
-        let containers = Dictionary(input.displays.map { ($0.id, $0.visibleFrame.cgRect) }, uniquingKeysWith: { first, _ in first })
+        let displaysByID = Dictionary(input.displays.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let pinned = Set(persistedStages.windowPins.map(\.windowID))
         for scopeIndex in persistedStages.scopes.indices {
             let persistentScope = persistedStages.scopes[scopeIndex]
-            guard let container = containers[persistentScope.displayID] else { continue }
+            guard let display = displaysByID[persistentScope.displayID] else { continue }
             for stageIndex in persistentScope.stages.indices where persistentScope.stages[stageIndex].mode.usesTreeEngine {
                 let stage = persistentScope.stages[stageIndex]
                 let scope = StageScope(displayID: persistentScope.displayID, desktopID: persistentScope.desktopID, stageID: stage.id)
                 let kept = Set(stage.members.map(\.windowID)).subtracting(input.destroyedWindowIDs).subtracting(pinned)
+                let liveKeptCount = stage.members.reduce(into: 0) { count, member in
+                    if kept.contains(member.windowID), input.stageManagedWindowIDs.contains(member.windowID) {
+                        count += 1
+                    }
+                }
+                let container = display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: liveKeptCount, display: display))
                 let confirmedMinimums = processState.confirmedMinimumSizes(for: stage.members, in: scope)
                 let tree = Self.reconciledTree(
                     stage.bspTree ?? .empty,
