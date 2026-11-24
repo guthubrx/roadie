@@ -557,7 +557,7 @@ public final class LayoutMaintainer {
             lastRestorationActivationWindowID = observedFocusedWindowID
         }
         let systemFocusedWindowID = hasActiveFullscreen ? observedFocusedWindowID : nil
-        let focusRestore = focusedHiddenRestore(in: snapshot, cause: cause, systemFocusedWindowID: systemFocusedWindowID)
+        let focusRestore = focusedHiddenRestore(in: snapshot, systemFocusedWindowID: systemFocusedWindowID)
 
         // Une reprise ne récupère pas l'intent automatique construit sur le cadre ignoré.
         // Les échecs mémorisés ne doivent pas absorber cette unique nouvelle demande.
@@ -2325,10 +2325,30 @@ public final class LayoutMaintainer {
     }
 
     /// Focus sur une voisine du zoom : sortie logique avant le masquage, qu'elle soit déjà cachée
-    /// ou encore visible (activation d'application, nouvelle fenêtre). Sinon, restaure le focus caché.
+    /// ou encore visible (activation d'application, nouvelle fenêtre, y compris sur `safety` ou
+    /// `deadline:window_discovery`). Sinon, restaure le focus caché.
     /// O(w) hors coût du plan réutilisé ; conserve les exclusions de scope et le focus du snapshot.
-    private func focusedHiddenRestore(in snapshot: DaemonSnapshot, cause: String, systemFocusedWindowID: WindowID?) -> FocusRestore? {
-        guard let focusedWindowID = snapshot.focusedWindowID,
+    private func focusedHiddenRestore(in snapshot: DaemonSnapshot, systemFocusedWindowID: WindowID?) -> FocusRestore? {
+        // Une nouvelle fenêtre (absente de l'intent de zoom) qui a déjà pris le focus système entre
+        // le relevé et l'application sort du zoom dès cette passe, sans attendre le tick suivant.
+        let resolvedFocusedID: WindowID?
+        if let systemID = systemFocusedWindowID,
+           systemID != snapshot.focusedWindowID,
+           let sysEntry = snapshot.windows.first(where: { $0.window.id == systemID }),
+           let sysScope = sysEntry.scope,
+           snapshot.state.activeScope(on: sysScope.displayID) == sysScope,
+           sysEntry.window.isTileCandidate,
+           !tickExcludedScopes.contains(sysScope),
+           let intent = service.commandLayoutIntent(scope: sysScope),
+           let zoomedID = intent.zoomedWindowID,
+           zoomedID != systemID,
+           !intent.windowIDs.contains(systemID),
+           !tickFullscreen.contains(where: { $0.entry.window.id == zoomedID && $0.entry.window.furniture?.isNativeFullscreen == true }) {
+            resolvedFocusedID = systemID
+        } else {
+            resolvedFocusedID = snapshot.focusedWindowID
+        }
+        guard let focusedWindowID = resolvedFocusedID,
               let focusedEntry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
               let focusedScope = focusedEntry.scope,
               snapshot.state.activeScope(on: focusedScope.displayID) == focusedScope,
@@ -2346,10 +2366,8 @@ public final class LayoutMaintainer {
         let isNativeZoom = tickFullscreen.contains {
             $0.entry.window.id == zoomedID && $0.entry.window.furniture?.isNativeFullscreen == true
         }
-        let activatesFocus = cause.contains("didActivateApplication") || cause.contains("AXFocusedWindowChanged")
-            || cause.contains("AXWindowCreated")
-        let confirmedVisibleFocus = activatesFocus && systemFocusedWindowID == focusedWindowID
-        let isZoomSibling = zoomedID != nil && zoomedID != focusedWindowID && !isNativeZoom && confirmedVisibleFocus
+        let isZoomSibling = zoomedID != nil && zoomedID != focusedWindowID && !isNativeZoom
+            && systemFocusedWindowID == focusedWindowID
         guard isHidden || isZoomSibling else { return nil }
         var restoration: ApplyPlan?
         if let zoomedWindowID = zoomedID,

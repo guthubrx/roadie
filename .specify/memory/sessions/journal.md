@@ -525,3 +525,7 @@ Session 168, 24 novembre 2026. Optimisation Lot I — ouverture instantanée du 
 (3) `TargetSearchSession` supprime le double `render()` synchrone avant `first_draw` lorsque aucun scan à l'écran ne tourne (`expectsOnScreenScan == false`, `finishLoading()` ne redessine plus quand `isLoading` est déjà faux) ;
 (4) `TargetOverlayPresenter.initialOverlayFrames` / `missingOverlayFrames` n'allouent au lancement du lanceur seul que la fenêtre overlay de l'écran portant la barre et créent paresseusement les fenêtres des autres écrans dès qu'un badge ou un aperçu fantôme y apparaît.
 2 612 tests Swift dans 391 suites et 29 tests de scripts réussis.
+
+Session 169, 24 novembre 2026. Sortie automatique du zoom lorsqu'une nouvelle fenêtre (ou une voisine) prend le focus sur n'importe quel tick (`safety`, `deadline:window_discovery`, événements AX) :
+- `LayoutMaintainer.focusedHiddenRestore` retire le filtre restrictif sur `cause` (`didActivateApplication`/`AXFocusedWindowChanged`/`AXWindowCreated`) dès que le focus système réel (`systemFocusedWindowID`) confirme la fenêtre visible hors zoom, et détecte dès la première passe une nouvelle fenêtre hors intent de zoom ayant pris le focus entre le relevé et l'application (évite qu'une application lancée à froid comme iTerm2 reste posée à sa taille initiale puis masquée hors écran sur une stage zoomée).
+2 614 tests Swift dans 391 suites et 29 tests de scripts réussis.

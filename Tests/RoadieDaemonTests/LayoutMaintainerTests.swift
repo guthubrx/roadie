@@ -5404,6 +5404,80 @@ struct PlacementTransitionRegressionTests {
         #expect(events.contains("\"type\":\"layout_zoom_exited\""))
         #expect(!events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
     }
+
+    @Test(arguments: ["safety", "deadline:window_discovery"])
+    func newcomerFocusedOnSafetyOrDiscoveryTickExitsZoomAndTilesCanvas(cause: String) throws {
+        let zoomed = powerWindow(425, x: 0, y: 0, width: 1000, height: 800)
+        let newcomer = powerWindow(426, x: 100, y: 100, width: 400, height: 300)
+        let provider = PowerUserProvider(windows: [zoomed, newcomer])
+        provider.focusedID = newcomer.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("zoom-exit-\(cause.replacingOccurrences(of: ":", with: "-"))"))
+        let intents = LayoutIntentStore(path: tempPath("zoom-exit-intents-\(cause.replacingOccurrences(of: ":", with: "-"))"))
+        let eventPath = tempPath("zoom-exit-events-\(cause.replacingOccurrences(of: ":", with: "-"))")
+        defer { try? FileManager.default.removeItem(atPath: eventPath) }
+        let scope = StageScope(displayID: powerDisplay().id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: scope.displayID,
+            activeStageID: scope.stageID, stages: [PersistentStage(id: scope.stageID, mode: .spatialBsp, focusedWindowID: zoomed.id,
+                members: [PersistentStageMember(windowID: zoomed.id, bundleID: zoomed.bundleID, title: zoomed.title, frame: zoomed.frame)])])],
+            activeDisplayID: scope.displayID))
+        intents.save(LayoutIntent(scope: scope, windowIDs: [zoomed.id],
+            placements: [zoomed.id: zoomed.frame], source: .command,
+            zoomedWindowID: zoomed.id, zoomReservesRail: true,
+            restorePlacements: [zoomed.id: Rect(x: 0, y: 0, width: 500, height: 800)]))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 0)),
+            intentStore: intents, stageStore: store)
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), spaceProbe: { _ in false })
+
+        _ = maintainer.tick(cause: cause)
+
+        #expect(intents.intent(for: scope)?.zoomedWindowID == nil)
+        let zoomedAfter = try #require(provider.snapshots.first(where: { $0.id == zoomed.id })?.frame)
+        let newcomerAfter = try #require(provider.snapshots.first(where: { $0.id == newcomer.id })?.frame)
+        #expect(zoomedAfter.width < powerDisplay().visibleFrame.width)
+        #expect(powerDisplay().visibleFrame.cgRect.contains(newcomerAfter.cgRect))
+        #expect(newcomerAfter.width > 400)
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.contains("\"type\":\"layout_zoom_exited\""))
+        #expect(!events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
+    }
+
+    @Test
+    func newcomerTakingFocusDuringPassExitsZoomImmediately() throws {
+        let zoomed = powerWindow(427, x: 0, y: 0, width: 1000, height: 800)
+        let newcomer = powerWindow(428, x: 100, y: 100, width: 400, height: 300)
+        let base = PowerUserProvider(windows: [zoomed, newcomer])
+        let provider = PlacementFocusTransitionProvider(base: base, focusIDs: [zoomed.id, newcomer.id])
+        let writer = PowerUserWriter(provider: base)
+        let store = StageStore(path: tempPath("zoom-exit-newcomer-transition"))
+        let intents = LayoutIntentStore(path: tempPath("zoom-exit-newcomer-transition-intents"))
+        let eventPath = tempPath("zoom-exit-newcomer-transition-events")
+        defer { try? FileManager.default.removeItem(atPath: eventPath) }
+        let scope = StageScope(displayID: powerDisplay().id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: scope.displayID,
+            activeStageID: scope.stageID, stages: [PersistentStage(id: scope.stageID, mode: .spatialBsp, focusedWindowID: zoomed.id,
+                members: [PersistentStageMember(windowID: zoomed.id, bundleID: zoomed.bundleID, title: zoomed.title, frame: zoomed.frame)])])],
+            activeDisplayID: scope.displayID))
+        intents.save(LayoutIntent(scope: scope, windowIDs: [zoomed.id],
+            placements: [zoomed.id: zoomed.frame], source: .command,
+            zoomedWindowID: zoomed.id, zoomReservesRail: true,
+            restorePlacements: [zoomed.id: Rect(x: 0, y: 0, width: 500, height: 800)]))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 0)),
+            intentStore: intents, stageStore: store)
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), spaceProbe: { _ in false })
+
+        _ = maintainer.tick(cause: "safety")
+
+        #expect(intents.intent(for: scope)?.zoomedWindowID == nil)
+        let newcomerAfter = try #require(base.snapshots.first(where: { $0.id == newcomer.id })?.frame)
+        #expect(powerDisplay().visibleFrame.cgRect.contains(newcomerAfter.cgRect))
+        #expect(newcomerAfter.width > 400)
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.contains("\"type\":\"layout_zoom_exited\""))
+        #expect(!events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
+    }
 }
 
 
