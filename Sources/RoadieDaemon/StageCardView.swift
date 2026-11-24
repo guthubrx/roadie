@@ -197,10 +197,17 @@ final class StageCardView: NSControl {
         fatalError("init(coder:) has not been implemented")
     }
 
+    // Clic sur une icône d'application sous la vignette : activer la stage et focaliser cette application (SPEC-157).
     // Clic sur le fond de la carte : activer la stage. Un clic sur l'aperçu d'une fenêtre passe par `dragPayload`
     // (qui porte l'action de focus d'un plein écran natif) ; le fond ne doit jamais viser une fenêtre précise.
     func action(at point: CGPoint) -> RailAction? {
-        dragPayload(at: point) == nil ? .switchStage(stageID) : nil
+        if let member = appIconMember(at: point) {
+            if presentationState(for: member) == .nativeFullscreen {
+                return nativeFullscreenFocusAction(for: member)
+            }
+            return .focusStageWindow(stageID, member.windowID, member.bundleID)
+        }
+        return dragPayload(at: point) == nil ? .switchStage(stageID) : nil
     }
 
     func snapshotImage() -> NSImage? {
@@ -674,19 +681,29 @@ final class StageCardView: NSControl {
         )
     }
 
-    /// Liste dédupliquée des identifiants d'applications présents dans la stage, en préservant l'ordre
-    /// d'affichage (fenêtre active en tête via `visualMembers`). O(m).
-    static func distinctAppBundleIDs(
+    struct AppIconsRowLayout {
+        var rowRect: CGRect
+        var transform: CGAffineTransform
+        var items: [(member: PersistentStageMember, rect: CGRect)]
+        var overflow: Int
+
+        var bundleIDs: [String] { items.map(\.member.bundleID) }
+        var iconRects: [CGRect] { items.map(\.rect) }
+    }
+
+    /// Liste dédupliquée des membres représentatifs par application présente dans la stage, en préservant
+    /// l'ordre d'affichage (fenêtre active en tête via `visualMembers`). O(m).
+    static func distinctAppMembers(
         for members: [PersistentStageMember],
         maxCount: Int = 6
-    ) -> (bundleIDs: [String], overflow: Int) {
+    ) -> (members: [PersistentStageMember], overflow: Int) {
         guard maxCount > 0 else { return ([], 0) }
         var seen = Set<String>()
-        var ordered: [String] = []
+        var ordered: [PersistentStageMember] = []
         for member in members {
             let bundleID = member.bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !bundleID.isEmpty, seen.insert(bundleID).inserted else { continue }
-            ordered.append(bundleID)
+            ordered.append(member)
         }
         if ordered.count <= maxCount {
             return (ordered, 0)
@@ -694,10 +711,20 @@ final class StageCardView: NSControl {
         return (Array(ordered.prefix(maxCount)), ordered.count - maxCount)
     }
 
-    /// Géométrie de la rangée horizontale d'icônes d'applications en bas de la carte (SPEC-157).
-    /// Ancrée à l'intérieur du bord bas de l'aperçu de premier plan pour ne jamais modifier la hauteur
-    /// du slot ni chevaucher la légende ou les bordures plein écran. O(m).
-    func appIconsRowLayout() -> (pillRect: CGRect, iconRects: [CGRect], bundleIDs: [String], overflow: Int)? {
+    /// Liste dédupliquée des identifiants d'applications présents dans la stage, en préservant l'ordre
+    /// d'affichage (fenêtre active en tête via `visualMembers`). O(m).
+    static func distinctAppBundleIDs(
+        for members: [PersistentStageMember],
+        maxCount: Int = 6
+    ) -> (bundleIDs: [String], overflow: Int) {
+        let distinct = distinctAppMembers(for: members, maxCount: maxCount)
+        return (distinct.members.map(\.bundleID), distinct.overflow)
+    }
+
+    /// Géométrie de la rangée horizontale d'icônes d'applications en dessous de la vignette (SPEC-157).
+    /// Suit la perspective du mode parallax (parallèle au bord inférieur incliné de `rawFront`) tout en
+    /// restant à l'intérieur de `bounds` sans modifier la hauteur du slot ni la légende. O(m).
+    func appIconsRowLayout() -> AppIconsRowLayout? {
         guard config.showAppIconsRow, config.mode != .icons, !visualMembers.isEmpty else { return nil }
         let preview = previewArea(in: cardContentRect)
         let previews = hitPreviewItems().map(\.rect)
@@ -707,82 +734,106 @@ final class StageCardView: NSControl {
         } else {
             rawFront = previews.first ?? preview
         }
-        let anchor = config.mode == .parallax ? rawFront.applying(parallaxProjection(for: rawFront)) : rawFront
-        guard anchor.width >= 28, anchor.height >= 28 else { return nil }
+        guard rawFront.width >= 28, rawFront.height >= 24 else { return nil }
 
-        let maxIcons = max(1, min(6, Int((anchor.width - 14) / 17)))
-        let distinct = Self.distinctAppBundleIDs(for: visualMembers, maxCount: maxIcons)
-        guard !distinct.bundleIDs.isEmpty else { return nil }
+        let spacing: CGFloat = 5
+        let idealIconSize: CGFloat = 20
+        let maxIcons = max(1, min(6, Int((rawFront.width + spacing) / (18 + spacing))))
+        let distinct = Self.distinctAppMembers(for: visualMembers, maxCount: maxIcons)
+        guard !distinct.members.isEmpty else { return nil }
 
-        let count = distinct.bundleIDs.count
-        let spacing: CGFloat = 3
-        let horizontalPadding: CGFloat = 5
-        let verticalPadding: CGFloat = 2.5
+        let count = distinct.members.count
         let overflowWidth: CGFloat = distinct.overflow > 0 ? 18 : 0
-        let maxContentWidth = max(12, anchor.width - 10 - 2 * horizontalPadding - overflowWidth)
-        let idealIconSize: CGFloat = 15
+        let maxContentWidth = max(12, rawFront.width - overflowWidth)
         let fittedIconSize = min(
             idealIconSize,
-            max(11, floor((maxContentWidth - CGFloat(max(0, count - 1)) * spacing) / CGFloat(count)))
+            max(12, floor((maxContentWidth - CGFloat(max(0, count - 1)) * spacing) / CGFloat(count)))
         )
         let iconsWidth = CGFloat(count) * fittedIconSize + CGFloat(max(0, count - 1)) * spacing
-        let pillWidth = min(anchor.width - 8, iconsWidth + overflowWidth + 2 * horizontalPadding)
-        let pillHeight = fittedIconSize + 2 * verticalPadding
-        let bottomInset: CGFloat = 4
-        let pillRect = CGRect(
-            x: anchor.midX - pillWidth / 2,
-            y: anchor.minY + bottomInset,
-            width: pillWidth,
-            height: pillHeight
+        let rowWidth = min(rawFront.width, iconsWidth + overflowWidth)
+        let rowHeight = fittedIconSize
+        let gap: CGFloat = 6
+
+        var rowRect = CGRect(
+            x: rawFront.midX - rowWidth / 2,
+            y: rawFront.minY - gap - rowHeight,
+            width: rowWidth,
+            height: rowHeight
         )
-        let startX = pillRect.minX + horizontalPadding
-        let iconY = pillRect.midY - fittedIconSize / 2
-        let iconRects = (0..<count).map { index in
-            CGRect(
-                x: startX + CGFloat(index) * (fittedIconSize + spacing),
-                y: iconY,
+        let usePerspective = config.mode == .parallax
+        let initialTransform = usePerspective
+            ? Self.parallaxTransform(for: rowRect, rotation: config.parallaxRotation)
+            : .identity
+        let projected = usePerspective ? rowRect.applying(initialTransform) : rowRect
+        if projected.minY < 2 {
+            rowRect.origin.y += (2 - projected.minY)
+        }
+        let transform = usePerspective
+            ? Self.parallaxTransform(for: rowRect, rotation: config.parallaxRotation)
+            : .identity
+
+        let items = distinct.members.enumerated().map { index, member in
+            let rect = CGRect(
+                x: rowRect.minX + CGFloat(index) * (fittedIconSize + spacing),
+                y: rowRect.minY,
                 width: fittedIconSize,
                 height: fittedIconSize
             )
+            return (member: member, rect: rect)
         }
-        return (pillRect, iconRects, distinct.bundleIDs, distinct.overflow)
+        return AppIconsRowLayout(
+            rowRect: rowRect,
+            transform: transform,
+            items: items,
+            overflow: distinct.overflow
+        )
+    }
+
+    /// Renvoie le membre associé à l'icône cliquée dans la rangée (en inversant la perspective si active). O(m).
+    func appIconMember(at point: CGPoint) -> PersistentStageMember? {
+        guard let layout = appIconsRowLayout() else { return nil }
+        let localPoint = layout.transform.isIdentity ? point : point.applying(layout.transform.inverted())
+        return layout.items.first { $0.rect.insetBy(dx: -2, dy: -2).contains(localPoint) }?.member
     }
 
     private func drawAppIconsRow() {
-        guard let layout = appIconsRowLayout() else { return }
-        let radius = layout.pillRect.height / 2
-        let pill = NSBezierPath(roundedRect: layout.pillRect, xRadius: radius, yRadius: radius)
-        NSColor.black.withAlphaComponent(isActive ? 0.62 : 0.52).setFill()
-        pill.fill()
-        NSColor.white.withAlphaComponent(isActive ? 0.24 : 0.16).setStroke()
-        pill.lineWidth = 0.75
-        pill.stroke()
+        guard let layout = appIconsRowLayout(),
+              let context = NSGraphicsContext.current?.cgContext else { return }
+        context.saveGState()
+        context.concatenate(layout.transform)
 
-        let alpha: CGFloat = isActive ? 0.96 : 0.86
-        for (bundleID, iconRect) in zip(layout.bundleIDs, layout.iconRects) {
-            guard let icon = Self.appIcon(for: bundleID) else { continue }
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.65)
+        shadow.shadowBlurRadius = 2.5
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.set()
+
+        let alpha: CGFloat = isActive ? 0.98 : 0.88
+        for item in layout.items {
+            guard let icon = Self.appIcon(for: item.member.bundleID) else { continue }
             icon.draw(
-                in: iconRect,
+                in: item.rect,
                 from: CGRect(origin: .zero, size: icon.size),
                 operation: .sourceOver,
                 fraction: alpha
             )
         }
-        if layout.overflow > 0, let lastRect = layout.iconRects.last {
+        if layout.overflow > 0, let lastRect = layout.items.last?.rect {
             let badgeRect = CGRect(
                 x: lastRect.maxX + 2,
-                y: layout.pillRect.minY + 2,
-                width: max(0, layout.pillRect.maxX - lastRect.maxX - 4),
-                height: layout.pillRect.height - 4
+                y: layout.rowRect.minY + max(0, (layout.rowRect.height - 12) / 2),
+                width: max(0, layout.rowRect.maxX - lastRect.maxX - 2),
+                height: 12
             )
             let paragraph = NSMutableParagraphStyle()
             paragraph.alignment = .center
             ("+\(layout.overflow)" as NSString).draw(in: badgeRect, withAttributes: [
-                .foregroundColor: NSColor.white.withAlphaComponent(0.90),
-                .font: NSFont.systemFont(ofSize: 9, weight: .semibold),
+                .foregroundColor: NSColor.white.withAlphaComponent(0.92),
+                .font: NSFont.systemFont(ofSize: 9.5, weight: .semibold),
                 .paragraphStyle: paragraph,
             ])
         }
+        context.restoreGState()
     }
 
     private static func appIcon(for bundleID: String) -> NSImage? {
@@ -881,6 +932,7 @@ final class StageCardView: NSControl {
     }
 
     func dragPayload(at point: CGPoint) -> RailDragPayload? {
+        if appIconMember(at: point) != nil { return nil }
         guard let hit = hitPreview(at: point) else { return nil }
         return RailDragPayload(
             windowID: hit.member.windowID,
@@ -896,7 +948,7 @@ final class StageCardView: NSControl {
     }
 
     func windowID(at point: CGPoint) -> WindowID? {
-        hitPreview(at: point)?.member.windowID
+        hitPreview(at: point)?.member.windowID ?? appIconMember(at: point)?.windowID
     }
 
     func windowInsertionIndex(at point: CGPoint) -> Int {

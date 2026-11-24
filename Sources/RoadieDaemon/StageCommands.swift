@@ -576,6 +576,28 @@ public struct StageCommandService {
         return switchDisplay(display, to: stageID, snapshot: snapshot)
     }
 
+    /// Active la stage sur `displayID` et donne directement le focus à `windowID` (clic sur une icône
+    /// d'application sous la vignette du NavRail, SPEC-157). Si une autre fenêtre de la stage était
+    /// en zoom Roadie, sort du zoom afin que l'application demandée soit immédiatement visible.
+    public func switchAndFocus(
+        _ stageID: StageID,
+        windowID: WindowID,
+        bundleID: String,
+        displayID: DisplayID
+    ) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
+            return StageCommandResult(message: "stage switch-focus: unknown display", changed: false, outcome: .failed)
+        }
+        return switchDisplay(
+            display,
+            to: stageID,
+            snapshot: snapshot,
+            preferredWindowID: windowID,
+            preferredBundleID: bundleID
+        )
+    }
+
     public func switchToPosition(_ position: Int) -> StageCommandResult {
         guard position > 0 else {
             return StageCommandResult(message: "stage switch-position: requires a positive position", changed: false, outcome: .failed)
@@ -1367,7 +1389,9 @@ public struct StageCommandService {
         to stageID: StageID,
         snapshot: DaemonSnapshot,
         generation: UInt64 = PlacementGeneration.shared.next(),
-        navigation: StageCycleDirection? = nil
+        navigation: StageCycleDirection? = nil,
+        preferredWindowID: WindowID? = nil,
+        preferredBundleID: String? = nil
     ) -> StageCommandResult {
         let startedAt = Date()
         // Lecture pour décider du cas « déjà active » ; les écritures passent par `mutate`.
@@ -1376,11 +1400,77 @@ public struct StageCommandService {
         let previousID = scope.activeStageID
         // Écran et bureau de la bascule : seuls eux sont soustraits au maintien (FR-040).
         let switchScope = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
+        // Si l'utilisateur clique sur une application précise et qu'une autre fenêtre de cette stage
+        // était zoomée en plein écran Roadie, on sort du zoom pour rendre l'application cliquée visible.
+        var clearedZoom = false
+        if let preferredWindowID,
+           let zoomed = service.effectiveIntentStore.intent(for: switchScope)?.zoomedWindowID,
+           zoomed != preferredWindowID {
+            service.effectiveIntentStore.remove(scope: switchScope)
+            clearedZoom = true
+        }
         if previousID == stageID {
             let activeDisplayChanged = state.activeDisplayID != display.id
             let targetStage = scope.stages.first { $0.id == stageID }
             let targetMembers = targetStage?.members ?? []
             let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+            if let preferredWindowID {
+                do {
+                    try store.mutateChecked { state in
+                        var currentScope = activeScope(displayID: display.id, in: &state)
+                        if let index = currentScope.stages.firstIndex(where: { $0.id == stageID }),
+                           currentScope.stages[index].members.contains(where: { $0.windowID == preferredWindowID }) {
+                            currentScope.stages[index].focusedWindowID = preferredWindowID
+                            state.update(currentScope)
+                        }
+                        state.focusDisplay(display.id)
+                        state.protectCommandFocus(
+                            displayID: display.id,
+                            desktopID: scope.desktopID,
+                            stageID: stageID,
+                            windowID: preferredWindowID,
+                            staleFocusedWindowID: snapshot.focusedWindowID == preferredWindowID ? nil : snapshot.focusedWindowID,
+                            duration: 3.0
+                        )
+                    }
+                } catch {
+                    return .persistenceFailure("stage switch \(stageID.rawValue)", error)
+                }
+                if clearedZoom {
+                    beginLayoutCommand("stage.switch.focus_unzoom", scopes: [switchScope])
+                    defer { finishLayoutCommand("stage.switch.focus_unzoom", scopes: [switchScope]) }
+                    _ = service.applyCommandPlacement(
+                        CommandPlacement(layoutScopes: [switchScope]),
+                        snapshot: snapshot,
+                        cause: "stage.switch.focus_unzoom",
+                        generation: generation,
+                        events: events
+                    )
+                }
+                let focused: Bool
+                if let window = windowsByID[preferredWindowID] {
+                    focused = service.focus(window)
+                } else if let bundleID = preferredBundleID, !bundleID.isEmpty {
+                    focused = service.activateApplication(bundleID: bundleID)
+                } else {
+                    focused = false
+                }
+                events.append(RoadieEvent(
+                    type: "stage_focus_window",
+                    scope: switchScope,
+                    details: [
+                        "windowID": String(preferredWindowID.rawValue),
+                        "clearedZoom": String(clearedZoom),
+                        "focused": String(focused),
+                        "activeDisplayChanged": String(activeDisplayChanged),
+                        "durationMs": formatMs(elapsedMs(since: startedAt))
+                    ]
+                ))
+                return StageCommandResult.changedOrNoOp(
+                    "stage switch \(stageID.rawValue): focused window \(preferredWindowID.rawValue) focused=\(focused)",
+                    changed: focused || clearedZoom || activeDisplayChanged
+                )
+            }
             let liveWindowIDs = Set(windowsByID.keys)
             let nativeFullscreenMember = targetMembers
                 .first { $0.confirmedClosedAt == nil && $0.presentationState == .nativeFullscreen && !liveWindowIDs.contains($0.windowID) }
@@ -1531,14 +1621,19 @@ public struct StageCommandService {
 
                 let previousMembers = Set(scope.memberIDs(in: previousID))
                 let targetMembers = Set(scope.memberIDs(in: stageID))
+                if let preferredWindowID,
+                   let idx = scope.stages.firstIndex(where: { $0.id == stageID }),
+                   scope.stages[idx].members.contains(where: { $0.windowID == preferredWindowID }) {
+                    scope.stages[idx].focusedWindowID = preferredWindowID
+                }
                 let targetStage = scope.stages.first(where: { $0.id == stageID })
                 let targetLiveMemberIDs = targetStage?.members.compactMap { member -> WindowID? in
                     windowsByID[member.windowID] == nil ? nil : member.windowID
                 } ?? []
-                let targetFocusedWindowID = targetStage?.focusedWindowID.flatMap { windowsByID[$0] == nil ? nil : $0 }
-                    ?? targetLiveMemberIDs.last
-                    ?? targetStage?.focusedWindowID
-                    ?? targetStage?.members.last?.windowID
+                let livePreferredID: WindowID? = preferredWindowID.flatMap { windowsByID[$0] == nil ? nil : $0 }
+                let liveStageFocusedID: WindowID? = targetStage?.focusedWindowID.flatMap { windowsByID[$0] == nil ? nil : $0 }
+                let fallbackWindowID: WindowID? = preferredWindowID ?? targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID
+                let targetFocusedWindowID: WindowID? = livePreferredID ?? liveStageFocusedID ?? targetLiveMemberIDs.last ?? fallbackWindowID
                 let hiddenWindowIDs = previousMembers.subtracting(targetMembers)
                 // Toutes les fenêtres de la stage cible ont disparu (application absente, autre
                 // Space, absence courte) : la bascule a lieu quand même, puis on tente de faire

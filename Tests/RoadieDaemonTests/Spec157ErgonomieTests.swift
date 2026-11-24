@@ -36,27 +36,28 @@ struct Spec157ErgonomieTests {
 
     @Test
     @MainActor
-    func appIconsRowRespectsSettingModeAndPreservesCardGeometry() {
+    func appIconsRowSitsBelowPreviewFollowsPerspectiveAndRoutesClickToAppWindow() throws {
         let members = [
             PersistentStageMember(windowID: WindowID(rawValue: 10), bundleID: "com.apple.Safari", title: "Safari", frame: Rect(x: 0, y: 0, width: 800, height: 600)),
             PersistentStageMember(windowID: WindowID(rawValue: 11), bundleID: "com.googlecode.iterm2", title: "iTerm2", frame: Rect(x: 0, y: 0, width: 800, height: 600)),
         ]
         let stage = PersistentStage(id: StageID(rawValue: "1"), name: "1", focusedWindowID: WindowID(rawValue: 10), members: members)
 
-        var enabledConfig = RailVisualConfig.load(settings: RailSettings.load(raw: ""))
-        enabledConfig.showAppIconsRow = true
+        var stackedConfig = RailVisualConfig.load(settings: RailSettings.load(raw: ""))
+        stackedConfig.mode = .stacked
+        stackedConfig.showAppIconsRow = true
         let cardOn = StageCardView(
             stage: stage,
             displayLabel: "1",
             isActive: true,
             accent: .systemGreen,
-            config: enabledConfig,
+            config: stackedConfig,
             presentationStates: [:],
             thumbnails: [:],
             position: 1
         )
 
-        var disabledConfig = enabledConfig
+        var disabledConfig = stackedConfig
         disabledConfig.showAppIconsRow = false
         let cardOff = StageCardView(
             stage: stage,
@@ -72,16 +73,56 @@ struct Spec157ErgonomieTests {
         #expect(cardOn.bounds.height == cardOff.bounds.height)
         #expect(cardOn.stageLabelLayout().rect == cardOff.stageLabelLayout().rect)
 
-        let layout = cardOn.appIconsRowLayout()
-        #expect(layout != nil)
-        #expect(layout?.bundleIDs == ["com.apple.Safari", "com.googlecode.iterm2"])
-        #expect(layout?.iconRects.count == 2)
-        if let layout, let first = layout.iconRects.first, let second = layout.iconRects.last {
+        let stackedLayout = try #require(cardOn.appIconsRowLayout())
+        let stackedFront = try #require(cardOn.previewDisplayFrames().first)
+        #expect(stackedLayout.bundleIDs == ["com.apple.Safari", "com.googlecode.iterm2"])
+        #expect(stackedLayout.iconRects.count == 2)
+        #expect(stackedLayout.transform.isIdentity)
+        // La rangée est bien placée EN DESSOUS de la vignette.
+        #expect(stackedLayout.rowRect.maxY < stackedFront.minY)
+        if let first = stackedLayout.iconRects.first, let second = stackedLayout.iconRects.last {
             #expect(second.minX > first.maxX)
+            let clickSecond = CGPoint(x: second.midX, y: second.midY)
+            #expect(cardOn.dragPayload(at: clickSecond) == nil)
+            if case .focusStageWindow(let sID, let wID, let bID) = cardOn.action(at: clickSecond) {
+                #expect(sID == StageID(rawValue: "1"))
+                #expect(wID == WindowID(rawValue: 11))
+                #expect(bID == "com.googlecode.iterm2")
+            } else {
+                Issue.record("Le clic sur la 2e icône doit cibler focusStageWindow pour iTerm2")
+            }
         }
         #expect(cardOff.appIconsRowLayout() == nil)
 
-        var iconsModeConfig = enabledConfig
+        // En mode parallax : la rangée suit la perspective et reste cliquable après projection.
+        var parallaxConfig = stackedConfig
+        parallaxConfig.mode = .parallax
+        parallaxConfig.parallaxRotation = 35
+        let parallaxCard = StageCardView(
+            stage: stage,
+            displayLabel: "1",
+            isActive: true,
+            accent: .systemGreen,
+            config: parallaxConfig,
+            presentationStates: [:],
+            thumbnails: [:],
+            position: 1
+        )
+        let parallaxLayout = try #require(parallaxCard.appIconsRowLayout())
+        #expect(!parallaxLayout.transform.isIdentity)
+        #expect(parallaxLayout.transform == StageCardView.parallaxTransform(for: parallaxLayout.rowRect, rotation: 35))
+        let secondLocal = try #require(parallaxLayout.items.last?.rect)
+        let projectedClick = CGPoint(x: secondLocal.midX, y: secondLocal.midY).applying(parallaxLayout.transform)
+        #expect(parallaxCard.dragPayload(at: projectedClick) == nil)
+        if case .focusStageWindow(let sID, let wID, let bID) = parallaxCard.action(at: projectedClick) {
+            #expect(sID == StageID(rawValue: "1"))
+            #expect(wID == WindowID(rawValue: 11))
+            #expect(bID == "com.googlecode.iterm2")
+        } else {
+            Issue.record("Le clic projeté en mode parallax doit cibler focusStageWindow pour iTerm2")
+        }
+
+        var iconsModeConfig = stackedConfig
         iconsModeConfig.mode = .icons
         let cardIconsOnly = StageCardView(
             stage: stage,
@@ -101,12 +142,74 @@ struct Spec157ErgonomieTests {
             displayLabel: "2",
             isActive: false,
             accent: .systemGreen,
-            config: enabledConfig,
+            config: stackedConfig,
             presentationStates: [:],
             thumbnails: [:],
             position: 2
         )
         #expect(emptyCard.appIconsRowLayout() == nil)
+    }
+
+    @Test
+    func switchAndFocusActivatesStageExitsOtherWindowZoomAndFocusesClickedApp() {
+        let displayA = DisplayID(rawValue: "display-focus-app")
+        let snapA = DisplaySnapshot(id: displayA, index: 1, name: "Main", frame: Rect(x: 0, y: 0, width: 1920, height: 1080), visibleFrame: Rect(x: 0, y: 25, width: 1920, height: 1055), isMain: true)
+        let win1 = WindowSnapshot(id: WindowID(rawValue: 10), pid: 10, appName: "Safari", bundleID: "com.apple.Safari", title: "Docs", frame: Rect(x: 0, y: 25, width: 1920, height: 1055), isOnScreen: true, isTileCandidate: true)
+        let win2 = WindowSnapshot(id: WindowID(rawValue: 20), pid: 20, appName: "iTerm2", bundleID: "com.googlecode.iterm2", title: "zsh", frame: Rect(x: 20, y: 40, width: 900, height: 900), isOnScreen: true, isTileCandidate: true)
+        let win3 = WindowSnapshot(id: WindowID(rawValue: 30), pid: 30, appName: "Firefox", bundleID: "org.mozilla.firefox", title: "Web", frame: Rect(x: 20, y: 40, width: 900, height: 900), isOnScreen: true, isTileCandidate: true)
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-157-switch-focus-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let store = StageStore(path: dir.appendingPathComponent("stages.json").path)
+        let intentStore = LayoutIntentStore(path: dir.appendingPathComponent("intents.json").path)
+        let events = EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: displayA, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1", focusedWindowID: win1.id, members: [
+                        PersistentStageMember(windowID: win1.id, bundleID: win1.bundleID, title: win1.title, frame: win1.frame),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2"), name: "Stage 2", focusedWindowID: win2.id, members: [
+                        PersistentStageMember(windowID: win2.id, bundleID: win2.bundleID, title: win2.title, frame: win2.frame),
+                        PersistentStageMember(windowID: win3.id, bundleID: win3.bundleID, title: win3.title, frame: win3.frame),
+                    ]),
+                ]),
+            ],
+            activeDisplayID: displayA
+        ))
+
+        let stage2Scope = StageScope(displayID: displayA, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
+        intentStore.save(LayoutIntent(
+            scope: stage2Scope,
+            windowIDs: [win2.id, win3.id],
+            placements: [win2.id: snapA.visibleFrame],
+            source: .command,
+            zoomedWindowID: win2.id
+        ))
+
+        let writer = Spec157RecordingWriter()
+        let service = SnapshotService(
+            provider: Spec157FakeProvider(displays: [snapA], windows: [win1, win2, win3], focusedID: win1.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            intentStore: intentStore,
+            stageStore: store,
+            events: events
+        )
+        let stageService = StageCommandService(service: service, store: store, events: events)
+
+        // 1. Bascule depuis stage 1 vers stage 2 en cliquant sur Firefox (win3) alors qu'iTerm2 (win2) était zoomé.
+        let switchResult = stageService.switchAndFocus(StageID(rawValue: "2"), windowID: win3.id, bundleID: win3.bundleID, displayID: displayA)
+        #expect(switchResult.changed)
+        #expect(intentStore.intent(for: stage2Scope) == nil)
+        #expect(writer.focusedWindowIDs.last == win3.id)
+
+        // 2. Stage 2 déjà active : clic sur iTerm2 (win2) donne directement le focus à win2.
+        let sameStageResult = stageService.switchAndFocus(StageID(rawValue: "2"), windowID: win2.id, bundleID: win2.bundleID, displayID: displayA)
+        #expect(sameStageResult.changed)
+        #expect(writer.focusedWindowIDs.last == win2.id)
     }
 
     @Test

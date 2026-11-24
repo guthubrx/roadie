@@ -578,6 +578,7 @@ public final class RailController {
             }
             if let action = panel.action(at: screenPoint) {
                 perform(action, displayID: displayID)
+                if case .focusStageWindow = action { return }
             } else if let stageID = panel.emptyStageID(at: screenPoint) {
                 guard !emptyRailClickHitsManagedWindow(at: screenPoint, displayID: displayID) else {
                     return
@@ -982,6 +983,23 @@ public final class RailController {
             fflush(stdout)
             events.append(RoadieEvent(type: "rail_stage_switch", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
             _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
+        case .focusStageWindow(let stageID, let windowID, let bundleID):
+            print("rail focus stage \(stageID.rawValue) window \(windowID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(type: "rail_stage_app_focus", details: [
+                "displayID": displayID.rawValue,
+                "stageID": stageID.rawValue,
+                "windowID": String(windowID.rawValue),
+                "bundleID": bundleID
+            ]))
+            let service = snapshotService
+            let stageStore = store
+            let eventLog = events
+            Task.detached(priority: .userInitiated) {
+                _ = StageCommandService(service: service, store: stageStore, events: eventLog)
+                    .switchAndFocus(stageID, windowID: windowID, bundleID: bundleID, displayID: displayID)
+                await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.focus_app") }
+            }
         case .focusNativeFullscreen(let windowID, let bundleID, let stageID):
             print("rail focus native fullscreen \(windowID.rawValue)")
             fflush(stdout)
@@ -1859,6 +1877,7 @@ struct RailDisplayContentCache {
 
 enum RailAction {
     case switchStage(StageID)
+    case focusStageWindow(StageID, WindowID, String)
     case focusNativeFullscreen(WindowID, String, StageID)
     case summonWindow(WindowID)
     case moveWindow(WindowID, StageID, Int?, Bool, stageInsertion: StageInsertion? = nil)
