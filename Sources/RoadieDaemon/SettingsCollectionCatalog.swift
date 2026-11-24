@@ -41,6 +41,18 @@ extension SettingsCatalog {
             return list(.text, [])
         case "switcher.excluded_bundles", "switcher.zone_click_excluded_bundles":
             return list(.text, [], unique: true)
+        case "clipboard.excluded_bundles":
+            return list(.text, ClipboardConfig.defaultExcludedBundles.map(SettingValue.string),
+                        suggestions: ClipboardConfig.defaultExcludedBundles, unique: true)
+        case "snippets.items":
+            return rows("snippets.items", [
+                field("keyword", tr("Mot-clé", "Keyword"), required: true,
+                      help: tr("Abréviation courte déclenchant le snippet, par exemple ;sig ou ;date.", "Short trigger keyword for the snippet, e.g. ;sig or ;date.")),
+                field("title", tr("Titre", "Title"),
+                      help: tr("Nom lisible affiché dans la barre de recherche.", "Readable title shown in the search bar.")),
+                field("body", tr("Texte", "Body"), required: true,
+                      help: tr("Texte inséré ; variables disponibles : {date}, {time}, {datetime}, {clipboard}, {cursor}.", "Inserted text; available variables: {date}, {time}, {datetime}, {clipboard}, {cursor}.")),
+            ], key: "keyword")
         case "target_mode.bookmark_browsers":
             return list(.choice(["firefox", "safari", "chrome", "brave", "edge"]),
                         TargetModeConfig().bookmarkBrowsers.map(SettingValue.string), unique: true)

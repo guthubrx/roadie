@@ -61,7 +61,10 @@ enum SettingsOrganization {
             if key == "excluded_bundles" { return tr("Applications exclues", "Excluded apps") }
             if key == "enabled" { return tr("Activation", "Activation") }
             return key.contains("font") ? tr("Texte", "Text") : tr("Apparence commune", "Shared appearance")
-        case .recherche: return key.contains("font") ? tr("Texte et apparence", "Text and appearance") : tr("Activation et contenu", "Activation and content")
+        case .recherche:
+            if d.tablePath == "clipboard" { return tr("Presse-papiers", "Clipboard") }
+            if d.tablePath == "snippets" { return tr("Snippets", "Snippets") }
+            return key.contains("font") ? tr("Texte et apparence", "Text and appearance") : tr("Activation et contenu", "Activation and content")
         case .lettres: return key.contains("font") ? tr("Texte des repères", "Label text") : tr("Activation et repères", "Activation and labels")
         case .grille:
             if key.contains("font") || key.contains("color") || key.contains("opacity") || key.contains("overlay") || key == "label_placement" { return tr("Apparence et repères", "Appearance and labels") }

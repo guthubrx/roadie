@@ -17,6 +17,10 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var switcher: WindowSwitcherConfig
     /// Raccourcis de commandes gérés par Roadie (session 108).
     public var shortcuts: [CommandShortcut]
+    /// Historique local sécurisé du presse-papiers (Spec 163).
+    public var clipboard: ClipboardConfig
+    /// Snippets locaux et expandeur optionnel (Spec 163).
+    public var snippets: SnippetsConfig
 
     public init(
         interface: InterfaceConfig = InterfaceConfig(),
@@ -32,7 +36,9 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         experimental: ExperimentalConfig = ExperimentalConfig(),
         overview: OverviewConfig = OverviewConfig(),
         switcher: WindowSwitcherConfig = WindowSwitcherConfig(),
-        shortcuts: [CommandShortcut] = []
+        shortcuts: [CommandShortcut] = [],
+        clipboard: ClipboardConfig = ClipboardConfig(),
+        snippets: SnippetsConfig = SnippetsConfig()
     ) {
         self.interface = interface
         self.tiling = tiling
@@ -48,6 +54,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.overview = overview
         self.switcher = switcher
         self.shortcuts = shortcuts
+        self.clipboard = clipboard
+        self.snippets = snippets
     }
 
     public init(
@@ -62,7 +70,9 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
         experimental: ExperimentalConfig = ExperimentalConfig(),
         overview: OverviewConfig = OverviewConfig(),
-        switcher: WindowSwitcherConfig = WindowSwitcherConfig()
+        switcher: WindowSwitcherConfig = WindowSwitcherConfig(),
+        clipboard: ClipboardConfig = ClipboardConfig(),
+        snippets: SnippetsConfig = SnippetsConfig()
     ) {
         self.init(
             interface: interface,
@@ -77,7 +87,9 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
             widthAdjustment: widthAdjustment,
             experimental: experimental,
             overview: overview,
-            switcher: switcher
+            switcher: switcher,
+            clipboard: clipboard,
+            snippets: snippets
         )
     }
 
@@ -96,6 +108,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case overview
         case switcher
         case shortcuts
+        case clipboard
+        case snippets
     }
 
     // Alias public ; le modèle interne et les anciens fichiers restent compatibles.
@@ -117,6 +131,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.overview = try c.decodeIfPresent(OverviewConfig.self, forKey: .overview) ?? OverviewConfig()
         self.switcher = try c.decodeIfPresent(WindowSwitcherConfig.self, forKey: .switcher) ?? WindowSwitcherConfig()
         self.shortcuts = try c.decodeIfPresent([CommandShortcut].self, forKey: .shortcuts) ?? []
+        self.clipboard = try c.decodeIfPresent(ClipboardConfig.self, forKey: .clipboard) ?? ClipboardConfig()
+        self.snippets = try c.decodeIfPresent(SnippetsConfig.self, forKey: .snippets) ?? SnippetsConfig()
         let launcher = try decoder.container(keyedBy: LauncherKeys.self)
         if launcher.contains(.launcher) {
             self.experimental.targetMode = try TargetModeConfig(

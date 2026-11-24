@@ -13,14 +13,16 @@ public enum RoadieConfigLoader {
         "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"],
         "experimental.target_mode": ["web_searches", "fallback_searches", "bookmark_browsers", "app_search_paths", "btt_pause_keys",
                                       "file_types", "file_excluded_folders"],
-        "switcher": ["excluded_bundles", "zone_click_excluded_bundles", "zone_clicks_per_app", "shortcuts"]
+        "switcher": ["excluded_bundles", "zone_click_excluded_bundles", "zone_clicks_per_app", "shortcuts"],
+        "clipboard": ["excluded_bundles"],
+        "snippets": ["items"]
     ]
 
     /// Tables qui sont elles-mêmes des tableaux de tables ou leurs sous-tables.
     private static let nonScalarTables: Set<String> = [
         "tiling.display_overrides", "stage_manager.workspaces", "fx.borders.stage_overrides", "exclusions.floating_windows",
         "fx.rail.preview.stage_overrides", "switcher.shortcuts", "switcher.zone_clicks_per_app", "experimental.target_mode.web_searches", "rules", "rules.match", "rules.action",
-        "shortcuts"
+        "shortcuts", "snippets.items"
     ]
 
     /// Clés scalaires reconnues par le validateur, par chemin de table TOML complet.
@@ -210,7 +212,10 @@ private enum ConfigValidationRules {
         "rules",
         "rules.match",
         "rules.action",
-        "shortcuts"
+        "shortcuts",
+        "clipboard",
+        "snippets",
+        "snippets.items"
     ]
 
     private static let knownUnsupportedTables: Set<String> = [
@@ -280,7 +285,10 @@ private enum ConfigValidationRules {
             "rules": ["id", "enabled", "priority", "stop_processing", "match", "action"],
             "shortcuts": ["keys", "command", "enabled", "btt_uuid"],
             "rules.match": ["app", "app_regex", "title", "title_regex", "role", "subrole", "display", "desktop", "stage", "is_floating"],
-            "rules.action": ["manage", "exclude", "assign_desktop", "assign_display", "assign_stage", "follow", "floating", "layout", "gap_override", "scratchpad", "emit_event", "remember_frame"]
+            "rules.action": ["manage", "exclude", "assign_desktop", "assign_display", "assign_stage", "follow", "floating", "layout", "gap_override", "scratchpad", "emit_event", "remember_frame"],
+            "clipboard": ["enabled", "max_items", "retention_days", "excluded_bundles"],
+            "snippets": ["enabled", "auto_expand", "items"],
+            "snippets.items": ["keyword", "title", "body"]
         ]
         keys["launcher"] = keys["experimental.target_mode"]
         keys["launcher.web_searches"] = keys["experimental.target_mode.web_searches"]

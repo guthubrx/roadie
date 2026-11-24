@@ -915,6 +915,45 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
             let timerRows = Self.timerRows(for: timerQuery)
             launcherList.prependSection(tr("Minuteur", "Timer"), timerRows)
         }
+        // Historique presse-papiers local sécurisé (Spec 163 : `cb …` ou `clipboard …`).
+        let fullConfig = ConfigReloadService.shared.currentConfig()
+        if fullConfig.clipboard.enabled, let cbFilter = Self.prefixQuery(model.query, prefixes: ["cb", "clipboard"]) {
+            let entries = ClipboardHistoryStore().load().search(cbFilter, limit: 15)
+            let rows: [LauncherList.Row] = entries.map { entry in
+                let badge = entry.pinned ? "📌 " : ""
+                let source = entry.sourceBundleID.map { "\($0) · " } ?? ""
+                return .system(LauncherSystemCommand(
+                    id: "clipboard-copy:\(entry.id)",
+                    title: "\(badge)\(entry.preview(maxLength: 72))",
+                    keywords: ["cb", "clipboard"],
+                    symbol: entry.pinned ? "pin.fill" : "doc.on.clipboard",
+                    confirms: false,
+                    detail: "\(source)" + tr("Retour copie", "Return copies")
+                ))
+            }
+            if !rows.isEmpty {
+                launcherList.prependSection(tr("Presse-papiers", "Clipboard"), rows)
+            }
+        }
+        // Snippets locaux (Spec 163 : `snip …` ou `snippet …`).
+        if fullConfig.snippets.enabled, let snipFilter = Self.prefixQuery(model.query, prefixes: ["snip", "snippet", "snippets"]) {
+            let matches = SnippetsService.search(snipFilter, in: fullConfig.snippets.items, limit: 15)
+            let rows: [LauncherList.Row] = matches.map { item in
+                let label = item.title.isEmpty ? item.keyword : "\(item.keyword) — \(item.title)"
+                let preview = item.body.replacingOccurrences(of: "\n", with: " ").prefix(60)
+                return .system(LauncherSystemCommand(
+                    id: "snippet-copy:\(item.keyword)",
+                    title: label,
+                    keywords: ["snip", "snippet", item.keyword],
+                    symbol: "text.badge.plus",
+                    confirms: false,
+                    detail: "\(preview) · " + tr("Retour copie", "Return copies")
+                ))
+            }
+            if !rows.isEmpty {
+                launcherList.prependSection(tr("Snippets", "Snippets"), rows)
+            }
+        }
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
         syncHighlight()
     }
@@ -1171,6 +1210,20 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         default:
             return false
         }
+    }
+
+    /// Reconnaît un préfixe exact seul (`cb`) ou suivi d'un espace et d'un filtre (`cb foo`). O(p).
+    static func prefixQuery(_ raw: String, prefixes: [String]) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = trimmed.lowercased()
+        for prefix in prefixes {
+            if lowered == prefix { return "" }
+            if lowered.hasPrefix(prefix + " ") {
+                let start = trimmed.index(trimmed.startIndex, offsetBy: prefix.count + 1)
+                return String(trimmed[start...]).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
     }
 
     /// Lignes du lanceur pour une requête minuteur / Pomodoro (Spec 161).

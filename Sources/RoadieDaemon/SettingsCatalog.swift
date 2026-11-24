@@ -639,6 +639,26 @@ extension SettingsCatalog {
         entry(.recherche, "experimental.target_mode", "show_scrollbar", tr("Barre de défilement", "Scroll bar"),
               tr("Montre à droite de la liste une barre qui indique la place des lignes visibles quand il y a plus de résultats que de place.", "Shows a bar on the right of the list that marks the position of the visible rows when there are more results than room."),
               .bool, .bool(false)),
+        // Spec 163 : historique presse-papiers local sécurisé et snippets.
+        entry(.recherche, "clipboard", "enabled", tr("Historique du presse-papiers", "Clipboard history"),
+              tr("Enregistre localement (permissions 0600) les textes copiés pour les retrouver via « cb » dans la barre ou `roadie clipboard`. Ignore toujours les éléments masqués/temporaires et gestionnaires de mots de passe.", "Locally stores copied text (0600 permissions) so you can search it via “cb” in the bar or `roadie clipboard`. Always ignores concealed/transient entries and password managers."),
+              .bool, .bool(true)),
+        entry(.recherche, "clipboard", "max_items", tr("Nombre maximal d'entrées conservées", "Maximum stored entries"),
+              tr("Nombre maximal de textes conservés dans l'historique (10 à 2000). Les entrées non épinglées les plus anciennes sont purgées en premier.", "Maximum number of text items kept in history (10 to 2000). Oldest unpinned entries are evicted first."),
+              .int(10...2000), .int(200)),
+        entry(.recherche, "clipboard", "retention_days", tr("Durée de conservation (jours)", "Retention period (days)"),
+              tr("Les entrées non épinglées plus anciennes que ce délai sont supprimées automatiquement (1 à 90 jours).", "Unpinned entries older than this period are pruned automatically (1 to 90 days)."),
+              .int(1...90), .int(7)),
+        readOnlyEntry(.recherche, "clipboard", "excluded_bundles", tr("Applications exclues du presse-papiers", "Apps excluded from clipboard history"),
+                      tr("Identifiants d'applications dont les copies ne sont jamais enregistrées (gestionnaires de mots de passe, Trousseau, etc.).", "Bundle identifiers whose copies are never recorded (password managers, Keychain, etc.).")),
+        entry(.recherche, "snippets", "enabled", tr("Snippets dans le lanceur", "Snippets in the launcher"),
+              tr("Permet de rechercher et d'étendre vos snippets via « snip » dans la barre ou `roadie snippet` ({date}, {time}, {datetime}, {clipboard}, {cursor}).", "Lets you search and expand your snippets via “snip” in the bar or `roadie snippet` ({date}, {time}, {datetime}, {clipboard}, {cursor})."),
+              .bool, .bool(true)),
+        entry(.recherche, "snippets", "auto_expand", tr("Auto-expansion clavier des snippets", "Keyboard auto-expansion of snippets"),
+              tr("Remplace automatiquement un mot-clé de snippet suivi d'un espace dans les champs texte ordinaires (désactivé par défaut ; ignore toujours les champs de mot de passe).", "Automatically expands a snippet keyword followed by a space in regular text fields (off by default; always skips secure password fields)."),
+              .bool, .bool(false)),
+        readOnlyEntry(.recherche, "snippets", "items", tr("Liste des snippets", "Snippets list"),
+                      tr("Tableau [[snippets.items]] associant un mot-clé, un titre et un corps avec variables dynamiques.", "Table [[snippets.items]] mapping a keyword, a title and a body with dynamic variables.")),
     ]
 
     static let appTargetDescriptors: [SettingDescriptor] = [

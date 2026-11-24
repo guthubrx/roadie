@@ -250,6 +250,11 @@ func startTargetModeComponent() {
     zoneClickRecorder = ZoneClickRecorder()
     zoneClickRecorder?.start()
     ShutdownRegistry.register { zoneClickRecorder?.stop() }
+    // Spec 163 : historique presse-papiers local sécurisé et auto-expandeur optionnel de snippets.
+    ClipboardMonitor.shared.start()
+    ShutdownRegistry.register { ClipboardMonitor.shared.stop() }
+    SnippetAutoExpander.shared.start()
+    ShutdownRegistry.register { SnippetAutoExpander.shared.stop() }
 }
 
 @MainActor

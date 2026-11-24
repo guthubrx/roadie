@@ -242,6 +242,22 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
                 }
                 return
             }
+            if id.hasPrefix("clipboard-copy:") {
+                let entryID = String(id.dropFirst("clipboard-copy:".count))
+                if let entry = ClipboardHistoryStore().load().entry(matching: entryID) {
+                    _ = ClipboardMonitor.copyToPasteboard(entry.text)
+                }
+                return
+            }
+            if id.hasPrefix("snippet-copy:") {
+                let keyword = String(id.dropFirst("snippet-copy:".count))
+                let config = ConfigReloadService.shared.currentConfig()
+                if config.snippets.enabled, let item = SnippetsService.find(keyword: keyword, in: config.snippets.items) {
+                    let expanded = SnippetsService.expand(item.body, clipboardText: ClipboardMonitor.readPlainTextIfSafe())
+                    _ = ClipboardMonitor.copyToPasteboard(expanded.text)
+                }
+                return
+            }
             // Navigateur SF Symbols (session 131), avec la recherche tapée après `symbols`.
             if id.hasPrefix("sf-symbols:") {
                 LauncherSymbolsPanel.show(query: String(id.dropFirst("sf-symbols:".count)))

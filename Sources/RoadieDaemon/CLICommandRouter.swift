@@ -157,6 +157,10 @@ public final class CLICommandRouter {
             return verb == "health"
         case "timer":
             return verb == "status"
+        case "clipboard":
+            return verb == "list" || verb == "search"
+        case "snippet":
+            return verb == "list" || (verb == "expand" && !args.contains("--copy"))
         default:
             return false
         }
@@ -248,6 +252,8 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "launch PATH [--stage NAME | --here [--mouse] | --new-stage] [--position left|right|full|float] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
         CLICommandSpec(usage: "timer start DURATION [LABEL] | pomodoro [DURATION] [LABEL] | status | cancel [ID]"),
+        CLICommandSpec(usage: "clipboard list [N] [--json] | search QUERY [--json] | copy ID | pin ID | delete ID | clear [--all]"),
+        CLICommandSpec(usage: "snippet list [--json] | expand KEYWORD [--copy] [--json]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
         CLICommandSpec(usage: "record start NAME [--duration S] [--stop-file PATH]"),
         CLICommandSpec(usage: "record replay|list|inspect|delete ..."),
@@ -370,7 +376,7 @@ public final class CLICommandRouter {
         switch command {
         // `bookmark` : `set` lit la fenêtre active, donc l'Accessibilité du daemon. En local, un
         // raccourci Karabiner ne voyait aucune fenêtre (« no active tiled window »).
-        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark", "timer", "scratchpad":
+        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark", "timer", "scratchpad", "clipboard", "snippet":
             return true
         // `floating` lit la fenêtre active : il faut l'Accessibilité du daemon (SPEC-047).
         case "toggle":
@@ -835,6 +841,10 @@ public final class CLICommandRouter {
                                                       notificationName: WindowSwitcherRuntimeBridge.notificationName)
         case "timer":
             return runTimerCommand(Array(args.dropFirst()))
+        case "clipboard":
+            return try runClipboardCommand(Array(args.dropFirst()))
+        case "snippet":
+            return try runSnippetCommand(Array(args.dropFirst()))
         case "grid":
             return try runGridCommand(Array(args.dropFirst()))
         case "record":
@@ -2469,6 +2479,133 @@ public final class CLICommandRouter {
             case "hide": return finish(scratchpads.hide(name: name))
             default: return finish(scratchpads.release(name: name))
             }
+        default:
+            return usageError()
+        }
+    }
+
+    private func runClipboardCommand(_ args: [String]) throws -> Int32 {
+        guard let verb = args.first?.lowercased() else { return usageError() }
+        let store = ClipboardHistoryStore()
+        let json = args.contains("--json")
+        switch verb {
+        case "list":
+            let limit = args.dropFirst().first(where: { !$0.hasPrefix("--") }).flatMap(Int.init) ?? 20
+            guard limit > 0 else { return usageError() }
+            let entries = store.load().search("", limit: limit)
+            if json {
+                try printCodableJSON(entries)
+            } else if entries.isEmpty {
+                out(tr("historique presse-papiers vide", "clipboard history empty"))
+            } else {
+                for entry in entries {
+                    let pin = entry.pinned ? "pinned" : "normal"
+                    out("\(entry.id.prefix(8))\t\(pin)\t\(entry.preview(maxLength: 80))")
+                }
+            }
+            return 0
+        case "search":
+            let queryParts = args.dropFirst().filter { $0 != "--json" }
+            guard !queryParts.isEmpty else { return usageError() }
+            let entries = store.load().search(queryParts.joined(separator: " "), limit: 30)
+            if json {
+                try printCodableJSON(entries)
+            } else if entries.isEmpty {
+                out(tr("aucune entrée correspondante", "no matching clipboard entry"))
+            } else {
+                for entry in entries {
+                    let pin = entry.pinned ? "pinned" : "normal"
+                    out("\(entry.id.prefix(8))\t\(pin)\t\(entry.preview(maxLength: 80))")
+                }
+            }
+            return 0
+        case "copy":
+            guard let id = args.dropFirst().first, !id.hasPrefix("--") else { return usageError() }
+            guard let entry = store.load().entry(matching: id) else {
+                err(tr("clipboard: entrée introuvable : \(id)", "clipboard: entry not found: \(id)"))
+                return 1
+            }
+            guard ClipboardMonitor.copyToPasteboard(entry.text) else {
+                err("clipboard: failed to write pasteboard")
+                return 1
+            }
+            out("clipboard copied id=\(entry.id.prefix(8))")
+            return 0
+        case "pin":
+            guard let id = args.dropFirst().first, !id.hasPrefix("--") else { return usageError() }
+            guard let updated = try store.mutateChecked({ $0.togglePin(idOrPrefix: id) }) else {
+                err(tr("clipboard: entrée introuvable : \(id)", "clipboard: entry not found: \(id)"))
+                return 1
+            }
+            out("clipboard id=\(updated.id.prefix(8)) pinned=\(updated.pinned)")
+            return 0
+        case "delete":
+            guard let id = args.dropFirst().first, !id.hasPrefix("--") else { return usageError() }
+            let deleted = try store.mutateChecked { $0.delete(idOrPrefix: id) }
+            guard deleted else {
+                err(tr("clipboard: entrée introuvable : \(id)", "clipboard: entry not found: \(id)"))
+                return 1
+            }
+            out("clipboard deleted id=\(id)")
+            return 0
+        case "clear":
+            let includePinned = args.contains("--all")
+            let removed = try store.mutateChecked { $0.clear(includePinned: includePinned) }
+            out("clipboard cleared count=\(removed)")
+            return 0
+        default:
+            return usageError()
+        }
+    }
+
+    private func runSnippetCommand(_ args: [String]) throws -> Int32 {
+        guard let verb = args.first?.lowercased() else { return usageError() }
+        let config = configReload.currentConfig()
+        let json = args.contains("--json")
+        switch verb {
+        case "list":
+            let items = config.snippets.items
+            if json {
+                try printCodableJSON(items)
+            } else if items.isEmpty {
+                out(tr("aucun snippet configuré", "no snippets configured"))
+            } else {
+                for item in items {
+                    let preview = item.body.replacingOccurrences(of: "\n", with: " ").prefix(60)
+                    out("\(item.keyword)\t\(item.title)\t\(preview)")
+                }
+            }
+            return 0
+        case "expand":
+            guard config.snippets.enabled else {
+                err("snippet: disabled in configuration")
+                return 1
+            }
+            guard let keyword = args.dropFirst().first, !keyword.hasPrefix("--") else { return usageError() }
+            guard let item = SnippetsService.find(keyword: keyword, in: config.snippets.items) else {
+                err(tr("snippet introuvable : \(keyword)", "snippet not found: \(keyword)"))
+                return 1
+            }
+            let clipText = ClipboardMonitor.readPlainTextIfSafe()
+            let expanded = SnippetsService.expand(item.body, clipboardText: clipText)
+            if args.contains("--copy") {
+                _ = ClipboardMonitor.copyToPasteboard(expanded.text)
+            }
+            if json {
+                struct ExpandPayload: Encodable {
+                    let keyword: String
+                    let text: String
+                    let cursorOffsetFromEnd: Int?
+                }
+                try printCodableJSON(ExpandPayload(
+                    keyword: item.keyword,
+                    text: expanded.text,
+                    cursorOffsetFromEnd: expanded.cursorOffsetFromEnd
+                ))
+            } else {
+                out(expanded.text)
+            }
+            return 0
         default:
             return usageError()
         }
