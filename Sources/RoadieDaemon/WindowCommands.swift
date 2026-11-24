@@ -304,7 +304,8 @@ public struct WindowCommandService {
                     if let idx = persistent.stages.firstIndex(where: { $0.id == scope.stageID }) {
                         let byID = Dictionary(uniqueKeysWithValues: persistent.stages[idx].members.map { ($0.windowID, $0) })
                         let reordered = ordered.compactMap { byID[$0] }
-                        let remaining = persistent.stages[idx].members.filter { !Set(ordered).contains($0.windowID) }
+                        let orderedSet = Set(ordered)
+                        let remaining = persistent.stages[idx].members.filter { !orderedSet.contains($0.windowID) }
                         persistent.stages[idx].members = reordered + remaining
                         persistent.stages[idx].focusedWindowID = pair.active.window.id
                         state.update(persistent)

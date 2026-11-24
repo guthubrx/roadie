@@ -14,6 +14,9 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
     /// Garde absolue vis-à-vis de `HiddenWindowPlacement.isPreferred` (tolérance 8 pt autour de `maxX - 1`).
     public static let safeHiddenClearance: CGFloat = 16
 
+    /// Largeur minimale utile pour activer le ruban défilant ; en deçà, repli explicite plein cadre.
+    public static let minimumRibbonWidth: CGFloat = 120
+
     /// Pas idéal entre colonnes lointaines échelonnées en éventail au bord de l'écran.
     private static let overflowCascadeStep: CGFloat = 16
 
@@ -42,8 +45,9 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
         let rect = request.container.inset(by: request.outerGaps)
         guard Self.isFinite(rect), rect.width > 0, rect.height > 0 else { return LayoutPlan(placements: [:]) }
 
-        // Très petit conteneur : aucune colonne ne déborde, évitant tout faux positif `HiddenWindowPlacement`.
-        if rect.width < Self.safeHiddenClearance * 2 {
+        // Conteneur trop étroit pour un ruban défilant : repli explicite plein cadre sans débordement,
+        // garantissant l'absence de faux positif `HiddenWindowPlacement` même sur des conteneurs minuscules.
+        if rect.width < Self.minimumRibbonWidth {
             let full = rect.integral
             var placements: [WindowID: CGRect] = [:]
             placements.reserveCapacity(windows.count)
@@ -53,12 +57,7 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
             return LayoutPlan(placements: placements)
         }
 
-        let colWidth: CGFloat
-        if rect.width <= 120 {
-            colWidth = rect.width
-        } else {
-            colWidth = min(rect.width, max(120, floor(rect.width * columnWidthRatio)))
-        }
+        let colWidth = min(rect.width, max(Self.minimumRibbonWidth, floor(rect.width * columnWidthRatio)))
         let gap = max(0, min(CGFloat(request.innerGap), rect.width / 8))
         let step = colWidth + gap
         let totalWidth = CGFloat(windows.count) * colWidth + CGFloat(max(0, windows.count - 1)) * gap
@@ -75,57 +74,62 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
         }
 
         let rawXs = windows.indices.map { index in
-            rect.minX + CGFloat(index) * step - scrollX
+            floor(rect.minX + CGFloat(index) * step - scrollX)
         }
 
         var resolvedXs = rawXs
         if totalWidth > rect.width {
-            let singlePeek = min(Self.minimumEdgePeek, max(Self.safeHiddenClearance, rect.width / 4))
-            let minAllowedX = rect.minX - colWidth + singlePeek
-            let maxAllowedX = rect.maxX - singlePeek
+            let singlePeek = floor(min(Self.minimumEdgePeek, max(Self.safeHiddenClearance, rect.width / 4)))
+            let minAllowedX = ceil(rect.minX - colWidth) + singlePeek
+            let maxAllowedX = floor(rect.maxX) - singlePeek
 
             let leftOverflow = windows.indices.filter { rawXs[$0] < minAllowedX }
             let inRange = windows.indices.filter { rawXs[$0] >= minAllowedX && rawXs[$0] <= maxAllowedX }
             let rightOverflow = windows.indices.filter { rawXs[$0] > maxAllowedX }
 
-            // Colonnes hors-écran à gauche : échelonnées de façon strictement croissante,
-            // jamais superposées et toujours >= `safeHiddenClearance` du bord gauche.
+            // Colonnes hors-écran à gauche : échelonnées de façon strictement croissante d'au moins 1 pt
+            // tant que la bande disponible le permet (et repli borné sur `bandStart` si le nombre de
+            // colonnes dépasse le nombre de pixels disponibles), toujours >= `safeHiddenClearance` du bord.
             if leftOverflow.count == 1, let idx = leftOverflow.first {
                 resolvedXs[idx] = minAllowedX
             } else if leftOverflow.count > 1 {
-                let bandStart = rect.minX - colWidth + Self.safeHiddenClearance
-                let nextVisibleX = inRange.first.map { rawXs[$0] } ?? (rect.maxX - colWidth)
-                let maxBandEnd = max(bandStart, nextVisibleX - Self.safeHiddenClearance)
-                let desiredSpan = min(
-                    CGFloat(leftOverflow.count - 1) * Self.overflowCascadeStep,
-                    max(0, maxBandEnd - bandStart),
-                    max(0, rect.width / 3)
+                let bandStart = ceil(rect.minX - colWidth) + Self.safeHiddenClearance
+                let nextVisibleX = inRange.first.map { rawXs[$0] } ?? floor(rect.maxX - colWidth)
+                let maxStrictEnd = max(bandStart, nextVisibleX - 1)
+                let requiredMinSpan = CGFloat(leftOverflow.count - 1)
+                let preferredEnd = nextVisibleX - Self.safeHiddenClearance
+                let comfortableEnd = min(maxStrictEnd, max(preferredEnd, bandStart + requiredMinSpan))
+                let preferredSpan = min(
+                    requiredMinSpan * Self.overflowCascadeStep,
+                    max(requiredMinSpan, floor(rect.width / 3))
                 )
-                let bandEnd = min(maxBandEnd, bandStart + desiredSpan)
+                let bandEnd = min(comfortableEnd, bandStart + preferredSpan)
                 let divisor = CGFloat(leftOverflow.count - 1)
                 for (offset, idx) in leftOverflow.enumerated() {
-                    resolvedXs[idx] = bandStart + (bandEnd - bandStart) * (CGFloat(offset) / divisor)
+                    resolvedXs[idx] = floor(bandStart + max(0, bandEnd - bandStart) * (CGFloat(offset) / divisor))
                 }
             }
 
-            // Colonnes hors-écran à droite : échelonnées de façon strictement croissante,
-            // jamais superposées et toujours <= `rect.maxX - safeHiddenClearance` (écart >= 15 pt
-            // avec le marqueur `HiddenWindowPlacement` à `maxX - 1`, tolérance 8 pt).
+            // Colonnes hors-écran à droite : échelonnées de façon strictement croissante d'au moins 1 pt
+            // tant que la bande disponible le permet, toujours <= `rect.maxX - safeHiddenClearance`
+            // (écart >= 15 pt avec le marqueur `HiddenWindowPlacement` à `maxX - 1`, tolérance 8 pt).
             if rightOverflow.count == 1, let idx = rightOverflow.first {
                 resolvedXs[idx] = maxAllowedX
             } else if rightOverflow.count > 1 {
                 let bandEnd = floor(rect.maxX) - Self.safeHiddenClearance
-                let prevVisibleX = inRange.last.map { rawXs[$0] } ?? rect.minX
-                let minBandStart = min(bandEnd, prevVisibleX + Self.safeHiddenClearance)
-                let desiredSpan = min(
-                    CGFloat(rightOverflow.count - 1) * Self.overflowCascadeStep,
-                    max(0, bandEnd - minBandStart),
-                    max(0, rect.width / 3)
+                let prevVisibleX = inRange.last.map { rawXs[$0] } ?? floor(rect.minX)
+                let minStrictStart = min(bandEnd, prevVisibleX + 1)
+                let requiredMinSpan = CGFloat(rightOverflow.count - 1)
+                let preferredStart = prevVisibleX + Self.safeHiddenClearance
+                let comfortableStart = max(minStrictStart, min(preferredStart, bandEnd - requiredMinSpan))
+                let preferredSpan = min(
+                    requiredMinSpan * Self.overflowCascadeStep,
+                    max(requiredMinSpan, floor(rect.width / 3))
                 )
-                let bandStart = max(minBandStart, bandEnd - desiredSpan)
+                let bandStart = max(comfortableStart, bandEnd - preferredSpan)
                 let divisor = CGFloat(rightOverflow.count - 1)
                 for (offset, idx) in rightOverflow.enumerated() {
-                    resolvedXs[idx] = floor(bandStart + (bandEnd - bandStart) * (CGFloat(offset) / divisor))
+                    resolvedXs[idx] = floor(bandStart + max(0, bandEnd - bandStart) * (CGFloat(offset) / divisor))
                 }
             }
         }

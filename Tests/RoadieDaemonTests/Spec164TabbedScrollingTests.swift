@@ -349,38 +349,43 @@ struct Spec164TabbedScrollingTests {
 
     @Test func scrollingSixWindowsStaggersOverflowColumnsWithoutOverlapOrHiddenCollision() throws {
         let testScope = StageScope(displayID: DisplayID(rawValue: "d1"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        let disp = DisplaySnapshot(
-            id: DisplayID(rawValue: "d1"),
-            index: 1,
-            name: "Display 1",
-            frame: Rect(x: 0, y: 0, width: 1580, height: 900),
-            visibleFrame: Rect(x: 0, y: 0, width: 1580, height: 900),
-            isMain: true
-        )
-        let container = disp.visibleFrame.cgRect
         let ids = (1...6).map { WindowID(rawValue: UInt32($0)) }
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: testScope,
-            mode: .scrolling,
-            container: container,
-            windowIDs: ids,
-            outerGaps: .zero,
-            innerGap: 8,
-            focusedWindowID: ids[0],
-            scrollingColumnWidth: 0.65
-        ))
-        let xs = try ids.map { try #require(plan.placements[$0]).minX }
-        // Strictement croissantes : zéro superposition exacte de colonnes hors écran
-        for i in 0..<(xs.count - 1) {
-            #expect(xs[i] < xs[i + 1])
-        }
-        // Aucune colonne ne satisfait HiddenWindowPlacement.isHiddenOrLegacyOffscreen
-        for id in ids {
-            let rect = try #require(plan.placements[id])
-            #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(rect, in: [disp]))
+        // Vérifier les deux extrémités du ruban (focus sur la première puis sur la dernière colonne)
+        // sur un grand écran (1580 pt), un écran compact (400 pt) et la borne exacte (120 pt) :
+        // positions strictement croissantes et zéro faux positif HiddenWindowPlacement.
+        for (dispName, width) in [("Wide", 1580.0), ("Compact", 400.0), ("MinimumRibbon", 120.0)] {
+            let testDisp = DisplaySnapshot(
+                id: DisplayID(rawValue: dispName),
+                index: 1,
+                name: dispName,
+                frame: Rect(x: 0, y: 0, width: width, height: 900),
+                visibleFrame: Rect(x: 0, y: 0, width: width, height: 900),
+                isMain: true
+            )
+            for focusID in [ids[0], ids[5]] {
+                let plan = LayoutPlanner.plan(LayoutRequest(
+                    scope: testScope,
+                    mode: .scrolling,
+                    container: testDisp.visibleFrame.cgRect,
+                    windowIDs: ids,
+                    outerGaps: .zero,
+                    innerGap: 8,
+                    focusedWindowID: focusID,
+                    scrollingColumnWidth: 0.65
+                ))
+                let xs = try ids.map { try #require(plan.placements[$0]).minX }
+                for i in 0..<(xs.count - 1) {
+                    #expect(xs[i] < xs[i + 1])
+                }
+                for id in ids {
+                    let rect = try #require(plan.placements[id])
+                    #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(rect, in: [testDisp]))
+                }
+            }
         }
 
-        // Petit conteneur (32 pt) : ne doit jamais déclencher de faux masquage
+        // Petit conteneur (32 pt < minimumRibbonWidth) avec 6 fenêtres aux deux extrémités :
+        // repli explicite plein cadre, ne doit jamais déclencher de faux masquage.
         let tinyDisp = DisplaySnapshot(
             id: DisplayID(rawValue: "tiny"),
             index: 1,
@@ -389,19 +394,22 @@ struct Spec164TabbedScrollingTests {
             visibleFrame: Rect(x: 0, y: 0, width: 32, height: 32),
             isMain: true
         )
-        let tinyPlan = LayoutPlanner.plan(LayoutRequest(
-            scope: testScope,
-            mode: .scrolling,
-            container: tinyDisp.visibleFrame.cgRect,
-            windowIDs: [ids[0], ids[1], ids[2]],
-            outerGaps: .zero,
-            innerGap: 4,
-            focusedWindowID: ids[0],
-            scrollingColumnWidth: 0.65
-        ))
-        for id in [ids[0], ids[1], ids[2]] {
-            let rect = try #require(tinyPlan.placements[id])
-            #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(rect, in: [tinyDisp]))
+        for focusID in [ids[0], ids[5]] {
+            let tinyPlan = LayoutPlanner.plan(LayoutRequest(
+                scope: testScope,
+                mode: .scrolling,
+                container: tinyDisp.visibleFrame.cgRect,
+                windowIDs: ids,
+                outerGaps: .zero,
+                innerGap: 4,
+                focusedWindowID: focusID,
+                scrollingColumnWidth: 0.65
+            ))
+            for id in ids {
+                let rect = try #require(tinyPlan.placements[id])
+                #expect(rect == tinyDisp.visibleFrame.cgRect)
+                #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(rect, in: [tinyDisp]))
+            }
         }
 
         // Cadres non finis (NaN / Inf) rejetés proprement par les deux stratégies
