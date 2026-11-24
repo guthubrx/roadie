@@ -7,17 +7,20 @@ public struct DisplayCommandService {
     private let store: StageStore
     private let events: EventLog
     private let commandActivity: LayoutCommandActivity
+    private let mouseFollower: MouseFollower
 
     public init(
         service: SnapshotService = SnapshotService(),
         store: StageStore = StageStore(),
         events: EventLog = EventLog(),
-        commandActivity: LayoutCommandActivity = .shared
+        commandActivity: LayoutCommandActivity = .shared,
+        mouseFollower: MouseFollower = MouseFollower()
     ) {
         self.service = service
         self.store = store
         self.events = events
         self.commandActivity = commandActivity
+        self.mouseFollower = mouseFollower
     }
 
     public func focus(index: Int) -> StageCommandResult {
@@ -307,6 +310,9 @@ public struct DisplayCommandService {
             snapshot.windows.first { $0.window.id == id && $0.scope == activeScope }?.window
         }
         let focusedResult = focused.map { service.focus($0) } ?? false
+        if focusedResult, let focused {
+            mouseFollower.follow(focused)
+        }
         events.append(RoadieEvent(type: "display_focus", details: [
             "displayIndex": String(display.index),
             "displayID": display.id.rawValue,

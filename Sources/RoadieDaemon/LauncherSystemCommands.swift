@@ -94,6 +94,22 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             .init(id: "roadie-prune-empty", fr: "Nettoyer les stages vides", en: "Clean up empty stages",
                   keywords: ["nettoyer", "prune", "vides", "empty", "stages", "bureaux", "clean"],
                   symbol: "sparkles", confirms: false),
+            // Session 178 (SPEC-160) : Quick Wins WM.
+            .init(id: "roadie-window-close", fr: "Fermer la fenêtre active", en: "Close active window",
+                  keywords: ["fermer", "close", "fenetre", "window", "quitter"],
+                  symbol: "xmark.square", confirms: false),
+            .init(id: "roadie-window-gather-app", fr: "Rassembler les fenêtres de l'app", en: "Gather app windows",
+                  keywords: ["rassembler", "gather", "app", "application", "fenetres", "windows", "regrouper"],
+                  symbol: "square.stack.3d.up", confirms: false),
+            .init(id: "roadie-layout-rotate", fr: "Pivoter la disposition (90°)", en: "Rotate layout (90°)",
+                  keywords: ["pivoter", "rotate", "rotation", "tourner", "layout", "disposition", "bsp"],
+                  symbol: "rotate.right", confirms: false),
+            .init(id: "roadie-layout-mirror-x", fr: "Miroir horizontal de la disposition", en: "Mirror layout horizontally",
+                  keywords: ["miroir", "mirror", "flip", "inverser", "horizontal", "layout", "disposition"],
+                  symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right", confirms: false),
+            .init(id: "roadie-layout-mirror-y", fr: "Miroir vertical de la disposition", en: "Mirror layout vertically",
+                  keywords: ["miroir", "mirror", "flip", "inverser", "vertical", "layout", "disposition"],
+                  symbol: "arrow.up.and.down.righttriangle.up.righttriangle.down", confirms: false),
         ]
     }
 
@@ -169,6 +185,16 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             Task.detached(priority: .userInitiated) { _ = DisplayCommandService().swapDefault() }
         case "roadie-prune-empty":
             Task.detached(priority: .userInitiated) { _ = StageCommandService().pruneEmpty() }
+        case "roadie-window-close":
+            Task.detached(priority: .userInitiated) { _ = WindowCommandService().close() }
+        case "roadie-window-gather-app":
+            Task.detached(priority: .userInitiated) { _ = WindowCommandService().gatherApp() }
+        case "roadie-layout-rotate":
+            Task.detached(priority: .userInitiated) { _ = LayoutCommandService().rotate(90) }
+        case "roadie-layout-mirror-x":
+            Task.detached(priority: .userInitiated) { _ = LayoutCommandService().mirror("x") }
+        case "roadie-layout-mirror-y":
+            Task.detached(priority: .userInitiated) { _ = LayoutCommandService().mirror("y") }
         default:
             // Navigateur SF Symbols (session 131), avec la recherche tapée après `symbols`.
             if id.hasPrefix("sf-symbols:") {

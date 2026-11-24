@@ -347,7 +347,7 @@ final class RailPanel: NSPanel {
                     thumbnails: thumbnails.images(for: stage.members),
                     position: index + 1
                 )
-                card.toolTip = StagePresentationOrder.menuLabel(stage, position: index + 1)
+                card.setStageToolTip(StagePresentationOrder.menuLabel(stage, position: index + 1))
             }
         } else {
             var reusableCardsByID: [StageID: StageCardView] = [:]
@@ -418,7 +418,7 @@ final class RailPanel: NSPanel {
                         position: index + 1
                     )
                 }
-                card.toolTip = StagePresentationOrder.menuLabel(stage, position: index + 1)
+                card.setStageToolTip(StagePresentationOrder.menuLabel(stage, position: index + 1))
                 stack.addArrangedSubview(card)
             }
 
@@ -736,6 +736,18 @@ final class RailPanel: NSPanel {
         let shouldIgnore = !shouldCapture
         if ignoresMouseEvents != shouldIgnore {
             ignoresMouseEvents = shouldIgnore
+        }
+    }
+
+    /// Met à jour le survol des icônes d'application sous les cartes visibles du rail (Spec 160).
+    func updateHoveredAppIcon(at screenPoint: CGPoint) {
+        let hit: (StageCardView, CGPoint)? = (!isCollapsed && isVisible) ? stageCard(at: screenPoint) : nil
+        for case let card as StageCardView in stack.arrangedSubviews {
+            if let hit, hit.0 === card {
+                card.updateHoveredAppIcon(at: hit.1)
+            } else {
+                card.updateHoveredAppIcon(at: nil)
+            }
         }
     }
 

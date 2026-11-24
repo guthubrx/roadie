@@ -481,6 +481,176 @@ public struct WindowCommandService {
         return commandResult
     }
 
+    /// Ferme gracieusement la fenêtre ciblée (ou focalisée) via son bouton AX de fermeture (Spec 160).
+    public func close(windowID: WindowID? = nil) -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        let entry: ScopedWindowSnapshot?
+        if let windowID {
+            entry = snapshot.windows.first { $0.window.id == windowID }
+        } else {
+            entry = activeWindow(in: snapshot)
+                ?? snapshot.focusedWindowID.flatMap { focusedID in
+                    snapshot.windows.first { $0.window.id == focusedID }
+                }
+        }
+        guard let target = entry else {
+            let suffix = windowID.map { " \($0.rawValue): unknown window" } ?? ": no active window"
+            return WindowCommandResult(
+                message: "window close\(suffix)",
+                changed: false,
+                outcome: windowID == nil ? .noOp : .failed
+            )
+        }
+        let ok = service.close(target.window)
+        let result = WindowCommandResult.changedOrFailed(
+            ok ? "window close \(target.window.id.rawValue): closed" : "window close \(target.window.id.rawValue): failed",
+            changed: ok
+        )
+        events.append(RoadieEvent(
+            type: "window_close",
+            scope: target.scope,
+            details: [
+                "windowID": String(target.window.id.rawValue),
+                "bundleID": target.window.bundleID,
+                "closed": String(ok),
+            ]
+        ))
+        return result
+    }
+
+    /// Rassemble dans la stage active toutes les autres fenêtres gérées (hors plein écran natif et hors épingles)
+    /// de la même application (`bundleID`) que la fenêtre ciblée ou active (Spec 160).
+    public func gatherApp(windowID: WindowID? = nil) -> WindowCommandResult {
+        let generation = PlacementGeneration.shared.next()
+        let snapshot = service.snapshot()
+        let anchor: ScopedWindowSnapshot?
+        if let windowID {
+            anchor = snapshot.windows.first { $0.window.id == windowID }
+        } else {
+            anchor = activeWindow(in: snapshot)
+        }
+        guard let anchor,
+              let displayID = anchor.scope?.displayID
+                ?? snapshot.displays.first(where: { $0.frame.cgRect.contains(anchor.window.frame.center) })?.id
+                ?? snapshot.displays.first?.id,
+              let display = snapshot.displays.first(where: { $0.id == displayID })
+        else {
+            return WindowCommandResult(message: "window gather-app: no active window", changed: false, outcome: .noOp)
+        }
+        let bundleID = anchor.window.bundleID
+        guard !bundleID.isEmpty else {
+            return WindowCommandResult(message: "window gather-app: unknown bundle", changed: false, outcome: .noOp)
+        }
+
+        var currentState = stageStore.state()
+        let desktopID = currentState.currentDesktopID(for: displayID)
+        let currentScope = currentState.scope(displayID: displayID, desktopID: desktopID)
+        let targetScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: currentScope.activeStageID)
+
+        let candidates = snapshot.windows.filter { entry in
+            entry.window.bundleID == bundleID
+                && entry.window.id != anchor.window.id
+                && entry.scope != targetScope
+                && entry.window.isTileCandidate
+                && entry.window.furniture?.isNativeFullscreen != true
+                && currentState.pin(for: entry.window.id) == nil
+        }
+        guard !candidates.isEmpty else {
+            return WindowCommandResult(
+                message: "window gather-app \(bundleID): no other windows to gather",
+                changed: false,
+                outcome: .noOp
+            )
+        }
+
+        let affectedScopes = Set([targetScope] + candidates.compactMap(\.scope))
+        beginLayoutCommand("window.gather_app", scopes: affectedScopes)
+        defer { finishLayoutCommand("window.gather_app", scopes: affectedScopes) }
+
+        let defaultMode = service.effectiveConfig.tiling.defaultStrategy
+        do {
+            try stageStore.mutateChecked { state in
+                let activeStageID = state.scope(displayID: displayID, desktopID: desktopID).activeStageID
+                let activeStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: activeStageID)
+                // 1) Retirer toutes les fenêtres rassemblées de leurs stages et arbres d'origine.
+                for entry in candidates {
+                    let window = entry.window
+                    for scopeIndex in state.scopes.indices {
+                        state.scopes[scopeIndex].remove(windowID: window.id)
+                    }
+                    if let sourceScope = entry.scope,
+                       sourceScope != activeStageScope,
+                       let sourceTree = state.bspTree(for: sourceScope) {
+                        state.setBSPTree(sourceTree.removing(window.id), for: sourceScope)
+                    }
+                    state.suppressRulePlacement(window: window)
+                }
+                // 2) Lire le scope cible après nettoyage, y affecter les fenêtres, puis persister le scope.
+                var activeScope = state.scope(displayID: displayID, desktopID: desktopID)
+                let usesTree = activeScope.stages.first(where: { $0.id == activeStageID })?.mode.usesTreeEngine ?? defaultMode.usesTreeEngine
+                for entry in candidates {
+                    activeScope.assign(
+                        window: entry.window,
+                        to: activeStageID,
+                        insertionIndex: nil,
+                        focusWindow: false,
+                        defaultMode: defaultMode
+                    )
+                }
+                state.update(activeScope)
+                // 3) Mettre à jour l'arbre BSP cible après `state.update(activeScope)` (qui remplace le scope).
+                if usesTree {
+                    var tree = state.bspTree(for: activeStageScope) ?? .empty
+                    let container = display.visibleFrame.cgRect
+                    if !tree.contains(anchor.window.id) {
+                        tree = tree.inserting(anchor.window.id, at: nil, side: .right, in: container)
+                    }
+                    for entry in candidates where !tree.contains(entry.window.id) {
+                        tree = tree.inserting(entry.window.id, at: anchor.window.id, side: .right, in: container)
+                    }
+                    state.setBSPTree(tree, for: activeStageScope)
+                }
+            }
+        } catch {
+            return .persistenceFailure("window gather-app \(bundleID)", error)
+        }
+
+        var placement = CommandPlacement(layoutScopes: affectedScopes)
+        for entry in candidates {
+            if HiddenWindowPlacement.isHiddenOrLegacyOffscreen(entry.window.frame.cgRect, in: snapshot.displays)
+                || !display.frame.cgRect.intersects(entry.window.frame.cgRect) {
+                let rect = display.visibleFrame.cgRect
+                placement.restoring[entry.window.id] = CGRect(
+                    x: rect.minX + 40,
+                    y: rect.minY + 40,
+                    width: min(entry.window.frame.cgRect.width, rect.width),
+                    height: min(entry.window.frame.cgRect.height, rect.height)
+                ).integral
+            }
+        }
+        let (_, applyResult) = service.applyCommandPlacement(
+            placement,
+            cause: "window.gather_app",
+            generation: generation,
+            events: events
+        )
+        _ = focusWindow(anchor.window)
+        events.append(RoadieEvent(
+            type: "window_gather_app",
+            scope: targetScope,
+            details: [
+                "bundleID": bundleID,
+                "anchorWindowID": String(anchor.window.id.rawValue),
+                "gathered": String(candidates.count),
+                "applied": String(applyResult.applied + applyResult.clamped),
+            ]
+        ))
+        return WindowCommandResult(
+            message: "window gather-app \(bundleID): gathered=\(candidates.count) applied=\(applyResult.applied + applyResult.clamped)",
+            changed: true
+        )
+    }
+
     public func reset() -> WindowCommandResult {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()

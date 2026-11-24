@@ -101,6 +101,8 @@ final class StageCardView: NSControl {
     private let contentInset: CGFloat = 4
     private var widthConstraint: NSLayoutConstraint!
     private var heightConstraint: NSLayoutConstraint!
+    private(set) var hoveredAppIconWindowID: WindowID?
+    private var stageToolTipText: String?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -171,7 +173,51 @@ final class StageCardView: NSControl {
         if widthConstraint.constant != width { widthConstraint.constant = width }
         if heightConstraint.constant != height { heightConstraint.constant = height }
         layer?.shadowColor = accent.cgColor
+        if let hovered = hoveredAppIconWindowID,
+           !visualMembers.contains(where: { $0.windowID == hovered }) {
+            hoveredAppIconWindowID = nil
+            toolTip = stageToolTipText
+        }
         needsDisplay = true
+    }
+
+    /// Définit l'infobulle de la stage (restaurée lorsque la souris quitte une icône d'application).
+    func setStageToolTip(_ text: String) {
+        stageToolTipText = text
+        if hoveredAppIconWindowID == nil {
+            toolTip = text
+        }
+    }
+
+    /// Met à jour le survol d'une icône d'application sous la vignette et l'infobulle associée (Spec 160).
+    /// Retourne vrai uniquement si l'état visuel de survol a changé.
+    @discardableResult
+    func updateHoveredAppIcon(at localPoint: CGPoint?) -> Bool {
+        let member = localPoint.flatMap { appIconMember(at: $0) }
+        let nextID = member?.windowID
+        let changed = nextID != hoveredAppIconWindowID
+        hoveredAppIconWindowID = nextID
+        if let member {
+            toolTip = Self.appIconToolTip(for: member)
+        } else if toolTip != stageToolTipText {
+            toolTip = stageToolTipText
+        }
+        if changed {
+            needsDisplay = true
+        }
+        return changed
+    }
+
+    static func appIconToolTip(for member: PersistentStageMember) -> String {
+        let appName = NSRunningApplication.runningApplications(withBundleIdentifier: member.bundleID)
+            .first?.localizedName
+            ?? member.bundleID.split(separator: ".").last.map(String.init)
+            ?? member.bundleID
+        let trimmedTitle = member.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedTitle.isEmpty || trimmedTitle.caseInsensitiveCompare(appName) == .orderedSame {
+            return appName
+        }
+        return "\(appName) — \(trimmedTitle)"
     }
 
     /// Même rendu et mêmes miniatures, avec la légende de la position future.
@@ -899,14 +945,25 @@ final class StageCardView: NSControl {
         shadow.shadowOffset = NSSize(width: 0, height: -1)
         shadow.set()
 
-        let alpha: CGFloat = isActive ? 0.98 : 0.88
+        let baseAlpha: CGFloat = isActive ? 0.98 : 0.88
         for item in layout.items {
             guard let icon = Self.appIcon(for: item.member.bundleID) else { continue }
+            let isHovered = item.member.windowID == hoveredAppIconWindowID
+            if isHovered {
+                let highlightRect = item.rect.insetBy(dx: -3, dy: -2)
+                let pill = NSBezierPath(roundedRect: highlightRect, xRadius: 6, yRadius: 6)
+                NSColor.white.withAlphaComponent(0.22).setFill()
+                pill.fill()
+                NSColor.white.withAlphaComponent(0.58).setStroke()
+                pill.lineWidth = 1
+                pill.stroke()
+            }
+            let drawRect = isHovered ? item.rect.scaled(by: 1.12) : item.rect
             icon.draw(
-                in: item.rect,
+                in: drawRect,
                 from: CGRect(origin: .zero, size: icon.size),
                 operation: .sourceOver,
-                fraction: alpha
+                fraction: isHovered ? 1.0 : baseAlpha
             )
         }
         if layout.overflow > 0, let lastRect = layout.items.last?.rect {

@@ -52,6 +52,7 @@ public struct StageCommandService {
     private let events: EventLog
     private let config: RoadieConfig
     private let commandActivity: LayoutCommandActivity
+    private let mouseFollower: MouseFollower
     private var intentStore: LayoutIntentStore { service.effectiveIntentStore }
     private var focusRecall: StageFocusRecallService { StageFocusRecallService(service: service) }
 
@@ -60,13 +61,15 @@ public struct StageCommandService {
         store: StageStore? = nil,
         events: EventLog = EventLog(),
         config: RoadieConfig? = nil,
-        commandActivity: LayoutCommandActivity = .shared
+        commandActivity: LayoutCommandActivity = .shared,
+        mouseFollower: MouseFollower = MouseFollower()
     ) {
         self.service = service
         self.store = store ?? service.effectiveStageStore
         self.events = events
         self.config = config ?? service.effectiveConfig
         self.commandActivity = commandActivity
+        self.mouseFollower = mouseFollower
     }
 
     public func assign(_ rawStageID: String) -> StageCommandResult {
@@ -1459,6 +1462,9 @@ public struct StageCommandService {
                         in: targetStage,
                         windowsByID: windowsByID
                     )
+                    if focused, let focusedWindow = windowsByID[preferredWindowID] {
+                        mouseFollower.follow(focusedWindow)
+                    }
                     events.append(RoadieEvent(
                         type: "stage_focus_window",
                         scope: switchScope,
@@ -1796,10 +1802,17 @@ public struct StageCommandService {
         if let focusedID = transition.targetFocusedWindowID,
            let focusedWindow = windowsByID[focusedID] {
             let focusService = service
+            let follower = mouseFollower
             let deferred = Thread.isMainThread && MainActor.assumeIsolated {
-                FrameTransitionRuntime.shared.deferStageFocus(generation: generation) { _ = focusService.focus(focusedWindow) }
+                FrameTransitionRuntime.shared.deferStageFocus(generation: generation) {
+                    if focusService.focus(focusedWindow) {
+                        follower.follow(focusedWindow)
+                    }
+                }
             }
-            if !deferred { _ = service.focus(focusedWindow) }
+            if !deferred, service.focus(focusedWindow) {
+                mouseFollower.follow(focusedWindow)
+            }
         } else if let preferredWindowID {
             _ = focusRecall.focusOrRecallPreferred(
                 windowID: preferredWindowID,

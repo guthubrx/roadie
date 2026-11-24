@@ -267,6 +267,52 @@ public struct LayoutCommandService {
         insert(direction, verb: "join-with")
     }
 
+    /// Rotation horaire (90, 180 ou 270°) de l'arbre BSP de la stage active (Spec 160).
+    public func rotate(_ degrees: Int) -> LayoutCommandResult {
+        guard degrees == 90 || degrees == 180 || degrees == 270 else {
+            return LayoutCommandResult(message: "layout rotate: requires 90|180|270", changed: false, outcome: .failed)
+        }
+        let generation = PlacementGeneration.shared.next()
+        guard let context = activeContext() else {
+            return LayoutCommandResult(message: "layout rotate \(degrees): no active scope", changed: false, outcome: .noOp)
+        }
+        guard context.stage.mode.usesTreeEngine else {
+            return LayoutCommandResult(message: "layout rotate \(degrees): requires spatialBsp", changed: false, outcome: .failed)
+        }
+        return treeCommand(
+            "layout.rotate",
+            label: "layout rotate \(degrees)",
+            scope: context.scope,
+            snapshot: context.snapshot,
+            generation: generation
+        ) { tree, _ in
+            tree.rotated(degrees: degrees) ?? tree
+        }
+    }
+
+    /// Miroir horizontal (`x`) ou vertical (`y`) de l'arbre BSP de la stage active (Spec 160).
+    public func mirror(_ rawAxis: String) -> LayoutCommandResult {
+        guard let axis = BSPMirrorAxis(rawValue: rawAxis.lowercased()) else {
+            return LayoutCommandResult(message: "layout mirror: requires x|y", changed: false, outcome: .failed)
+        }
+        let generation = PlacementGeneration.shared.next()
+        guard let context = activeContext() else {
+            return LayoutCommandResult(message: "layout mirror \(axis.rawValue): no active scope", changed: false, outcome: .noOp)
+        }
+        guard context.stage.mode.usesTreeEngine else {
+            return LayoutCommandResult(message: "layout mirror \(axis.rawValue): requires spatialBsp", changed: false, outcome: .failed)
+        }
+        return treeCommand(
+            "layout.mirror",
+            label: "layout mirror \(axis.rawValue)",
+            scope: context.scope,
+            snapshot: context.snapshot,
+            generation: generation
+        ) { tree, _ in
+            tree.mirrored(axis)
+        }
+    }
+
     private func activeWindowID(in context: (snapshot: DaemonSnapshot, scope: StageScope, stage: RoadieStages.StageState)) -> WindowID? {
         context.snapshot.focusedWindowID ?? context.stage.focusedWindowID ?? context.stage.windowIDs.last
     }

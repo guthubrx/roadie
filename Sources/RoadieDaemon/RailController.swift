@@ -449,6 +449,7 @@ public final class RailController {
             let overManagedWindow = railClickWouldHitManagedWindow(at: point, displayID: displayID, panel: panel)
             panel.updateMousePassthrough(at: point, allowEmptyRail: !overManagedWindow)
             panel.updateAutoHide(mouse: point, canHide: canHide)
+            panel.updateHoveredAppIcon(at: point)
         }
         syncHoverTimer()
     }
@@ -767,6 +768,26 @@ public final class RailController {
         }
 
         menu.addItem(.separator())
+        let transformMenu = NSMenu(title: tr("Disposition", "Layout"))
+        for (title, action) in [
+            (tr("Pivoter de 90°", "Rotate 90°"), RailAction.rotateLayout(90)),
+            (tr("Pivoter de 180°", "Rotate 180°"), RailAction.rotateLayout(180)),
+            (tr("Miroir horizontal", "Mirror horizontal"), RailAction.mirrorLayout("x")),
+            (tr("Miroir vertical", "Mirror vertical"), RailAction.mirrorLayout("y")),
+        ] {
+            let target = RailMenuActionTarget { [weak self] in
+                self?.perform(action, displayID: displayID)
+            }
+            let item = NSMenuItem(title: title, action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
+            item.target = target
+            stageMenuTargets.append(target)
+            transformMenu.addItem(item)
+        }
+        let transformItem = NSMenuItem(title: tr("Transformer la disposition", "Transform layout"), action: nil, keyEquivalent: "")
+        transformItem.submenu = transformMenu
+        menu.addItem(transformItem)
+
+        menu.addItem(.separator())
         let liveWindowIDs = snapshotService.railWindowIDs(in: snapshot)
         let refusal = Self.deleteStageRefusal(stageID: stageID, displayID: displayID, store: store,
                                               liveWindowIDs: liveWindowIDs)
@@ -906,6 +927,30 @@ public final class RailController {
         let displayItem = NSMenuItem(title: tr("Envoyer la fenetre vers ecran", "Send window to display"), action: nil, keyEquivalent: "")
         displayItem.submenu = displayMenu
         menu.addItem(displayItem)
+
+        let gatherTarget = RailMenuActionTarget { [weak self] in
+            self?.perform(.gatherAppWindows(windowID), displayID: displayID)
+        }
+        let gatherItem = NSMenuItem(
+            title: tr("Rassembler les fenêtres de cette app", "Gather this app's windows"),
+            action: #selector(RailMenuActionTarget.choose(_:)),
+            keyEquivalent: ""
+        )
+        gatherItem.target = gatherTarget
+        stageMenuTargets.append(gatherTarget)
+        menu.addItem(gatherItem)
+
+        let closeTarget = RailMenuActionTarget { [weak self] in
+            self?.perform(.closeWindow(windowID), displayID: displayID)
+        }
+        let closeItem = NSMenuItem(
+            title: tr("Fermer la fenêtre", "Close window"),
+            action: #selector(RailMenuActionTarget.choose(_:)),
+            keyEquivalent: ""
+        )
+        closeItem.target = closeTarget
+        stageMenuTargets.append(closeTarget)
+        menu.addItem(closeItem)
     }
 
     private func windowStageTargets(displayID: DisplayID, excluding sourceStageID: StageID, snapshot: DaemonSnapshot) -> [(title: String, stageID: StageID)] {
@@ -1157,6 +1202,38 @@ public final class RailController {
                 _ = StageCommandService(service: service, store: stageStore, events: eventLog)
                     .pruneEmpty(displayID: displayID)
                 await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.prune_empty") }
+            }
+        case .closeWindow(let windowID):
+            let service = snapshotService
+            let stageStore = store
+            let eventLog = events
+            Task.detached(priority: .userInitiated) {
+                _ = WindowCommandService(service: service, stageStore: stageStore, events: eventLog)
+                    .close(windowID: windowID)
+                await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.close_window") }
+            }
+        case .gatherAppWindows(let windowID):
+            let service = snapshotService
+            let stageStore = store
+            let eventLog = events
+            Task.detached(priority: .userInitiated) {
+                _ = WindowCommandService(service: service, stageStore: stageStore, events: eventLog)
+                    .gatherApp(windowID: windowID)
+                await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.gather_app") }
+            }
+        case .rotateLayout(let degrees):
+            let service = snapshotService
+            let eventLog = events
+            Task.detached(priority: .userInitiated) {
+                _ = LayoutCommandService(service: service, events: eventLog).rotate(degrees)
+                await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.layout_rotate") }
+            }
+        case .mirrorLayout(let axis):
+            let service = snapshotService
+            let eventLog = events
+            Task.detached(priority: .userInitiated) {
+                _ = LayoutCommandService(service: service, events: eventLog).mirror(axis)
+                await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.layout_mirror") }
             }
         }
     }
@@ -1891,6 +1968,10 @@ enum RailAction {
     case balanceLayout
     case swapDisplay(DisplayID)
     case pruneEmptyStages
+    case closeWindow(WindowID)
+    case gatherAppWindows(WindowID)
+    case rotateLayout(Int)
+    case mirrorLayout(String)
 }
 
 struct RailWindowDropTarget {

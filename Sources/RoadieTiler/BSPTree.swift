@@ -9,6 +9,14 @@ public enum BSPOrientation: String, Codable, Equatable, Sendable {
     case horizontal
 }
 
+/// Axe de symétrie d'un arbre BSP (Spec 160).
+/// - `x` : miroir horizontal (gauche ↔ droite).
+/// - `y` : miroir vertical (haut ↔ bas).
+public enum BSPMirrorAxis: String, Codable, Equatable, Sendable {
+    case x
+    case y
+}
+
 /// Côté d'insertion d'une nouvelle fenêtre par rapport à la feuille qu'elle divise.
 public enum BSPInsertionSide: String, Codable, Equatable, Sendable {
     case right   // nouvelle fenêtre en second (droite/bas)
@@ -868,5 +876,72 @@ private struct InferredCuts {
         return leftFrame.minY.isClose(to: rect.minY, tolerance: edgeTolerance)
             && rightFrame.maxY.isClose(to: rect.maxY, tolerance: edgeTolerance)
             && abs(rightFrame.minY - leftFrame.maxY - gap) <= gapTolerance
+    }
+}
+
+// MARK: - Transformations géométriques (Spec 160)
+
+public extension BSPTree {
+    /// Rotation horaire de 90° de l'ensemble de l'arbre BSP. O(n).
+    /// - Un split `vertical` (gauche / droite) devient `horizontal` (haut / bas) avec le même ratio.
+    /// - Un split `horizontal` (haut / bas) devient `vertical` (droite / gauche inversés en gauche / droite,
+    ///   donc `second` à gauche avec ratio `1 - ratio` et `first` à droite).
+    func rotated90() -> BSPTree {
+        switch self {
+        case .empty, .leaf:
+            return self
+        case .split(let orientation, let ratio, let first, let second):
+            switch orientation {
+            case .vertical:
+                return .split(
+                    orientation: .horizontal,
+                    ratio: ratio,
+                    first: first.rotated90(),
+                    second: second.rotated90()
+                )
+            case .horizontal:
+                return .split(
+                    orientation: .vertical,
+                    ratio: (1.0 - ratio).clamped(to: 0.1...0.9),
+                    first: second.rotated90(),
+                    second: first.rotated90()
+                )
+            }
+        }
+    }
+
+    /// Rotation horaire de `degrees` (90, 180 ou 270). Retourne `nil` pour un angle non pris en charge. O(n).
+    func rotated(degrees: Int) -> BSPTree? {
+        switch degrees {
+        case 90: return rotated90()
+        case 180: return rotated90().rotated90()
+        case 270: return rotated90().rotated90().rotated90()
+        default: return nil
+        }
+    }
+
+    /// Miroir de l'arbre BSP selon l'axe `.x` (gauche ↔ droite) ou `.y` (haut ↔ bas). Involutif. O(n).
+    func mirrored(_ axis: BSPMirrorAxis) -> BSPTree {
+        switch self {
+        case .empty, .leaf:
+            return self
+        case .split(let orientation, let ratio, let first, let second):
+            let flipsThisNode = (axis == .x && orientation == .vertical)
+                || (axis == .y && orientation == .horizontal)
+            if flipsThisNode {
+                return .split(
+                    orientation: orientation,
+                    ratio: (1.0 - ratio).clamped(to: 0.1...0.9),
+                    first: second.mirrored(axis),
+                    second: first.mirrored(axis)
+                )
+            }
+            return .split(
+                orientation: orientation,
+                ratio: ratio,
+                first: first.mirrored(axis),
+                second: second.mirrored(axis)
+            )
+        }
     }
 }

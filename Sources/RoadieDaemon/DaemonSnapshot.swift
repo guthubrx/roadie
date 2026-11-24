@@ -2369,6 +2369,11 @@ public extension SnapshotService {
         return frameWriter.toggleNativeFullscreen(window)
     }
 
+    func close(_ window: WindowSnapshot) -> Bool {
+        invalidateSharedSnapshot()
+        return frameWriter.close(window)
+    }
+
     func focusedWindowID() -> WindowID? {
         provider.focusedWindowID()
     }

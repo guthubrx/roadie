@@ -223,6 +223,8 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "layout toggle-split [left|right|up|down]"),
         CLICommandSpec(usage: "layout join-with|insert left|right|up|down"),
         CLICommandSpec(usage: "layout flatten|zoom-parent"),
+        CLICommandSpec(usage: "layout rotate 90|180|270"),
+        CLICommandSpec(usage: "layout mirror x|y"),
         CLICommandSpec(usage: "layout width next|prev|nudge [DELTA]|ratio RATIO [--all]"),
         CLICommandSpec(usage: "config show|validate|reload [--json] [--config PATH]"),
         CLICommandSpec(usage: "rules validate|list|explain [--json] [--config PATH]"),
@@ -267,7 +269,8 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "window bookmark set|focus|jump|clear|list NAME"),
         CLICommandSpec(usage: "window reset"),
         CLICommandSpec(usage: "window explain [WINDOW_ID]"),
-        CLICommandSpec(usage: "window close", implemented: false),
+        CLICommandSpec(usage: "window close [WINDOW_ID]"),
+        CLICommandSpec(usage: "window gather-app"),
         CLICommandSpec(usage: "desktop list|current"),
         CLICommandSpec(usage: "desktop focus N|prev|next|last|back|back-and-forth"),
         CLICommandSpec(usage: "desktop next|prev|last|back|back-and-forth"),
@@ -533,6 +536,20 @@ public final class CLICommandRouter {
                 return finish(result)
             case "zoom-parent":
                 let result = LayoutCommandService(service: service).zoomParent()
+                return finish(result)
+            case "rotate":
+                guard let raw = args.dropFirst(2).first, let degrees = Int(raw), degrees == 90 || degrees == 180 || degrees == 270 else {
+                    err("roadie: layout rotate requires 90|180|270")
+                    return 64
+                }
+                let result = LayoutCommandService(service: service).rotate(degrees)
+                return finish(result)
+            case "mirror":
+                guard let axis = args.dropFirst(2).first, axis.lowercased() == "x" || axis.lowercased() == "y" else {
+                    err("roadie: layout mirror requires x|y")
+                    return 64
+                }
+                let result = LayoutCommandService(service: service).mirror(axis)
                 return finish(result)
             case "width":
                 let result = runWidthLayoutCommand(Array(args.dropFirst(2)))
@@ -1356,8 +1373,21 @@ public final class CLICommandRouter {
         case "explain":
             return explainWindow(args.dropFirst().first)
         case "close":
-            out("roadie: window close is not implemented in this build")
-            return 1
+            let targetID: WindowID?
+            if let raw = args.dropFirst().first {
+                guard let parsed = UInt32(raw) else {
+                    err("roadie: window close expects an optional numeric window id")
+                    return 64
+                }
+                targetID = WindowID(rawValue: parsed)
+            } else {
+                targetID = nil
+            }
+            let result = WindowCommandService(service: service).close(windowID: targetID)
+            return finish(result)
+        case "gather-app":
+            let result = WindowCommandService(service: service).gatherApp()
+            return finish(result)
         default:
             return usageError()
         }

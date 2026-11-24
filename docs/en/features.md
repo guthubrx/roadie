@@ -44,9 +44,10 @@ By default (`tiling.float_picture_in_picture = true`, toggleable in **Settings >
 
 ### Navigation rail: app icons row and ergonomics
 
-- **App icons strip** (`fx.rail.show_app_icons_row = true` and `fx.rail.app_icons_row_size = 26`, 14–40 pt, configurable in **Settings > Rail**): each rail card displays clickable app icons below its thumbnail (following 3D perspective in parallax mode) while keeping the white native-fullscreen border and white zoom corners intact.
+- **App icons strip** (`fx.rail.show_app_icons_row = true` and `fx.rail.app_icons_row_size = 26`, 14–40 pt, configurable in **Settings > Rail**): each rail card displays clickable app icons below its thumbnail (following 3D perspective in parallax mode) with hover highlight and dynamic `App — Title` tooltip, while keeping the white native-fullscreen border and white zoom corners intact.
 - **Swap two displays in one key**: `roadie display swap [N|left|right|up|down]` swaps the active stages of two displays in one step (also available in the launcher and rail context menu).
 - **One-click empty stages cleanup**: `roadie stage prune-empty` deletes inactive, empty, unparked, unnamed stages on the active display (also available in the launcher and rail context menu; named stages are always preserved).
+- **Layout transforms & quick window actions**: `roadie layout rotate 90|180|270` rotates the active stage BSP tree, `roadie layout mirror x|y` flips it horizontally or vertically, `roadie window close [WINDOW_ID]` gracefully closes the active or targeted window, and `roadie window gather-app` gathers all other managed windows of the same app into the active stage (available via CLI, launcher, and rail context menu). The existing `focus.mouse_follows_focus` setting now also warps the pointer across stage switches and display focus changes.
 
 Use cases:
 

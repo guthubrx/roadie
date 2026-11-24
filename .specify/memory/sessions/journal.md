@@ -581,3 +581,11 @@ Session 177, 24 novembre 2026. Spec 159 (Lot 2) — Maintenabilité, découpage 
 (3) migration de `@unchecked Sendable` + `NSLock` vers `Sendable` strict + `OSAllocatedUnfairLock` sur `LayoutPreviewHold`, `InteractiveWritePermit`, `RailSettingsCache`, `PlacementGeneration` et `AXUnresponsiveApps` ;
 (4) suppression de tous les avertissements de compilation restants dans `Sources/` (`WindowSwitcherWindowAccess`, `WindowTitleDragAccess`, `LauncherTerminal`, `RoadieScreenCoordinate`, `SearchBarRenderer`) et `Tests/` (`ReactiveTilingAXTests`, `Spec029ResizeTests`, `Audit022LotGTests`, `Spec061OverviewTests`, `Spec093WorkflowSafetyTests`, `Spec131BarCommandsTests`, `Spec131ReturnModifiersTests`, `Spec144FrameTransitionTests`, `TickSchedulerTests`).
 2 648 tests Swift dans 394 suites et 29 tests de scripts réussis.
+
+Session 178, 24 novembre 2026. Spec 160 (Lot 3) — Quick Wins WM & NavRail :
+(1) `BSPTree` gagne `rotated90()`, `rotated(degrees: 90|180|270)` et `mirrored(.x|.y)`, exposés via `LayoutCommandService.rotate`/`mirror`, `CLICommandRouter` (`layout rotate 90|180|270`, `layout mirror x|y`), `LauncherSystemCommands` et le sous-menu « Transformer la disposition » du NavRail ;
+(2) `WindowFrameWriting.close(_:)` (via `kAXCloseButtonAttribute` dans `AXWindowFrameWriter`) et `WindowCommandService.close(windowID:)` activent `roadie window close [WINDOW_ID]` (`implemented: true`) en CLI, lanceur et menu contextuel du rail ;
+(3) `WindowCommandService.gatherApp(windowID:)` (`roadie window gather-app`) rassemble atomiquement dans la stage active toutes les autres fenêtres gérées (hors plein écran natif et épingles) de la même application avec mise à jour des arbres BSP source/cible et placement groupé ;
+(4) `MouseFollower` (`focus.mouse_follows_focus`) est étendu à `StageCommandService.switchDisplay` et `DisplayCommandService.focus` ;
+(5) `StageCardView.updateHoveredAppIcon(at:)` et `RailPanel.updateHoveredAppIcon(at:)` (branchés sur `RailController.updateRailHover()`) ajoutent un halo discret, un agrandissement léger (1,12×) et une infobulle dynamique `App — Titre` au survol des icônes d'application sous les vignettes du NavRail.
+2 654 tests Swift dans 395 suites et 29 tests de scripts réussis.

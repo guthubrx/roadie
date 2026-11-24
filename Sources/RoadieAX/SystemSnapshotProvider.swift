@@ -46,6 +46,7 @@ public protocol WindowFrameWriting: Sendable {
     func reset(_ window: WindowSnapshot) -> Bool
     func toggleZoom(_ window: WindowSnapshot) -> Bool
     func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool
+    func close(_ window: WindowSnapshot) -> Bool
 }
 
 public extension WindowFrameWriting {
@@ -83,6 +84,7 @@ public extension WindowFrameWriting {
     func reset(_ window: WindowSnapshot) -> Bool { false }
     func toggleZoom(_ window: WindowSnapshot) -> Bool { reset(window) }
     func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool { false }
+    func close(_ window: WindowSnapshot) -> Bool { false }
 }
 
 /// Résultat de `focusOnOtherSpace` : ouverture demandée, élément trouvé par jeton distant, focus obtenu,
@@ -1659,6 +1661,10 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
     public func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool {
         press(kAXFullScreenButtonAttribute, of: window)
+    }
+
+    public func close(_ window: WindowSnapshot) -> Bool {
+        press(kAXCloseButtonAttribute, of: window)
     }
 
     private func press(_ buttonAttribute: String, of window: WindowSnapshot) -> Bool {
