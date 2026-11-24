@@ -136,24 +136,29 @@ struct AXWindowFrameWriterTests {
         #expect(f.frames.entry(for: 1)?.writesInGeneration == 1)
     }
 
-    @Test func lotEIntermediateAnimationFrameUsesMinimalAXWritesAndSkipsReadBackAndRegistry() {
-        // 1. Position + taille modifiées : au plus une écriture position + une écriture taille,
-        // sans AXFullScreen, sans relecture synchrone et sans polluer WrittenFrameRegistry.
+    @Test func lotEIntermediateAnimationFrameUsesMinimalAXWritesPreservesSafetyAndReturnsObservedFrame() {
+        // 1. Position + taille modifiées : AXFullScreen vérifié, au plus une écriture position +
+        // une écriture taille (jamais double set AXSize), cadre réellement observé relu (y compris
+        // clamp silencieux) et sans polluer WrittenFrameRegistry.
         let both = WriterFixture()
         both.io.windows[50] = index(pid: 50, ids: [1])
         let movedAndResized = CGRect(x: 120, y: 40, width: 620, height: 480)
+        let silentlyClamped = CGRect(x: 120, y: 40, width: 700, height: 480)
+        both.io.readBack = silentlyClamped
         let bothResult = both.writer.setFrames([
             WindowFrameUpdate(window: window(1, pid: 50), frame: movedAndResized, isIntermediateAnimationFrame: true),
         ], generation: PlacementGeneration.outsideBudget)
-        #expect(bothResult[WindowID(rawValue: 1)] == movedAndResized)
+        #expect(bothResult[WindowID(rawValue: 1)] == silentlyClamped)
+        #expect(both.io.calls.contains("get AXFullScreen"))
         #expect(both.io.frameWrites == ["set AXPosition", "set AXSize"])
-        #expect(!both.io.calls.contains("get AXFullScreen"))
-        #expect(!both.io.calls.contains("read AXPosition,AXSize"))
+        #expect(both.io.calls.contains("read AXPosition,AXSize"))
         #expect(both.frames.entry(for: 1) == nil)
 
         // 2. Déplacement seul (taille identique à 0,5 pt près) : zéro set AXSize (zéro relayout).
         let posOnly = WriterFixture()
         posOnly.io.windows[50] = index(pid: 50, ids: [1])
+        posOnly.io.simulatesFrameAttributes = true
+        posOnly.io.readBack = CGRect(x: 0, y: 0, width: 400, height: 300)
         let movedOnly = CGRect(x: 240, y: 0, width: 400, height: 300)
         let posResult = posOnly.writer.setFrames([
             WindowFrameUpdate(window: window(1, pid: 50), frame: movedOnly, isIntermediateAnimationFrame: true),
@@ -164,6 +169,8 @@ struct AXWindowFrameWriterTests {
         // 3. Redimensionnement seul (position identique à 0,5 pt près) : zéro set AXPosition.
         let sizeOnly = WriterFixture()
         sizeOnly.io.windows[50] = index(pid: 50, ids: [1])
+        sizeOnly.io.simulatesFrameAttributes = true
+        sizeOnly.io.readBack = CGRect(x: 0, y: 0, width: 400, height: 300)
         let resizedOnly = CGRect(x: 0, y: 0, width: 640, height: 300)
         let sizeResult = sizeOnly.writer.setFrames([
             WindowFrameUpdate(window: window(1, pid: 50), frame: resizedOnly, isIntermediateAnimationFrame: true),
@@ -171,7 +178,39 @@ struct AXWindowFrameWriterTests {
         #expect(sizeResult[WindowID(rawValue: 1)] == resizedOnly)
         #expect(sizeOnly.io.frameWrites == ["set AXSize"])
 
-        // 4. Image finale (isIntermediateAnimationFrame == false) : contrat complet Spec043 préservé.
+        // 4. Plein écran natif activé après le snapshot : zéro écriture de cadre.
+        let fullscreen = WriterFixture()
+        fullscreen.io.windows[50] = index(pid: 50, ids: [1])
+        fullscreen.io.nativeFullscreen = true
+        let fullscreenResult = fullscreen.writer.setFrames([
+            WindowFrameUpdate(window: window(1, pid: 50), frame: movedAndResized, isIntermediateAnimationFrame: true),
+        ], generation: PlacementGeneration.outsideBudget)
+        #expect((fullscreenResult[WindowID(rawValue: 1)] ?? nil) == nil)
+        #expect(fullscreen.io.calls.contains("get AXFullScreen"))
+        #expect(fullscreen.io.frameWrites.isEmpty)
+
+        // 5. Refus de redimensionnement (fenêtre non redimensionnable) :
+        //    - avec déplacement : publie le cadre réellement relu (taille inchangée), jamais la cible fictive ;
+        //    - sans déplacement : aucune écriture réussie, retourne nil.
+        let nonResizableMove = WriterFixture()
+        nonResizableMove.io.windows[50] = index(pid: 50, ids: [1])
+        nonResizableMove.io.simulatesFrameAttributes = true
+        nonResizableMove.io.readBack = CGRect(x: 0, y: 0, width: 400, height: 300)
+        nonResizableMove.io.setErrors[kAXSizeAttribute] = .attributeUnsupported
+        let nonResizableMoveResult = nonResizableMove.writer.setFrames([
+            WindowFrameUpdate(window: window(1, pid: 50), frame: movedAndResized, isIntermediateAnimationFrame: true),
+        ], generation: PlacementGeneration.outsideBudget)
+        #expect(nonResizableMoveResult[WindowID(rawValue: 1)] == CGRect(x: 120, y: 40, width: 400, height: 300))
+
+        let nonResizableSizeOnly = WriterFixture()
+        nonResizableSizeOnly.io.windows[50] = index(pid: 50, ids: [1])
+        nonResizableSizeOnly.io.setErrors[kAXSizeAttribute] = .attributeUnsupported
+        let nonResizableSizeResult = nonResizableSizeOnly.writer.setFrames([
+            WindowFrameUpdate(window: window(1, pid: 50), frame: resizedOnly, isIntermediateAnimationFrame: true),
+        ], generation: PlacementGeneration.outsideBudget)
+        #expect((nonResizableSizeResult[WindowID(rawValue: 1)] ?? nil) == nil)
+
+        // 6. Image finale (isIntermediateAnimationFrame == false) : contrat complet Spec043 préservé.
         let finalFixture = WriterFixture()
         finalFixture.io.windows[50] = index(pid: 50, ids: [1])
         finalFixture.io.simulatesFrameAttributes = true

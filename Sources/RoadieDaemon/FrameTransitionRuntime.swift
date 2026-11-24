@@ -21,6 +21,7 @@ public final class FrameTransitionRuntime {
         var ids: Set<String> = []
         var focusAfterScenePlacement: (() -> Void)?
         var scene: StageSceneTransition?
+        var isScheduling = false
         var finalSubmitted = false
         var finalResults: [WindowID: ApplyResultItem] = [:]
         init(service: SnapshotService, generation: UInt64, generations: PlacementGeneration) {
@@ -138,6 +139,11 @@ public final class FrameTransitionRuntime {
         case .up: CGSize(width: 0, height: -distance)
         case .down: CGSize(width: 0, height: distance)
         }
+        // Préparer toutes les commandes avant de lancer EffectAnimator : une completion synchrone
+        // (cible déjà atteinte ou durée nulle) ne doit jamais déclencher une soumission finale
+        // partielle avant l'enregistrement des fenêtres suivantes du lot.
+        var prepared: [(command: ApplyCommand, animationID: String)] = []
+        prepared.reserveCapacity(plan.commands.count)
         for original in plan.commands {
             var command = original
             if immediateWindowIDs.contains(command.window.id) { command.positionsBeforeResizing = true }
@@ -145,10 +151,15 @@ public final class FrameTransitionRuntime {
             current.commands[id] = command
             current.windows[id] = current.windows[id] ?? window
             current.finished.remove(id)
-            var from = current.frames[id]?.cgRect ?? window.frame.cgRect
-            var to = command.frame.cgRect
             let animationID = "ax-\(ObjectIdentifier(self))-\(window.pid)-\(id.rawValue)"
             current.ids.insert(animationID)
+            prepared.append((command, animationID))
+        }
+        current.isScheduling = true
+        for (command, animationID) in prepared {
+            let window = command.window, id = window.id
+            var from = current.frames[id]?.cgRect ?? window.frame.cgRect
+            var to = command.frame.cgRect
             if immediateWindowIDs.contains(id), !command.preservesSize {
                 EffectAnimator.shared.cancel(animationID)
                 current.frames[id] = command.frame
@@ -176,11 +187,12 @@ public final class FrameTransitionRuntime {
             } completion: { [weak self, weak current] in
                 guard let self, let current, self.session === current else { return }
                 current.finished.insert(id)
-                if current.finished.count == current.commands.count { self.pulse() }
+                if !current.isScheduling, current.finished.count == current.commands.count { self.pulse() }
             }
         }
-        // La première cible part dès maintenant par le writer asynchrone commun.
-        if !immediateWindowIDs.isEmpty { pulse() }
+        current.isScheduling = false
+        // La première cible ou un lot déjà achevé synchroniquement part dès maintenant.
+        if !immediateWindowIDs.isEmpty || current.finished.count == current.commands.count { pulse() }
         return ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0,
             items: plan.commands.map { ApplyResultItem(windowID: $0.window.id, status: .deferred, requested: $0.frame, actual: nil) })
     }

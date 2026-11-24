@@ -239,4 +239,70 @@ extension Spec144FrameTransitionTests {
         #expect(updates[0].isIntermediateAnimationFrame && updates[0].frame == midA.cgRect)
         #expect(!updates[1].isIntermediateAnimationFrame && updates[1].frame == f.target.cgRect)
     }
+
+    @Test func lotESynchronousCompletionForFirstWindowDoesNotDropSecondWindow() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let path = try #require(f.configService.state.activePath)
+        try "[fx.animations]\nenabled=true\nduration_ms=80\n".write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
+        f.live.invalidate()
+        let source = try #require(f.context.snapshot.windows.first { $0.window.id == f.source }?.window)
+        let neighbor = try #require(f.context.snapshot.windows.first { $0.window.id == f.neighbor }?.window)
+        let neighborTarget = Rect(x: 100, y: 120, width: 520, height: 640)
+        let runtime = FrameTransitionRuntime(generations: f.generations, isMouseDown: { false })
+        defer { runtime.cancel() }
+        // La première fenêtre est déjà à destination (completion synchrone dans EffectAnimator) ;
+        // la seconde doit tout de même être animée puis placée à sa cible finale.
+        let plan = ApplyPlan(commands: [
+            ApplyCommand(window: source, frame: source.frame),
+            ApplyCommand(window: neighbor, frame: neighborTarget),
+        ])
+        _ = runtime.schedule(plan, service: f.service, generation: f.generations.current, action: .move)
+        #expect(await f.waitFor { !runtime.isHoldingLayout })
+        #expect(f.backend.frame(source.id) == source.frame.cgRect)
+        #expect(f.backend.frame(neighbor.id) == neighborTarget.cgRect)
+    }
+
+    @Test func lotEAllSynchronousCompletionsAndZeroDurationFallbackPlaceAllWindows() async throws {
+        let f = try Drag143Fixture(); defer { f.clean() }
+        let path = try #require(f.configService.state.activePath)
+        // 1. Toutes les fenêtres complètent synchroniquement (cibles déjà atteintes) pendant la
+        //    préparation du lot : la soumission finale part une seule fois pour l'ensemble du lot.
+        try "[fx.animations]\nenabled=true\nduration_ms=80\n".write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
+        f.live.invalidate()
+        let source = try #require(f.context.snapshot.windows.first { $0.window.id == f.source }?.window)
+        let neighbor = try #require(f.context.snapshot.windows.first { $0.window.id == f.neighbor }?.window)
+        let runtime = FrameTransitionRuntime(generations: f.generations, isMouseDown: { false })
+        defer { runtime.cancel() }
+        var deliveredIDs: Set<WindowID> = []
+        runtime.onFinalResult = { result, _, _ in
+            for item in result.items { deliveredIDs.insert(item.windowID) }
+        }
+        let samePlan = ApplyPlan(commands: [
+            ApplyCommand(window: source, frame: source.frame),
+            ApplyCommand(window: neighbor, frame: neighbor.frame),
+        ])
+        let scheduled = try #require(runtime.schedule(samePlan, service: f.service, generation: f.generations.current, action: .move))
+        #expect(scheduled.deferred == 2)
+        #expect(await f.waitFor { !runtime.isHoldingLayout })
+        #expect(deliveredIDs == [source.id, neighbor.id])
+
+        // 2. Durée nulle (courbe ease_out) : policy.enabled == false, le runtime passe la main au
+        //    repli synchrone qui place immédiatement les deux fenêtres.
+        try "[fx.animations]\nenabled=true\ncurve='ease_out'\nduration_ms=0\n".write(toFile: path, atomically: true, encoding: .utf8)
+        _ = f.configService.reload(path: path)
+        f.live.invalidate()
+        let sourceTarget = Rect(x: 40, y: 60, width: 480, height: 600)
+        let neighborTarget = Rect(x: 560, y: 60, width: 480, height: 600)
+        let movePlan = ApplyPlan(commands: [
+            ApplyCommand(window: source, frame: sourceTarget),
+            ApplyCommand(window: neighbor, frame: neighborTarget),
+        ])
+        #expect(runtime.schedule(movePlan, service: f.service, generation: f.generations.current, action: .move) == nil)
+        let syncResult = f.service.apply(movePlan, generation: f.generations.current)
+        #expect(syncResult.applied == 2)
+        #expect(f.backend.frame(source.id) == sourceTarget.cgRect)
+        #expect(f.backend.frame(neighbor.id) == neighborTarget.cgRect)
+    }
 }
