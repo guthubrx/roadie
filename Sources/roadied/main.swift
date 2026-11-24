@@ -20,6 +20,7 @@ if let first = args.first, roadieReaderCommands.contains(first) {
 let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
+var dimInactiveController: DimInactiveController?
 var dividerResizeRuntime: DividerResizeRuntime?
 var nativeResizeRuntime: NativeResizeRuntime?
 var focusFollowsMouseController: FocusFollowsMouseController?
@@ -197,6 +198,9 @@ func startBorderComponent() {
     borderController = BorderController()
     borderController?.start()
     ShutdownRegistry.register { borderController?.stop() }
+    dimInactiveController = DimInactiveController()
+    dimInactiveController?.start()
+    ShutdownRegistry.register { dimInactiveController?.stop() }
 }
 
 @MainActor

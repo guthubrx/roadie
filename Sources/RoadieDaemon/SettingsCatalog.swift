@@ -398,6 +398,8 @@ extension SettingsCatalog {
               tr("Garde hors du tuilage les infobulles et les menus contextuels.", "Keeps tooltips and context menus out of tiling."), .bool, .bool(true)),
         entry(.tuilage, "tiling", "float_picture_in_picture", tr("Laisser flotter les vidéos Picture-in-Picture", "Float Picture-in-Picture videos"),
               tr("Garde automatiquement hors du tuilage les petites fenêtres vidéo en incrustation (Safari, Firefox, Chrome, etc.).", "Automatically keeps Picture-in-Picture video windows floating outside tiling (Safari, Firefox, Chrome, etc.)."), .bool, .bool(true)),
+        entry(.tuilage, "tiling", "scratchpad_enabled", tr("Activer le scratchpad flottant", "Enable floating scratchpad"),
+              tr("Autorise l'affectation et le rappel d'une fenêtre flottante centrée (roadie scratchpad toggle) hors du tuilage.", "Allows assigning and toggling a centered floating scratchpad window (roadie scratchpad toggle) outside tiling."), .bool, .bool(true)),
         readOnlyEntry(.tuilage, "tiling", "smart_gaps_solo_sides", tr("Côtés sans marge pour une fenêtre seule", "Sides without a gap for a single window"),
                       tr("Liste des côtés (top, right, bottom, left) où la marge disparaît.", "List of sides (top, right, bottom, left) where the gap disappears.")),
         readOnlyEntry(.tuilage, "tiling", "allowed_subroles", tr("Types de fenêtres tuilées", "Tiled window types"),

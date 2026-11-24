@@ -1057,8 +1057,9 @@ public struct SnapshotService: Sendable {
         let allowedSubroles: Set<String>
         let floatingBundles: Set<String>
         let sortedRules: [WindowRule]
+        let scratchpadWindowIDs: Set<WindowID>
 
-        init(config: RoadieConfig) {
+        init(config: RoadieConfig, scratchpadWindowIDs: Set<WindowID>? = nil) {
             self.allowedSubroles = Set(config.tiling.allowedSubroles)
             self.floatingBundles = Set(config.exclusions.floatingBundles)
             self.sortedRules = config.rules
@@ -1069,6 +1070,8 @@ public struct SnapshotService: Sendable {
                     }
                     return lhs.priority > rhs.priority
                 }
+            self.scratchpadWindowIDs = scratchpadWindowIDs
+                ?? (config.tiling.scratchpadEnabled ? ScratchpadStore.protectedWindowIDs() : [])
         }
     }
 
@@ -1118,6 +1121,10 @@ public struct SnapshotService: Sendable {
                 let kind = rule.action.exclude == true ? "exclude" : "floating"
                 decision = TilingDecision(tile: false, reason: tr("règle \(rule.id) : \(kind)", "rule \(rule.id): \(kind)"))
             }
+        }
+        // Spec 162 : une fenêtre affectée au scratchpad flottant reste toujours hors du tuilage.
+        if config.tiling.scratchpadEnabled, context.scratchpadWindowIDs.contains(window.id) {
+            return TilingDecision(tile: false, reason: tr("scratchpad flottant", "floating scratchpad"))
         }
         return decision
     }

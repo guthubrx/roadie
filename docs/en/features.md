@@ -1185,3 +1185,9 @@ When moving up to a previous stage, its windows enter from below and move upward
 - **Native Color Picker** (`color` / `couleur`): launches `NSColorSampler`, copies `#RRGGBB`, and reports HEX / RGB / HSL.
 - **Offline Emoji & Typography Picker** (`experimental.target_mode.emoji_picker`): type `:word` or `emoji word` (includes `⌘ ⌥ ⇧ ⌃ → — … € ± ≈ ≠`).
 - **Native Timer & Pomodoro** (`experimental.target_mode.timer_enabled`): `timer 15m break`, `pomodoro`, `timer status`, `timer stop` in the launcher or via `roadie timer start|pomodoro|status|cancel`.
+
+### Floating Scratchpad, Dim Inactive & Enriched Workspace Scenes (Spec 162)
+
+- **Named floating scratchpad** (`tiling.scratchpad_enabled`, enabled by default in **Settings > Tiling**): detach a window from tiling (`roadie scratchpad assign [NAME] [--window ID]`), toggle it centered on the active display (`roadie scratchpad toggle [NAME]`, or from the launcher “Toggle scratchpad”), explicitly `show` / `hide`, inspect (`roadie scratchpad list [--json]`), or return it to tiling (`roadie scratchpad release [NAME]`). Falls back to window rules declaring `action.scratchpad`.
+- **Dim Inactive windows** (`fx.dim_inactive.enabled = false` by default, `fx.dim_inactive.opacity = 0.22` in **Settings > Effects**): places a lightweight click-through dimming veil over visible unfocused tiled windows on the active stage (zero panels and zero overhead when disabled).
+- **Enriched Workspace Scenes**: `roadie project save [NAME] [--url URL]... [--app BUNDLE_OR_PATH]... [--note TEXT]` stores extra URLs/folders, apps to launch if not running, display count, and notes alongside windows and BSP tree; `roadie project info NAME [--json]` inspects a scene; `roadie project open NAME` automatically launches missing apps and opens associated URLs/folders.

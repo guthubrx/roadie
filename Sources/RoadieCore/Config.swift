@@ -218,6 +218,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     public var popupFilter: Bool
     /// Quand true (defaut), laisse flotter automatiquement les fenetres Picture-in-Picture (Spec 157).
     public var floatPictureInPicture: Bool
+    /// Quand true (defaut), active le scratchpad flottant nommé (`roadie scratchpad`, Spec 162).
+    public var scratchpadEnabled: Bool
 
     public init(
         defaultStrategy: WindowManagementMode = .bsp,
@@ -238,7 +240,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         smartGapsSoloSides: [GapSide] = GapSide.allCases,
         allowedSubroles: [String] = ["AXStandardWindow"],
         popupFilter: Bool = true,
-        floatPictureInPicture: Bool = true
+        floatPictureInPicture: Bool = true,
+        scratchpadEnabled: Bool = true
     ) {
         self.defaultStrategy = defaultStrategy
         self.splitPolicy = splitPolicy
@@ -259,6 +262,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.allowedSubroles = allowedSubroles
         self.popupFilter = popupFilter
         self.floatPictureInPicture = floatPictureInPicture
+        self.scratchpadEnabled = scratchpadEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -281,6 +285,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         case allowedSubroles = "allowed_subroles"
         case popupFilter = "popup_filter"
         case floatPictureInPicture = "float_picture_in_picture"
+        case scratchpadEnabled = "scratchpad_enabled"
     }
 
     public init(from decoder: Decoder) throws {
@@ -314,6 +319,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.allowedSubroles = try c.decodeIfPresent([String].self, forKey: .allowedSubroles) ?? ["AXStandardWindow"]
         self.popupFilter = try c.decodeIfPresent(Bool.self, forKey: .popupFilter) ?? true
         self.floatPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .floatPictureInPicture) ?? true
+        self.scratchpadEnabled = try c.decodeIfPresent(Bool.self, forKey: .scratchpadEnabled) ?? true
     }
 }
 
@@ -551,29 +557,61 @@ public struct WindowPlacementConfig: Equatable, Codable, Sendable {
     }
 }
 
+/// Assombrissement des fenêtres inactives (`[fx.dim_inactive]`, Spec 162).
+public struct DimInactiveConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    /// Opacité du voile sombre sur les fenêtres inactives, bornée dans `0.05...0.75`.
+    public var opacity: Double
+
+    public init(enabled: Bool = false, opacity: Double = 0.22) {
+        self.enabled = enabled
+        self.opacity = opacity.isFinite ? min(0.75, max(0.05, opacity)) : 0.22
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case opacity
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        let opacity = try c.decodeFlexibleDouble(forKey: .opacity) ?? 0.22
+        guard opacity.isFinite, (0.05...0.75).contains(opacity) else {
+            throw DecodingError.dataCorruptedError(forKey: .opacity, in: c, debugDescription: "fx.dim_inactive.opacity must be between 0.05 and 0.75")
+        }
+        self.init(enabled: enabled, opacity: opacity)
+    }
+}
+
 public struct EffectsConfig: Equatable, Codable, Sendable {
     public var borders: BorderConfig
     public var animations: AnimationsConfig
+    public var dimInactive: DimInactiveConfig
     public var dropPreview: String
     public var dragPreview: String = "content"
     public var dragPreviewOpacityPercent: Double = 85
     public var dragPreviewScalePercent: Double = 50
 
-    public init(borders: BorderConfig = BorderConfig()) {
+    public init(borders: BorderConfig = BorderConfig(), dimInactive: DimInactiveConfig = DimInactiveConfig()) {
         self.borders = borders
         self.animations = AnimationsConfig()
+        self.dimInactive = dimInactive
         self.dropPreview = "contour"
     }
 
-    public init(borders: BorderConfig = BorderConfig(), animations: AnimationsConfig, dropPreview: String = "contour") {
+    public init(borders: BorderConfig = BorderConfig(), animations: AnimationsConfig, dropPreview: String = "contour", dimInactive: DimInactiveConfig = DimInactiveConfig()) {
         self.borders = borders
         self.animations = animations
+        self.dimInactive = dimInactive
         self.dropPreview = dropPreview
     }
 
     // `borders` est facultatif : `[fx.rail]` seul est une configuration valide.
     enum CodingKeys: String, CodingKey {
-        case borders, animations, dropPreview = "drop_preview"
+        case borders, animations
+        case dimInactive = "dim_inactive"
+        case dropPreview = "drop_preview"
         case dragPreview = "drag_preview"
         case dragPreviewOpacityPercent = "drag_preview_opacity_percent"
         case dragPreviewScalePercent = "drag_preview_scale_percent"
@@ -583,6 +621,7 @@ public struct EffectsConfig: Equatable, Codable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.borders = try c.decodeIfPresent(BorderConfig.self, forKey: .borders) ?? BorderConfig()
         self.animations = try c.decodeIfPresent(AnimationsConfig.self, forKey: .animations) ?? AnimationsConfig()
+        self.dimInactive = try c.decodeIfPresent(DimInactiveConfig.self, forKey: .dimInactive) ?? DimInactiveConfig()
         self.dropPreview = try c.decodeIfPresent(String.self, forKey: .dropPreview) ?? "contour"
         dragPreview = try c.decodeIfPresent(String.self, forKey: .dragPreview) ?? "content"
         dragPreviewOpacityPercent = try c.decodeIfPresent(Double.self, forKey: .dragPreviewOpacityPercent) ?? 85

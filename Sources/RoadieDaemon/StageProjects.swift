@@ -12,25 +12,111 @@ struct ProjectWindow: Codable, Equatable, Sendable {
     let title: String
 }
 
-/// Stage nommée gardée comme projet : ses fenêtres dans l'ordre et la forme de sa disposition, dont les
-/// feuilles sont les rangs des fenêtres à partir de 1 (`WindowID(rang)`, un identifiant est positif).
+/// Plan de lancement calculé pour rouvrir une scène de travail (Spec 162) : pur et testable.
+struct StageProjectLaunchPlan: Equatable, Sendable {
+    let missingApps: [String]
+    let urlsToOpen: [String]
+    let windowCount: Int
+    let hasTree: Bool
+}
+
+/// Stage nommée gardée comme projet/scène : ses fenêtres dans l'ordre, la forme de sa disposition
+/// (feuilles = rangs à partir de 1) et ses métadonnées enrichies optionnelles (Spec 162 : URLs/dossiers
+/// supplémentaires, applications à lancer si absentes, nombre d'écrans, note).
 struct StageProject: Codable, Equatable, Sendable {
     let name: String
     let savedAt: Date
     let windows: [ProjectWindow]
     let tree: BSPTree?
+    var extraURLs: [String]
+    var launchApps: [String]
+    var displayCount: Int
+    var notes: String?
+
+    init(
+        name: String,
+        savedAt: Date,
+        windows: [ProjectWindow],
+        tree: BSPTree?,
+        extraURLs: [String] = [],
+        launchApps: [String] = [],
+        displayCount: Int = 1,
+        notes: String? = nil
+    ) {
+        self.name = name
+        self.savedAt = savedAt
+        self.windows = windows
+        self.tree = tree
+        self.extraURLs = extraURLs
+        self.launchApps = launchApps
+        self.displayCount = max(1, displayCount)
+        self.notes = notes
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, savedAt, windows, tree
+        case extraURLs, launchApps, displayCount, notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.savedAt = try c.decode(Date.self, forKey: .savedAt)
+        self.windows = try c.decode([ProjectWindow].self, forKey: .windows)
+        self.tree = try c.decodeIfPresent(BSPTree.self, forKey: .tree)
+        self.extraURLs = try c.decodeIfPresent([String].self, forKey: .extraURLs) ?? []
+        self.launchApps = try c.decodeIfPresent([String].self, forKey: .launchApps) ?? []
+        self.displayCount = max(1, try c.decodeIfPresent(Int.self, forKey: .displayCount) ?? 1)
+        self.notes = try c.decodeIfPresent(String.self, forKey: .notes)
+    }
 
     /// Fenêtres vivantes d'une stage, dans l'ordre de ses membres ; l'arbre ne garde que leurs feuilles,
     /// remplacées par leur rang. O(m + f).
-    static func capture(name: String, members: [WindowID], windows: [WindowID: ProjectWindow], tree: BSPTree?, at now: Date) -> StageProject {
+    static func capture(
+        name: String,
+        members: [WindowID],
+        windows: [WindowID: ProjectWindow],
+        tree: BSPTree?,
+        at now: Date,
+        extraURLs: [String] = [],
+        launchApps: [String] = [],
+        displayCount: Int = 1,
+        notes: String? = nil
+    ) -> StageProject {
         let kept = members.filter { windows[$0] != nil }
         let rank = Dictionary(uniqueKeysWithValues: kept.enumerated().map { ($1, $0 + 1) })
         let ranked = tree.map { tree in
             let absent = Set(tree.windowIDs).subtracting(kept)
             return renamed(tree.projected(excluding: absent)) { rank[$0].map { WindowID(rawValue: UInt32($0)) } }
         }
-        return StageProject(name: name, savedAt: now, windows: kept.compactMap { windows[$0] },
-                            tree: ranked.flatMap { $0.isEmpty ? nil : $0 })
+        return StageProject(
+            name: name,
+            savedAt: now,
+            windows: kept.compactMap { windows[$0] },
+            tree: ranked.flatMap { $0.isEmpty ? nil : $0 },
+            extraURLs: extraURLs,
+            launchApps: launchApps,
+            displayCount: displayCount,
+            notes: notes
+        )
+    }
+
+    /// Calcule les applications absentes à lancer et les URLs/dossiers supplémentaires à ouvrir (Spec 162).
+    func launchPlan(runningBundleIDs: Set<String>) -> StageProjectLaunchPlan {
+        var missing: [String] = []
+        var seen = Set<String>()
+        for app in launchApps {
+            let trimmed = app.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !runningBundleIDs.contains(trimmed), seen.insert(trimmed).inserted else { continue }
+            missing.append(trimmed)
+        }
+        let urls = extraURLs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return StageProjectLaunchPlan(
+            missingApps: missing,
+            urlsToOpen: urls,
+            windowCount: windows.count,
+            hasTree: tree != nil
+        )
     }
 
     /// Arbre remis sur les fenêtres rouvertes, rang pour rang ; nil s'il en manque une. O(f).

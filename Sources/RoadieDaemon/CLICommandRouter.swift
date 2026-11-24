@@ -149,8 +149,10 @@ public final class CLICommandRouter {
             return verb == "plan"
         case "focus":
             return verb == "status"
-        case "stage", "bookmark", "targets":
+        case "stage", "bookmark", "targets", "scratchpad":
             return verb == "list"
+        case "project":
+            return verb == "list" || verb == "info"
         case "daemon":
             return verb == "health"
         case "timer":
@@ -234,7 +236,8 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
         CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|screen|actions|hide ..."),
         CLICommandSpec(usage: "overview show|toggle|hide|status [--json]"),
-        CLICommandSpec(usage: "project save [NAME] | open NAME | list [--json] | delete NAME"),
+        CLICommandSpec(usage: "project save [NAME] [--url URL]... [--app BUNDLE_OR_PATH]... [--note TEXT] | open NAME | info NAME [--json] | list [--json] | delete NAME"),
+        CLICommandSpec(usage: "scratchpad assign|toggle|show|hide|release|list [NAME] [--window ID] [--json]"),
         CLICommandSpec(usage: "undo"),
         CLICommandSpec(usage: "launcher history [--clear] [--json]"),
         CLICommandSpec(usage: "launcher reset"),
@@ -367,7 +370,7 @@ public final class CLICommandRouter {
         switch command {
         // `bookmark` : `set` lit la fenêtre active, donc l'Accessibilité du daemon. En local, un
         // raccourci Karabiner ne voyait aucune fenêtre (« no active tiled window »).
-        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark", "timer":
+        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark", "timer", "scratchpad":
             return true
         // `floating` lit la fenêtre active : il faut l'Accessibilité du daemon (SPEC-047).
         case "toggle":
@@ -673,7 +676,7 @@ public final class CLICommandRouter {
             // SPEC-081 : remettre la fenêtre du dernier déplacement dans sa stage d'origine.
             return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "launcher.undo"), json: args.contains("--json"))
         case "project":
-            // SPEC-080 : enregistrer et rouvrir passent par le démon (lecture AX) ; la liste se lit ici.
+            // SPEC-080 / SPEC-162 : enregistrer et rouvrir passent par le démon (lecture AX) ; liste et info se lisent ici.
             let sub = args.count >= 2 ? args[1] : ""
             let name = args.count >= 3 && !args[2].hasPrefix("--") ? args[2] : nil
             switch sub {
@@ -686,8 +689,62 @@ public final class CLICommandRouter {
                     out(projects.isEmpty ? tr("aucun projet", "no projects") : projects.map { "\($0.name)\t\($0.windows.count) " + tr("fenêtre(s)", "window(s)") }.joined(separator: "\n"))
                 }
                 return 0
+            case "info":
+                guard let name else { return usageError() }
+                guard let project = StageProjectStore().load().project(named: name) else {
+                    err(tr("projet introuvable : \(name)", "project not found: \(name)"))
+                    return 1
+                }
+                if args.contains("--json") {
+                    try printCodableJSON(project)
+                } else {
+                    out("project=\(project.name) windows=\(project.windows.count) displays=\(project.displayCount) savedAt=\(ISO8601DateFormatter().string(from: project.savedAt))")
+                    if !project.launchApps.isEmpty {
+                        out("apps=\(project.launchApps.joined(separator: ", "))")
+                    }
+                    if !project.extraURLs.isEmpty {
+                        out("urls=\(project.extraURLs.joined(separator: ", "))")
+                    }
+                    if let notes = project.notes, !notes.isEmpty {
+                        out("notes=\(notes)")
+                    }
+                }
+                return 0
             case "save":
-                return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "project.save", arguments: name.map { ["name": $0] } ?? [:]),
+                var payload: [String: String] = [:]
+                var urls: [String] = []
+                var apps: [String] = []
+                var note: String?
+                var idx = 2
+                if idx < args.count, !args[idx].hasPrefix("--") {
+                    payload["name"] = args[idx]
+                    idx += 1
+                }
+                while idx < args.count {
+                    let arg = args[idx]
+                    switch arg {
+                    case "--json":
+                        idx += 1
+                    case "--url":
+                        guard idx + 1 < args.count else { return usageError() }
+                        urls.append(args[idx + 1])
+                        idx += 2
+                    case "--app":
+                        guard idx + 1 < args.count else { return usageError() }
+                        apps.append(args[idx + 1])
+                        idx += 2
+                    case "--note":
+                        guard idx + 1 < args.count else { return usageError() }
+                        note = args[idx + 1]
+                        idx += 2
+                    default:
+                        return usageError()
+                    }
+                }
+                if !urls.isEmpty { payload["urls"] = urls.joined(separator: "\n") }
+                if !apps.isEmpty { payload["apps"] = apps.joined(separator: "\n") }
+                if let note { payload["note"] = note }
+                return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "project.save", arguments: payload),
                                                          json: args.contains("--json"))
             case "open", "delete":
                 guard let name else { return usageError() }
@@ -696,6 +753,8 @@ public final class CLICommandRouter {
             default:
                 return usageError()
             }
+        case "scratchpad":
+            return try runScratchpadCommand(Array(args.dropFirst()))
         case "workflow":
             return try runWorkflowCommand(Array(args.dropFirst()))
         case "launcher":
@@ -2356,6 +2415,60 @@ public final class CLICommandRouter {
             let count = service.cancelAll()
             out("timers cancelled=\(count)")
             return 0
+        default:
+            return usageError()
+        }
+    }
+
+    private func runScratchpadCommand(_ args: [String]) throws -> Int32 {
+        guard let verb = args.first?.lowercased() else { return usageError() }
+        let scratchpads = ScratchpadCommandService(service: service)
+        switch verb {
+        case "list":
+            let entries = scratchpads.list()
+            if args.contains("--json") {
+                try printCodableJSON(entries)
+            } else if entries.isEmpty {
+                out(tr("aucun scratchpad", "no scratchpads"))
+            } else {
+                for entry in entries {
+                    let state = entry.isVisible ? "visible" : "hidden"
+                    out("\(entry.name)\twindow=\(entry.windowID.rawValue)\t\(state)\t\(entry.bundleID)\t\(entry.title)")
+                }
+            }
+            return 0
+        case "assign":
+            var name: String?
+            var windowID: WindowID?
+            var idx = 1
+            while idx < args.count {
+                let arg = args[idx]
+                if arg == "--window" {
+                    guard idx + 1 < args.count, let parsed = Self.windowID(args[idx + 1]) else {
+                        return usageError()
+                    }
+                    windowID = parsed
+                    idx += 2
+                } else if !arg.hasPrefix("--"), name == nil {
+                    name = arg
+                    idx += 1
+                } else {
+                    return usageError()
+                }
+            }
+            return finish(scratchpads.assign(name: name, windowID: windowID))
+        case "toggle", "show", "hide", "release":
+            let rest = Array(args.dropFirst())
+            guard rest.count <= 1, rest.first.map({ !$0.hasPrefix("--") }) ?? true else {
+                return usageError()
+            }
+            let name = rest.first
+            switch verb {
+            case "toggle": return finish(scratchpads.toggle(name: name))
+            case "show": return finish(scratchpads.show(name: name))
+            case "hide": return finish(scratchpads.hide(name: name))
+            default: return finish(scratchpads.release(name: name))
+            }
         default:
             return usageError()
         }

@@ -465,7 +465,15 @@ public final class TargetModeRuntimeController: NSObject {
         // `roadie project …` (SPEC-080) : de même.
         switch command.name {
         case "project.save":
-            let result = saveProject(named: command.string("name"))
+            let urls = (command.string("urls") ?? "")
+                .split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let apps = (command.string("apps") ?? "")
+                .split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let result = saveProject(named: command.string("name"), extraURLs: urls, launchApps: apps, notes: command.string("note"))
             events.append(RoadieEvent(type: "project.command", details: ["command": "save", "message": result.message]))
             return
         case "project.open":
@@ -1810,9 +1818,14 @@ public final class TargetModeRuntimeController: NSObject {
 
     // MARK: - Projets (SPEC-080)
 
-    /// Garde la stage nommée `name` (défaut : stage active) comme projet : fenêtres vivantes, document ou
-    /// adresse lus par l'accessibilité, forme de la disposition. Une stage anonyme est refusée.
-    private func saveProject(named name: String?) -> TargetActionResult {
+    /// Garde la stage nommée `name` (défaut : stage active) comme projet/scène : fenêtres vivantes, document ou
+    /// adresse lus par l'accessibilité, forme de la disposition et métadonnées optionnelles (Spec 162).
+    private func saveProject(
+        named name: String?,
+        extraURLs: [String] = [],
+        launchApps: [String] = [],
+        notes: String? = nil
+    ) -> TargetActionResult {
         let state = service.effectiveStageStore.state()
         guard let scope = name.map({ LauncherSearchContext.stage(for: "stage:\(LauncherMatch.fold($0))", in: state) }) ?? activeStageScope(),
               let stage = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
@@ -1820,17 +1833,30 @@ public final class TargetModeRuntimeController: NSObject {
         guard StagePresentationOrder.isNamed(stage) else { return refused("project save", "anonymous") }
         let service = service
         let events = events
+        let displayCount = max(1, NSScreen.screens.count)
         Task { @MainActor in
             let entries = await WindowSwitcherService(service: service).load().entries.filter { $0.scope == scope }
             let windows = await Self.projectWindows(entries)
-            let project = StageProject.capture(name: stage.name, members: stage.members.map(\.windowID), windows: windows,
-                                               tree: stage.bspTree, at: Date())
+            let project = StageProject.capture(
+                name: stage.name,
+                members: stage.members.map(\.windowID),
+                windows: windows,
+                tree: stage.bspTree,
+                at: Date(),
+                extraURLs: extraURLs,
+                launchApps: launchApps,
+                displayCount: displayCount,
+                notes: notes
+            )
             do {
                 try StageProjectStore().save(project)
                 events.append(RoadieEvent(type: "project.saved", details: [
                     "windows": String(project.windows.count),
                     "documents": String(project.windows.filter { $0.document != nil || $0.url != nil }.count),
-                    "tree": String(project.tree != nil)]))
+                    "tree": String(project.tree != nil),
+                    "extraURLs": String(project.extraURLs.count),
+                    "launchApps": String(project.launchApps.count),
+                    "displays": String(project.displayCount)]))
             } catch {
                 events.append(RoadieEvent(type: "project.save_failed", details: ["reason": "persistence"]))
                 let effects = AlfredLiveEffects(events: events, webSearchURL: "", reopen: { _ in })
@@ -1867,11 +1893,16 @@ public final class TargetModeRuntimeController: NSObject {
         let store = service.effectiveStageStore
         Task { @MainActor in
             let switcher = WindowSwitcherService(service: service)
+            let runningBundles = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+            let launchPlan = project.launchPlan(runningBundleIDs: runningBundles)
             let context = "stage:\(LauncherMatch.fold(project.name))"
             if let scope = LauncherSearchContext.stage(for: context, in: store.state()),
                let entry = await switcher.load().entries.first(where: { $0.scope == scope }) {
                 _ = switcher.activate(entry)
-                events.append(RoadieEvent(type: "project.opened", details: ["outcome": "shown"]))
+                await Self.launchSceneExtras(launchPlan, openURLs: false)
+                events.append(RoadieEvent(type: "project.opened", details: [
+                    "outcome": "shown",
+                    "missingApps": String(launchPlan.missingApps.count)]))
                 return
             }
             var scope = LauncherSearchContext.stage(for: context, in: store.state())
@@ -1886,6 +1917,7 @@ public final class TargetModeRuntimeController: NSObject {
             if store.state().currentDesktopID(for: scope.displayID) == scope.desktopID {
                 _ = StageCommandService(service: service, store: store, events: events).switchTo(scope.stageID.rawValue, displayID: scope.displayID)
             }
+            await Self.launchSceneExtras(launchPlan, openURLs: true)
             var reopened: [WindowID] = []
             for window in project.windows {
                 let known = Set(await switcher.load().entries.filter { $0.window.bundleID == window.bundleID }.map(\.id))
@@ -1897,9 +1929,42 @@ public final class TargetModeRuntimeController: NSObject {
             let tree = project.tree(for: reopened)
             if let tree { store.mutate { $0.setBSPTree(tree, for: scope) } }
             events.append(RoadieEvent(type: "project.opened", details: [
-                "outcome": "reopened", "windows": String(project.windows.count), "reopened": String(reopened.count), "tree": String(tree != nil)]))
+                "outcome": "reopened",
+                "windows": String(project.windows.count),
+                "reopened": String(reopened.count),
+                "tree": String(tree != nil),
+                "missingApps": String(launchPlan.missingApps.count),
+                "extraURLs": String(launchPlan.urlsToOpen.count)]))
         }
         return TargetActionResult(changed: true, message: "project open: \(project.name)")
+    }
+
+    /// Lance les applications manquantes et ouvre les URLs/dossiers configurés d'une scène (Spec 162).
+    private static func launchSceneExtras(_ plan: StageProjectLaunchPlan, openURLs: Bool) async {
+        let workspace = NSWorkspace.shared
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        for app in plan.missingApps {
+            let expanded = NSString(string: app).expandingTildeInPath
+            let appURL: URL?
+            if FileManager.default.fileExists(atPath: expanded) {
+                appURL = URL(fileURLWithPath: expanded)
+            } else {
+                appURL = workspace.urlForApplication(withBundleIdentifier: app)
+            }
+            if let appURL {
+                _ = try? await workspace.openApplication(at: appURL, configuration: configuration)
+            }
+        }
+        guard openURLs else { return }
+        for raw in plan.urlsToOpen {
+            let expanded = NSString(string: raw).expandingTildeInPath
+            if FileManager.default.fileExists(atPath: expanded) {
+                workspace.open(URL(fileURLWithPath: expanded))
+            } else if let url = URL(string: raw), let scheme = url.scheme, !scheme.isEmpty {
+                workspace.open(url)
+            }
+        }
     }
 
     /// Document ou adresse avec leur application ; sinon une nouvelle fenêtre de l'application.

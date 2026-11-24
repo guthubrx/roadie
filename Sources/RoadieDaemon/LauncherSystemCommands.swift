@@ -114,6 +114,10 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             .init(id: "color-picker", fr: "Pipette de couleur", en: "Color picker",
                   keywords: ["color", "couleur", "pipette", "eyedropper", "hex", "rgb", "hsl", "picker"],
                   symbol: "eyedropper", confirms: false),
+            // Session 180 (SPEC-162) : bascule rapide du scratchpad flottant.
+            .init(id: "roadie-scratchpad-toggle", fr: "Scratchpad (afficher/masquer)", en: "Toggle scratchpad",
+                  keywords: ["scratchpad", "tiroir", "flottant", "floating", "drawer", "toggle"],
+                  symbol: "macwindow.on.rectangle", confirms: false),
         ]
     }
 
@@ -204,6 +208,8 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
                 try? await Task.sleep(for: .milliseconds(200))
                 LauncherColorFormat.pickColor()
             }
+        case "roadie-scratchpad-toggle":
+            Task.detached(priority: .userInitiated) { _ = ScratchpadCommandService().toggle() }
         case "roadie-timer-cancel-all":
             let count = LauncherTimerService.shared.cancelAll()
             LauncherTimerService.postLocalNotification(

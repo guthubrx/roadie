@@ -1227,3 +1227,9 @@ En remontant vers une stage précédente, ses fenêtres arrivent du bas et monte
 - **Pipette de couleur native** (`color` / `couleur`) : ouvre la pipette système `NSColorSampler`, copie `#RRGGBB` et affiche HEX / RGB / HSL.
 - **Émojis et typographie hors ligne** (`experimental.target_mode.emoji_picker`) : tapez `:mot` ou `emoji mot` (inclut `⌘ ⌥ ⇧ ⌃ → — … € ± ≈ ≠`).
 - **Minuteur et Pomodoro natifs** (`experimental.target_mode.timer_enabled`) : `timer 15m pause`, `pomodoro`, `timer status`, `timer stop` dans le lanceur ou via `roadie timer start|pomodoro|status|cancel`.
+
+### Scratchpad flottant, Dim Inactive et Scènes de travail enrichies (Spec 162)
+
+- **Scratchpad flottant nommé** (`tiling.scratchpad_enabled`, activé par défaut dans **Paramètres > Tuilage**) : affectez une fenêtre hors tuilage (`roadie scratchpad assign [NOM] [--window ID]`), basculez son affichage centré sur l'écran actif (`roadie scratchpad toggle [NOM]`, ou depuis le lanceur « Scratchpad (afficher/masquer) »), forcez `show` / `hide`, listez (`roadie scratchpad list [--json]`) ou relâchez vers le tuilage (`roadie scratchpad release [NOM]`). Repli automatique sur les règles `action.scratchpad`.
+- **Assombrissement des fenêtres inactives (Dim Inactive)** (`fx.dim_inactive.enabled = false` par défaut, `fx.dim_inactive.opacity = 0.22` dans **Paramètres > Effets**) : pose un voile léger traversant aux clics au-dessus des fenêtres tuilées visibles non focalisées de la stage active (zéro panneau et zéro coût lorsqu'il est désactivé).
+- **Scènes de travail enrichies** : `roadie project save [NOM] [--url URL]... [--app BUNDLE_OR_PATH]... [--note TEXTE]` enregistre en plus des fenêtres et de l'arbre BSP des URLs/dossiers, des applications à lancer si absentes, le nombre d'écrans et une note ; `roadie project info NOM [--json]` inspecte la scène ; `roadie project open NOM` lance automatiquement les applications manquantes et ouvre les URLs/dossiers associés.
