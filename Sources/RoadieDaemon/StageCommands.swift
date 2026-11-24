@@ -1656,7 +1656,11 @@ public struct StageCommandService {
                 // grâce des membres absents.
                 let targetMissing = !targetMembers.isEmpty && targetLiveMemberIDs.isEmpty
                 let nativeFullscreenMember = targetMissing
-                    ? targetStage?.members.first { $0.confirmedClosedAt == nil && $0.presentationState == .nativeFullscreen }
+                    ? targetStage?.members.first {
+                        $0.confirmedClosedAt == nil
+                            && $0.presentationState == .nativeFullscreen
+                            && (preferredWindowID == nil || $0.windowID == preferredWindowID)
+                    }
                     : nil
                 scope.activeStageID = stageID
                 state.update(scope)

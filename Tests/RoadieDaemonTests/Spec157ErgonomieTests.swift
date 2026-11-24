@@ -261,6 +261,54 @@ struct Spec157ErgonomieTests {
     }
 
     @Test
+    func switchAndFocusDoesNotDivertToNativeFullscreenSiblingWhenAllTargetMembersAreMissing() {
+        let displayA = DisplayID(rawValue: "display-missing-fs")
+        let snapA = DisplaySnapshot(id: displayA, index: 1, name: "Main", frame: Rect(x: 0, y: 0, width: 1920, height: 1080), visibleFrame: Rect(x: 0, y: 25, width: 1920, height: 1055), isMain: true)
+        let win1 = WindowSnapshot(id: WindowID(rawValue: 10), pid: 10, appName: "Code", bundleID: "com.microsoft.VSCode", title: "Code", frame: Rect(x: 0, y: 25, width: 900, height: 900), isOnScreen: true, isTileCandidate: true)
+        let safariFSID = WindowID(rawValue: 20)
+        let firefoxID = WindowID(rawValue: 30)
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-157-missing-fs-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let store = StageStore(path: dir.appendingPathComponent("stages.json").path)
+        let events = EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+        var safariMember = PersistentStageMember(windowID: safariFSID, bundleID: "com.apple.Safari", title: "Safari", frame: snapA.frame)
+        safariMember.presentationState = .nativeFullscreen
+        let firefoxMember = PersistentStageMember(windowID: firefoxID, bundleID: "org.mozilla.firefox", title: "Firefox", frame: Rect(x: 20, y: 40, width: 900, height: 900))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: displayA, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1", focusedWindowID: win1.id, members: [
+                        PersistentStageMember(windowID: win1.id, bundleID: win1.bundleID, title: win1.title, frame: win1.frame),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2"), name: "Stage 2", focusedWindowID: safariFSID, members: [
+                        safariMember,
+                        firefoxMember,
+                    ]),
+                ]),
+            ],
+            activeDisplayID: displayA
+        ))
+
+        let writer = Spec157RecordingWriter()
+        let service = SnapshotService(
+            provider: Spec157FakeProvider(displays: [snapA], windows: [win1], focusedID: win1.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: store,
+            events: events
+        )
+        let result = StageCommandService(service: service, store: store, events: events)
+            .switchAndFocus(StageID(rawValue: "2"), windowID: firefoxID, bundleID: "org.mozilla.firefox", displayID: displayA)
+        #expect(result.changed)
+        #expect(writer.recalledWindowIDs == [firefoxID])
+        #expect(writer.activatedBundleIDs == ["org.mozilla.firefox"])
+        #expect(!writer.activatedBundleIDs.contains("com.apple.Safari"))
+    }
+
+    @Test
     func railSettingsParsesShowAppIconsRowWithDefaultTrue() {
         #expect(RailSettings.load(raw: "").showAppIconsRow == true)
         #expect(RailSettings.load(raw: "[fx.rail]\nshow_app_icons_row = false\n").showAppIconsRow == false)
