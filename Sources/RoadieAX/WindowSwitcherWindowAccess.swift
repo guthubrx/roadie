@@ -32,31 +32,76 @@ public enum WindowSwitcherAXOutcome: Equatable, Sendable {
 
 /// Accès AX ciblé par identité de fenêtre (CGWindowID + pid). Aucun force kill.
 public enum WindowSwitcherWindowAccess {
+    private static let stateAttributeNames: [String] = [
+        kAXMinimizedAttribute, kAXTitleAttribute, "AXFullScreen",
+    ]
+
     public static func states(pid: pid_t, windowIDs: Set<WindowID>) -> [WindowID: WindowSwitcherAXState] {
         guard !windowIDs.isEmpty, !AXUnresponsiveApps.shared.isQuarantined(pid) else { return [:] }
         let required = Set(windowIDs.map { CGWindowID($0.rawValue) })
-        guard let windows = AXApplicationWindows(pid: pid, requiredWindowIDs: required) else { return [:] }
+        // Lot J : réutilise l'index AX s'il couvre déjà toutes les fenêtres demandées, sinon
+        // énumère `kAXWindows` sans parcourir 256 enfants (une fenêtre d'un autre Space n'est pas une feuille).
+        guard let windows = AXWindowIndexCache.shared.reusableWindows(for: pid, required: required)
+            ?? AXApplicationWindows(pid: pid, requiredWindowIDs: required, discoverAttachedSheets: false)
+        else { return [:] }
         let application = NSRunningApplication(processIdentifier: pid)
+        let appName = application?.localizedName
+        let isHidden = application?.isHidden ?? false
+        let hasApp = application != nil
         var result: [WindowID: WindowSwitcherAXState] = [:]
         for entry in windows.entries {
             guard let id = entry.id, required.contains(id) else { continue }
-            let minimized = attribute(entry.element, kAXMinimizedAttribute, pid: pid) as? Bool
-            result[WindowID(rawValue: id)] = WindowSwitcherAXState(
-                appName: application?.localizedName,
-                title: attribute(entry.element, kAXTitleAttribute, pid: pid) as? String,
-                isMinimized: minimized ?? false,
-                isFullscreen: attribute(entry.element, "AXFullScreen", pid: pid) as? Bool ?? false,
-                isHidden: application?.isHidden ?? false,
-                visibilityKnown: minimized != nil && application != nil
+            guard let values = readStateAttributes(entry.element, pid: pid) else { continue }
+            result[WindowID(rawValue: id)] = parseState(
+                values: values, appName: appName, isHidden: isHidden, hasApp: hasApp
             )
         }
         for id in required where result[WindowID(rawValue: id)] == nil {
             result[WindowID(rawValue: id)] = WindowSwitcherAXState(
-                appName: application?.localizedName, isHidden: application?.isHidden ?? false,
+                appName: appName, isHidden: isHidden,
                 visibilityKnown: false, isListed: false
             )
         }
         return result
+    }
+
+    /// Lit minimisé/titre/plein-écran en un seul aller-retour AX groupé (Lot J).
+    private static func readStateAttributes(_ element: AXUIElement, pid: pid_t) -> [AnyObject]? {
+        let registry = AXUnresponsiveApps.shared
+        guard !registry.isQuarantined(pid) else { return nil }
+        var raw: CFArray?
+        let error = AXCallTimings.shared.measure(pid) {
+            AXUIElementCopyMultipleAttributeValues(
+                element, stateAttributeNames as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
+            )
+        }
+        if registry.noteResult(error, pid: pid) { return nil }
+        let values = error == .success ? (raw as? [AnyObject]) ?? [] : []
+        if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry) { return nil }
+        return values
+    }
+
+    static func parseState(
+        values: [AnyObject],
+        appName: String?,
+        isHidden: Bool,
+        hasApp: Bool
+    ) -> WindowSwitcherAXState {
+        let minimized: Bool? = if values.count > 0, AXReadValue.embeddedError(values[0]) == nil {
+            values[0] as? Bool
+        } else { nil }
+        let title: String? = if values.count > 1, AXReadValue.embeddedError(values[1]) == nil {
+            values[1] as? String
+        } else { nil }
+        let fullscreen = (values.count > 2 ? AXReadValue.flag(values[2]) : nil) ?? false
+        return WindowSwitcherAXState(
+            appName: appName,
+            title: title,
+            isMinimized: minimized ?? false,
+            isFullscreen: fullscreen,
+            isHidden: isHidden,
+            visibilityKnown: minimized != nil && hasApp
+        )
     }
 
     public static func close(_ windowID: WindowID, pid: pid_t) -> WindowSwitcherAXOutcome {

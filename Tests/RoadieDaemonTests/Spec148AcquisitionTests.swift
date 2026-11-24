@@ -172,4 +172,25 @@ private final class Acquisition148Provider: SystemSnapshotProviding, Sendable {
         let failedProducer = await invalidatedService.readerSnapshot(followFocus: true, producerCycle: 60)
         #expect(failedProducer == nil)
     }
+
+    @Test func lotJSwitcherLoadReusesFreshFollowFocusSnapshotAndProvisionalLoadAvoidsAX() async throws {
+        let provider = Acquisition148Provider(invalidations: 0)
+        let service = fixture(provider)
+        service.enableQuietReaderReuse(cap: 5.0)
+        // Le producteur publie un snapshot `followFocus: true`.
+        _ = service.producerSnapshot(cycle: 1.0)
+        #expect(provider.state.withLock { $0.scans } == 1)
+
+        // `WindowSwitcherService.load()` réutilise ce snapshot sans relancer de scan AX.
+        let switcher = WindowSwitcherService(service: service)
+        let loaded = await switcher.load()
+        #expect(loaded.snapshot != nil)
+        #expect(Set(loaded.entries.map(\.id)) == [WindowID(rawValue: 1), WindowID(rawValue: 2)])
+        #expect(provider.state.withLock { $0.scans } == 1)
+
+        // Le repli mémoire (`provisionalLoad`) produit immédiatement la liste sans aucun appel AX.
+        let provisional = try #require(switcher.provisionalLoad())
+        #expect(Set(provisional.entries.map(\.id)) == [WindowID(rawValue: 1), WindowID(rawValue: 2)])
+        #expect(provider.state.withLock { $0.scans } == 1)
+    }
 }

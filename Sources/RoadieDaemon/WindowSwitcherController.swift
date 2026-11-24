@@ -125,6 +125,8 @@ private final class WindowSwitcherSession {
     var acquisitionUnavailable = false
     var panel: WindowSwitcherPanel?
     var panelVisible = false
+    /// Vrai lorsque la liste affichée provient du cache en mémoire en attendant le relevé frais (Lot J).
+    var provisionalPresented = false
     var thumbnailVersion = -1
     var loadTask: Task<Void, Never>?
     var loadRevision = 0
@@ -132,6 +134,8 @@ private final class WindowSwitcherSession {
     var timer: Timer?
     var outsideMonitor: Any?
     var localClickMonitor: Any?
+    var globalFlagsMonitor: Any?
+    var localFlagsMonitor: Any?
     /// Profil `zones` (session 136) : zones montrées, par identifiant d'entrée, et leur ordre.
     var zones: [WindowID: SwitcherZone] = [:]
     var zoneRecentIDs: [WindowID] = []
@@ -307,6 +311,13 @@ public final class WindowSwitcherController {
             self.acquired(sessionID: sessionID, entries: loaded.entries, context: loaded.context,
                           available: loaded.snapshot != nil)
         }
+        newSession.globalFlagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] _ in
+            Task { @MainActor in self?.checkModifiers() }
+        }
+        newSession.localFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            MainActor.assumeIsolated { self?.checkModifiers() }
+            return event
+        }
         newSession.timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
@@ -314,6 +325,19 @@ public final class WindowSwitcherController {
 
     private func acquired(sessionID: Int, entries: [WindowSwitcherEntry], context: WindowSwitcherContext, available: Bool) {
         guard let session, session.id == sessionID else { return }
+        if session.provisionalPresented {
+            session.provisionalPresented = false
+            guard available else { return }
+            let previous = session.model?.selected?.id
+            let query = session.model?.query ?? ""
+            thumbnails.prune(keeping: Set(entries.map(\.id)), owner: "switcher")
+            var model = makeModel(entries: entries, context: context, session: session)
+            model.search(query)
+            if let previous { model.select(id: previous) }
+            session.model = model
+            refresh(session)
+            return
+        }
         session.acquisitionUnavailable = !available
         if available {
             thumbnails.prune(keeping: Set(entries.map(\.id)), owner: "switcher")
@@ -351,7 +375,8 @@ public final class WindowSwitcherController {
         )
     }
 
-    private func tick() {
+    /// Vérification immédiate des modificateurs (appelée sur `.flagsChanged` à < 1 ms et en secours par `tick()`, Lot J).
+    private func checkModifiers() {
         guard let session else { return }
         let held = WindowSwitcherHotkey.held(in: CGEventSource.flagsState(.combinedSessionState))
         let isHeld = !WindowSwitcherHotkey.isReleased(required: session.required, held: held)
@@ -368,9 +393,32 @@ public final class WindowSwitcherController {
            session.panel?.isSearchEditing != true {
             advance(backwards: true)
         }
-        if !session.panelVisible, session.state.phase == .acquiring,
-           Date().timeIntervalSince(session.startedAt) > 0.15 {
-            presentPanel(session)
+    }
+
+    private func tick() {
+        checkModifiers()
+        guard let session else { return }
+        if !session.panelVisible, session.state.phase == .acquiring {
+            let elapsed = Date().timeIntervalSince(session.startedAt)
+            // Lot J : sous charge (> 60 ms), afficher immédiatement le dernier cache mémoire au lieu d'attendre « Chargement… ».
+            if elapsed > 0.06, let provisional = switcher.provisionalLoad(), !provisional.entries.isEmpty {
+                session.provisionalPresented = true
+                session.model = makeModel(entries: provisional.entries, context: provisional.context, session: session)
+                if session.state.initialBackwards { session.model?.selectInitialBackwards() }
+                if let ready = session.state.ready() {
+                    switch ready {
+                    case .acceptImmediately(let steps):
+                        steps.forEach { session.model?.next(backwards: $0) }
+                        validate(session)
+                        return
+                    case .present(let steps):
+                        steps.forEach { session.model?.next(backwards: $0) }
+                        presentPanel(session)
+                    }
+                }
+            } else if elapsed > 0.15 {
+                presentPanel(session)
+            }
         }
         if session.panelVisible, thumbnails.version != session.thumbnailVersion {
             refresh(session)
@@ -634,6 +682,8 @@ public final class WindowSwitcherController {
         session.timer?.invalidate()
         if let monitor = session.outsideMonitor { NSEvent.removeMonitor(monitor) }
         if let monitor = session.localClickMonitor { NSEvent.removeMonitor(monitor) }
+        if let monitor = session.globalFlagsMonitor { NSEvent.removeMonitor(monitor) }
+        if let monitor = session.localFlagsMonitor { NSEvent.removeMonitor(monitor) }
         session.panel?.orderOut(nil)
         session.panel = nil
         session.model = nil

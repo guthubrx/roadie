@@ -44,6 +44,31 @@ struct AXUnresponsiveAppsTests {
         registry.markResponsive(42)
         #expect(!registry.isQuarantined(42))
     }
+
+    @Test
+    func lotJWindowSwitcherParseStateDecodesBatchedAttributesAndEmbeddedErrors() {
+        let ok = WindowSwitcherWindowAccess.parseState(
+            values: [kCFBooleanTrue, "Terminal" as CFString, kCFBooleanFalse],
+            appName: "iTerm2", isHidden: false, hasApp: true
+        )
+        #expect(ok.appName == "iTerm2")
+        #expect(ok.title == "Terminal")
+        #expect(ok.isMinimized)
+        #expect(!ok.isFullscreen)
+        #expect(ok.visibilityKnown)
+
+        var err = AXError.noValue
+        let noVal = AXValueCreate(.axError, &err)!
+        let missing = WindowSwitcherWindowAccess.parseState(
+            values: [noVal, noVal, noVal],
+            appName: "App", isHidden: true, hasApp: true
+        )
+        #expect(missing.title == nil)
+        #expect(!missing.isMinimized)
+        #expect(!missing.isFullscreen)
+        #expect(missing.isHidden)
+        #expect(!missing.visibilityKnown)
+    }
 }
 
 @Suite

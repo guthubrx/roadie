@@ -644,7 +644,9 @@ struct AXApplicationWindows: @unchecked Sendable {
     private let byID: [CGWindowID: AXUIElement]
 
     /// nil si l'application est mise de côté, ne répond pas ou refuse l'énumération. O(m).
-    init?(pid: pid_t, requiredWindowIDs: Set<CGWindowID>? = nil) {
+    /// `discoverAttachedSheets` (Lot J) : faux pour les lectures hors écran du sélecteur afin
+    /// d'éviter de parcourir 256 enfants AX quand une fenêtre appartient à un autre Space macOS.
+    init?(pid: pid_t, requiredWindowIDs: Set<CGWindowID>? = nil, discoverAttachedSheets: Bool = true) {
         let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return nil }
         var raw: CFTypeRef?
@@ -661,6 +663,10 @@ struct AXApplicationWindows: @unchecked Sendable {
             let idError = AXUIElementGetWindowID(element, &id)
             if registry.noteResult(idError, pid: pid) { return nil }
             entries.append((idError == .success && id > 0 ? id : nil, element))
+        }
+        guard discoverAttachedSheets else {
+            self.init(pid: pid, entries: entries)
+            return
         }
         func value(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
             guard !registry.isQuarantined(pid) else { return nil }

@@ -26,37 +26,98 @@ struct WindowSwitcherService {
         self.service = service.withoutObservationPersistence()
     }
 
+    /// Repli immédiat en mémoire (0 IPC AX) si la machine chargée ralentit `load()` (Lot J).
+    @MainActor
+    func provisionalLoad() -> (entries: [WindowSwitcherEntry], context: WindowSwitcherContext)? {
+        guard let snapshot = service.cachedGestureSnapshot() else { return nil }
+        let persisted = service.effectiveStageStore.state()
+        let drafts = collectDrafts(snapshot: snapshot, persisted: persisted)
+        let entries = drafts.map { draft in
+            WindowSwitcherEntry(
+                window: draft.window,
+                scope: draft.scope,
+                displayName: draft.displayName,
+                desktopName: draft.desktopName,
+                stageName: draft.stageName,
+                isMinimized: false,
+                isHidden: false,
+                isFullscreen: draft.window.furniture?.isNativeFullscreen ?? false,
+                visibilityKnown: draft.window.isOnScreen
+            )
+        }
+        let systemFocusedID = WindowSwitcherFocusHistory.shared.recentIDs.first { id in
+            snapshot.windows.contains { $0.window.id == id }
+        }
+        return (entries, context(snapshot: snapshot, systemFocusedID: systemFocusedID))
+    }
+
     @MainActor
     func load() async -> (entries: [WindowSwitcherEntry], context: WindowSwitcherContext, snapshot: DaemonSnapshot?, persisted: PersistentStageState) {
         // Une acquisition invalidée n'est pas une liste vide. Même reprise bornée pour
-        // l'ouverture et le rechargement ; aucune lecture AX sur le fil principal.
-        var acquired: DaemonSnapshot?
-        var attempts = 0
-        for attempt in 0...3 {
-            guard !Task.isCancelled else { break }
-            attempts += 1
-            acquired = await service.readerSnapshot(followFocus: false)
-            if acquired != nil || Task.isCancelled { break }
-            service.effectiveEvents.append(RoadieEvent(type: "switcher.acquisition", details: [
-                "state": "retry", "attempt": String(attempts)
-            ]))
-            if attempt < 3 {
-                do { try await Task.sleep(for: .milliseconds(100)) }
-                catch { break }
-            }
+        // l'ouverture et le rechargement ; aucune lecture AX ni disque sur le fil principal (Lot J).
+        let readFocused = service.focusedWindowReader()
+        let stageStore = service.effectiveStageStore
+        let focusedTask = Task.detached(priority: .userInitiated) { () -> WindowID? in
+            guard !Task.isCancelled else { return nil }
+            return readFocused()
         }
-        guard !Task.isCancelled, let snapshot = acquired else {
+        let persistedTask = Task.detached(priority: .userInitiated) { () -> (state: PersistentStageState, stamp: [Int64])? in
+            guard !Task.isCancelled else { return nil }
+            let path = stageStore.fileURL.path
+            let before = fileModificationStamp(path)
+            let state = stageStore.state()
+            let after = fileModificationStamp(path)
+            guard !Task.isCancelled else { return nil }
+            return (state, before == after ? after : [])
+        }
+        let acquiredOutcome: (snapshot: DaemonSnapshot?, attempts: Int, focusedID: WindowID?, persisted: (state: PersistentStageState, stamp: [Int64])?) = await withTaskCancellationHandler {
+            var acquired: DaemonSnapshot?
+            var attempts = 0
+            for attempt in 0...3 {
+                guard !Task.isCancelled else { break }
+                attempts += 1
+                acquired = await service.readerSnapshot(followFocus: false, reuseAnyRecent: true)
+                if acquired != nil || Task.isCancelled { break }
+                service.effectiveEvents.append(RoadieEvent(type: "switcher.acquisition", details: [
+                    "state": "retry", "attempt": String(attempts)
+                ]))
+                if attempt < 3 {
+                    do { try await Task.sleep(for: .milliseconds(100)) }
+                    catch { break }
+                }
+            }
+            guard !Task.isCancelled, let acquired else {
+                focusedTask.cancel()
+                persistedTask.cancel()
+                return (nil, attempts, nil, nil)
+            }
+            let focusedID = await focusedTask.value
+            let persisted = await persistedTask.value
+            return (acquired, attempts, focusedID, persisted)
+        } onCancel: {
+            focusedTask.cancel()
+            persistedTask.cancel()
+        }
+        guard !Task.isCancelled, let snapshot = acquiredOutcome.snapshot else {
             if !Task.isCancelled {
                 service.effectiveEvents.append(RoadieEvent(type: "switcher.acquisition", details: [
-                    "state": "unavailable", "attempts": String(attempts)
+                    "state": "unavailable", "attempts": String(acquiredOutcome.attempts)
                 ]))
             }
             return ([], WindowSwitcherContext(), nil, PersistentStageState())
         }
-        let persisted = service.effectiveStageStore.state()
+        let currentStamp = fileModificationStamp(stageStore.fileURL.path)
+        let persisted: PersistentStageState
+        if let preloaded = acquiredOutcome.persisted, !preloaded.stamp.isEmpty, preloaded.stamp == currentStamp {
+            persisted = preloaded.state
+        } else {
+            persisted = stageStore.state()
+        }
         let drafts = collectDrafts(snapshot: snapshot, persisted: persisted)
         let axStates = await accessibilityStates(for: drafts)
-        let retired = Self.retiredWindows(axStates, withoutSpace: SpaceProbe.windowsWithoutSpace)
+        guard !Task.isCancelled else { return ([], WindowSwitcherContext(), nil, PersistentStageState()) }
+        let retired = await Self.retiredWindowsAsync(axStates)
+        guard !Task.isCancelled else { return ([], WindowSwitcherContext(), nil, PersistentStageState()) }
         let entries = drafts.filter { !retired.contains($0.window.id) }.map { draft -> WindowSwitcherEntry in
             let ax = axStates[draft.window.id]
             var window = draft.window
@@ -76,12 +137,11 @@ struct WindowSwitcherService {
         }
         guard !Task.isCancelled else { return ([], WindowSwitcherContext(), nil, PersistentStageState()) }
         service.effectiveEvents.append(RoadieEvent(type: "switcher.acquisition", details: [
-            "state": "ready", "attempts": String(attempts),
+            "state": "ready", "attempts": String(acquiredOutcome.attempts),
             "observed": String(snapshot.windows.count), "entries": String(entries.count)
         ]))
-        // Fenêtre réellement au premier plan selon macOS : le relevé sans suivi du focus retient celle de
-        // la stage active du premier écran, pas forcément celle où l’utilisateur travaille.
-        return (entries, context(snapshot: snapshot, systemFocusedID: service.focusedWindowID()), snapshot, persisted)
+        // Fenêtre réellement au premier plan selon macOS : lue hors MainActor en parallèle du relevé.
+        return (entries, context(snapshot: snapshot, systemFocusedID: acquiredOutcome.focusedID), snapshot, persisted)
     }
 
     func activate(_ entry: WindowSwitcherEntry) -> WindowCommandResult {
@@ -224,6 +284,21 @@ struct WindowSwitcherService {
         let unlisted = Set(states.lazy.filter { !$0.value.isListed && !$0.value.isHidden }.map(\.key))
         guard !unlisted.isEmpty else { return [] }
         return withoutSpace(unlisted)?.intersection(unlisted) ?? []
+    }
+
+    /// Requête SkyLight hors `@MainActor` (Lot J) ; évite tout appel bloquant si `unlisted` est vide.
+    private static func retiredWindowsAsync(_ states: [WindowID: WindowSwitcherAXState]) async -> Set<WindowID> {
+        let unlisted = Set(states.lazy.filter { !$0.value.isListed && !$0.value.isHidden }.map(\.key))
+        guard !unlisted.isEmpty else { return [] }
+        let probeTask = Task.detached(priority: .userInitiated) {
+            guard !Task.isCancelled else { return Set<WindowID>() }
+            return SpaceProbe.windowsWithoutSpace(unlisted)?.intersection(unlisted) ?? []
+        }
+        return await withTaskCancellationHandler {
+            await probeTask.value
+        } onCancel: {
+            probeTask.cancel()
+        }
     }
 
     /// Fenêtres retirées parmi des fenêtres vivantes absentes du relevé (SPEC-083), mêmes critères
