@@ -213,6 +213,52 @@ struct Spec157ErgonomieTests {
     }
 
     @Test
+    func switchAndFocusRecallsRequestedMissingAppInsteadOfFocusingAnotherMember() {
+        let displayA = DisplayID(rawValue: "display-missing-app")
+        let snapA = DisplaySnapshot(id: displayA, index: 1, name: "Main", frame: Rect(x: 0, y: 0, width: 1920, height: 1080), visibleFrame: Rect(x: 0, y: 25, width: 1920, height: 1055), isMain: true)
+        let win1 = WindowSnapshot(id: WindowID(rawValue: 10), pid: 10, appName: "Safari", bundleID: "com.apple.Safari", title: "Docs", frame: Rect(x: 0, y: 25, width: 900, height: 900), isOnScreen: true, isTileCandidate: true)
+        let win2 = WindowSnapshot(id: WindowID(rawValue: 20), pid: 20, appName: "iTerm2", bundleID: "com.googlecode.iterm2", title: "zsh", frame: Rect(x: 20, y: 40, width: 900, height: 900), isOnScreen: true, isTileCandidate: true)
+        // win3 (Firefox) est membre de la stage 2 mais absent du relevé live (minimisé / autre Space).
+        let missingWin3ID = WindowID(rawValue: 30)
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-157-missing-app-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let store = StageStore(path: dir.appendingPathComponent("stages.json").path)
+        let events = EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: displayA, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1", focusedWindowID: win1.id, members: [
+                        PersistentStageMember(windowID: win1.id, bundleID: win1.bundleID, title: win1.title, frame: win1.frame),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2"), name: "Stage 2", focusedWindowID: win2.id, members: [
+                        PersistentStageMember(windowID: win2.id, bundleID: win2.bundleID, title: win2.title, frame: win2.frame),
+                        PersistentStageMember(windowID: missingWin3ID, bundleID: "org.mozilla.firefox", title: "Web", frame: Rect(x: 20, y: 40, width: 900, height: 900)),
+                    ]),
+                ]),
+            ],
+            activeDisplayID: displayA
+        ))
+
+        let writer = Spec157RecordingWriter()
+        let service = SnapshotService(
+            provider: Spec157FakeProvider(displays: [snapA], windows: [win1, win2], focusedID: win1.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: store,
+            events: events
+        )
+        let stageService = StageCommandService(service: service, store: store, events: events)
+        let result = stageService.switchAndFocus(StageID(rawValue: "2"), windowID: missingWin3ID, bundleID: "org.mozilla.firefox", displayID: displayA)
+        #expect(result.changed)
+        // Ne doit PAS avoir basculé le focus sur win2 : doit rappeler org.mozilla.firefox.
+        #expect(!writer.focusedWindowIDs.contains(win2.id))
+        #expect(writer.activatedBundleIDs.contains("org.mozilla.firefox"))
+    }
+
+    @Test
     func railSettingsParsesShowAppIconsRowWithDefaultTrue() {
         #expect(RailSettings.load(raw: "").showAppIconsRow == true)
         #expect(RailSettings.load(raw: "[fx.rail]\nshow_app_icons_row = false\n").showAppIconsRow == false)
@@ -487,10 +533,15 @@ private struct Spec157FakeProvider: SystemSnapshotProviding {
 
 private final class Spec157RecordingWriter: WindowFrameWriting, @unchecked Sendable {
     private(set) var focusedWindowIDs: [WindowID] = []
+    private(set) var activatedBundleIDs: [String] = []
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? { frame }
     func focus(_ window: WindowSnapshot) -> Bool {
         focusedWindowIDs.append(window.id)
+        return true
+    }
+    func activateApplication(bundleID: String) -> Bool {
+        activatedBundleIDs.append(bundleID)
         return true
     }
 }
