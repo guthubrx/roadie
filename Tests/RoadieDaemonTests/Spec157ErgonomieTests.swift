@@ -46,6 +46,7 @@ struct Spec157ErgonomieTests {
         var stackedConfig = RailVisualConfig.load(settings: RailSettings.load(raw: ""))
         stackedConfig.mode = .stacked
         stackedConfig.showAppIconsRow = true
+        stackedConfig.stageLabel.enabled = false
         let cardOn = StageCardView(
             stage: stage,
             displayLabel: "1",
@@ -148,6 +149,28 @@ struct Spec157ErgonomieTests {
             position: 2
         )
         #expect(emptyCard.appIconsRowLayout() == nil)
+
+        // Avec légende visible en dessous : la rangée d'icônes reste séparée sans jamais chevaucher la légende.
+        var withCaptionConfig = stackedConfig
+        withCaptionConfig.stageLabel.enabled = true
+        withCaptionConfig.stageLabel.placement = .below
+        withCaptionConfig.stageLabel.visibilitySeconds = 0
+        let cardWithCaption = StageCardView(
+            stage: stage,
+            displayLabel: "Stage 1",
+            isActive: true,
+            accent: .systemGreen,
+            config: withCaptionConfig,
+            presentationStates: [:],
+            thumbnails: [:],
+            position: 1
+        )
+        let captionLayout = cardWithCaption.stageLabelLayout()
+        let captionFrame = captionLayout.rect.applying(captionLayout.transform)
+        let rowBelowCaption = try #require(cardWithCaption.appIconsRowLayout())
+        let rowProjected = rowBelowCaption.rowRect.applying(rowBelowCaption.transform)
+        #expect(!rowProjected.intersects(captionFrame))
+        #expect(rowProjected.maxY <= captionFrame.minY)
     }
 
     @Test

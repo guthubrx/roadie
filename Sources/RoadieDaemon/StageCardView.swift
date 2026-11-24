@@ -745,28 +745,70 @@ final class StageCardView: NSControl {
         let count = distinct.members.count
         let overflowWidth: CGFloat = distinct.overflow > 0 ? 18 : 0
         let maxContentWidth = max(12, rawFront.width - overflowWidth)
+        let usePerspective = config.mode == .parallax
+
+        // Si la légende est actuellement visible sous la vignette, réserver sa bande et placer la
+        // rangée d'icônes en dessous sans jamais la chevaucher (si la hauteur restante est insuffisante
+        // dans un slot très serré, la légende garde la priorité).
+        let visibleCaptionFrame: CGRect?
+        if config.stageLabel.enabled,
+           config.stageLabel.placement == .below,
+           !displayLabel.isEmpty,
+           config.stageLabel.opacityMultiplier(now: Date()) > 0 {
+            let caption = stageLabelLayout()
+            visibleCaptionFrame = caption.rect.applying(caption.transform)
+        } else {
+            visibleCaptionFrame = nil
+        }
+
+        let maxHeightByCaption: CGFloat
+        if let captionFrame = visibleCaptionFrame {
+            let available = floor(captionFrame.minY - 2)
+            guard available >= 11 else { return nil }
+            maxHeightByCaption = available
+        } else {
+            maxHeightByCaption = idealIconSize
+        }
+
         let fittedIconSize = min(
             idealIconSize,
-            max(12, floor((maxContentWidth - CGFloat(max(0, count - 1)) * spacing) / CGFloat(count)))
+            maxHeightByCaption,
+            max(11, floor((maxContentWidth - CGFloat(max(0, count - 1)) * spacing) / CGFloat(count)))
         )
         let iconsWidth = CGFloat(count) * fittedIconSize + CGFloat(max(0, count - 1)) * spacing
         let rowWidth = min(rawFront.width, iconsWidth + overflowWidth)
         let rowHeight = fittedIconSize
         let gap: CGFloat = 6
 
-        var rowRect = CGRect(
-            x: rawFront.midX - rowWidth / 2,
-            y: rawFront.minY - gap - rowHeight,
-            width: rowWidth,
-            height: rowHeight
-        )
-        let usePerspective = config.mode == .parallax
-        let initialTransform = usePerspective
-            ? Self.parallaxTransform(for: rowRect, rotation: config.parallaxRotation)
-            : .identity
-        let projected = usePerspective ? rowRect.applying(initialTransform) : rowRect
-        if projected.minY < 2 {
-            rowRect.origin.y += (2 - projected.minY)
+        var rowRect: CGRect
+        if let captionFrame = visibleCaptionFrame {
+            rowRect = CGRect(
+                x: rawFront.midX - rowWidth / 2,
+                y: captionFrame.minY - 1 - rowHeight,
+                width: rowWidth,
+                height: rowHeight
+            )
+            if usePerspective {
+                let projected = rowRect.applying(Self.parallaxTransform(for: rowRect, rotation: config.parallaxRotation))
+                let overlapTop = max(0, projected.maxY - (captionFrame.minY - 1))
+                rowRect.origin.y -= overlapTop
+                let adjusted = rowRect.applying(Self.parallaxTransform(for: rowRect, rotation: config.parallaxRotation))
+                if adjusted.minY < 0 { return nil }
+            }
+        } else {
+            rowRect = CGRect(
+                x: rawFront.midX - rowWidth / 2,
+                y: rawFront.minY - gap - rowHeight,
+                width: rowWidth,
+                height: rowHeight
+            )
+            let initialTransform = usePerspective
+                ? Self.parallaxTransform(for: rowRect, rotation: config.parallaxRotation)
+                : .identity
+            let projected = usePerspective ? rowRect.applying(initialTransform) : rowRect
+            if projected.minY < 2 {
+                rowRect.origin.y += (2 - projected.minY)
+            }
         }
         let transform = usePerspective
             ? Self.parallaxTransform(for: rowRect, rotation: config.parallaxRotation)
