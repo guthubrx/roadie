@@ -195,5 +195,28 @@ struct SpatialBSPLayoutStrategyTests {
         ))
         #expect(balancedPlan.placements[win(1)]?.width == 300)
         #expect(balancedPlan.placements[win(2)]?.width == 300)
+
+        // Contre-exemple 3 (changement d'orientation d'un sous-arbre en .bsp dwindle) :
+        // 1000×400, gap 0, w1 >= 650×0, w2/w3 >= 300×100. Donner 650 à w1 laisse 350×400 (< hauteur)
+        // au sous-arbre [w2, w3], qui s'empile alors verticalement (350×200 chacune) et satisfait
+        // les trois minimums.
+        let flippedPlan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .bsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 400),
+            windowIDs: [win(1), win(2), win(3)],
+            splitPolicy: "dwindle",
+            innerGap: 0,
+            minimumSizes: [
+                win(1): CGSize(width: 650, height: 0),
+                win(2): CGSize(width: 300, height: 100),
+                win(3): CGSize(width: 300, height: 100),
+            ]
+        ))
+        #expect(flippedPlan.placements[win(1)]?.width == 650)
+        #expect(flippedPlan.placements[win(2)]?.width == 350)
+        #expect(flippedPlan.placements[win(2)]?.height == 199) // couture verticale 1 pt (BSPTree.gap(.horizontal))
+        #expect(flippedPlan.placements[win(3)]?.width == 350)
+        #expect(flippedPlan.placements[win(3)]?.height == 200)
     }
 }
