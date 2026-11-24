@@ -15,10 +15,18 @@ struct Spec162ScratchpadDimScenesTests {
         private let lock = NSLock()
         var writtenFrames: [WindowID: CGRect] = [:]
         var focusedWindowIDs: [WindowID] = []
+        var failSetFrame = false
 
         func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
-            lock.withLock { writtenFrames[window.id] = frame }
-            return frame
+            lock.withLock {
+                guard !failSetFrame else { return nil }
+                writtenFrames[window.id] = frame
+                return frame
+            }
+        }
+
+        func setFailSetFrame(_ value: Bool) {
+            lock.withLock { failSetFrame = value }
         }
 
         func focus(_ window: WindowSnapshot) -> Bool {
@@ -655,6 +663,48 @@ struct Spec162ScratchpadDimScenesTests {
         #expect(released.changed)
         let restoredFrame = try #require(writer.lastFrame(for: normalWin.id))
         #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(restoredFrame, in: [display()]))
+
+        // 3. Si `setFrame` échoue lors de `release` sur un scratchpad masqué, l'entrée est conservée et la commande échoue
+        let assignAgain = cmd.assign(name: "notes")
+        #expect(assignAgain.changed)
+        _ = cmd.hide(name: "notes")
+        let hiddenAgain = try #require(writer.lastFrame(for: normalWin.id))
+        provider.updateWindowFrame(normalWin.id, to: hiddenAgain)
+        writer.setFailSetFrame(true)
+        let failedRelease = cmd.release(name: "notes")
+        #expect(!failedRelease.changed)
+        #expect(failedRelease.outcome == CommandOutcome.failed)
+        #expect(scratchStore.load().entries["notes"] != nil)
+        writer.setFailSetFrame(false)
+
+        // 4. Repli règle atomique : si stages.json échoue lors de `toggle`, scratchpads.json est restauré
+        let roDir = try tempDir("scratchpad-rule-ro")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: roDir.path)
+            try? FileManager.default.removeItem(at: roDir)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: roDir.path)
+        let roStageStore = StageStore(path: roDir.appendingPathComponent("stages.json").path)
+        let ruleScratchStore = ScratchpadStore(path: dir.appendingPathComponent("rule-atomic.json").path)
+        let ruleWin = window(503, bundleID: "com.googlecode.iterm2", title: "RuleTerm")
+        let ruleService = SnapshotService(
+            provider: MutableProvider(displays: [display()], windows: [ruleWin], focused: ruleWin.id),
+            frameWriter: SpyWriter(),
+            config: ruleConfig,
+            stageStore: roStageStore,
+            events: eventLog,
+            persistStateChanges: false
+        )
+        let atomicRuleCmd = ScratchpadCommandService(
+            service: ruleService,
+            stageStore: roStageStore,
+            scratchpadStore: ruleScratchStore,
+            events: eventLog
+        )
+        let failedRuleToggle = atomicRuleCmd.toggle(name: "term")
+        #expect(!failedRuleToggle.changed)
+        #expect(failedRuleToggle.outcome == CommandOutcome.failed)
+        #expect(ruleScratchStore.load().entries.isEmpty)
     }
 
     @Test func scratchpadHysteresisNeverRetilesProtectedWindow() {

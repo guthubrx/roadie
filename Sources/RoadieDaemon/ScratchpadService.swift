@@ -300,9 +300,28 @@ public struct ScratchpadCommandService {
     }
 
     /// Détache le scratchpad `name` pour laisser la fenêtre revenir dans le cycle normal.
-    /// Si la fenêtre était masquée hors écran, la ramène centrée sur l'écran actif avant libération.
+    /// Si la fenêtre est masquée hors écran, la restauration de son cadre réussit avant la suppression
+    /// du registre afin qu'un échec AX n'abandonne jamais une fenêtre hors écran sans référence (Spec 162 R2).
     public func release(name rawName: String? = nil) -> WindowCommandResult {
         let name = ScratchpadStore.normalizedName(rawName)
+        guard let existing = scratchpadStore.load().entries[name] else {
+            return WindowCommandResult(message: "scratchpad release \(name): unknown", changed: false, outcome: .noOp)
+        }
+        let snapshot = service.snapshot()
+        if let live = snapshot.windows.first(where: {
+            $0.window.id == existing.windowID && $0.window.bundleID == existing.bundleID
+        })?.window,
+           live.furniture?.isNativeFullscreen != true,
+           HiddenWindowPlacement.isHiddenOrLegacyOffscreen(live.frame.cgRect, in: snapshot.displays) {
+            guard let display = activeDisplay(in: snapshot, fallbackWindow: live) else {
+                return .failure("scratchpad release \(name): no active display to restore hidden window")
+            }
+            let restoredFrame = Self.centeredFrame(saved: existing.floatingFrame, in: display.visibleFrame.cgRect)
+            guard service.setFrame(restoredFrame, of: live) != nil else {
+                return .failure("scratchpad release \(name): failed to restore hidden window")
+            }
+            _ = service.focus(live)
+        }
         let removed: PersistentScratchpadEntry?
         do {
             removed = try scratchpadStore.mutateChecked { book in
@@ -313,17 +332,6 @@ public struct ScratchpadCommandService {
         }
         guard let removed else {
             return WindowCommandResult(message: "scratchpad release \(name): unknown", changed: false, outcome: .noOp)
-        }
-        let snapshot = service.snapshot()
-        if let live = snapshot.windows.first(where: {
-            $0.window.id == removed.windowID && $0.window.bundleID == removed.bundleID
-        })?.window,
-           live.furniture?.isNativeFullscreen != true,
-           HiddenWindowPlacement.isHiddenOrLegacyOffscreen(live.frame.cgRect, in: snapshot.displays),
-           let display = activeDisplay(in: snapshot, fallbackWindow: live) {
-            let restoredFrame = Self.centeredFrame(saved: removed.floatingFrame, in: display.visibleFrame.cgRect)
-            _ = service.setFrame(restoredFrame, of: live)
-            _ = service.focus(live)
         }
         events.append(RoadieEvent(type: "scratchpad_release", details: [
             "name": name,
@@ -338,6 +346,59 @@ public struct ScratchpadCommandService {
 
     // MARK: - Internes
 
+    /// Transaction atomique partagée (`assign`, `show`/`hide` sur repli règle) : persiste d'abord
+    /// l'entrée scratchpad, puis détache la fenêtre des stages si demandé ; en cas d'échec de
+    /// `stages.json`, restaure le livre scratchpads à son état antérieur (Spec 162 R2).
+    private func persistEntryAndDetachIfNeeded(
+        commandLabel: String,
+        entry: PersistentScratchpadEntry,
+        window: WindowSnapshot,
+        detachFromStages: Bool,
+        sourceScope: StageScope?
+    ) -> WindowCommandResult? {
+        let previousBook: PersistentScratchpadBook
+        do {
+            previousBook = try scratchpadStore.mutateChecked { book in
+                let before = book
+                for (existingName, item) in book.entries where item.windowID == entry.windowID && existingName != entry.name {
+                    book.entries.removeValue(forKey: existingName)
+                }
+                book.entries[entry.name] = entry
+                return before
+            }
+        } catch {
+            return .persistenceFailure(commandLabel, error)
+        }
+
+        guard detachFromStages else { return nil }
+        do {
+            try stageStore.mutateChecked { state in
+                for idx in state.scopes.indices {
+                    state.scopes[idx].remove(windowID: window.id)
+                }
+                if let sourceScope, let tree = state.bspTree(for: sourceScope) {
+                    state.setBSPTree(tree.removing(window.id), for: sourceScope)
+                }
+                state.suppressRulePlacement(window: window)
+            }
+        } catch {
+            do {
+                try scratchpadStore.mutateChecked { book in
+                    book = previousBook
+                }
+            } catch let rollbackError {
+                return .partial("\(commandLabel): stage persistence failed (\(error)) and rollback failed (\(rollbackError))")
+            }
+            return .persistenceFailure(commandLabel, error)
+        }
+
+        if let sourceScope {
+            try? service.removeLayoutIntentChecked(scope: sourceScope)
+            _ = service.applyTreeScope(sourceScope, cause: "scratchpad.detach", generation: PlacementGeneration.shared.next())
+        }
+        return nil
+    }
+
     private func show(
         name: String,
         snapshot: DaemonSnapshot,
@@ -347,23 +408,24 @@ public struct ScratchpadCommandService {
         guard resolved.window.furniture?.isNativeFullscreen != true else {
             return .failure("scratchpad show \(name): window is in native fullscreen")
         }
-        if !resolved.fromBook {
-            detachFromStagesIfNeeded(window: resolved.window, in: snapshot)
-        }
         let frame = Self.centeredFrame(saved: resolved.entry.floatingFrame, in: display.visibleFrame.cgRect)
-        do {
-            try scratchpadStore.mutateChecked { book in
-                book.entries[name] = PersistentScratchpadEntry(
-                    name: name,
-                    windowID: resolved.window.id,
-                    bundleID: resolved.window.bundleID,
-                    title: resolved.window.title,
-                    isVisible: true,
-                    floatingFrame: Rect(frame)
-                )
-            }
-        } catch {
-            return .persistenceFailure("scratchpad show \(name)", error)
+        let nextEntry = PersistentScratchpadEntry(
+            name: name,
+            windowID: resolved.window.id,
+            bundleID: resolved.window.bundleID,
+            title: resolved.window.title,
+            isVisible: true,
+            floatingFrame: Rect(frame)
+        )
+        let sourceScope = snapshot.windows.first(where: { $0.window.id == resolved.window.id })?.scope
+        if let failure = persistEntryAndDetachIfNeeded(
+            commandLabel: "scratchpad show \(name)",
+            entry: nextEntry,
+            window: resolved.window,
+            detachFromStages: !resolved.fromBook,
+            sourceScope: sourceScope
+        ) {
+            return failure
         }
         let placed = service.setFrame(frame, of: resolved.window) != nil
         _ = service.focus(resolved.window)
@@ -387,26 +449,27 @@ public struct ScratchpadCommandService {
         guard resolved.window.furniture?.isNativeFullscreen != true else {
             return .failure("scratchpad hide \(name): window is in native fullscreen")
         }
-        if !resolved.fromBook {
-            detachFromStagesIfNeeded(window: resolved.window, in: snapshot)
-        }
         let currentVisibleFrame = HiddenWindowPlacement.isHiddenOrLegacyOffscreen(resolved.window.frame.cgRect, in: snapshot.displays)
             ? resolved.entry.floatingFrame
             : resolved.window.frame
         let hiddenFrame = HiddenWindowPlacement.frame(for: resolved.window.frame.cgRect, on: display, among: snapshot.displays)
-        do {
-            try scratchpadStore.mutateChecked { book in
-                book.entries[name] = PersistentScratchpadEntry(
-                    name: name,
-                    windowID: resolved.window.id,
-                    bundleID: resolved.window.bundleID,
-                    title: resolved.window.title,
-                    isVisible: false,
-                    floatingFrame: currentVisibleFrame
-                )
-            }
-        } catch {
-            return .persistenceFailure("scratchpad hide \(name)", error)
+        let nextEntry = PersistentScratchpadEntry(
+            name: name,
+            windowID: resolved.window.id,
+            bundleID: resolved.window.bundleID,
+            title: resolved.window.title,
+            isVisible: false,
+            floatingFrame: currentVisibleFrame
+        )
+        let sourceScope = snapshot.windows.first(where: { $0.window.id == resolved.window.id })?.scope
+        if let failure = persistEntryAndDetachIfNeeded(
+            commandLabel: "scratchpad hide \(name)",
+            entry: nextEntry,
+            window: resolved.window,
+            detachFromStages: !resolved.fromBook,
+            sourceScope: sourceScope
+        ) {
+            return failure
         }
         let moved = service.setFrame(hiddenFrame, of: resolved.window) != nil
         events.append(RoadieEvent(type: "scratchpad_hide", details: [
@@ -418,23 +481,6 @@ public struct ScratchpadCommandService {
             "scratchpad hide \(name): window=\(resolved.window.id.rawValue)",
             changed: moved
         )
-    }
-
-    private func detachFromStagesIfNeeded(window: WindowSnapshot, in snapshot: DaemonSnapshot) {
-        let sourceScope = snapshot.windows.first(where: { $0.window.id == window.id })?.scope
-        try? stageStore.mutateChecked { state in
-            for idx in state.scopes.indices {
-                state.scopes[idx].remove(windowID: window.id)
-            }
-            if let sourceScope, let tree = state.bspTree(for: sourceScope) {
-                state.setBSPTree(tree.removing(window.id), for: sourceScope)
-            }
-            state.suppressRulePlacement(window: window)
-        }
-        if let sourceScope {
-            try? service.removeLayoutIntentChecked(scope: sourceScope)
-            _ = service.applyTreeScope(sourceScope, cause: "scratchpad.detach", generation: PlacementGeneration.shared.next())
-        }
     }
 
     private func resolveWindow(
