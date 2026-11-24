@@ -173,10 +173,15 @@ struct Spec158PerfMemoireTests {
         }
         #expect(cache.cleanedIconCount == SharedAppIconCache.maxCount)
 
+        // Consulter la toute première entrée met à jour son horodatage LRU : elle doit survivre à l'éviction.
+        #expect(cache.cleanedIcon(for: "com.example.app.0") != nil)
+
         // L'ajout d'une 65e entrée évince le quart le plus ancien (16 entrées), pas la totalité du cache.
         cache.storeCleanedIconForTesting(dummy, for: "com.example.app.overflow")
         let expectedCount = SharedAppIconCache.maxCount - (SharedAppIconCache.maxCount / 4) + 1
         #expect(cache.cleanedIconCount == expectedCount)
+        #expect(cache.cleanedIcon(for: "com.example.app.0") != nil)
+        #expect(cache.cleanedIcon(for: "com.example.app.1") == nil)
         #expect(cache.cleanedIcon(for: "com.example.app.overflow") != nil)
 
         cache.purge()

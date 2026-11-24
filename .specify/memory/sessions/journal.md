@@ -573,4 +573,4 @@ Session 176, 24 novembre 2026. Spec 158 (Lot 1) — Performance, fluidité, mém
 (3) `RailPanel.render(...)` réutilise en place `StageCardView`, `RailHeaderView` et `FixedHeightSpacer` lorsque la structure correspond, et réutilise les cartes par `StageID` lors d'une réorganisation ;
 (4) `OverviewWallpaper` borne ses miniatures à 4 entrées et expose `purge()` (appelé dans `OverviewController.hide()` avec `CIContext.clearCaches()`), `OverviewPanel.dismiss` libère les images en fin de fondu et `RailThumbnailStore.captureDragSource` s'aligne sur `sceneCapturePixelBudget` (1,2 Mpx) ;
 (5) `JSONPersistence` et `CommandSocketServer`/`CommandSocketClient` réutilisent des instances statiques `JSONEncoder`/`JSONDecoder` sur leurs chemins par défaut ; suppression des 3 `import RoadieCore` redondants dans `Sources/RoadieCore/` et déplacement de `currentRailSettings()` hors de `private extension SnapshotService`.
-2 642 tests Swift dans 393 suites et 29 tests de scripts réussis.
+2 643 tests Swift dans 393 suites et 29 tests de scripts réussis.

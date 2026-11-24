@@ -1046,9 +1046,11 @@ extension AXWindowFrameWriterTests {
         final class BarrierAXFrameIO: AXFrameIO, @unchecked Sendable {
             private let lock = NSLock()
             private let bothArrived = DispatchSemaphore(value: 0)
+            private var activePIDs = 0
+            private var maxActivePIDs = 0
+            private var waitedTimedOut = false
             private var distinctPIDsSeen: Set<pid_t> = []
             private var intraPIDOrder: [pid_t: [UInt32]] = [:]
-            var observedConcurrentExecution = false
             var windows: [pid_t: AXApplicationWindows] = [:]
 
             func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
@@ -1074,18 +1076,24 @@ extension AXWindowFrameWriterTests {
                 let groupPID: pid_t = rawPID < 200 ? 10 : 20
                 if attribute == kAXPositionAttribute {
                     let shouldWait: Bool = lock.withLock {
+                        activePIDs += 1
+                        maxActivePIDs = max(maxActivePIDs, activePIDs)
                         intraPIDOrder[groupPID, default: []].append(UInt32(rawPID))
                         let isFirstForGroup = distinctPIDsSeen.insert(groupPID).inserted
                         if distinctPIDsSeen.count == 2 {
-                            observedConcurrentExecution = true
                             bothArrived.signal()
                             bothArrived.signal()
                             return false
                         }
                         return isFirstForGroup
                     }
+                    defer {
+                        lock.withLock { activePIDs -= 1 }
+                    }
                     if shouldWait {
-                        _ = bothArrived.wait(timeout: .now() + .seconds(2))
+                        if bothArrived.wait(timeout: .now() + .seconds(2)) == .timedOut {
+                            lock.withLock { waitedTimedOut = true }
+                        }
                     }
                 }
                 return .success
@@ -1096,6 +1104,9 @@ extension AXWindowFrameWriterTests {
             func recordedOrder(for pid: pid_t) -> [UInt32] {
                 lock.withLock { intraPIDOrder[pid] ?? [] }
             }
+
+            var peakConcurrency: Int { lock.withLock { maxActivePIDs } }
+            var timedOut: Bool { lock.withLock { waitedTimedOut } }
         }
 
         let io = BarrierAXFrameIO()
@@ -1115,12 +1126,35 @@ extension AXWindowFrameWriterTests {
             WindowFrameUpdate(window: window(201, pid: 20), frame: target),
         ], generation: 1)
 
-        #expect(io.observedConcurrentExecution)
+        #expect(!io.timedOut)
+        #expect(io.peakConcurrency >= 2)
         #expect(results.count == 3)
         #expect(results[WindowID(rawValue: 101)]! == target)
         #expect(results[WindowID(rawValue: 102)]! == target)
         #expect(results[WindowID(rawValue: 201)]! == target)
         #expect(io.recordedOrder(for: 10) == [101, 102])
         #expect(io.recordedOrder(for: 20) == [201])
+    }
+
+    @Test func spec158ParallelMultiPIDRestoresEnhancedUIOnCancellation() {
+        let f = WriterFixture()
+        f.io.enhancedUserInterface = true
+        f.io.windows[10] = index(pid: 10, ids: [101, 102])
+        f.io.windows[20] = index(pid: 20, ids: [201, 202])
+        let generations = f.generations
+        let expected = generations.current
+        f.io.afterFrameWrite = { _ = generations.next() }
+        let target = CGRect(x: 10, y: 20, width: 400, height: 300)
+        _ = f.writer.setFrames([
+            WindowFrameUpdate(window: window(101, pid: 10), frame: target),
+            WindowFrameUpdate(window: window(102, pid: 10), frame: target),
+            WindowFrameUpdate(window: window(201, pid: 20), frame: target),
+            WindowFrameUpdate(window: window(202, pid: 20), frame: target),
+        ], generation: expected, isCurrent: { generations.current == expected })
+
+        let disabledCount = f.io.calls.filter { $0 == "set AXEnhancedUserInterface=false" }.count
+        let restoredCount = f.io.calls.filter { $0 == "set AXEnhancedUserInterface=true" }.count
+        #expect(disabledCount >= 1)
+        #expect(disabledCount == restoredCount)
     }
 }
