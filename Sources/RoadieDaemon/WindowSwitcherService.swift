@@ -21,16 +21,17 @@ struct WindowSwitcherService {
     }
 
     private let service: SnapshotService
+    @MainActor private static var lastKnownPersisted: [String: PersistentStageState] = [:]
 
     init(service: SnapshotService = SnapshotService()) {
         self.service = service.withoutObservationPersistence()
     }
 
-    /// Repli immédiat en mémoire (0 IPC AX) si la machine chargée ralentit `load()` (Lot J).
+    /// Repli immédiat strictement en mémoire (0 IPC AX, 0 lecture disque) si la machine chargée ralentit `load()` (Lot J).
     @MainActor
     func provisionalLoad() -> (entries: [WindowSwitcherEntry], context: WindowSwitcherContext)? {
         guard let snapshot = service.cachedGestureSnapshot() else { return nil }
-        let persisted = service.effectiveStageStore.state()
+        let persisted = Self.lastKnownPersisted[service.effectiveStageStore.fileURL.path] ?? PersistentStageState()
         let drafts = collectDrafts(snapshot: snapshot, persisted: persisted)
         let entries = drafts.map { draft in
             WindowSwitcherEntry(
@@ -111,8 +112,18 @@ struct WindowSwitcherService {
         if let preloaded = acquiredOutcome.persisted, !preloaded.stamp.isEmpty, preloaded.stamp == currentStamp {
             persisted = preloaded.state
         } else {
-            persisted = stageStore.state()
+            let reloadTask = Task.detached(priority: .userInitiated) { () -> PersistentStageState in
+                guard !Task.isCancelled else { return PersistentStageState() }
+                return stageStore.state()
+            }
+            persisted = await withTaskCancellationHandler {
+                await reloadTask.value
+            } onCancel: {
+                reloadTask.cancel()
+            }
+            guard !Task.isCancelled else { return ([], WindowSwitcherContext(), nil, PersistentStageState()) }
         }
+        Self.lastKnownPersisted[stageStore.fileURL.path] = persisted
         let drafts = collectDrafts(snapshot: snapshot, persisted: persisted)
         let axStates = await accessibilityStates(for: drafts)
         guard !Task.isCancelled else { return ([], WindowSwitcherContext(), nil, PersistentStageState()) }

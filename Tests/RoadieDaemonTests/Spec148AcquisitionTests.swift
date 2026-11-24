@@ -193,4 +193,69 @@ private final class Acquisition148Provider: SystemSnapshotProviding, Sendable {
         #expect(Set(provisional.entries.map(\.id)) == [WindowID(rawValue: 1), WindowID(rawValue: 2)])
         #expect(provider.state.withLock { $0.scans } == 1)
     }
+
+    @Test func lotJProvisionalLoadUsesMemoryCacheWithoutReadingDisk() async throws {
+        let provider = Acquisition148Provider(invalidations: 0)
+        let service = fixture(provider)
+        service.enableQuietReaderReuse(cap: 5.0)
+        _ = service.producerSnapshot(cycle: 1.0)
+        // Écrire un nom personnalisé sur disque : avant tout `load()`, `provisionalLoad()` ne lit pas le disque.
+        service.effectiveStageStore.mutate { state in
+            let scope = PersistentStageScope(
+                displayID: powerDisplay().id,
+                desktopID: DesktopID(rawValue: 1),
+                activeStageID: StageID(rawValue: "stage-1"),
+                stages: [
+                    PersistentStage(
+                        id: StageID(rawValue: "stage-1"),
+                        name: "Bureau Disque",
+                        members: [
+                            PersistentStageMember(
+                                windowID: WindowID(rawValue: 1),
+                                bundleID: "com.test.app",
+                                title: "One",
+                                frame: Rect(x: 0, y: 0, width: 500, height: 500)
+                            )
+                        ]
+                    )
+                ]
+            )
+            state.scopes = [scope]
+        }
+        let switcher = WindowSwitcherService(service: service)
+        let beforeLoad = try #require(switcher.provisionalLoad())
+        #expect(beforeLoad.entries.first { $0.id == WindowID(rawValue: 1) }?.stageName != "Bureau Disque")
+
+        // Après un `load()`, l'état persisté est en mémoire ; même après suppression du fichier,
+        // `provisionalLoad()` conserve les noms sans relire le disque.
+        let loaded = await switcher.load()
+        #expect(loaded.entries.first { $0.id == WindowID(rawValue: 1) }?.stageName == "Bureau Disque")
+        try? FileManager.default.removeItem(at: service.effectiveStageStore.fileURL)
+        let afterDelete = try #require(switcher.provisionalLoad())
+        #expect(afterDelete.entries.first { $0.id == WindowID(rawValue: 1) }?.stageName == "Bureau Disque")
+    }
+
+    @Test func lotJProvisionalAcquisitionFailureMarksUnavailableForRetry() {
+        var provisional = true
+        var unavailable = false
+        let shouldReplaceOnFailure = WindowSwitcherController.finishProvisionalAcquisition(
+            available: false,
+            provisionalPresented: &provisional,
+            acquisitionUnavailable: &unavailable
+        )
+        #expect(!shouldReplaceOnFailure)
+        #expect(!provisional)
+        #expect(unavailable)
+
+        provisional = true
+        unavailable = true
+        let shouldReplaceOnSuccess = WindowSwitcherController.finishProvisionalAcquisition(
+            available: true,
+            provisionalPresented: &provisional,
+            acquisitionUnavailable: &unavailable
+        )
+        #expect(shouldReplaceOnSuccess)
+        #expect(!provisional)
+        #expect(!unavailable)
+    }
 }

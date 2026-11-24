@@ -323,11 +323,29 @@ public final class WindowSwitcherController {
         }
     }
 
+    /// Clôture la phase provisoire lorsqu'une acquisition définitive aboutit ou échoue (Lot J).
+    /// Retourne `true` si le modèle définitif doit remplacer le modèle provisoire.
+    nonisolated static func finishProvisionalAcquisition(
+        available: Bool,
+        provisionalPresented: inout Bool,
+        acquisitionUnavailable: inout Bool
+    ) -> Bool {
+        provisionalPresented = false
+        acquisitionUnavailable = !available
+        return available
+    }
+
     private func acquired(sessionID: Int, entries: [WindowSwitcherEntry], context: WindowSwitcherContext, available: Bool) {
         guard let session, session.id == sessionID else { return }
         if session.provisionalPresented {
-            session.provisionalPresented = false
-            guard available else { return }
+            guard Self.finishProvisionalAcquisition(
+                available: available,
+                provisionalPresented: &session.provisionalPresented,
+                acquisitionUnavailable: &session.acquisitionUnavailable
+            ) else {
+                refresh(session)
+                return
+            }
             let previous = session.model?.selected?.id
             let query = session.model?.query ?? ""
             thumbnails.prune(keeping: Set(entries.map(\.id)), owner: "switcher")
