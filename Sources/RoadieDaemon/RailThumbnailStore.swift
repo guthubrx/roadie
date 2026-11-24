@@ -32,11 +32,10 @@ final class RailThumbnailStore {
     /// Durée et capacité maximales des captures nettes non suivies (Lot B / Lot L : maîtrise la RAM au repos).
     private let detailedRetention: TimeInterval = 90
     static let detailedMaxCount = 12
-    static let iconsMaxCount = 64
+    static let iconsMaxCount = SharedAppIconCache.maxCount
     /// Plafond de pixels des captures de scène/glisser (Lot L : 1,2 Mpx au lieu de 2 Mpx, ~40 % plus rapide sur 4K/5K).
     nonisolated static let sceneCapturePixelBudget: CGFloat = 1_200_000
     private var fallbacks: [WindowID: NSImage] = [:]
-    private var icons: [String: NSImage] = [:]
     private var signatures: [WindowID: String] = [:]
     private var capturedAt: [WindowID: Date] = [:]
     private var attemptedAt: [WindowID: Date] = [:]
@@ -301,7 +300,7 @@ final class RailThumbnailStore {
         guard let window = shareableWindows[source.id], window.owningApplication?.processID == source.pid,
               source.frame.width > 0, source.frame.height > 0 else { return nil }
         let size = source.frame.cgRect.size
-        let scale = min(2, sqrt(2_000_000 / (size.width * size.height)))
+        let scale = min(2, sqrt(Self.sceneCapturePixelBudget / (size.width * size.height)))
         let config = SCStreamConfiguration()
         config.width = max(1, Int(size.width * scale)); config.height = max(1, Int(size.height * scale))
         config.pixelFormat = kCVPixelFormatType_32BGRA
@@ -343,59 +342,7 @@ final class RailThumbnailStore {
     }
 
     private func fallbackIcon(for member: PersistentStageMember) -> NSImage? {
-        if let cached = icons[member.bundleID] {
-            return cached
-        }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: member.bundleID) else {
-            return nil
-        }
-        let sourceIcon = NSWorkspace.shared.icon(forFile: url.path)
-        let size = NSSize(width: 160, height: 104)
-        let scale: CGFloat = 2
-        let pixelWidth = Int(size.width * scale)
-        let pixelHeight = Int(size.height * scale)
-        let bitmapInfo = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
-        let image: NSImage
-        if let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-           let context = CGContext(
-               data: nil, width: pixelWidth, height: pixelHeight, bitsPerComponent: 8,
-               bytesPerRow: 0, space: colorSpace, bitmapInfo: bitmapInfo
-           ) {
-            context.scaleBy(x: scale, y: scale)
-            let graphics = NSGraphicsContext(cgContext: context, flipped: false)
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = graphics
-            NSColor(calibratedWhite: 0.08, alpha: 0.96).setFill()
-            NSBezierPath(roundedRect: CGRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
-            NSColor.white.withAlphaComponent(0.08).setStroke()
-            let border = NSBezierPath(roundedRect: CGRect(x: 0.5, y: 0.5, width: size.width - 1, height: size.height - 1), xRadius: 10, yRadius: 10)
-            border.lineWidth = 1
-            border.stroke()
-            var proposed = CGRect(x: 0, y: 0, width: 104, height: 104)
-            if let iconCG = sourceIcon.cgImage(forProposedRect: &proposed, context: nil, hints: nil) {
-                context.draw(iconCG, in: CGRect(x: (size.width - 52) / 2, y: (size.height - 52) / 2, width: 52, height: 52))
-            } else {
-                sourceIcon.draw(
-                    in: CGRect(x: (size.width - 52) / 2, y: (size.height - 52) / 2, width: 52, height: 52),
-                    from: .zero,
-                    operation: .sourceOver,
-                    fraction: 1
-                )
-            }
-            NSGraphicsContext.restoreGraphicsState()
-            if let rendered = context.makeImage() {
-                image = NSImage(cgImage: rendered, size: size)
-            } else {
-                return nil
-            }
-        } else {
-            return nil
-        }
-        if icons.count >= Self.iconsMaxCount {
-            icons.removeAll(keepingCapacity: true)
-        }
-        icons[member.bundleID] = image
-        return image
+        SharedAppIconCache.shared.fallbackCard(for: member.bundleID)
     }
 
     nonisolated static func isDRMSensitiveBundle(_ bundleID: String) -> Bool {

@@ -566,3 +566,11 @@ Session 175, 24 novembre 2026. Agrandissement et réglage de taille des icônes 
 (1) `fx.rail.app_icons_row_size` (défaut `26` pt, plage `14...40` pt) ajouté dans `Config.swift`, `RailSettings.swift`, `RailVisualConfig.swift` et `SettingsCatalogRail.swift` (Paramètres > Rail) ;
 (2) `StageCardView.appIconsRowLayout()` passe la taille par défaut à `26` pt et compense partiellement la compression horizontale `cos(angle)` en mode 3D `parallax` (`min(1.35, 1 / sqrt(xScale))`), tout en conservant l'inclinaison en perspective, le hit-testing cliquable et la séparation avec la légende.
 2 637 tests Swift dans 392 suites et 29 tests de scripts réussis.
+
+Session 176, 24 novembre 2026. Spec 158 (Lot 1) — Performance, fluidité, mémoire et hygiène de compilation :
+(1) `AXWindowFrameWriter.setFrames(_:generation:isCurrent:)` parallélise les écritures AX par `pid` distinct via `DispatchQueue.concurrentPerform` (ordre intra-PID et cycle `AXEnhancedUserInterface` strictement préservés, sans surcoût pour 1 PID) ; `SpyAXFrameIO` sécurisé par `NSLock` dans `ReactiveTilingAXTests` ;
+(2) `SharedAppIconCache` unifie les icônes nettoyées de `StageCardView` et les cartes de repli de `RailThumbnailStore` (bitmaps sRGB 64×64 détachés, pré-scan du périmètre court-circuitant le BFS pour les bords déjà transparents, éviction progressive du quart le plus ancien au-delà de 64 entrées) ;
+(3) `RailPanel.render(...)` réutilise en place `StageCardView`, `RailHeaderView` et `FixedHeightSpacer` lorsque la structure correspond, et réutilise les cartes par `StageID` lors d'une réorganisation ;
+(4) `OverviewWallpaper` borne ses miniatures à 4 entrées et expose `purge()` (appelé dans `OverviewController.hide()` avec `CIContext.clearCaches()`), `OverviewPanel.dismiss` libère les images en fin de fondu et `RailThumbnailStore.captureDragSource` s'aligne sur `sceneCapturePixelBudget` (1,2 Mpx) ;
+(5) `JSONPersistence` et `CommandSocketServer`/`CommandSocketClient` réutilisent des instances statiques `JSONEncoder`/`JSONDecoder` sur leurs chemins par défaut ; suppression des 3 `import RoadieCore` redondants dans `Sources/RoadieCore/` et déplacement de `currentRailSettings()` hors de `private extension SnapshotService`.
+2 642 tests Swift dans 393 suites et 29 tests de scripts réussis.

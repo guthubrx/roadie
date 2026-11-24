@@ -1,5 +1,4 @@
 import Foundation
-import RoadieCore
 
 /// Organisation indépendante du style des cartes (vignettes, icônes, liste).
 public enum WindowSwitcherPresentation: String, CaseIterable, Codable, Sendable {

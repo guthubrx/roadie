@@ -150,19 +150,22 @@ public final class CommandSocketServer: @unchecked Sendable {
         }
         let encoded: Data
         do {
-            encoded = try JSONEncoder().encode(response)
+            encoded = try Self.encoder.encode(response)
         } catch {
             // FR-015 : jamais d'échec muet ; le client reçoit une erreur minimale.
             fputs("roadied: failed to encode command response: \(error)\n", stderr)
             let fallback = CommandSocketResponse(exitCode: 70, stderr: "roadie: roadied failed to encode its response\n")
-            guard let data = try? JSONEncoder().encode(fallback) else { return }
+            guard let data = try? Self.encoder.encode(fallback) else { return }
             encoded = data
         }
         _ = CommandSocketIO.writeAll(client, encoded + Data([0x0A]), deadline: Date().addingTimeInterval(Self.ioTimeout))
     }
 
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
+
     private func respond(to data: Data) -> CommandSocketResponse {
-        guard let request = try? JSONDecoder().decode(CommandSocketRequest.self, from: data) else {
+        guard let request = try? Self.decoder.decode(CommandSocketRequest.self, from: data) else {
             return CommandSocketResponse(exitCode: 64, stderr: "roadie: invalid request\n")
         }
         guard request.version == Self.protocolVersion else {
@@ -309,15 +312,18 @@ public enum CommandSocketClient {
         guard let fd = connect(to: path, timeout: connectTimeout) else { return .unreachable }
         defer { close(fd) }
         CommandSocketIO.prepare(fd)
-        guard let payload = try? JSONEncoder().encode(request),
+        guard let payload = try? Self.encoder.encode(request),
               CommandSocketIO.writeAll(fd, payload + Data([0x0A]), deadline: Date().addingTimeInterval(connectTimeout))
         else { return .unreachable }
         let deadline = Date().addingTimeInterval(responseTimeout)
         guard case .line(let data) = CommandSocketIO.readLine(fd, limit: .max, deadline: deadline),
-              let response = try? JSONDecoder().decode(CommandSocketResponse.self, from: data)
+              let response = try? Self.decoder.decode(CommandSocketResponse.self, from: data)
         else { return .noResponse }
         return .response(response)
     }
+
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
 
     private static func connect(to path: String, timeout: TimeInterval) -> Int32? {
         var address = sockaddr_un()

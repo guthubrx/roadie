@@ -7,7 +7,9 @@ import Testing
 // SPEC-017 T035 : écrivain AX, registre des frames écrites, écho absorbé, sonde de bureau.
 
 /// Écrivain espion : enregistre les appels AX et répond avec des valeurs scriptées.
+/// Protégé par verrou pour supporter les appels parallèles par PID (Spec 158).
 private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
+    private let lock = NSLock()
     var calls: [String] = []
     var enumerations = 0
     var windows: [pid_t: AXApplicationWindows] = [:]
@@ -27,64 +29,75 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
     var resizeOrigins: [CGPoint] = []
 
     func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
-        enumerations += 1
-        return windows[pid]
+        lock.withLock {
+            enumerations += 1
+            return windows[pid]
+        }
     }
 
     func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?) {
-        calls.append("get \(attribute)")
-        if attribute == kAXTitleAttribute { return (.success, (titles[element] ?? "") as CFString) }
-        if attribute == kAXMinimizedAttribute {
-            if let error = minimizedReadError { return (error, nil) }
-            if let minimized { return (.success, minimized ? kCFBooleanTrue : kCFBooleanFalse) }
-            return (.attributeUnsupported, nil)
+        lock.withLock {
+            calls.append("get \(attribute)")
+            if attribute == kAXTitleAttribute { return (.success, (titles[element] ?? "") as CFString) }
+            if attribute == kAXMinimizedAttribute {
+                if let error = minimizedReadError { return (error, nil) }
+                if let minimized { return (.success, minimized ? kCFBooleanTrue : kCFBooleanFalse) }
+                return (.attributeUnsupported, nil)
+            }
+            if attribute == "AXFullScreen" {
+                if let error = nativeFullscreenReadError { return (error, nil) }
+                if let nativeFullscreen { return (.success, nativeFullscreen ? kCFBooleanTrue : kCFBooleanFalse) }
+                return (.attributeUnsupported, nil)
+            }
+            return attribute == AXWindowFrameWriter.enhancedUserInterface
+                ? (.success, enhancedUserInterface ? kCFBooleanTrue : kCFBooleanFalse)
+                : (.attributeUnsupported, nil)
         }
-        if attribute == "AXFullScreen" {
-            if let error = nativeFullscreenReadError { return (error, nil) }
-            if let nativeFullscreen { return (.success, nativeFullscreen ? kCFBooleanTrue : kCFBooleanFalse) }
-            return (.attributeUnsupported, nil)
-        }
-        return attribute == AXWindowFrameWriter.enhancedUserInterface
-            ? (.success, enhancedUserInterface ? kCFBooleanTrue : kCFBooleanFalse)
-            : (.attributeUnsupported, nil)
     }
 
     func values(of attributes: [String], on element: AXUIElement) -> (AXError, [AnyObject]) {
-        calls.append("read \(attributes.joined(separator: ","))")
-        if let error = readBackError { return (error, []) }
-        var origin = readBack.origin
-        var size = readBack.size
-        return (.success, [AXValueCreate(.cgPoint, &origin)!, AXValueCreate(.cgSize, &size)!])
+        lock.withLock {
+            calls.append("read \(attributes.joined(separator: ","))")
+            if let error = readBackError { return (error, []) }
+            var origin = readBack.origin
+            var size = readBack.size
+            return (.success, [AXValueCreate(.cgPoint, &origin)!, AXValueCreate(.cgSize, &size)!])
+        }
     }
 
     func setValue(_ value: CFTypeRef, of attribute: String, on element: AXUIElement) -> AXError {
-        if attribute == AXWindowFrameWriter.enhancedUserInterface {
-            calls.append("set \(attribute)=\((value as? Bool) == true)")
-            return .success
-        }
-        calls.append("set \(attribute)")
-        if simulatesFrameAttributes, setErrors[attribute] == nil {
-            let ax = unsafeBitCast(value, to: AXValue.self)
-            if attribute == kAXPositionAttribute {
-                var point = CGPoint.zero
-                if AXValueGetValue(ax, .cgPoint, &point) { readBack.origin = point }
-            } else if attribute == kAXSizeAttribute {
-                resizeOrigins.append(readBack.origin)
-                var size = CGSize.zero
-                if AXValueGetValue(ax, .cgSize, &size) { readBack.size = size }
+        let (result, callback): (AXError, (@Sendable () -> Void)?) = lock.withLock {
+            if attribute == AXWindowFrameWriter.enhancedUserInterface {
+                calls.append("set \(attribute)=\((value as? Bool) == true)")
+                return (.success, nil)
             }
+            calls.append("set \(attribute)")
+            if simulatesFrameAttributes, setErrors[attribute] == nil {
+                let ax = unsafeBitCast(value, to: AXValue.self)
+                if attribute == kAXPositionAttribute {
+                    var point = CGPoint.zero
+                    if AXValueGetValue(ax, .cgPoint, &point) { readBack.origin = point }
+                } else if attribute == kAXSizeAttribute {
+                    resizeOrigins.append(readBack.origin)
+                    var size = CGSize.zero
+                    if AXValueGetValue(ax, .cgSize, &size) { readBack.size = size }
+                }
+            }
+            if let frameAfterWrite { readBack = frameAfterWrite }
+            return (setErrors[attribute] ?? .success, afterFrameWrite)
         }
-        if let frameAfterWrite { readBack = frameAfterWrite }
-        afterFrameWrite?()
-        return setErrors[attribute] ?? .success
+        callback?()
+        return result
     }
 
     func performAction(_ action: String, on element: AXUIElement) -> AXError {
-        calls.append("action \(action)")
-        return actionError
+        lock.withLock {
+            calls.append("action \(action)")
+            return actionError
+        }
     }
 
-    var frameWrites: [String] { calls.filter { $0 == "set AXSize" || $0 == "set AXPosition" } }
+    var frameWrites: [String] { lock.withLock { calls.filter { $0 == "set AXSize" || $0 == "set AXPosition" } } }
 }
 
 private final class ManualClock: @unchecked Sendable {
@@ -1027,5 +1040,87 @@ extension AXWindowFrameWriterTests {
         f.io.setErrors[kAXFocusedWindowAttribute] = .failure
         _ = f.writer.focus(window(502, pid: pid))
         #expect(f.io.calls.contains("set AXMain"))
+    }
+
+    @Test func spec158SetFramesParallelizesDistinctPIDsAndPreservesIntraPIDOrder() {
+        final class BarrierAXFrameIO: AXFrameIO, @unchecked Sendable {
+            private let lock = NSLock()
+            private let bothArrived = DispatchSemaphore(value: 0)
+            private var distinctPIDsSeen: Set<pid_t> = []
+            private var intraPIDOrder: [pid_t: [UInt32]] = [:]
+            var observedConcurrentExecution = false
+            var windows: [pid_t: AXApplicationWindows] = [:]
+
+            func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
+                lock.withLock { windows[pid] }
+            }
+
+            func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?) {
+                if attribute == "AXFullScreen" { return (.success, kCFBooleanFalse) }
+                if attribute == AXWindowFrameWriter.enhancedUserInterface { return (.success, kCFBooleanFalse) }
+                return (.attributeUnsupported, nil)
+            }
+
+            func values(of attributes: [String], on element: AXUIElement) -> (AXError, [AnyObject]) {
+                var origin = CGPoint(x: 10, y: 20)
+                var size = CGSize(width: 400, height: 300)
+                return (.success, [AXValueCreate(.cgPoint, &origin)!, AXValueCreate(.cgSize, &size)!])
+            }
+
+            func setValue(_ value: CFTypeRef, of attribute: String, on element: AXUIElement) -> AXError {
+                var rawPID: pid_t = 0
+                AXUIElementGetPid(element, &rawPID)
+                // Les éléments factices portent l'ID fenêtre dans leur pid synthétique (101, 102, 201).
+                let groupPID: pid_t = rawPID < 200 ? 10 : 20
+                if attribute == kAXPositionAttribute {
+                    let shouldWait: Bool = lock.withLock {
+                        intraPIDOrder[groupPID, default: []].append(UInt32(rawPID))
+                        let isFirstForGroup = distinctPIDsSeen.insert(groupPID).inserted
+                        if distinctPIDsSeen.count == 2 {
+                            observedConcurrentExecution = true
+                            bothArrived.signal()
+                            bothArrived.signal()
+                            return false
+                        }
+                        return isFirstForGroup
+                    }
+                    if shouldWait {
+                        _ = bothArrived.wait(timeout: .now() + .seconds(2))
+                    }
+                }
+                return .success
+            }
+
+            func performAction(_ action: String, on element: AXUIElement) -> AXError { .success }
+
+            func recordedOrder(for pid: pid_t) -> [UInt32] {
+                lock.withLock { intraPIDOrder[pid] ?? [] }
+            }
+        }
+
+        let io = BarrierAXFrameIO()
+        io.windows[10] = index(pid: 10, ids: [101, 102])
+        io.windows[20] = index(pid: 20, ids: [201])
+        let writer = AXWindowFrameWriter(
+            io: io,
+            windowIndex: AXWindowIndexCache(),
+            writtenFrames: WrittenFrameRegistry(),
+            registry: AXUnresponsiveApps(),
+            generations: PlacementGeneration()
+        )
+        let target = CGRect(x: 10, y: 20, width: 400, height: 300)
+        let results = writer.setFrames([
+            WindowFrameUpdate(window: window(101, pid: 10), frame: target),
+            WindowFrameUpdate(window: window(102, pid: 10), frame: target),
+            WindowFrameUpdate(window: window(201, pid: 20), frame: target),
+        ], generation: 1)
+
+        #expect(io.observedConcurrentExecution)
+        #expect(results.count == 3)
+        #expect(results[WindowID(rawValue: 101)]! == target)
+        #expect(results[WindowID(rawValue: 102)]! == target)
+        #expect(results[WindowID(rawValue: 201)]! == target)
+        #expect(io.recordedOrder(for: 10) == [101, 102])
+        #expect(io.recordedOrder(for: 20) == [201])
     }
 }

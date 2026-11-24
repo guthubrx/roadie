@@ -2568,8 +2568,10 @@ private extension SnapshotService {
 
         return Insets(top: top, right: right, bottom: bottom, left: left)
     }
+}
 
-    internal func currentRailSettings() -> RailSettings {
+extension SnapshotService {
+    func currentRailSettings() -> RailSettings {
         railSettings ?? RailSettings.load(path: configService.state.activePath ?? RoadieConfigLoader.defaultConfigPath())
     }
 }

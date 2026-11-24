@@ -156,6 +156,7 @@ public final class OverviewController {
         closing?.dismiss()
         members = []; liveFrames = [:]; imageVersion = -1
         thumbnails.prune(keeping: [], owner: "overview")
+        OverviewWallpaper.purge()
         events.append(RoadieEvent(type: "overview.state", details: ["state": "closed"]))
     }
 

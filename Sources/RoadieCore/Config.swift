@@ -1,5 +1,4 @@
 import Foundation
-import RoadieCore
 import TOMLKit
 
 public struct RoadieConfig: Equatable, Codable, Sendable {

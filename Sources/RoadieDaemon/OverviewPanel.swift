@@ -96,9 +96,20 @@ final class OverviewPanel: NSPanel, NSWindowDelegate {
     /// Retire l’overlay et son écoute clavier avant une activation ou une fermeture.
     func dismiss(completion: () -> Void = {}) {
         canvas.stopAnimations()
-        EffectAnimator.shared.visibility(self, visible: false, action: .overview) { [weak self] in self?.orderOut(nil) }
+        EffectAnimator.shared.visibility(self, visible: false, action: .overview) { [weak self] in
+            self?.orderOut(nil)
+            self?.releaseCachedImages()
+        }
         if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }; escapeMonitor = nil
         completion()
+    }
+
+    private func releaseCachedImages() {
+        backdrop.layer?.contents = nil
+        appliedBlur = nil
+        canvas.images.removeAll()
+        canvas.icons.removeAll()
+        canvas.appIcons.removeAll()
     }
 
     override func sendEvent(_ event: NSEvent) {

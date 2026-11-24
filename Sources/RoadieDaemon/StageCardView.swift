@@ -6,9 +6,11 @@ import RoadieStages
 
 @MainActor
 final class RailHeaderView: NSView {
-    private let displayName: String
-    private let desktopID: DesktopID
-    private let config: RailVisualConfig
+    private var displayName: String
+    private var desktopID: DesktopID
+    private var config: RailVisualConfig
+    private var widthConstraint: NSLayoutConstraint!
+    private var heightConstraint: NSLayoutConstraint!
 
     init(displayName: String, desktopID: DesktopID, config: RailVisualConfig) {
         self.displayName = displayName
@@ -17,9 +19,21 @@ final class RailHeaderView: NSView {
         let width = config.headerWidth > 0 ? config.headerWidth : max(1, config.railWidth - 12)
         super.init(frame: CGRect(x: 0, y: 0, width: width, height: config.headerHeight))
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: width).isActive = true
-        heightAnchor.constraint(equalToConstant: config.headerHeight).isActive = true
+        widthConstraint = widthAnchor.constraint(equalToConstant: width)
+        heightConstraint = heightAnchor.constraint(equalToConstant: config.headerHeight)
+        widthConstraint.isActive = true
+        heightConstraint.isActive = true
         wantsLayer = true
+    }
+
+    func update(displayName: String, desktopID: DesktopID, config: RailVisualConfig) {
+        self.displayName = displayName
+        self.desktopID = desktopID
+        self.config = config
+        let width = config.headerWidth > 0 ? config.headerWidth : max(1, config.railWidth - 12)
+        if widthConstraint.constant != width { widthConstraint.constant = width }
+        if heightConstraint.constant != config.headerHeight { heightConstraint.constant = config.headerHeight }
+        needsDisplay = true
     }
 
     required init?(coder: NSCoder) {
@@ -74,20 +88,19 @@ final class RailHeaderView: NSView {
 
 @MainActor
 final class StageCardView: NSControl {
-    private static var appIconCache: [String: NSImage] = [:]
-    private static let appIconCacheMaxCount = 64
-
     let stageID: StageID
-    private let stage: PersistentStage
+    private var stage: PersistentStage
     private var displayLabel: String
-    private let isActive: Bool
-    private let accent: NSColor
-    private let config: RailVisualConfig
-    private let captionLineHeight: CGFloat
-    private let presentationStates: [WindowID: WindowPresentationState]
+    private var isActive: Bool
+    private var accent: NSColor
+    private var config: RailVisualConfig
+    private var captionLineHeight: CGFloat
+    private var presentationStates: [WindowID: WindowPresentationState]
     private var thumbnails: [WindowID: NSImage]
-    private let visualMembers: [PersistentStageMember]
+    private var visualMembers: [PersistentStageMember]
     private let contentInset: CGFloat = 4
+    private var widthConstraint: NSLayoutConstraint!
+    private var heightConstraint: NSLayoutConstraint!
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -118,8 +131,10 @@ final class StageCardView: NSControl {
         super.init(frame: CGRect(x: 0, y: 0, width: width, height: height))
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: width).isActive = true
-        heightAnchor.constraint(equalToConstant: height).isActive = true
+        widthConstraint = widthAnchor.constraint(equalToConstant: width)
+        heightConstraint = heightAnchor.constraint(equalToConstant: height)
+        widthConstraint.isActive = true
+        heightConstraint.isActive = true
         layer?.cornerRadius = 18
         layer?.masksToBounds = false
         layer?.backgroundColor = NSColor.clear.cgColor
@@ -129,6 +144,34 @@ final class StageCardView: NSControl {
         layer?.shadowOpacity = 0
         layer?.shadowRadius = 0
         layer?.shadowOffset = .zero
+    }
+
+    /// Met à jour la carte en place sans recréer la vue ni ses contraintes (Spec 158).
+    func update(
+        stage: PersistentStage,
+        displayLabel: String,
+        isActive: Bool,
+        accent: NSColor,
+        config: RailVisualConfig,
+        presentationStates: [WindowID: WindowPresentationState],
+        thumbnails: [WindowID: NSImage],
+        position: Int? = nil
+    ) {
+        self.stage = stage
+        self.displayLabel = position.map { "\($0) — \(displayLabel)" } ?? displayLabel
+        self.isActive = isActive
+        self.accent = accent
+        self.config = config
+        self.captionLineHeight = config.stageLabel.captionLineHeight
+        self.presentationStates = presentationStates
+        self.thumbnails = thumbnails
+        self.visualMembers = Self.focusFirstMembers(stage)
+        let width = Self.width(for: config)
+        let height = Self.height(for: config, memberCount: stage.members.count)
+        if widthConstraint.constant != width { widthConstraint.constant = width }
+        if heightConstraint.constant != height { heightConstraint.constant = height }
+        layer?.shadowColor = accent.cgColor
+        needsDisplay = true
     }
 
     /// Même rendu et mêmes miniatures, avec la légende de la position future.
@@ -885,19 +928,7 @@ final class StageCardView: NSControl {
     }
 
     private static func appIcon(for bundleID: String) -> NSImage? {
-        if let cached = appIconCache[bundleID] {
-            return cached
-        }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            return nil
-        }
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
-        let cleanedIcon = icon.removingEdgeWhiteBackground()
-        if appIconCache.count >= appIconCacheMaxCount {
-            appIconCache.removeAll(keepingCapacity: true)
-        }
-        appIconCache[bundleID] = cleanedIcon
-        return cleanedIcon
+        SharedAppIconCache.shared.cleanedIcon(for: bundleID)
     }
 
     private func drawActiveStageShadowBehind(_ items: [(index: Int, rect: CGRect)]) {
@@ -1066,86 +1097,6 @@ final class StageCardView: NSControl {
     private func iconLetter(for member: PersistentStageMember) -> String {
         let source = member.bundleID.split(separator: ".").last.map(String.init) ?? member.title
         return String(source.prefix(1)).uppercased()
-    }
-}
-
-private extension NSImage {
-    func removingEdgeWhiteBackground() -> NSImage {
-        let pixelWidth = 64
-        let pixelHeight = 64
-        let bytesPerPixel = 4
-        let bytesPerRow = pixelWidth * bytesPerPixel
-        var pixels = [UInt8](repeating: 0, count: pixelHeight * bytesPerRow)
-        var proposed = CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight)
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: &pixels,
-                  width: pixelWidth,
-                  height: pixelHeight,
-                  bitsPerComponent: 8,
-                  bytesPerRow: bytesPerRow,
-                  space: colorSpace,
-                  bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
-              ),
-              let cgImage = cgImage(forProposedRect: &proposed, context: nil, hints: nil)
-        else {
-            return self
-        }
-
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
-
-        func offset(_ x: Int, _ y: Int) -> Int {
-            y * bytesPerRow + x * bytesPerPixel
-        }
-
-        func isEdgeWhite(_ x: Int, _ y: Int) -> Bool {
-            let i = offset(x, y)
-            let red = pixels[i]
-            let green = pixels[i + 1]
-            let blue = pixels[i + 2]
-            let alpha = pixels[i + 3]
-            return alpha > 0 && red >= 238 && green >= 238 && blue >= 238
-        }
-
-        var visited = [Bool](repeating: false, count: pixelWidth * pixelHeight)
-        var queue: [(x: Int, y: Int)] = []
-
-        func enqueue(_ x: Int, _ y: Int) {
-            guard x >= 0, x < pixelWidth, y >= 0, y < pixelHeight else { return }
-            let index = y * pixelWidth + x
-            guard !visited[index], isEdgeWhite(x, y) else { return }
-            visited[index] = true
-            queue.append((x, y))
-        }
-
-        for x in 0..<pixelWidth {
-            enqueue(x, 0)
-            enqueue(x, pixelHeight - 1)
-        }
-        for y in 0..<pixelHeight {
-            enqueue(0, y)
-            enqueue(pixelWidth - 1, y)
-        }
-
-        var cursor = 0
-        while cursor < queue.count {
-            let point = queue[cursor]
-            cursor += 1
-            let i = offset(point.x, point.y)
-            pixels[i] = 0
-            pixels[i + 1] = 0
-            pixels[i + 2] = 0
-            pixels[i + 3] = 0
-            enqueue(point.x + 1, point.y)
-            enqueue(point.x - 1, point.y)
-            enqueue(point.x, point.y + 1)
-            enqueue(point.x, point.y - 1)
-        }
-
-        guard let cleaned = context.makeImage() else {
-            return self
-        }
-        return NSImage(cgImage: cleaned, size: NSSize(width: pixelWidth, height: pixelHeight))
     }
 }
 

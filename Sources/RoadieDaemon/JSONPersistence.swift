@@ -166,7 +166,7 @@ enum JSONPersistence {
     static func writeThrowing<T: Encodable>(
         _ value: T,
         to url: URL,
-        configure: (JSONEncoder) -> Void = { _ in }
+        configure: ((JSONEncoder) -> Void)? = nil
     ) throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -183,14 +183,27 @@ enum JSONPersistence {
     static func loadThrowing<T: Decodable>(
         _ type: T.Type,
         from url: URL,
-        configure: (JSONDecoder) -> Void = { _ in }
+        configure: ((JSONDecoder) -> Void)? = nil
     ) throws -> T {
-        let decoder = JSONDecoder()
-        configure(decoder)
+        let decoder: JSONDecoder
+        if let configure {
+            let custom = JSONDecoder()
+            configure(custom)
+            decoder = custom
+        } else {
+            decoder = defaultDecoder
+        }
         return try decoder.decode(type, from: Data(contentsOf: url))
     }
 
     // MARK: - Interne
+
+    private static let defaultDecoder = JSONDecoder()
+    private static let prettySortedEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }()
 
     /// Ecriture avec verrou DEJA tenu par l'appelant. Aucune ecriture si les octets sont
     /// identiques a `existing` (FR-014).
@@ -198,11 +211,17 @@ enum JSONPersistence {
         _ value: T,
         to url: URL,
         existing: Data?,
-        configure: (JSONEncoder) -> Void = { _ in }
+        configure: ((JSONEncoder) -> Void)? = nil
     ) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        configure(encoder)
+        let encoder: JSONEncoder
+        if let configure {
+            let custom = JSONEncoder()
+            custom.outputFormatting = [.prettyPrinted, .sortedKeys]
+            configure(custom)
+            encoder = custom
+        } else {
+            encoder = prettySortedEncoder
+        }
         let data = try encoder.encode(value)
         guard data != existing else { return }
         try data.write(to: url, options: .atomic)
@@ -225,7 +244,7 @@ enum JSONPersistence {
             return .loaded(cached!.value as! T)
         case .read(let signature, let data):
             do {
-                let value = try JSONDecoder().decode(type, from: data)
+                let value = try defaultDecoder.decode(type, from: data)
                 publish(value, at: url, signature: signature)
                 return .loaded(value)
             } catch {

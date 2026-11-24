@@ -1424,54 +1424,100 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
     public func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64,
                           isCurrent: @Sendable () -> Bool) -> [WindowID: CGRect?] {
-        var results: [WindowID: CGRect?] = [:]
+        guard !updates.isEmpty else { return [:] }
         let reserved = Set(updates.map { $0.window.id.rawValue })
-        for (pid, group) in Dictionary(grouping: updates, by: { $0.window.pid }) {
-            guard isCurrent() else { break }
-            var windows: PIDWindows?
-            // AXEnhancedUserInterface : lu au premier placement de l'application, retabli en fin de lot.
-            var enhancedUI: (app: AXUIElement, restore: Bool)?
-            defer {
-                if let enhancedUI, enhancedUI.restore {
-                    let error = io.setValue(kCFBooleanTrue, of: Self.enhancedUserInterface, on: enhancedUI.app)
-                    registry.noteResult(error, pid: pid)
-                }
+        let grouped = Array(Dictionary(grouping: updates, by: { $0.window.pid }))
+        if grouped.count == 1 {
+            let (pid, group) = grouped[0]
+            return applyPIDGroup(pid: pid, group: group, generation: generation, reserved: reserved, isCurrent: isCurrent)
+        }
+        // Parallélisation par PID distinct (Spec 158) : les IPC Accessibility vers des
+        // applications distinctes s'exécutent en parallèle ; l'ordre intra-PID reste strict.
+        final class ParallelResults: @unchecked Sendable {
+            private let lock = NSLock()
+            private var slots: [[WindowID: CGRect?]]
+
+            init(count: Int) {
+                slots = Array(repeating: [:], count: count)
             }
-            for update in group {
-                guard isCurrent() else { break }
-                var applied: CGRect?
-                if !writtenFrames.isOverBudget(windowID: update.window.id.rawValue, generation: generation),
-                   !registry.isQuarantined(pid),
-                   let element = element(pid: pid, id: update.window.id, title: update.window.title,
-                                         frame: update.window.frame, windows: &windows, reserved: reserved) {
-                    // Le snapshot peut précéder l'entrée en plein écran natif. Un état vrai
-                    // relu interdit toute écriture (y compris intermédiaire) et ne consomme pas le budget.
-                    let (nativeError, nativeValue) = io.value(of: "AXFullScreen", on: element)
-                    let nativeFullscreen = nativeError == .success ? nativeValue.flatMap(AXReadValue.flag) : nil
-                    if !registry.noteResult(nativeError, pid: pid), nativeFullscreen != true, isCurrent() {
-                        if enhancedUI == nil {
-                            let app = AXMessaging.application(pid)
-                            enhancedUI = (app, disableEnhancedUserInterface(app, pid: pid))
-                        }
-                        if !registry.isQuarantined(pid) {
-                            if update.isIntermediateAnimationFrame {
-                                applied = writeIntermediate(update, on: element, pid: pid, isCurrent: isCurrent)
-                            } else {
-                                applied = write(
-                                    update, generation: generation, on: element, pid: pid,
-                                    nativeCode: nativeError.rawValue, nativeFullscreen: nativeFullscreen,
-                                    isCurrent: isCurrent
-                                )
-                            }
-                            // Une écriture partielle peut avoir changé le cadre même en échec.
-                            // La relecture réussie est réutilisable ; sinon la prochaine résolution relira.
-                            if let applied { windows?.observations.frames.updateValue(applied, forKey: element) }
-                            else { windows?.observations.frames.removeValue(forKey: element) }
+
+            func store(_ value: [WindowID: CGRect?], at index: Int) {
+                lock.withLock { slots[index] = value }
+            }
+
+            func merged() -> [WindowID: CGRect?] {
+                lock.withLock {
+                    var results: [WindowID: CGRect?] = [:]
+                    for slot in slots {
+                        for (id, frame) in slot {
+                            results.updateValue(frame, forKey: id)
                         }
                     }
+                    return results
                 }
-                results.updateValue(applied, forKey: update.window.id)
             }
+        }
+        let collector = ParallelResults(count: grouped.count)
+        DispatchQueue.concurrentPerform(iterations: grouped.count) { index in
+            let (pid, group) = grouped[index]
+            let partial = applyPIDGroup(pid: pid, group: group, generation: generation, reserved: reserved, isCurrent: isCurrent)
+            collector.store(partial, at: index)
+        }
+        return collector.merged()
+    }
+
+    private func applyPIDGroup(
+        pid: pid_t,
+        group: [WindowFrameUpdate],
+        generation: UInt64,
+        reserved: Set<CGWindowID>,
+        isCurrent: @Sendable () -> Bool
+    ) -> [WindowID: CGRect?] {
+        guard isCurrent() else { return [:] }
+        var results: [WindowID: CGRect?] = [:]
+        var windows: PIDWindows?
+        // AXEnhancedUserInterface : lu au premier placement de l'application, retabli en fin de lot.
+        var enhancedUI: (app: AXUIElement, restore: Bool)?
+        defer {
+            if let enhancedUI, enhancedUI.restore {
+                let error = io.setValue(kCFBooleanTrue, of: Self.enhancedUserInterface, on: enhancedUI.app)
+                registry.noteResult(error, pid: pid)
+            }
+        }
+        for update in group {
+            guard isCurrent() else { break }
+            var applied: CGRect?
+            if !writtenFrames.isOverBudget(windowID: update.window.id.rawValue, generation: generation),
+               !registry.isQuarantined(pid),
+               let element = element(pid: pid, id: update.window.id, title: update.window.title,
+                                     frame: update.window.frame, windows: &windows, reserved: reserved) {
+                // Le snapshot peut précéder l'entrée en plein écran natif. Un état vrai
+                // relu interdit toute écriture (y compris intermédiaire) et ne consomme pas le budget.
+                let (nativeError, nativeValue) = io.value(of: "AXFullScreen", on: element)
+                let nativeFullscreen = nativeError == .success ? nativeValue.flatMap(AXReadValue.flag) : nil
+                if !registry.noteResult(nativeError, pid: pid), nativeFullscreen != true, isCurrent() {
+                    if enhancedUI == nil {
+                        let app = AXMessaging.application(pid)
+                        enhancedUI = (app, disableEnhancedUserInterface(app, pid: pid))
+                    }
+                    if !registry.isQuarantined(pid) {
+                        if update.isIntermediateAnimationFrame {
+                            applied = writeIntermediate(update, on: element, pid: pid, isCurrent: isCurrent)
+                        } else {
+                            applied = write(
+                                update, generation: generation, on: element, pid: pid,
+                                nativeCode: nativeError.rawValue, nativeFullscreen: nativeFullscreen,
+                                isCurrent: isCurrent
+                            )
+                        }
+                        // Une écriture partielle peut avoir changé le cadre même en échec.
+                        // La relecture réussie est réutilisable ; sinon la prochaine résolution relira.
+                        if let applied { windows?.observations.frames.updateValue(applied, forKey: element) }
+                        else { windows?.observations.frames.removeValue(forKey: element) }
+                    }
+                }
+            }
+            results.updateValue(applied, forKey: update.window.id)
         }
         return results
     }

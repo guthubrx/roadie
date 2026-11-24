@@ -138,6 +138,9 @@ final class RailPanel: NSPanel {
     private var lastPersistedVisibleWidth: Double?
     private var hideAfter: Date?
     private var recordingIndicatorView: RecordingIndicatorView?
+    private var headerView: RailHeaderView?
+    private var renderedHeaderPosition: RailHeaderPosition?
+    private var leadingSpacerView: FixedHeightSpacer?
     private var reorderMagnetism: CGFloat = 50
     private var reorderPreview: RailStageReorderPreviewView?
     private var windowDropPreview: RailWindowDropPreviewView?
@@ -305,15 +308,14 @@ final class RailPanel: NSPanel {
         reorderMagnetism = config.reorderMagnetism
         recordingIndicatorView?.removeFromSuperview()
         recordingIndicatorView = nil
-        stack.arrangedSubviews.forEach { view in
-            stack.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
 
-        if config.headerVisible, config.headerPosition == .top {
-            stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
-        }
-        visibleStageIDs = content.stages.map(\.id)
+        let newVisibleStageIDs = content.stages.map(\.id)
+        let targetHeaderPosition: RailHeaderPosition? = config.headerVisible && config.headerPosition != .hidden
+            ? config.headerPosition
+            : nil
+        let targetSpacerHeight = stageLeadingSpacerHeight(stages: content.stages, config: config)
+
+        visibleStageIDs = newVisibleStageIDs
         orderedStageIDs = scope.stages.map(\.id)
         emptyStageIDs = content.emptyStageIDs
         stack.railBackgroundColor = config.backgroundColor
@@ -321,26 +323,110 @@ final class RailPanel: NSPanel {
         emptyClickHideActive = config.emptyClickHideActive
         emptyClickSafetyMargin = config.emptyClickSafetyMargin
         positionContent(config: config)
-        if let spacer = stageLeadingSpacer(stages: content.stages, config: config) {
-            stack.addArrangedSubview(spacer)
+
+        let existingCards = stack.arrangedSubviews.compactMap { $0 as? StageCardView }
+        let canUpdateInPlace = existingCards.count == content.stages.count
+            && zip(existingCards, content.stages).allSatisfy { $0.stageID == $1.id }
+            && renderedHeaderPosition == targetHeaderPosition
+            && (leadingSpacerView != nil) == (targetSpacerHeight > 0)
+
+        if canUpdateInPlace {
+            headerView?.update(displayName: displayName, desktopID: scope.desktopID, config: config)
+            if targetSpacerHeight > 0 {
+                leadingSpacerView?.update(height: targetSpacerHeight)
+            }
+            for (index, stage) in content.stages.enumerated() {
+                let card = existingCards[index]
+                card.update(
+                    stage: stage,
+                    displayLabel: Self.stageDisplayLabel(stage, position: index + 1),
+                    isActive: stage.id == scope.activeStageID,
+                    accent: config.accent(for: stage.id),
+                    config: config,
+                    presentationStates: content.presentationStates,
+                    thumbnails: thumbnails.images(for: stage.members),
+                    position: index + 1
+                )
+                card.toolTip = StagePresentationOrder.menuLabel(stage, position: index + 1)
+            }
+        } else {
+            var reusableCardsByID: [StageID: StageCardView] = [:]
+            reusableCardsByID.reserveCapacity(existingCards.count)
+            for card in existingCards {
+                reusableCardsByID[card.stageID] = card
+            }
+            stack.arrangedSubviews.forEach { view in
+                stack.removeArrangedSubview(view)
+                view.removeFromSuperview()
+            }
+
+            if let targetHeaderPosition {
+                if let existingHeader = headerView {
+                    existingHeader.update(displayName: displayName, desktopID: scope.desktopID, config: config)
+                } else {
+                    headerView = RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config)
+                }
+                if targetHeaderPosition == .top, let headerView {
+                    stack.addArrangedSubview(headerView)
+                }
+            } else {
+                headerView = nil
+            }
+            renderedHeaderPosition = targetHeaderPosition
+
+            if targetSpacerHeight > 0 {
+                let spacer: FixedHeightSpacer
+                if let existingSpacer = leadingSpacerView {
+                    existingSpacer.update(height: targetSpacerHeight)
+                    spacer = existingSpacer
+                } else {
+                    spacer = FixedHeightSpacer(height: targetSpacerHeight)
+                    leadingSpacerView = spacer
+                }
+                stack.addArrangedSubview(spacer)
+            } else {
+                leadingSpacerView = nil
+            }
+
+            for (index, stage) in content.stages.enumerated() {
+                let card: StageCardView
+                let label = Self.stageDisplayLabel(stage, position: index + 1)
+                let isActive = stage.id == scope.activeStageID
+                let accent = config.accent(for: stage.id)
+                let stageThumbnails = thumbnails.images(for: stage.members)
+                if let existing = reusableCardsByID.removeValue(forKey: stage.id) {
+                    existing.update(
+                        stage: stage,
+                        displayLabel: label,
+                        isActive: isActive,
+                        accent: accent,
+                        config: config,
+                        presentationStates: content.presentationStates,
+                        thumbnails: stageThumbnails,
+                        position: index + 1
+                    )
+                    card = existing
+                } else {
+                    card = StageCardView(
+                        stage: stage,
+                        displayLabel: label,
+                        isActive: isActive,
+                        accent: accent,
+                        config: config,
+                        presentationStates: content.presentationStates,
+                        thumbnails: stageThumbnails,
+                        position: index + 1
+                    )
+                }
+                card.toolTip = StagePresentationOrder.menuLabel(stage, position: index + 1)
+                stack.addArrangedSubview(card)
+            }
+
+            if targetHeaderPosition == .bottom, let headerView {
+                stack.addArrangedSubview(headerView)
+            }
         }
-        for (index, stage) in content.stages.enumerated() {
-            let card = StageCardView(
-                stage: stage,
-                displayLabel: Self.stageDisplayLabel(stage, position: index + 1),
-                isActive: stage.id == scope.activeStageID,
-                accent: config.accent(for: stage.id),
-                config: config,
-                presentationStates: content.presentationStates,
-                thumbnails: thumbnails.images(for: stage.members),
-                position: index + 1
-            )
-            card.toolTip = StagePresentationOrder.menuLabel(stage, position: index + 1)
-            stack.addArrangedSubview(card)
-        }
-        if config.headerVisible, config.headerPosition == .bottom {
-            stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
-        }
+
         if let recordingStatus {
             showRecordingIndicator(recordingStatus, bottomOffset: recordingIndicatorBottomOffset, textConfig: config.stageLabel)
         }
@@ -392,9 +478,9 @@ final class RailPanel: NSPanel {
         stack.edgeInsets = NSEdgeInsets(top: topInset, left: horizontalInset, bottom: bottomInset, right: rightInset)
     }
 
-    private func stageLeadingSpacer(stages: [PersistentStage], config: RailVisualConfig) -> NSView? {
+    private func stageLeadingSpacerHeight(stages: [PersistentStage], config: RailVisualConfig) -> CGFloat {
         let count = stages.count
-        guard count > 0 else { return nil }
+        guard count > 0 else { return 0 }
         let stageHeight = stages.reduce(CGFloat.zero) { $0 + StageCardView.height(for: config, memberCount: $1.members.count) }
             + CGFloat(max(0, count - 1)) * config.layoutSpacing
         let centeredTop = max(20, floor((frame.height - stageHeight) / 2))
@@ -417,9 +503,7 @@ final class RailPanel: NSPanel {
         case .bottom:
             targetTop = max(currentTop, frame.height - stageHeight - config.layoutBottomPadding)
         }
-        let height = max(0, targetTop - currentTop)
-        guard height > 0 else { return nil }
-        return FixedHeightSpacer(height: height)
+        return max(0, targetTop - currentTop)
     }
 
     func action(at screenPoint: CGPoint) -> RailAction? {
@@ -742,10 +826,19 @@ final class RailStackView: NSStackView {
 
 @MainActor
 final class FixedHeightSpacer: NSView {
+    private var heightConstraint: NSLayoutConstraint!
+
     init(height: CGFloat) {
         super.init(frame: CGRect(x: 0, y: 0, width: 1, height: height))
         translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: height).isActive = true
+        heightConstraint = heightAnchor.constraint(equalToConstant: height)
+        heightConstraint.isActive = true
+    }
+
+    func update(height: CGFloat) {
+        if heightConstraint.constant != height {
+            heightConstraint.constant = height
+        }
     }
 
     required init?(coder: NSCoder) {
