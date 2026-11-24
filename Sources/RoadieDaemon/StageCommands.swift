@@ -1455,10 +1455,20 @@ public struct StageCommandService {
                     let focused: Bool
                     if let window = windowsByID[preferredWindowID] {
                         focused = service.focus(window)
-                    } else if let bundleID = preferredBundleID, !bundleID.isEmpty {
-                        focused = service.activateApplication(bundleID: bundleID)
                     } else {
-                        focused = false
+                        let recall = recallMissingWindows(
+                            in: targetStage,
+                            preferredWindowID: preferredWindowID,
+                            includeMaximized: true,
+                            onlyPreferred: true
+                        )
+                        if recall.focusedWindowID != nil || recall.activatedApplication {
+                            focused = true
+                        } else if let bundleID = preferredBundleID, !bundleID.isEmpty {
+                            focused = service.activateApplication(bundleID: bundleID)
+                        } else {
+                            focused = false
+                        }
                     }
                     events.append(RoadieEvent(
                         type: "stage_focus_window",
