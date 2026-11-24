@@ -151,6 +151,33 @@ struct LauncherSearchContext {
         launch: { _ in TargetActionResult(changed: false, message: "launcher_disabled") }, recordVisit: { _, _ in }) }
 }
 
+/// Garde de génération pour les callbacks et relances (`rerun`) de Script Filter (Lot D) :
+/// rejette toute réponse ou relance issue d'une génération antérieure à un rafraîchissement,
+/// même lorsque l'argument demandé est redevenu identique.
+enum WorkflowCallbackGuard {
+    static func acceptsResponse(
+        currentGeneration: UInt64,
+        callbackGeneration: UInt64,
+        currentArgument: String?,
+        callbackArgument: String
+    ) -> Bool {
+        currentGeneration == callbackGeneration && currentArgument == callbackArgument
+    }
+
+    static func acceptsRerun(
+        currentGeneration: UInt64,
+        rerunGeneration: UInt64,
+        currentQuery: String,
+        rerunQuery: String,
+        activeEntries: [AlfredEntry],
+        entryID: String
+    ) -> Bool {
+        currentGeneration == rerunGeneration
+            && currentQuery == rerunQuery
+            && activeEntries.contains(where: { $0.id == entryID })
+    }
+}
+
 /// Décisions du lanceur sur l'état de Roadie, sans effet de bord.
 enum LauncherPlacement {
     /// Destination explicite sous la souris, indépendante du focus clavier. Aucun relevé AX.

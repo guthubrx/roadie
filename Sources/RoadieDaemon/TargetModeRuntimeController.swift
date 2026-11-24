@@ -899,11 +899,12 @@ public final class TargetModeRuntimeController: NSObject {
     // MARK: - Workflows (SPEC-088)
 
     /// Stockage synchronisé des workflows d'une session du lanceur : alimenté instantanément depuis
-    /// le cache en mémoire, puis mis à jour hors du fil principal (Lot D).
-    private final class WorkflowSessionStore: @unchecked Sendable {
+    /// le cache en mémoire, puis mis à jour atomiquement sur `@MainActor` avec jeton de génération (Lot D).
+    final class WorkflowSessionStore: @unchecked Sendable {
         private let lock = NSLock()
         private var workflows: [AlfredWorkflow]
         private var byID: [String: AlfredWorkflow]
+        private var generationValue: UInt64 = 0
 
         init(_ workflows: [AlfredWorkflow]) {
             self.workflows = workflows
@@ -917,10 +918,16 @@ public final class TargetModeRuntimeController: NSObject {
                 let changed = AlfredWorkflowIndex.changedWorkflowIDs(from: self.workflows, to: next)
                 self.workflows = next
                 self.byID = map
+                if !changed.isEmpty { generationValue &+= 1 }
                 return changed
             }
         }
 
+        func snapshotForRun(workflowID: String) -> (workflow: AlfredWorkflow, generation: UInt64)? {
+            lock.withLock { byID[workflowID].map { ($0, generationValue) } }
+        }
+
+        func isCurrent(_ generation: UInt64) -> Bool { lock.withLock { generationValue == generation } }
         func workflow(id: String) -> AlfredWorkflow? { lock.withLock { byID[id] } }
         func all() -> [AlfredWorkflow] { lock.withLock { workflows } }
     }
@@ -954,11 +961,14 @@ public final class TargetModeRuntimeController: NSObject {
             }
         }
         context.runScriptFilter = { entry, argument, done in
-            guard let workflow = store.workflow(id: entry.workflowID), let object = workflow.objects[entry.objectUID],
+            guard let run = store.snapshotForRun(workflowID: entry.workflowID),
+                  let object = run.workflow.objects[entry.objectUID],
                   let script = entry.kind == .fileFilter ? AlfredFileFilter.script(object, argument: argument) : AlfredScript(object: object) else {
                 DispatchQueue.main.async { MainActor.assumeIsolated { done(nil, "script absent") } }
                 return nil
             }
+            let workflow = run.workflow
+            let launchGeneration = run.generation
             // Cache demandé par le script (session 120) : même entrée, même saisie, réponse encore valable.
             let cacheKey = "\(entry.id)\u{1F}\(argument)"
             if let cached = AlfredScriptFilterCache.shared.response(for: cacheKey) {
@@ -971,7 +981,10 @@ public final class TargetModeRuntimeController: NSObject {
                                             variables: workflow.configuredVariables, keyword: entry.keyword) { result in
                 let response = entry.kind == .fileFilter ? AlfredFileFilter.response(result.text)
                     : result.output.isEmpty ? nil : AlfredScriptFilterResponse.parse(result.output)
-                if let response, !result.cancelled { AlfredScriptFilterCache.shared.store(response, for: cacheKey) }
+                // Ne jamais repeupler le cache partagé avec une réponse d'une génération remplacée (Lot D).
+                if let response, !result.cancelled, store.isCurrent(launchGeneration) {
+                    AlfredScriptFilterCache.shared.store(response, for: cacheKey)
+                }
                 events.append(RoadieEvent(type: "launcher.workflow_filter", details: [
                     "workflow": workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID,
                     "ms": String(Int(Date().timeIntervalSince(started) * 1000)), "status": String(result.status),

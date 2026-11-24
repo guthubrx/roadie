@@ -120,6 +120,41 @@ struct Spec088LauncherTests {
         cache.invalidate(workflowIDs: changed)
         #expect(cache.response(for: modifiedKey) == nil)
         #expect(cache.response(for: untouchedKey) != nil)
+
+        // Garde de génération : une réponse ou un `rerun` d'une ancienne génération à argument
+        // identique est rejeté et ne peut pas repeupler `AlfredScriptFilterCache`.
+        let sessionStore = TargetModeRuntimeController.WorkflowSessionStore([wfV1])
+        let runV1 = try #require(sessionStore.snapshotForRun(workflowID: wfV1.id))
+        #expect(sessionStore.isCurrent(runV1.generation))
+        let replaced = sessionStore.replace(with: [wfV2])
+        #expect(replaced == [wfV1.id])
+        #expect(!sessionStore.isCurrent(runV1.generation))
+        if sessionStore.isCurrent(runV1.generation) {
+            cache.store(cachedResponse, for: modifiedKey)
+        }
+        #expect(cache.response(for: modifiedKey) == nil)
+
+        // Même argument "q", génération courante incrémentée après rafraîchissement -> rejeté.
+        #expect(!WorkflowCallbackGuard.acceptsResponse(
+            currentGeneration: 2, callbackGeneration: 1, currentArgument: "q", callbackArgument: "q"
+        ))
+        #expect(WorkflowCallbackGuard.acceptsResponse(
+            currentGeneration: 2, callbackGeneration: 2, currentArgument: "q", callbackArgument: "q"
+        ))
+        // `rerun` après retrait du workflow ou changement de génération -> rejeté.
+        let entryV1 = try #require(AlfredWorkflowIndex.entries([wfV1]).first)
+        #expect(!WorkflowCallbackGuard.acceptsRerun(
+            currentGeneration: 2, rerunGeneration: 1, currentQuery: "al q", rerunQuery: "al q",
+            activeEntries: [entryV1], entryID: entryV1.id
+        ))
+        #expect(!WorkflowCallbackGuard.acceptsRerun(
+            currentGeneration: 1, rerunGeneration: 1, currentQuery: "al q", rerunQuery: "al q",
+            activeEntries: [], entryID: entryV1.id
+        ))
+        #expect(WorkflowCallbackGuard.acceptsRerun(
+            currentGeneration: 1, rerunGeneration: 1, currentQuery: "al q", rerunQuery: "al q",
+            activeEntries: [entryV1], entryID: entryV1.id
+        ))
     }
 }
 

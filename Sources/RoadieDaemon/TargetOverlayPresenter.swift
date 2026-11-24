@@ -997,11 +997,13 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private let pathListing = LauncherPathListing()
     private var pathFiles: [LauncherFile] = []
     private var pathFor: String?
-    /// Workflows (SPEC-088) : script en cours, saisie demandée et dernière réponse, par entrée.
+    /// Workflows (SPEC-088) : script en cours, saisie demandée, génération active et dernière réponse, par entrée.
     private var workflowRuns: [String: AlfredProcess] = [:]
     private var workflowRequested: [String: String] = [:]
     private var workflowResponses: [String: (argument: String, response: AlfredScriptFilterResponse?, error: String?)] = [:]
     private var workflowPending: [String: DispatchWorkItem] = [:]
+    private var workflowReruns: [String: DispatchWorkItem] = [:]
+    private var workflowGeneration: UInt64 = 0
     /// Aperçu actif (SPEC-078) : demande envoyée au contrôleur, attente de 150 ms, fantôme rendu.
     private var sentPreview: LauncherPreviewRequest?
     private var pendingPreview: LauncherPreviewRequest?
@@ -1754,22 +1756,34 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     /// Entrées qui ne correspondent plus à la saisie : leur script s'arrête, leur réponse est oubliée.
     private func pruneWorkflows(keeping active: Set<String>) {
-        for key in Set(workflowRuns.keys).union(workflowResponses.keys).union(workflowPending.keys) where !active.contains(key) {
+        let keys = Set(workflowRuns.keys)
+            .union(workflowResponses.keys)
+            .union(workflowPending.keys)
+            .union(workflowReruns.keys)
+        for key in keys where !active.contains(key) {
             workflowRuns.removeValue(forKey: key)?.cancel()
             workflowPending.removeValue(forKey: key)?.cancel()
+            workflowReruns.removeValue(forKey: key)?.cancel()
             workflowResponses[key] = nil
             workflowRequested[key] = nil
         }
     }
 
-    /// Invalide les processus, délais et réponses Script Filter des workflows modifiés ou retirés
-    /// lors d'un rafraîchissement asynchrone, afin qu'aucune ancienne réponse ne soit réutilisée (Lot D).
+    /// Invalide les processus, délais, relances `rerun` et réponses Script Filter des workflows
+    /// modifiés ou retirés lors d'un rafraîchissement asynchrone, et incrémente la génération pour
+    /// écarter tout callback encore en file sur le fil principal (Lot D).
     private func invalidateWorkflowState(for workflowIDs: Set<String>) {
+        workflowGeneration &+= 1
         let prefixes = workflowIDs.map { "wf:\($0):" }
-        let keys = Set(workflowRuns.keys).union(workflowResponses.keys).union(workflowPending.keys).union(workflowRequested.keys)
+        let keys = Set(workflowRuns.keys)
+            .union(workflowResponses.keys)
+            .union(workflowPending.keys)
+            .union(workflowReruns.keys)
+            .union(workflowRequested.keys)
         for key in keys where prefixes.contains(where: { key.hasPrefix($0) }) {
             workflowRuns.removeValue(forKey: key)?.cancel()
             workflowPending.removeValue(forKey: key)?.cancel()
+            workflowReruns.removeValue(forKey: key)?.cancel()
             workflowResponses[key] = nil
             workflowRequested[key] = nil
         }
@@ -1897,22 +1911,49 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         workflowRequested[key] = argument
         workflowRuns.removeValue(forKey: key)?.cancel()
         workflowPending.removeValue(forKey: key)?.cancel()
+        workflowReruns.removeValue(forKey: key)?.cancel()
         let query = model.query
+        let generation = workflowGeneration
         let start: @MainActor () -> Void = { [weak self] in
-            guard let self, !self.finished, self.workflowRequested[key] == argument else { return }
+            guard let self, !self.finished,
+                  WorkflowCallbackGuard.acceptsResponse(
+                      currentGeneration: self.workflowGeneration,
+                      callbackGeneration: generation,
+                      currentArgument: self.workflowRequested[key],
+                      callbackArgument: argument
+                  ) else { return }
             self.workflowRuns[key] = self.launcher.runScriptFilter(entry, argument) { [weak self] response, error in
-                guard let self, !self.finished, self.workflowRequested[key] == argument else { return }
+                guard let self, !self.finished,
+                      WorkflowCallbackGuard.acceptsResponse(
+                          currentGeneration: self.workflowGeneration,
+                          callbackGeneration: generation,
+                          currentArgument: self.workflowRequested[key],
+                          callbackArgument: argument
+                      ) else { return }
                 self.workflowRuns[key] = nil
                 self.workflowResponses[key] = (argument, response, error ?? (response == nil ? tr("Réponse illisible", "Unreadable response") : nil))
                 self.filesChanged = true
                 self.render()
                 if let rerun = response?.rerun {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + rerun) { [weak self] in
+                    self.workflowReruns.removeValue(forKey: key)?.cancel()
+                    let rerunWork = DispatchWorkItem { [weak self] in
                         MainActor.assumeIsolated {
-                            guard let self, !self.finished, self.model.query == query else { return }
-                            self.requestScriptFilter(entry, argument, force: true)
+                            guard let self, !self.finished,
+                                  WorkflowCallbackGuard.acceptsRerun(
+                                      currentGeneration: self.workflowGeneration,
+                                      rerunGeneration: generation,
+                                      currentQuery: self.model.query,
+                                      rerunQuery: query,
+                                      activeEntries: self.launcher.workflowEntries,
+                                      entryID: key
+                                  ),
+                                  let currentEntry = self.launcher.workflowEntries.first(where: { $0.id == key }) else { return }
+                            self.workflowReruns[key] = nil
+                            self.requestScriptFilter(currentEntry, argument, force: true)
                         }
                     }
+                    self.workflowReruns[key] = rerunWork
+                    DispatchQueue.main.asyncAfter(deadline: .now() + rerun, execute: rerunWork)
                 }
             }
         }
