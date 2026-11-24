@@ -59,14 +59,20 @@ public struct TargetModeRuntimeCommand: Equatable, Sendable {
 
 /// Cache événementiel des applications ordinaires en cours d'exécution (Lot K).
 /// Évite l'appel synchrone `NSWorkspace.shared.runningApplications` (13–23 ms d'IPC LaunchServices)
-/// sur `@MainActor` à chaque ouverture du lanceur : initialisé une fois, maintenu par les
-/// notifications lancement/fermeture/activation de `NSWorkspace`.
+/// sur `@MainActor` à chaque ouverture du lanceur : préchauffé hors `@MainActor` au démarrage,
+/// maintenu par PID sur les notifications `NSWorkspace` (`didLaunch`/`didTerminate`/`didActivate`/
+/// `didDeactivate`) et réconcilié périodiquement en arrière-plan (60 s) pour les changements de
+/// politique d'activation sans notification.
 @MainActor
 final class RunningApplicationsCache {
     static let shared = RunningApplicationsCache(observeWorkspace: true)
+    static let reconcileInterval: TimeInterval = 60
 
     private var regularByPID: [pid_t: String] = [:]
     private var seeded = false
+    private var refreshing = false
+    private var lastReconciledAt: Date = .distantPast
+    private var mutationGeneration: UInt64 = 0
     nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
     init(observeWorkspace: Bool = false) {
@@ -100,7 +106,17 @@ final class RunningApplicationsCache {
                 self.noteActivated(pid: pid, bundleID: bundleID, isRegular: isRegular)
             }
         }
-        observers = [launch, terminate, activate]
+        let deactivate = center.addObserver(forName: NSWorkspace.didDeactivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let pid = app?.processIdentifier ?? 0
+            let bundleID = app?.bundleIdentifier
+            let isRegular = app?.activationPolicy == .regular
+            MainActor.assumeIsolated {
+                guard let self, self.seeded, pid > 0 else { return }
+                self.noteActivated(pid: pid, bundleID: bundleID, isRegular: isRegular)
+            }
+        }
+        observers = [launch, terminate, activate, deactivate]
     }
 
     deinit {
@@ -108,7 +124,7 @@ final class RunningApplicationsCache {
         observers.forEach { center.removeObserver($0) }
     }
 
-    func seed(_ entries: [(pid: pid_t, bundleID: String?, isRegular: Bool)]) {
+    func seed(_ entries: [(pid: pid_t, bundleID: String?, isRegular: Bool)], now: Date = Date()) {
         regularByPID.removeAll(keepingCapacity: true)
         for entry in entries where entry.isRegular {
             if let bundleID = entry.bundleID, !bundleID.isEmpty {
@@ -116,9 +132,22 @@ final class RunningApplicationsCache {
             }
         }
         seeded = true
+        lastReconciledAt = now
     }
 
+    /// Applique une réconciliation de fond si aucun événement n'est survenu pendant sa lecture.
+    /// Retourne `true` si l'état a été appliqué, `false` s'il a été écarté car obsolète.
+    @discardableResult
+    func applyReconciled(_ entries: [(pid: pid_t, bundleID: String?, isRegular: Bool)], expectedGeneration: UInt64, now: Date = Date()) -> Bool {
+        guard !seeded || mutationGeneration == expectedGeneration else { return false }
+        seed(entries, now: now)
+        return true
+    }
+
+    var currentGeneration: UInt64 { mutationGeneration }
+
     func noteLaunched(pid: pid_t, bundleID: String?, isRegular: Bool) {
+        mutationGeneration &+= 1
         guard isRegular, let bundleID, !bundleID.isEmpty else {
             regularByPID.removeValue(forKey: pid)
             return
@@ -127,6 +156,7 @@ final class RunningApplicationsCache {
     }
 
     func noteTerminated(pid: pid_t) {
+        mutationGeneration &+= 1
         regularByPID.removeValue(forKey: pid)
     }
 
@@ -134,11 +164,36 @@ final class RunningApplicationsCache {
         noteLaunched(pid: pid, bundleID: bundleID, isRegular: isRegular)
     }
 
-    func regularBundleIDs() -> Set<String> {
+    /// Préchauffe ou réconcilie la liste hors `@MainActor` (0 ms d'IPC LaunchServices sur le fil principal).
+    func refreshInBackground(now: Date = Date()) {
+        guard !refreshing else { return }
+        refreshing = true
+        let generation = mutationGeneration
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let entries = NSWorkspace.shared.runningApplications.map {
+                ($0.processIdentifier, $0.bundleIdentifier, $0.activationPolicy == .regular)
+            }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.refreshing = false
+                    let applied = self.applyReconciled(entries, expectedGeneration: generation, now: now)
+                    if !applied {
+                        // Une notification est arrivée pendant le scan : relancer une réconciliation fraîche plus tard.
+                        self.lastReconciledAt = .distantPast
+                    }
+                }
+            }
+        }
+    }
+
+    func regularBundleIDs(now: Date = Date()) -> Set<String> {
         if !seeded {
             seed(NSWorkspace.shared.runningApplications.map {
                 ($0.processIdentifier, $0.bundleIdentifier, $0.activationPolicy == .regular)
-            })
+            }, now: now)
+        } else if now.timeIntervalSince(lastReconciledAt) >= Self.reconcileInterval {
+            refreshInBackground(now: now)
         }
         return Set(regularByPID.values)
     }
@@ -329,6 +384,8 @@ public final class TargetModeRuntimeController: NSObject {
     }
 
     public func start() {
+        // Préchauffage hors `@MainActor` des applications ouvertes (Lot K) : 0 ms d'IPC LaunchServices dès la première ouverture.
+        RunningApplicationsCache.shared.refreshInBackground()
         // Index des applications prêt avant la première ouverture de la barre (SPEC-073), et leurs icônes
         // réduites en fond à la taille des lignes (session 123).
         let rowIcon = LauncherRowMetrics(fontSize: TargetOverlayStyle.launcher(service.effectiveConfig.experimental.targetMode).commandTextFontSize).icon

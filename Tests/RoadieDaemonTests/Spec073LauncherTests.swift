@@ -106,6 +106,24 @@ struct Spec073LauncherListTests {
         #expect(cache.regularBundleIDs() == ["com.agent.helper", "com.apple.Safari"])
         cache.noteTerminated(pid: 200)
         #expect(cache.regularBundleIDs() == ["com.apple.Safari"])
+
+        // Réconciliation de fond : retire une app passée `.accessory` sans quitter et ajoute une nouvelle `.regular`.
+        let gen = cache.currentGeneration
+        let applied = cache.applyReconciled([
+            (pid: 300, bundleID: "com.apple.Safari", isRegular: false),
+            (pid: 400, bundleID: "com.apple.Notes", isRegular: true),
+        ], expectedGeneration: gen)
+        #expect(applied)
+        #expect(cache.regularBundleIDs() == ["com.apple.Notes"])
+
+        // Un événement plus récent empêche un scan obsolète d'écraser le cache.
+        let staleGen = cache.currentGeneration
+        cache.noteLaunched(pid: 500, bundleID: "com.apple.Terminal", isRegular: true)
+        let ignored = cache.applyReconciled([
+            (pid: 400, bundleID: "com.apple.Notes", isRegular: true),
+        ], expectedGeneration: staleGen)
+        #expect(!ignored)
+        #expect(cache.regularBundleIDs() == ["com.apple.Notes", "com.apple.Terminal"])
     }
 
     @Test func lotKPrecomputedSystemAndBookmarkIndexesPreserveMatchingResults() {
