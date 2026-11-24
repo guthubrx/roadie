@@ -1930,6 +1930,7 @@ public extension SnapshotService {
             // absentes ni les fenêtres en plein écran natif, puis placé (A9, FR-007). La stratégie
             // garde le filet de sécurité d'une fenêtre vivante encore sans feuille.
             let placed = treePlacedWindowIDs(orderedWindowIDs, in: snapshot)
+            let knownMinimums = processState.confirmedMinimumSizes(for: snapshot.windows.map(\.window), in: scope)
             return LayoutPlanner.plan(LayoutRequest(
                 scope: scope,
                 mode: .spatialBsp,
@@ -1937,7 +1938,8 @@ public extension SnapshotService {
                 windowIDs: placed,
                 bspTree: stageStore.state().bspTree(for: scope),
                 outerGaps: outerGaps(windowCount: placed.count, display: display),
-                innerGap: config.tiling.gapsInner
+                innerGap: config.tiling.gapsInner,
+                minimumSizes: knownMinimums
             ))
         }
         let liveOrderedWindowIDs = orderedWindowIDs.filter { windowsByID[$0] != nil }

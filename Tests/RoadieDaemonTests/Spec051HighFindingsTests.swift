@@ -149,6 +149,44 @@ struct Spec051HighFindingsTests {
         #expect(placedW1.width >= 900)
         #expect(placedW1.width + placedW2.width + 10 == containerWidth)
     }
+
+    /// Lot C : un minimum confirmé réalisable au-delà du plafond de ratio 0,95 (ex. 980 / 1000)
+    /// est honoré aussi bien par `layoutPlan` réel (via `SizedTree`) que par `previewPlacements`.
+    @Test func confirmedMinimumBeyondRatioCapMatchesBetweenLayoutPlanAndPreview() throws {
+        let w1 = powerWindow(20, x: 0)
+        let w2 = powerWindow(21, x: 500)
+        let provider = PowerUserProvider(windows: [w1])
+        var config = RoadieConfig()
+        config.tiling.defaultStrategy = .spatialBsp
+        config.tiling.gapsOuter = 0
+        config.tiling.gapsInner = 0
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: PowerUserWriter(provider: provider),
+            config: config,
+            intentStore: LayoutIntentStore(path: tempPath("lot-c-cap-intents")),
+            stageStore: StageStore(path: tempPath("lot-c-cap-stages")),
+            events: EventLog(path: tempPath("lot-c-cap-events")),
+            persistStateChanges: true
+        )
+        let snap1 = service.snapshot()
+        let scope = try #require(snap1.windows.first?.scope)
+        service.syncConfirmedMinimums([
+            w1.id: SnapshotProcessState.ConfirmedMinimum(
+                pid: w1.pid, bundleID: w1.bundleID, scope: scope, size: CGSize(width: 980, height: 0)
+            )
+        ])
+
+        let preview = service.previewPlacements(scope: scope, incoming: w2.id, in: snap1)
+        #expect(preview[w1.id]?.width == 980)
+        #expect(preview[w2.id]?.width == 20)
+
+        provider.snapshots = [w1, w2]
+        let snap2 = service.snapshot()
+        let plan2 = service.layoutPlan(from: snap2, scope: scope, orderedWindowIDs: [w1.id, w2.id])
+        #expect(plan2.placements[w1.id]?.width == 980)
+        #expect(plan2.placements[w2.id]?.width == 20)
+    }
 }
 
 /// Drapeau partagé entre le test et le fil du relevé.
