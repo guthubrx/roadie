@@ -1126,6 +1126,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             self.launcherQuery = nil
             self.render()
         }
+        launcher.loadWorkflows { [weak self] entries, triggers in
+            guard let self, !self.finished else { return }
+            LauncherOpenClock.current?.mark("workflows_refreshed")
+            guard entries != self.launcher.workflowEntries || triggers != self.launcher.workflowTriggers else { return }
+            self.launcher.workflowEntries = entries
+            self.launcher.workflowTriggers = triggers
+            self.launcherQuery = nil
+            self.filesChanged = true
+            self.render()
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
@@ -3472,6 +3482,7 @@ private final class TargetOverlayWindow: NSPanel {
         )
         isOpaque = false
         backgroundColor = .clear
+        colorSpace = .sRGB
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         ignoresMouseEvents = true

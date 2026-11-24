@@ -638,6 +638,11 @@ final class WindowDragReorderController {
         owned = false; draining = false; nativeReleaseSent = false
     }
 
+    /// Lot D : ne signaler `drag.real_unprepared` que si le clic visait une barre de titre candidate.
+    nonisolated static func shouldReportUnpreparedDrag(nativeMovementPassed: Bool, hasCandidateWindow: Bool) -> Bool {
+        !nativeMovementPassed && hasCandidateWindow
+    }
+
     /// Mouvements O(1), clic O(w) sur le relevé publié : aucune lecture AX/disque dans le tap.
     private func capture(_ type: CGEventType, event: CGEvent) -> Bool {
         if event.getIntegerValueField(.eventSourceUserData) == ModifierWindowGestureController.replayMarker { return false }
@@ -693,7 +698,10 @@ final class WindowDragReorderController {
                 return false
             }
             guard pending != nil else {
-                if !nativeMovementPassed {
+                // Lot D : ne journaliser `drag.real_unprepared` que si le clic visait réellement une
+                // barre de titre candidate (`pressWindow != nil`). Les glissers ordinaires dans le
+                // contenu (sélection de texte, curseurs) ne créent ni tâche MainActor ni événement.
+                if Self.shouldReportUnpreparedDrag(nativeMovementPassed: nativeMovementPassed, hasCandidateWindow: pressWindow != nil) {
                     let events = events
                     Task { @MainActor in events.append(RoadieEvent(type: "drag.real_unprepared")) }
                 }

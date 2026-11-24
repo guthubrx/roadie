@@ -253,6 +253,10 @@ public final class TargetModeRuntimeController: NSObject {
         DispatchQueue.main.async { SearchBarRenderer.warmUp(style: style) }
         // Panneaux des Réglages Système lus en fond (session 123) : la première ouverture n'attend plus.
         DispatchQueue.global(qos: .utility).async { _ = LauncherSettingTargetsCache.shared.systemPanes() }
+        // Index des workflows préchauffé hors du fil principal (Lot D) : 0 ms d'I/O disque à l'ouverture.
+        if barConfig.workflowsEnabled {
+            AlfredWorkflowIndex.shared.refreshAsync(alfred: barConfig.alfredWorkflows)
+        }
         guard observer == nil else { return }
         observer = DistributedNotificationCenter.default().addObserver(
             forName: TargetModeRuntimeNotification.name,
@@ -764,8 +768,10 @@ public final class TargetModeRuntimeController: NSObject {
                 .prefix(targetModeConfig.idleFrequentCount)
             if !habits.isEmpty { idle += [.header(tr("Souvent ici", "Often here"))] + habits.map { .app($0, detail: tr("souvent dans cette stage", "often in this stage")) } }
         }
+        let historyStore = LauncherHistoryStore()
+        let history = historyStore.load()
         let recent = targetModeConfig.idleRecentSearchesEnabled
-            ? LauncherHistoryStore().load().recent(targetModeConfig.idleRecentSearchesCount) : []
+            ? history.recent(targetModeConfig.idleRecentSearchesCount) : []
         if !recent.isEmpty { idle += [.header(tr("Recherches récentes", "Recent searches"))] + recent.map(LauncherList.Row.history) }
         context.idleRows = idle
         // Documents et onglets de l'ouverture précédente montrés tout de suite (moins d'une minute), puis
@@ -872,8 +878,6 @@ public final class TargetModeRuntimeController: NSObject {
         context.webSearches = targetMode.webSearches ?? WebSearch.defaults
         context.webSearchTemplate = webSearchURL
         context.fallbackSearches = targetMode.fallbackSearches
-        let historyStore = LauncherHistoryStore()
-        let history = historyStore.load()
         context.recordQuery = { query in historyStore.record(query) }
         if initialQuery == nil, initialSubject == nil, context.workflowGrid == nil, let resumed = history.resumable(at: now) {
             context.initialQuery = resumed
@@ -894,18 +898,52 @@ public final class TargetModeRuntimeController: NSObject {
 
     // MARK: - Workflows (SPEC-088)
 
-    /// Workflows de la barre : index relu s'il a changé, Script Filter lancé en fond, schéma exécuté
-    /// après la fermeture avec les vrais effets. Le journal ne garde ni saisie ni résultat (FR-011).
+    /// Stockage synchronisé des workflows d'une session du lanceur : alimenté instantanément depuis
+    /// le cache en mémoire, puis mis à jour hors du fil principal (Lot D).
+    private final class WorkflowSessionStore: @unchecked Sendable {
+        private let lock = NSLock()
+        private var workflows: [AlfredWorkflow]
+        private var byID: [String: AlfredWorkflow]
+
+        init(_ workflows: [AlfredWorkflow]) {
+            self.workflows = workflows
+            self.byID = Dictionary(workflows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+
+        func update(_ workflows: [AlfredWorkflow]) {
+            let map = Dictionary(workflows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            lock.withLock {
+                self.workflows = workflows
+                self.byID = map
+            }
+        }
+
+        func workflow(id: String) -> AlfredWorkflow? { lock.withLock { byID[id] } }
+        func all() -> [AlfredWorkflow] { lock.withLock { workflows } }
+    }
+
+    /// Workflows de la barre : instantané en mémoire immédiat (0 ms d'I/O sur `@MainActor`) puis
+    /// rafraîchissement asynchrone hors du fil principal (Lot D) ; Script Filter lancé en fond,
+    /// schéma exécuté après la fermeture avec les vrais effets. Le journal ne garde ni saisie ni résultat (FR-011).
     private func workflowContext(_ context: inout LauncherSearchContext, webSearchURL: String) {
         let config = service.effectiveConfig.experimental.targetMode
         guard config.workflowsEnabled else { return }
-        let workflows = AlfredWorkflowIndex.shared.workflows(alfred: config.alfredWorkflows)
-        let byID = Dictionary(workflows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let alfredEnabled = config.alfredWorkflows
+        let initial = AlfredWorkflowIndex.shared.cachedWorkflows(alfred: alfredEnabled) ?? []
+        let store = WorkflowSessionStore(initial)
         let events = events
-        context.workflowEntries = AlfredWorkflowIndex.entries(workflows)
-        context.workflowTriggers = AlfredWorkflowIndex.triggers(workflows)
+        context.workflowEntries = AlfredWorkflowIndex.entries(initial)
+        context.workflowTriggers = AlfredWorkflowIndex.triggers(initial)
+        context.loadWorkflows = { done in
+            AlfredWorkflowIndex.shared.refreshAsync(alfred: alfredEnabled) { fresh in
+                store.update(fresh)
+                let entries = AlfredWorkflowIndex.entries(fresh)
+                let triggers = AlfredWorkflowIndex.triggers(fresh)
+                DispatchQueue.main.async { MainActor.assumeIsolated { done(entries, triggers) } }
+            }
+        }
         context.runScriptFilter = { entry, argument, done in
-            guard let workflow = byID[entry.workflowID], let object = workflow.objects[entry.objectUID],
+            guard let workflow = store.workflow(id: entry.workflowID), let object = workflow.objects[entry.objectUID],
                   let script = entry.kind == .fileFilter ? AlfredFileFilter.script(object, argument: argument) : AlfredScript(object: object) else {
                 DispatchQueue.main.async { MainActor.assumeIsolated { done(nil, "script absent") } }
                 return nil
@@ -933,12 +971,13 @@ public final class TargetModeRuntimeController: NSObject {
             }
         }
         context.runWorkflow = { [weak self] entry, arg, variables, modifiers in
-            guard let workflow = byID[entry.workflowID] else {
+            guard let workflow = store.workflow(id: entry.workflowID) else {
                 return TargetActionResult(changed: false, message: "launcher workflow: absent", error: "workflow")
             }
+            let allWorkflows = store.all()
             let effects = Self.liveEffects(self, events: events, webSearchURL: webSearchURL)
             Task.detached {
-                _ = await AlfredWorkflowEngine(effects: effects, workflows: workflows)
+                _ = await AlfredWorkflowEngine(effects: effects, workflows: allWorkflows)
                     .run(workflow, from: entry.objectUID, arg: arg, variables: variables, modifiers: modifiers)
             }
             return TargetActionResult(changed: true, message: "launcher workflow: \(workflow.bundleID.isEmpty ? workflow.id : workflow.bundleID)")

@@ -76,8 +76,9 @@ public struct RestoreSafetyService {
 
     /// Écrit la dernière frame visible de chaque fenêtre gérée (FR-037). Une fenêtre masquée
     /// prend la frame de son membre de stage (ou celle du snapshot précédent) : le snapshot ne
-    /// contient jamais de position masquée. Aucune écriture si le contenu n'a pas changé.
-    // O(n + m), n = fenêtres live, m = membres de stage.
+    /// contient jamais de position masquée. Les entrées sont triées par `windowID` (Lot D) et
+    /// aucune écriture disque n'a lieu si seules la pile Z (focus) ou les titres dynamiques ont changé.
+    // O(n log n + m), n = fenêtres live, m = membres de stage.
     public func writeSnapshot(snapshot supplied: DaemonSnapshot? = nil) throws -> RestoreSafetySnapshot {
         let previous: RestoreSafetySnapshot?
         switch loadSnapshotResult() {
@@ -109,7 +110,8 @@ public struct RestoreSafetyService {
                     frame: frame
                 )
             }
-        if let previous, previous.windows == windows {
+            .sorted { $0.windowID < $1.windowID }
+        if let previous, Self.hasSameRestorableState(previous.windows, windows) {
             return previous
         }
         let restore = RestoreSafetySnapshot(generatedAt: Date(), windows: windows)
@@ -475,6 +477,19 @@ public struct RestoreSafetyService {
 
     /// Verrou distinct de celui de `JSONPersistence` (`<marqueur>.lock`), non réentrant.
     private var recoveryLockPath: String { "\(markerPath).recovery.lock" }
+
+    /// Vrai si deux listes portent les mêmes fenêtres restaurables (identifiant, application, bundle et
+    /// cadre), indépendamment de l'ordre Z (focus) et des titres dynamiques (Lot D). O(n log n).
+    static func hasSameRestorableState(_ previous: [RestoreSafetyWindow], _ sortedCurrent: [RestoreSafetyWindow]) -> Bool {
+        guard previous.count == sortedCurrent.count else { return false }
+        let sortedPrevious = previous.sorted { $0.windowID < $1.windowID }
+        return zip(sortedPrevious, sortedCurrent).allSatisfy { lhs, rhs in
+            lhs.windowID == rhs.windowID
+                && lhs.appName == rhs.appName
+                && lhs.bundleID == rhs.bundleID
+                && lhs.frame == rhs.frame
+        }
+    }
 
     /// Dernière frame visible de chaque membre de stage (toutes stages confondues). Une frame
     /// masquée ou hors de tout écran présent (écran disparu) n'en est pas une. O(m).

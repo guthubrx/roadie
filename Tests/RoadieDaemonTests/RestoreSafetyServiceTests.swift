@@ -50,6 +50,56 @@ struct RestoreSafetyServiceTests {
         #expect(marker.cleanExit)
         #expect(!service.shouldRestoreAfterProcessExit(pid: 42))
     }
+
+    /// Lot D : un changement de focus (ordre Z) ou de titre dynamique ne réécrit pas `restore.json` ;
+    /// un changement de cadre écrit bien une nouvelle version triée par `windowID`.
+    @Test
+    func writeSnapshotSkipsZOrderAndTitleChurnAndSortsByWindowID() throws {
+        var w1 = powerWindow(10, x: 0)
+        var w2 = powerWindow(2, x: 500)
+        let provider = PowerUserProvider(windows: [w1, w2])
+        let writer = PowerUserWriter(provider: provider)
+        let stageStore = StageStore(path: tempPath("restore-lot-d-stage"))
+        let eventsPath = tempPath("restore-lot-d-events")
+        let events = EventLog(path: eventsPath)
+        let snapshotService = SnapshotService(
+            provider: provider, frameWriter: writer, stageStore: stageStore, events: events
+        )
+        let restorePath = tempPath("restore-lot-d")
+        defer {
+            try? FileManager.default.removeItem(atPath: restorePath)
+            try? FileManager.default.removeItem(atPath: eventsPath)
+        }
+        let service = RestoreSafetyService(path: restorePath, service: snapshotService, eventLog: events)
+
+        let snapshotWrittenCount = {
+            ((try? String(contentsOfFile: eventsPath, encoding: .utf8)) ?? "")
+                .split(separator: "\n")
+                .filter { $0.contains("\"restore.snapshot_written\"") }
+                .count
+        }
+        let first = try service.writeSnapshot()
+        #expect(first.windows.map(\.windowID) == [2, 10])
+        let firstMtime = try FileManager.default.attributesOfItem(atPath: restorePath)[.modificationDate] as? Date
+
+        // Inversion Z-order + titre dynamique : aucune réécriture disque ni nouvel événement.
+        w1.title = "Terminal — build 42"
+        w2.title = "Safari — onglet 2"
+        provider.snapshots = [w2, w1]
+        let second = try service.writeSnapshot()
+        let secondMtime = try FileManager.default.attributesOfItem(atPath: restorePath)[.modificationDate] as? Date
+        #expect(second.windows == first.windows)
+        #expect(secondMtime == firstMtime)
+        #expect(snapshotWrittenCount() == 1)
+
+        // Changement réel de cadre : nouvelle écriture triée par windowID.
+        w1.frame.x = 120
+        provider.snapshots = [w2, w1]
+        let third = try service.writeSnapshot()
+        #expect(third.windows.map(\.windowID) == [2, 10])
+        #expect(third.windows.first(where: { $0.windowID == 10 })?.frame.x == 120)
+        #expect(snapshotWrittenCount() == 2)
+    }
 }
 
 /// SPEC-016 T068 : restauration des fenêtres masquées et verrou d'instance.

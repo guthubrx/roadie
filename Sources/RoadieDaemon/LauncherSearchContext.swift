@@ -63,11 +63,13 @@ struct LauncherSearchContext {
     }
     /// Fin de l'aperçu par Retour : la disposition de l'aperçu reste (vrai) ou est restaurée (faux).
     var endPreview: @MainActor (Bool) -> Void = { _ in }
-    /// Workflows (SPEC-088) : entrées tapées ; Script Filter lancé hors du fil principal (réponse ou
-    /// erreur rendue sur le fil principal, processus annulable) ; schéma exécuté après la fermeture.
+    /// Workflows (SPEC-088) : entrées tapées ; rafraîchies hors du fil principal (Lot D) ; Script
+    /// Filter lancé hors du fil principal (réponse ou erreur rendue sur le fil principal, processus
+    /// annulable) ; schéma exécuté après la fermeture.
     var workflowEntries: [AlfredEntry] = []
     /// Déclencheurs (SPEC-089) : recherches de repli, actions universelles sur texte, actions sur fichier.
     var workflowTriggers: [AlfredEntry] = []
+    var loadWorkflows: (@escaping @MainActor @Sendable ([AlfredEntry], [AlfredEntry]) -> Void) -> Void = { _ in }
     var runScriptFilter: (AlfredEntry, String, @escaping @MainActor @Sendable (AlfredScriptFilterResponse?, String?) -> Void) -> AlfredProcess? = { _, _, _ in nil }
     var runWorkflow: @MainActor (AlfredEntry, [String], [String: String], Int) -> TargetActionResult = { _, _, _, _ in
         TargetActionResult(changed: false, message: "launcher_disabled")

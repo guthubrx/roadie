@@ -187,6 +187,14 @@ struct Spec051HighFindingsTests {
         #expect(plan2.placements[w1.id]?.width == 980)
         #expect(plan2.placements[w2.id]?.width == 20)
     }
+
+    /// Lot D : un glisser ordinaire hors barre de titre (`hasCandidateWindow == false`) ne déclenche
+    /// aucun événement `drag.real_unprepared`.
+    @Test func unpreparedDragIsReportedOnlyWhenPressTargetedACandidateWindow() {
+        #expect(!WindowDragReorderController.shouldReportUnpreparedDrag(nativeMovementPassed: false, hasCandidateWindow: false))
+        #expect(WindowDragReorderController.shouldReportUnpreparedDrag(nativeMovementPassed: false, hasCandidateWindow: true))
+        #expect(!WindowDragReorderController.shouldReportUnpreparedDrag(nativeMovementPassed: true, hasCandidateWindow: true))
+    }
 }
 
 /// Drapeau partagé entre le test et le fil du relevé.

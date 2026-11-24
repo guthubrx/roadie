@@ -49,4 +49,18 @@ struct Spec088LauncherTests {
         _ = await AlfredWorkflowEngine(effects: effects).run(workflow, from: "SF", arg: item.mods[524_288]?.arg ?? item.arg, modifiers: 524_288)
         #expect(effects.calls == ["copy::coeur:"])
     }
+
+    /// Lot D : `cachedWorkflows` renvoie immédiatement l'instantané déjà chargé sans I/O disque,
+    /// et `refreshAsync` alimente le cache hors du fil principal tout en coalesçant les appels concurrents.
+    @Test func workflowIndexCachesAndRefreshesAsynchronously() async {
+        let index = AlfredWorkflowIndex()
+        #expect(index.cachedWorkflows(alfred: false, roadie: false) == nil)
+        let loaded = await withCheckedContinuation { continuation in
+            index.refreshAsync(alfred: false, roadie: false) { workflows in
+                continuation.resume(returning: workflows)
+            }
+        }
+        #expect(loaded.isEmpty)
+        #expect(index.cachedWorkflows(alfred: false, roadie: false) == [])
+    }
 }
