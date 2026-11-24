@@ -183,23 +183,38 @@ final class LauncherTimerService: Sendable {
     // MARK: - Analyseur de durée et de commande lanceur / CLI
 
     /// Parse une durée libre : `25m`, `1h30m`, `90s`, `45` (minutes par défaut), `1h15`, `2m30s`.
+    /// Toute multiplication ou addition est contrôlée contre le dépassement d'entier et bornée à 24 h (86 400 s).
     static func parseDurationSeconds(_ raw: String) -> Int? {
+        let maxSeconds = 86_400
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !text.isEmpty else { return nil }
-        if let bareMinutes = Int(text), bareMinutes > 0 {
-            return min(86_400, bareMinutes * 60)
+        if text.allSatisfy(\.isNumber) {
+            guard let bareMinutes = Int(text) else {
+                // Entier strictement positif dépassant Int.max → plafonné à 24 h (sauf zéros purs).
+                return text.contains(where: { $0 != "0" }) ? maxSeconds : nil
+            }
+            guard bareMinutes > 0 else { return nil }
+            let (prod, overflow) = bareMinutes.multipliedReportingOverflow(by: 60)
+            return overflow ? maxSeconds : min(maxSeconds, prod)
         }
         var total = 0
         var number = ""
         var matchedUnit = false
+        func addBounded(_ count: Int, multiplier: Int) {
+            let (prod, mulOverflow) = count.multipliedReportingOverflow(by: multiplier)
+            let delta = mulOverflow ? maxSeconds : min(maxSeconds, prod)
+            let (sum, addOverflow) = total.addingReportingOverflow(delta)
+            total = addOverflow ? maxSeconds : min(maxSeconds, sum)
+        }
         for char in text {
             if char.isNumber {
                 number.append(char)
-            } else if let n = Int(number), !number.isEmpty {
+            } else if !number.isEmpty {
+                let n = Int(number) ?? maxSeconds
                 switch char {
-                case "h": total += n * 3600; matchedUnit = true
-                case "m": total += n * 60; matchedUnit = true
-                case "s": total += n; matchedUnit = true
+                case "h": addBounded(n, multiplier: 3600); matchedUnit = true
+                case "m": addBounded(n, multiplier: 60); matchedUnit = true
+                case "s": addBounded(n, multiplier: 1); matchedUnit = true
                 default: return nil
                 }
                 number = ""
@@ -209,14 +224,15 @@ final class LauncherTimerService: Sendable {
         }
         if !number.isEmpty {
             // Ex. `1h30` → les chiffres finaux après `h` sont des minutes.
-            if matchedUnit, let trailing = Int(number), text.contains("h"), !text.contains("m"), !text.contains("s") {
-                total += trailing * 60
+            if matchedUnit, text.contains("h"), !text.contains("m"), !text.contains("s") {
+                let trailing = Int(number) ?? maxSeconds
+                addBounded(trailing, multiplier: 60)
             } else {
                 return nil
             }
         }
         guard matchedUnit, total > 0 else { return nil }
-        return min(86_400, total)
+        return min(maxSeconds, total)
     }
 
     /// Formate une durée en `MM:SS` ou `HH:MM:SS`.

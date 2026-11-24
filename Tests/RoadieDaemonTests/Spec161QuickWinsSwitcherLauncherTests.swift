@@ -221,6 +221,14 @@ struct Spec161QuickWinsSwitcherLauncherTests {
         let octToDec = try #require(LauncherConverter.evaluate("0o755 to dec", locale: posix))
         #expect(octToDec.text == "493")
 
+        // Borne Int64.min : aucun dépassement sur la magnitude non signée (hex, bin, oct).
+        let minHex = try #require(LauncherConverter.evaluate("-9223372036854775808 in hex", locale: posix))
+        #expect(minHex.text == "-0x8000000000000000")
+        let minBin = try #require(LauncherConverter.evaluate("-9223372036854775808 to bin", locale: posix))
+        #expect(minBin.text == "-0b1" + String(repeating: "0", count: 63))
+        let minOct = try #require(LauncherConverter.evaluate("-9223372036854775808 en oct", locale: posix))
+        #expect(minOct.text == "-0o1000000000000000000000")
+
         // Fuseaux horaires déterministes (date fixe : 2026-06-15 12:00 UTC)
         let utc = try #require(TimeZone(identifier: "UTC"))
         let fixed = Date(timeIntervalSince1970: 1_781_524_800) // 2026-06-15T12:00:00Z
@@ -262,12 +270,19 @@ struct Spec161QuickWinsSwitcherLauncherTests {
 
     // MARK: - Minuteur & Pomodoro (service + CLI)
 
-    @Test @MainActor func timerServiceParsesRunsCancelsAndExposesCLI() throws {
+    @Test @MainActor func timerServiceParsesRunsCancelsAndExposesCLI() async throws {
         #expect(LauncherTimerService.parseDurationSeconds("25m") == 1500)
         #expect(LauncherTimerService.parseDurationSeconds("1h30m") == 5400)
         #expect(LauncherTimerService.parseDurationSeconds("1h30") == 5400)
         #expect(LauncherTimerService.parseDurationSeconds("90s") == 90)
         #expect(LauncherTimerService.parseDurationSeconds("10") == 600)
+        // Aucun dépassement d'entier sur des durées extrêmes : plafonnées proprement à 24 h (86 400 s).
+        #expect(LauncherTimerService.parseDurationSeconds("9223372036854775807") == 86_400)
+        #expect(LauncherTimerService.parseDurationSeconds("9223372036854775807h") == 86_400)
+        #expect(LauncherTimerService.parseDurationSeconds("999999999999999999999999") == 86_400)
+        #expect(LauncherTimerService.parseDurationSeconds("1h999999999999999999m") == 86_400)
+        #expect(LauncherTimerService.parseDurationSeconds("0") == nil)
+        #expect(LauncherTimerService.parseDurationSeconds("0s") == nil)
         #expect(LauncherTimerService.parseDurationSeconds("abc") == nil)
 
         #expect(LauncherTimerService.parseQuery("pomodoro") == .start(seconds: 1500, label: "Pomodoro"))
@@ -300,16 +315,56 @@ struct Spec161QuickWinsSwitcherLauncherTests {
         #expect(service.cancel(id: t2.id))
         #expect(service.activeTimers().isEmpty)
 
-        // CLI `roadie timer` (nettoyage garanti en fin de test).
+        // Routage daemon obligatoire pour `timer` afin que les minuteurs survivent à la sortie de `roadie`.
+        #expect(CLICommandRouter.isDaemonRouted(["timer", "start", "10m"]))
+        #expect(CLICommandRouter.isDaemonRouted(["timer", "pomodoro"]))
+        #expect(CLICommandRouter.isDaemonRouted(["timer", "status"]))
+        #expect(CLICommandRouter.isDaemonRouted(["timer", "cancel"]))
+        #expect(!CLICommandRouter.isDaemonRouted(["timer", "--help"]))
+
+        // Aller-retour complet sur socket daemon entre connexions client distinctes.
         defer { _ = LauncherTimerService.shared.cancelAll() }
         _ = LauncherTimerService.shared.cancelAll()
+        let sockPath = "/tmp/roadie-spec161-\(UUID().uuidString.prefix(8)).sock"
+        let lockPath = "/tmp/roadie-spec161-\(UUID().uuidString.prefix(8)).lock"
+        defer {
+            try? FileManager.default.removeItem(atPath: sockPath)
+            try? FileManager.default.removeItem(atPath: lockPath)
+        }
         let router = CLICommandRouter()
-        #expect(router.run(["timer", "start", "10m", "Focus"]).exitCode == 0)
-        let status = router.run(["timer", "status"])
-        #expect(status.exitCode == 0)
-        #expect(status.stdout.contains("Focus"))
-        #expect(router.run(["timer", "cancel"]).exitCode == 0)
-        #expect(router.run(["timer", "status"]).stdout.contains("none"))
+        let server = try #require(CommandSocketServer.start(router: router, path: sockPath))
+        defer { server.stop() }
+
+        let startResp = await Task.detached {
+            CommandSocketClient.execute(argv: ["timer", "start", "10m", "FocusSocket"], cwd: nil, socketPath: sockPath, lockPath: lockPath) {
+                CLIResponse(exitCode: 99, stderr: "unexpected local fallback")
+            }
+        }.value
+        #expect(startResp.exitCode == 0)
+        #expect(startResp.stdout.contains("FocusSocket"))
+
+        let statusResp = await Task.detached {
+            CommandSocketClient.execute(argv: ["timer", "status"], cwd: nil, socketPath: sockPath, lockPath: lockPath) {
+                CLIResponse(exitCode: 99, stderr: "unexpected local fallback")
+            }
+        }.value
+        #expect(statusResp.exitCode == 0)
+        #expect(statusResp.stdout.contains("FocusSocket"))
+
+        let cancelResp = await Task.detached {
+            CommandSocketClient.execute(argv: ["timer", "cancel"], cwd: nil, socketPath: sockPath, lockPath: lockPath) {
+                CLIResponse(exitCode: 99, stderr: "unexpected local fallback")
+            }
+        }.value
+        #expect(cancelResp.exitCode == 0)
+
+        let afterResp = await Task.detached {
+            CommandSocketClient.execute(argv: ["timer", "status"], cwd: nil, socketPath: sockPath, lockPath: lockPath) {
+                CLIResponse(exitCode: 99, stderr: "unexpected local fallback")
+            }
+        }.value
+        #expect(afterResp.exitCode == 0)
+        #expect(afterResp.stdout.contains("none"))
         #expect(router.run(["timer", "start", "invalid"]).exitCode == 64)
     }
 }

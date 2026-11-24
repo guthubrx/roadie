@@ -367,7 +367,7 @@ public final class CLICommandRouter {
         switch command {
         // `bookmark` : `set` lit la fenêtre active, donc l'Accessibilité du daemon. En local, un
         // raccourci Karabiner ne voyait aucune fenêtre (« no active tiled window »).
-        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark":
+        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark", "timer":
             return true
         // `floating` lit la fenêtre active : il faut l'Accessibilité du daemon (SPEC-047).
         case "toggle":

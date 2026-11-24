@@ -53,17 +53,18 @@ enum LauncherConverter {
               let parsed = parseIntegerLiteral(lhs, requirePrefix: false)
         else { return nil }
 
+        let magnitude = parsed.value.magnitude
         let formatted: String
         let label: String
         switch target {
         case 16:
-            formatted = (parsed.value < 0 ? "-0x" : "0x") + String(abs(parsed.value), radix: 16)
+            formatted = (parsed.value < 0 ? "-0x" : "0x") + String(magnitude, radix: 16)
             label = "HEX"
         case 2:
-            formatted = (parsed.value < 0 ? "-0b" : "0b") + String(abs(parsed.value), radix: 2)
+            formatted = (parsed.value < 0 ? "-0b" : "0b") + String(magnitude, radix: 2)
             label = "BIN"
         case 8:
-            formatted = (parsed.value < 0 ? "-0o" : "0o") + String(abs(parsed.value), radix: 8)
+            formatted = (parsed.value < 0 ? "-0o" : "0o") + String(magnitude, radix: 8)
             label = "OCT"
         default:
             formatted = String(parsed.value)
