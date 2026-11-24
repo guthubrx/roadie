@@ -249,6 +249,19 @@ public struct SnapshotService: Sendable {
         processState.latestPublishedSnapshot()
     }
 
+    /// Relevé déjà publié encore valide (âge, `stateStamp`, `config` et génération d'observation vérifiés),
+    /// sans aucun IPC AX ; retourne `nil` dès qu'une invalidation ou expiration impose un repli frais (Lot L).
+    public func validCachedSnapshot(followFocus: Bool = false) -> DaemonSnapshot? {
+        processState.recentSnapshot(
+            followFocus: followFocus,
+            now: clock(),
+            stateStamp: fileModificationStamp(stageStore.fileURL.path),
+            config: config,
+            allowQuietReuse: true,
+            reuseAnyRecent: true
+        )
+    }
+
     /// `sharedSnapshot`, avec `scanned` vrai si un relevé complet a été fait (compteur `scans`, A12).
     private func sharedSnapshotCountingScan(followFocus: Bool) -> (snapshot: DaemonSnapshot, scanned: Bool) {
         if let recent = processState.recentSnapshot(

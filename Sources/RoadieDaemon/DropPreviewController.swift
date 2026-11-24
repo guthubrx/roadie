@@ -168,11 +168,12 @@ struct DropPreviewEngine {
     }
 
     /// Lit l'etat persiste puis le snapshot partage (lecture seule pendant le drag). Cout : au plus un snapshot.
-    /// Avec `preferCachedSnapshot` (Lot L), réutilise immédiatement le dernier relevé gestuel publié (0 IPC AX)
-    /// lorsqu'il existe et comporte des écrans, pour que `pending` soit prêt avant les 8 px d'un glisser rapide.
+    /// Avec `preferCachedSnapshot` (Lot L), réutilise le relevé déjà publié uniquement s'il est encore valide
+    /// (âge, `stateStamp` identique, `config` et génération d'observation non invalidée), sinon retombe sur
+    /// `sharedSnapshot()` frais.
     func makeContext(preferCachedSnapshot: Bool = false) -> DropPreviewContext {
         let persistedStateBeforeSnapshot = service.effectiveStageStore.state()
-        if preferCachedSnapshot, let cached = service.cachedGestureSnapshot(), !cached.displays.isEmpty {
+        if preferCachedSnapshot, let cached = service.validCachedSnapshot(followFocus: false), !cached.displays.isEmpty {
             return DropPreviewContext(snapshot: cached, persistedStateBeforeSnapshot: persistedStateBeforeSnapshot)
         }
         return DropPreviewContext(snapshot: service.sharedSnapshot(), persistedStateBeforeSnapshot: persistedStateBeforeSnapshot)

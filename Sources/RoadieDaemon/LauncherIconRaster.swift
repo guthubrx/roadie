@@ -19,6 +19,7 @@ enum LauncherIconRaster {
     private static var images: [Key: NSImage] = [:]
     private static var lastUsed: [Key: UInt64] = [:]
     private static var useClock: UInt64 = 0
+    private static var transientGeneration: UInt64 = 0
     private static var pending: Set<Key> = []
     private static var redrawScheduled = false
     private static let queue = DispatchQueue(label: "roadie.launcher.icon-raster", qos: .userInitiated)
@@ -49,10 +50,17 @@ enum LauncherIconRaster {
         }
     }
 
-    /// Libère immédiatement les vignettes temporaires (`window:*`, `image:*`) à la fermeture de la barre,
-    /// en conservant les petites icônes d'applications (`file:*`) en cache LRU (Lot L).
+    static func isTransient(_ id: String) -> Bool {
+        id.hasPrefix("window:") || id.hasPrefix("image:")
+    }
+
+    static var currentTransientGeneration: UInt64 { transientGeneration }
+
+    /// Libère immédiatement les vignettes temporaires (`window:*`, `image:*`) à la fermeture de la barre
+    /// et incrémente la génération pour empêcher toute préparation en vol de les réinsérer (Lot L).
     static func purgeTransientThumbnails() {
-        let transient = images.keys.filter { $0.id.hasPrefix("window:") || $0.id.hasPrefix("image:") }
+        transientGeneration &+= 1
+        let transient = images.keys.filter { isTransient($0.id) }
         for key in transient {
             images.removeValue(forKey: key)
             lastUsed.removeValue(forKey: key)
@@ -60,7 +68,12 @@ enum LauncherIconRaster {
     }
 
     /// Insère une entrée dans le cache LRU borné (exposé pour tests unitaires).
-    static func store(_ image: NSImage, for key: Key, maxLimit: Int = limit) {
+    /// Si `expectedTransientGeneration` ne correspond plus à la génération courante pour une clé transitoire,
+    /// l'image tardive est ignorée au lieu de réoccuper la mémoire au repos.
+    static func store(_ image: NSImage, for key: Key, expectedTransientGeneration: UInt64? = nil, maxLimit: Int = limit) {
+        if let expectedTransientGeneration, isTransient(key.id), expectedTransientGeneration != transientGeneration {
+            return
+        }
         useClock &+= 1
         images[key] = image
         lastUsed[key] = useClock
@@ -78,6 +91,7 @@ enum LauncherIconRaster {
         lastUsed.removeAll()
         pending.removeAll()
         useClock = 0
+        transientGeneration = 0
     }
 
     private static func evictIfNeeded(maxLimit: Int = limit) {
@@ -96,6 +110,7 @@ enum LauncherIconRaster {
 
     private static func request(_ key: Key, size: CGSize, source: @escaping @Sendable () -> NSImage?) {
         guard pending.insert(key).inserted else { return }
+        let capturedTransientGeneration = isTransient(key.id) ? transientGeneration : nil
         queue.async {
             let raster: CGImage? = autoreleasepool {
                 source().flatMap { rasterize($0, width: key.width, height: key.height) }
@@ -104,7 +119,7 @@ enum LauncherIconRaster {
                 MainActor.assumeIsolated {
                     pending.remove(key)
                     guard let raster else { return }
-                    store(NSImage(cgImage: raster, size: size), for: key)
+                    store(NSImage(cgImage: raster, size: size), for: key, expectedTransientGeneration: capturedTransientGeneration)
                     scheduleRedraw()
                 }
             }

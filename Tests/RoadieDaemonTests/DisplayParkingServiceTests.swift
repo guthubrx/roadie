@@ -747,6 +747,7 @@ struct DisplayParkingServiceTests {
         let hostID = DisplayID(rawValue: "built-in")
         let ghostID = DisplayID(rawValue: "old-disconnected-ghost")
         let namedGoneID = DisplayID(rawValue: "old-named-display")
+        let floatGoneID = DisplayID(rawValue: "old-float-display")
         let pinnedGoneID = DisplayID(rawValue: "old-pinned-display")
         let labeledGoneID = DisplayID(rawValue: "old-labeled-display")
         var state = PersistentStageState(
@@ -760,6 +761,9 @@ struct DisplayParkingServiceTests {
                 ]),
                 PersistentStageScope(displayID: namedGoneID, activeStageID: StageID(rawValue: "1"), stages: [
                     PersistentStage(id: StageID(rawValue: "1"), name: "Travail"),
+                ]),
+                PersistentStageScope(displayID: floatGoneID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1", mode: .float),
                 ]),
                 PersistentStageScope(displayID: pinnedGoneID, activeStageID: StageID(rawValue: "1"), stages: [
                     PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1"),
@@ -799,6 +803,7 @@ struct DisplayParkingServiceTests {
         #expect(remainingDisplayIDs.contains(hostID))
         #expect(!remainingDisplayIDs.contains(ghostID))
         #expect(remainingDisplayIDs.contains(namedGoneID))
+        #expect(remainingDisplayIDs.contains(floatGoneID))
         #expect(remainingDisplayIDs.contains(pinnedGoneID))
         #expect(remainingDisplayIDs.contains(labeledGoneID))
         #expect(!state.desktopSelections.contains { $0.displayID == ghostID })

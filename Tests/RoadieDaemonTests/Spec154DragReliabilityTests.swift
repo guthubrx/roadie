@@ -140,12 +140,19 @@ import RoadieCore
 
     @Test func lotLDropPreviewMakeContextReusesCachedGestureSnapshotWhenAvailable() throws {
         let f = try Drag143Fixture(); defer { f.clean() }
-        // Préchauffer le cache gestuel via un relevé partagé.
+        // Préchauffer le cache valide via un relevé partagé.
         let initial = f.service.sharedSnapshot()
         let engine = DropPreviewEngine(service: f.service)
+        #expect(f.service.validCachedSnapshot(followFocus: false) != nil)
         let cachedContext = engine.makeContext(preferCachedSnapshot: true)
         #expect(cachedContext.snapshot.displays == initial.displays)
         #expect(cachedContext.snapshot.windows.map(\.window.id) == initial.windows.map(\.window.id))
+
+        // Après invalidation, le cache n'est plus réutilisé et `makeContext` retombe sur un relevé frais.
+        f.service.invalidateSharedSnapshot()
+        #expect(f.service.validCachedSnapshot(followFocus: false) == nil)
+        let refreshedContext = engine.makeContext(preferCachedSnapshot: true)
+        #expect(refreshedContext.snapshot.displays == initial.displays)
     }
 }
 

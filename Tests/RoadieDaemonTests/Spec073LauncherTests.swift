@@ -175,10 +175,20 @@ struct Spec073LauncherListTests {
         #expect(LauncherIconRaster.contains(id: "file:/Applications/A.app"))
         #expect(LauncherIconRaster.contains(id: "image:/tmp/pic.png"))
 
+        let inFlightGeneration = LauncherIconRaster.currentTransientGeneration
         LauncherIconRaster.purgeTransientThumbnails()
         #expect(!LauncherIconRaster.contains(id: "image:/tmp/pic.png"))
         #expect(LauncherIconRaster.contains(id: "file:/Applications/A.app"))
         #expect(LauncherIconRaster.contains(id: "file:/Applications/B.app"))
+
+        // Une vignette préparée en vol avant la fermeture ne doit pas se réinsérer après la purge.
+        LauncherIconRaster.store(icon, for: .init(id: "window:42:9", width: 64, height: 64),
+                                 expectedTransientGeneration: inFlightGeneration, maxLimit: 3)
+        #expect(!LauncherIconRaster.contains(id: "window:42:9"))
+        // En revanche, une vignette demandée après la purge (génération courante) est acceptée.
+        LauncherIconRaster.store(icon, for: .init(id: "window:42:10", width: 64, height: 64),
+                                 expectedTransientGeneration: LauncherIconRaster.currentTransientGeneration, maxLimit: 3)
+        #expect(LauncherIconRaster.contains(id: "window:42:10"))
     }
 }
 

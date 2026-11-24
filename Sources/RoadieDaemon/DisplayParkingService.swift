@@ -74,7 +74,8 @@ public struct DisplayParkingService: Sendable {
         state: inout PersistentStageState,
         liveDisplays: [DisplaySnapshot],
         windows: [WindowSnapshot],
-        now: Date = Date()
+        now: Date = Date(),
+        defaultMode: WindowManagementMode = .bsp
     ) -> DisplayParkingReport {
         let liveDisplayIDs = Set(liveDisplays.map(\.id))
         guard !state.scopes.isEmpty else {
@@ -87,7 +88,7 @@ public struct DisplayParkingService: Sendable {
         if let restoreReport = restoreParkedStages(state: &state, liveDisplays: liveDisplays, now: now) {
             stampLiveDisplayMetadata(state: &state, liveDisplays: liveDisplays)
             _ = pruneEmptyParkedResidues(state: &state)
-            _ = pruneDisconnectedEmptyUnnamedScopes(state: &state, liveDisplayIDs: liveDisplayIDs)
+            _ = pruneDisconnectedEmptyUnnamedScopes(state: &state, liveDisplayIDs: liveDisplayIDs, defaultMode: defaultMode)
             return restoreReport
         }
 
@@ -99,7 +100,7 @@ public struct DisplayParkingService: Sendable {
         if recoveredParkedCount > 0 {
             stampLiveDisplayMetadata(state: &state, liveDisplays: liveDisplays)
             _ = pruneEmptyParkedResidues(state: &state)
-            _ = pruneDisconnectedEmptyUnnamedScopes(state: &state, liveDisplayIDs: liveDisplayIDs)
+            _ = pruneDisconnectedEmptyUnnamedScopes(state: &state, liveDisplayIDs: liveDisplayIDs, defaultMode: defaultMode)
             return DisplayParkingReport(
                 kind: .noop,
                 reason: .parkedStagesRecovered,
@@ -204,7 +205,7 @@ public struct DisplayParkingService: Sendable {
 
         guard parkedCount > 0 else {
             skippedCount += pruneEmptyParkedResidues(state: &state)
-            skippedCount += pruneDisconnectedEmptyUnnamedScopes(state: &state, liveDisplayIDs: liveDisplayIDs)
+            skippedCount += pruneDisconnectedEmptyUnnamedScopes(state: &state, liveDisplayIDs: liveDisplayIDs, defaultMode: defaultMode)
             if deferredCount > 0 {
                 return DisplayParkingReport(
                     kind: .noop,
@@ -485,15 +486,17 @@ public struct DisplayParkingService: Sendable {
     }
 
     /// Purge douce des scopes fantômes d'écrans débranchés (Lot L) : ne supprime un scope absent que
-    /// si TOUS ses stages sont vides, sans nom personnalisé, sans groupe, sans focus, sans copie parquée
-    /// en attente de restauration et sans pin/bookmark/label associé. Tout bureau nommé, occupé ou
-    /// branché est strictement préservé. O(scopes + pins + bookmarks).
+    /// si TOUS ses stages sont vides, sans nom personnalisé, sans réglage de mode/arbre personnalisé,
+    /// sans groupe, sans focus, sans copie parquée en attente de restauration et sans pin/bookmark/label
+    /// associé. Tout bureau nommé, occupé, configuré ou branché est strictement préservé. O(scopes + pins + bookmarks).
     @discardableResult
     func pruneDisconnectedEmptyUnnamedScopes(
         state: inout PersistentStageState,
-        liveDisplayIDs: Set<DisplayID>
+        liveDisplayIDs: Set<DisplayID>,
+        defaultMode: WindowManagementMode = .bsp
     ) -> Int {
         guard !liveDisplayIDs.isEmpty else { return 0 }
+        let defaultModes: Set<WindowManagementMode> = defaultMode == .spatialBsp ? [.bsp, .spatialBsp] : [defaultMode]
         let parkedOriginDisplayIDs = Set(restoreCandidates(in: state).compactMap { $0.stage.origin?.displayID })
         let parkedOriginLogicalIDs = Set(restoreCandidates(in: state).compactMap { $0.stage.origin?.logicalDisplayID })
         let pinnedScopes = Set(state.windowPins.map { "\($0.homeScope.displayID.rawValue)#\($0.homeScope.desktopID.rawValue)" })
@@ -520,6 +523,8 @@ public struct DisplayParkingService: Sendable {
                     && stage.groups.isEmpty
                     && stage.focusedWindowID == nil
                     && stage.parkingState != .parked
+                    && stage.bspTree == nil
+                    && defaultModes.contains(stage.mode)
                     && !StagePresentationOrder.isNamed(stage)
             }
             guard allEmptyUnnamed else { return false }

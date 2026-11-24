@@ -240,7 +240,8 @@ public struct DaemonHealthService {
             DisplayParkingService().transition(
                 state: &state,
                 liveDisplays: snapshot.displays,
-                windows: snapshot.windows.map(\.window)
+                windows: snapshot.windows.map(\.window),
+                defaultMode: service.effectiveConfig.tiling.defaultStrategy
             )
         }
     }
