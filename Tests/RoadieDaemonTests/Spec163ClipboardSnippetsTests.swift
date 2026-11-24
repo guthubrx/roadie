@@ -361,10 +361,41 @@ struct Spec163ClipboardSnippetsTests {
         #expect(!SnippetAutoExpander.shouldRestorePasteboard(expectedGeneration: 3, currentGeneration: 3, expectedChangeCount: 10, currentChangeCount: 11))
         #expect(!SnippetAutoExpander.shouldRestorePasteboard(expectedGeneration: 3, currentGeneration: 4, expectedChangeCount: 10, currentChangeCount: 10))
 
-        // 2. Auto-expansion refusée si le presse-papiers porte un marqueur sensible (préserve le secret)
-        #expect(!SnippetAutoExpander.canSafelyUsePasteboard(types: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"]))
-        #expect(!SnippetAutoExpander.canSafelyUsePasteboard(types: ["org.nspasteboard.TransientType"]))
-        #expect(SnippetAutoExpander.canSafelyUsePasteboard(types: ["public.utf8-plain-text"]))
+        // 2. Auto-expansion refusée si le presse-papiers porte un marqueur sensible externe,
+        //    mais autorisée pour une écriture interne Roadie (deux expansions successives avec/sans texte initial)
+        #expect(!SnippetAutoExpander.canSafelyUsePasteboard(
+            types: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"],
+            currentChangeCount: 10,
+            lastInternalChangeCount: 10
+        ))
+        #expect(!SnippetAutoExpander.canSafelyUsePasteboard(
+            types: ["public.utf8-plain-text", "org.nspasteboard.TransientType"],
+            currentChangeCount: 11,
+            lastInternalChangeCount: 10
+        ))
+        #expect(SnippetAutoExpander.canSafelyUsePasteboard(
+            types: ["public.utf8-plain-text"],
+            currentChangeCount: 11,
+            lastInternalChangeCount: nil
+        ))
+        // Scénario 1 : expansion #1 (sans texte initial) écrit TransientType (changeCount=20), expansion #2 réussit
+        #expect(SnippetAutoExpander.canSafelyUsePasteboard(
+            types: ["public.utf8-plain-text", "org.nspasteboard.TransientType"],
+            currentChangeCount: 20,
+            lastInternalChangeCount: 20
+        ))
+        // Scénario 2 : expansion #1 -> restauration du texte initial avec TransientType (changeCount=21) -> expansion #2 réussit,
+        // puis un secret externe (changeCount=22) reste bloqué !
+        #expect(SnippetAutoExpander.canSafelyUsePasteboard(
+            types: ["public.utf8-plain-text", "org.nspasteboard.TransientType"],
+            currentChangeCount: 21,
+            lastInternalChangeCount: 21
+        ))
+        #expect(!SnippetAutoExpander.canSafelyUsePasteboard(
+            types: ["public.utf8-plain-text", "org.nspasteboard.TransientType"],
+            currentChangeCount: 22,
+            lastInternalChangeCount: 21
+        ))
 
         // 3. Le tampon clavier se vide dès qu'on change d'application (targetPID différent)
         let items = [SnippetItem(keyword: ";sig", title: "Sig", body: "Cordialement")]
@@ -404,5 +435,41 @@ struct Spec163ClipboardSnippetsTests {
         #expect(prunedBook.entries.map(\.text) == ["épinglé"])
         // Vérifier que la purge a bien été persistée sur disque
         #expect(store.load().entries.map(\.text) == ["épinglé"])
+    }
+
+    @Test @MainActor func consecutiveAutoExpansionsSucceedWithAndWithoutInitialClipboardText() throws {
+        let plain: Set<String> = ["public.utf8-plain-text"]
+        let transient: Set<String> = ["public.utf8-plain-text", "org.nspasteboard.TransientType"]
+
+        // Cas A : deux expansions successives AVEC texte initial (expansion 1 -> restauration -> expansion 2 -> restauration)
+        var stateWithText = SnippetPasteboardState()
+        let firstRaw = stateWithText.beginExpansion(types: plain, currentChangeCount: 10, readPlainText: { "initial" })
+        let first = try #require(firstRaw)
+        #expect(first.previousText == "initial")
+        stateWithText.didWriteExpanded(changeCount: 11)
+        #expect(stateWithText.canRestore(expectedGeneration: first.generation, writtenChangeCount: 11, currentChangeCount: 11))
+        stateWithText.didRestore(text: "initial", changeCount: 12)
+
+        // Seconde expansion après restauration (le presse-papiers porte TransientType au changeCount 12)
+        let secondRaw = stateWithText.beginExpansion(types: transient, currentChangeCount: 12, readPlainText: { "initial" })
+        let second = try #require(secondRaw)
+        #expect(second.previousText == "initial")
+        stateWithText.didWriteExpanded(changeCount: 13)
+        // L'ancienne restauration de first est ignorée ; celle de second est autorisée
+        #expect(!stateWithText.canRestore(expectedGeneration: first.generation, writtenChangeCount: 11, currentChangeCount: 13))
+        #expect(stateWithText.canRestore(expectedGeneration: second.generation, writtenChangeCount: 13, currentChangeCount: 13))
+        // Si un mot de passe externe arrive ensuite (changeCount 14 + TransientType ou ConcealedType), expansion refusée
+        let blockedExternal = stateWithText.beginExpansion(types: transient, currentChangeCount: 14, readPlainText: { "secret" })
+        #expect(blockedExternal == nil)
+
+        // Cas B : deux expansions successives SANS texte initial (previousText == nil)
+        var stateEmpty = SnippetPasteboardState()
+        let empty1Raw = stateEmpty.beginExpansion(types: [], currentChangeCount: 50, readPlainText: { nil })
+        let empty1 = try #require(empty1Raw)
+        #expect(empty1.previousText == nil)
+        stateEmpty.didWriteExpanded(changeCount: 51)
+        let empty2Raw = stateEmpty.beginExpansion(types: transient, currentChangeCount: 51, readPlainText: { "expanded1" })
+        let empty2 = try #require(empty2Raw)
+        #expect(empty2.previousText == nil)
     }
 }

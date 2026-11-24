@@ -179,6 +179,62 @@ public struct SnippetTypingBuffer: Equatable, Sendable {
     }
 }
 
+/// Machine d'état pure gérant la sécurité du presse-papiers entre expansions successives (Spec 163 R2).
+struct SnippetPasteboardState: Equatable, Sendable {
+    private(set) var generation: UInt64 = 0
+    private(set) var lastInternalChangeCount: Int?
+    private(set) var pendingRestoreText: String?
+
+    mutating func reset() {
+        lastInternalChangeCount = nil
+        pendingRestoreText = nil
+    }
+
+    /// Vérifie si le presse-papiers peut être utilisé en toute sécurité, puis prépare la génération
+    /// et le texte initial à restaurer. Retourne `nil` si un secret / marqueur externe est présent.
+    mutating func beginExpansion(
+        types: Set<String>,
+        currentChangeCount: Int,
+        readPlainText: () -> String?
+    ) -> (generation: UInt64, previousText: String?)? {
+        guard SnippetAutoExpander.canSafelyUsePasteboard(
+            types: types,
+            currentChangeCount: currentChangeCount,
+            lastInternalChangeCount: lastInternalChangeCount
+        ) else {
+            return nil
+        }
+        generation &+= 1
+        let previousText: String?
+        if lastInternalChangeCount == currentChangeCount {
+            previousText = pendingRestoreText
+        } else {
+            let plain = readPlainText()
+            pendingRestoreText = plain
+            previousText = plain
+        }
+        return (generation, previousText)
+    }
+
+    mutating func didWriteExpanded(changeCount: Int) {
+        lastInternalChangeCount = changeCount
+    }
+
+    func canRestore(expectedGeneration: UInt64, writtenChangeCount: Int, currentChangeCount: Int) -> Bool {
+        SnippetAutoExpander.shouldRestorePasteboard(
+            expectedGeneration: expectedGeneration,
+            currentGeneration: generation,
+            expectedChangeCount: writtenChangeCount,
+            currentChangeCount: currentChangeCount
+        )
+    }
+
+    mutating func didRestore(text: String, changeCount: Int) {
+        lastInternalChangeCount = changeCount
+        pendingRestoreText = text
+    }
+}
+
 /// Auto-expandeur clavier optionnel, STRICTEMENT inactif tant que `snippets.enabled && snippets.auto_expand`
 /// n'est pas activé (0 moniteur installé par défaut). Ignore toujours la saisie sécurisée macOS.
 @MainActor
@@ -193,7 +249,7 @@ public final class SnippetAutoExpander {
     private var buffer = SnippetTypingBuffer()
     private var started = false
     private var isExpanding = false
-    private var expansionGeneration: UInt64 = 0
+    private var pasteboardState = SnippetPasteboardState()
     var hasActiveKeyMonitor: Bool { keyMonitor != nil }
 
     public init(configLoader: @escaping () -> RoadieConfig = { ConfigReloadService.shared.currentConfig() }) {
@@ -256,11 +312,12 @@ public final class SnippetAutoExpander {
             self.workspaceObserver = nil
         }
         buffer.reset()
+        pasteboardState.reset()
     }
 
     /// Garde pur de restauration du presse-papiers : n'autorise la restauration que si aucune nouvelle
     /// expansion ni aucune nouvelle copie utilisateur (`changeCount`) n'est survenue depuis l'écriture.
-    static func shouldRestorePasteboard(
+    nonisolated static func shouldRestorePasteboard(
         expectedGeneration: UInt64,
         currentGeneration: UInt64,
         expectedChangeCount: Int,
@@ -270,9 +327,23 @@ public final class SnippetAutoExpander {
     }
 
     /// Refuse l'expansion par presse-papiers si le presse-papiers actif porte un marqueur sensible
-    /// (mot de passe masqué / transitoire) afin de ne jamais détruire un secret en attente de collage.
-    static func canSafelyUsePasteboard(types: Set<String>) -> Bool {
-        !ClipboardSecurityFilter.hasForbiddenPasteboardType(types)
+    /// (mot de passe masqué / transitoire externe) afin de ne jamais détruire un secret en attente.
+    /// Autorise en revanche un `TransientType` écrit par Roadie lui-même (même `changeCount`), afin
+    /// que deux expansions successives (avec ou sans texte initial) fonctionnent (Spec 163 R2).
+    nonisolated static func canSafelyUsePasteboard(
+        types: Set<String>,
+        currentChangeCount: Int,
+        lastInternalChangeCount: Int?
+    ) -> Bool {
+        if !ClipboardSecurityFilter.hasForbiddenPasteboardType(types) {
+            return true
+        }
+        guard let lastInternalChangeCount, currentChangeCount == lastInternalChangeCount else {
+            return false
+        }
+        let lowered = Set(types.map { $0.lowercased() })
+        let forbiddenFound = lowered.intersection(ClipboardSecurityFilter.forbiddenPasteboardTypes)
+        return forbiddenFound == ["org.nspasteboard.transienttype"]
     }
 
     private static let navigationResetKeyCodes: Set<UInt16> = [
@@ -327,18 +398,21 @@ public final class SnippetAutoExpander {
 
     private func performExpansion(for item: SnippetItem) {
         let pasteboard = NSPasteboard.general
+        let currentChangeCount = pasteboard.changeCount
         let rawTypes = Set(pasteboard.types?.map(\.rawValue) ?? [])
-        // Ne jamais écraser un presse-papiers contenant un secret (mot de passe masqué/transitoire) (Spec 163 R1).
-        guard Self.canSafelyUsePasteboard(types: rawTypes) else {
+        guard let session = pasteboardState.beginExpansion(
+            types: rawTypes,
+            currentChangeCount: currentChangeCount,
+            readPlainText: { pasteboard.string(forType: .string) }
+        ) else {
             return
         }
 
         isExpanding = true
         defer { isExpanding = false }
 
-        expansionGeneration &+= 1
-        let myGeneration = expansionGeneration
-        let previousText = pasteboard.string(forType: .string)
+        let myGeneration = session.generation
+        let previousText = session.previousText
         let expanded = SnippetsService.expand(item.body, clipboardText: previousText)
         // Supprimer le mot-clé tapé + l'espace déclencheur.
         let deleteCount = item.keyword.trimmingCharacters(in: .whitespacesAndNewlines).count + 1
@@ -353,6 +427,7 @@ public final class SnippetAutoExpander {
         // Copier avec marqueur TransientType pour ne pas polluer l'historique presse-papiers.
         ClipboardMonitor.copyToPasteboard(expanded.text, transient: true)
         let writtenChangeCount = pasteboard.changeCount
+        pasteboardState.didWriteExpanded(changeCount: writtenChangeCount)
         if let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
            let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) {
             down.flags = .maskCommand
@@ -374,14 +449,14 @@ public final class SnippetAutoExpander {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self,
-                          Self.shouldRestorePasteboard(
+                          self.pasteboardState.canRestore(
                               expectedGeneration: myGeneration,
-                              currentGeneration: self.expansionGeneration,
-                              expectedChangeCount: writtenChangeCount,
+                              writtenChangeCount: writtenChangeCount,
                               currentChangeCount: NSPasteboard.general.changeCount
                           )
                     else { return }
                     ClipboardMonitor.copyToPasteboard(previousText, transient: true)
+                    self.pasteboardState.didRestore(text: previousText, changeCount: NSPasteboard.general.changeCount)
                 }
             }
         }
