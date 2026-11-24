@@ -168,6 +168,11 @@ public final class AXWindowEventObserver {
         if name == kAXWindowCreatedNotification as String {
             watchDestruction(of: element, id: windowID, observer: observer, pid: pid)
         }
+        if !isDestroyed {
+            // Une notification AX vivante prouve que l'application répond de nouveau (Lot H).
+            AXUnresponsiveApps.shared.markResponsive(pid)
+        }
+        AXAttributeCache.shared.invalidateVolatile(pid: pid)
         if Self.cacheInvalidatingNotifications.contains(name) {
             AXAttributeCache.shared.invalidate(pid: pid)
             AXWindowIndexCache.shared.invalidate(pid: pid)

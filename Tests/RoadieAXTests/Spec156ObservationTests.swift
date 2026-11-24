@@ -22,9 +22,33 @@ struct Spec156ObservationTests {
         let peak = state.withLock { $0.peak }
         print("SPEC156 AX batch: ms=\(Int(Date().timeIntervalSince(start) * 1000)) peak=\(peak)")
         #expect(peak > 1)
-        #expect(peak <= 4)
+        #expect(peak <= LiveSystemSnapshotProvider.maxObservationWorkers)
         #expect(result.map(\.id) == windows.map(\.id))
         #expect(result.allSatisfy { $0.subrole == "observed" })
+    }
+
+    @Test func lotHWorkStealingPreventsSlowAppFromBlockingFastApps() {
+        let windows = (1...6).map { id in
+            WindowSnapshot(id: WindowID(rawValue: UInt32(id)), pid: Int32(id), appName: "Fixture",
+                bundleID: "fixture.\(id)", title: "Fixture", frame: Rect(x: 0, y: 0, width: 300, height: 200),
+                isOnScreen: true, isTileCandidate: true)
+        }
+        let finishedFastBeforeSlow = OSAllocatedUnfairLock(initialState: 0)
+        let slowDone = OSAllocatedUnfairLock(initialState: false)
+        let result = LiveSystemSnapshotProvider.observeWindowGroups(windows, maxWorkers: 2) { group in
+            if group.first?.pid == 1 {
+                Thread.sleep(forTimeInterval: 0.08)
+                slowDone.withLock { $0 = true }
+            } else {
+                Thread.sleep(forTimeInterval: 0.005)
+                if !slowDone.withLock({ $0 }) {
+                    finishedFastBeforeSlow.withLock { $0 += 1 }
+                }
+            }
+            return group
+        }
+        #expect(result.map(\.id) == windows.map(\.id))
+        #expect(finishedFastBeforeSlow.withLock { $0 } >= 4)
     }
 
     @Test func windowsFromOneApplicationStayInOneOrderedGroup() {

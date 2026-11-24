@@ -35,4 +35,31 @@ import Testing
         cache.replaceAll(with: [a], generation: next)
         #expect(cache.windows(for: 50)?.element(id: 2) != nil)
     }
+
+    @Test func lotHPerPIDInvalidationDoesNotDiscardOtherPIDsDuringScan() {
+        let attrCache = AXAttributeCache()
+        let attrs = AXWindowAttributes(stable: AXStableWindowAttributes(role: "AXWindow"), volatile: .init())
+        let scanAttr = attrCache.beginSnapshot()
+        attrCache.invalidate(pid: 50)
+        attrCache.record(attrs, for: 1, pid: 50, stableIsFresh: true, generation: scanAttr)
+        attrCache.record(attrs, for: 2, pid: 60, stableIsFresh: true, generation: scanAttr)
+        #expect(attrCache.lastKnown(for: 1) == nil)
+        #expect(attrCache.lastKnown(for: 2) == attrs)
+
+        let scanVolatile = attrCache.beginSnapshot()
+        attrCache.invalidateVolatile(pid: 50)
+        attrCache.record(attrs, for: 1, pid: 50, stableIsFresh: false, generation: scanVolatile)
+        attrCache.record(attrs, for: 3, pid: 60, stableIsFresh: false, generation: scanVolatile)
+        #expect(attrCache.lastKnown(for: 1) == nil)
+        #expect(attrCache.lastKnown(for: 3) == attrs)
+
+        let indexCache = AXWindowIndexCache()
+        let pid50 = AXApplicationWindows(pid: 50, entries: [(id: 1, element: AXUIElementCreateApplication(501))])
+        let pid60 = AXApplicationWindows(pid: 60, entries: [(id: 2, element: AXUIElementCreateApplication(601))])
+        let scanIdx = indexCache.beginSnapshot()
+        indexCache.invalidate(pid: 50)
+        indexCache.replaceAll(with: [pid50, pid60], generation: scanIdx)
+        #expect(indexCache.windows(for: 50) == nil)
+        #expect(indexCache.windows(for: 60)?.element(id: 2) != nil)
+    }
 }

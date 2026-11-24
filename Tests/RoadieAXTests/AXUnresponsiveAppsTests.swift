@@ -34,6 +34,16 @@ struct AXUnresponsiveAppsTests {
         }
         #expect(!registry.isQuarantined(7))
     }
+
+    @Test
+    func lotHMarkResponsiveClearsQuarantineEarly() {
+        let clock = ManualClock()
+        let registry = AXUnresponsiveApps(now: { clock.now })
+        #expect(registry.noteResult(.cannotComplete, pid: 42))
+        #expect(registry.isQuarantined(42))
+        registry.markResponsive(42)
+        #expect(!registry.isQuarantined(42))
+    }
 }
 
 @Suite
@@ -125,6 +135,39 @@ struct AXAttributeCacheTests {
         cache.retain(only: [2])
         #expect(cache.lastKnown(for: 1) == nil)
         #expect(cache.lastKnown(for: 2) != nil)
+    }
+
+    @Test
+    func lotHReusableAttributesAvoidsIPCOnlyForUnchangedBackgroundWindows() {
+        let clock = ManualClock()
+        let cache = AXAttributeCache(now: { clock.now })
+        let frame = CGRect(x: 100, y: 50, width: 800, height: 600)
+        // Fenêtre neuve (< 0,5 s) : stable non en cache -> jamais réutilisée sans lecture AX.
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true, frame: frame)
+        #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) == nil)
+
+        // Après maturation (> 0,5 s), fenêtre d'arrière-plan immobile : réutilisable 0 IPC.
+        clock.advance(0.6)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true, frame: frame)
+        #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) != nil)
+        // Frontmost PID : toujours relu frais.
+        #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: true, stableTTL: 600) == nil)
+        // Changement de cadre CG (> 0,5 pt) : toujours relu frais.
+        #expect(cache.reusableAttributes(for: 1, frame: frame.offsetBy(dx: 2, dy: 0), isFrontmostPID: false, stableTTL: 600) == nil)
+        // Événement AX sur ce PID (`invalidateVolatile`) : force une relecture volatile sans perdre `stable`.
+        cache.invalidateVolatile(pid: 9)
+        #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) == nil)
+        #expect(cache.stableAttributes(for: 1, ttl: 600) != nil)
+
+        // Fenêtre précédemment focalisée : toujours relue fraîche pour laisser `isFocused` retomber.
+        cache.record(attributes(focused: true), for: 1, pid: 9, stableIsFresh: false, frame: frame)
+        #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) == nil)
+
+        // Expiration du volatileTTL (2 s) : force une relecture fraîche.
+        cache.record(attributes(focused: false), for: 1, pid: 9, stableIsFresh: false, frame: frame)
+        #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) != nil)
+        clock.advance(AXAttributeCache.volatileTTL + 0.1)
+        #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) == nil)
     }
 }
 
