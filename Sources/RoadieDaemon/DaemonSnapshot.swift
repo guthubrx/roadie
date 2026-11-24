@@ -264,14 +264,17 @@ public struct SnapshotService: Sendable {
 
     /// Acquisition des lecteurs graphiques : aucune attente AX sur MainActor.
     /// Les commandes gardent sharedSnapshot/snapshot et leur contrat synchrone.
+    /// `reuseAnyRecent` (Lot I) : un lecteur `followFocus: false` peut réutiliser un relevé
+    /// `followFocus: true` déjà publié et encore valide (0 IPC AX, aucune mutation d'état).
     @MainActor
     func readerSnapshot(followFocus: Bool = true, producerCycle: TimeInterval? = nil,
+                        reuseAnyRecent: Bool = false,
                         isCurrent: @MainActor () -> Bool = { true }) async -> DaemonSnapshot? {
         guard !Task.isCancelled, isCurrent() else { return nil }
         func recent() -> DaemonSnapshot? {
             processState.recentSnapshot(followFocus: followFocus, now: clock(),
                                        stateStamp: fileModificationStamp(stageStore.fileURL.path), config: config,
-                                       allowQuietReuse: true)
+                                       allowQuietReuse: true, reuseAnyRecent: reuseAnyRecent)
         }
         if producerCycle == nil, let snapshot = recent() { return snapshot }
         let expectedConfig = config
@@ -2749,18 +2752,25 @@ final class SnapshotProcessState: @unchecked Sendable {
 
     /// Dernier snapshot publié s'il est récent et que ni l'état persisté ni la config n'ont changé.
     /// `allowQuietReuse` (lecteurs) : au-delà de `maxAge`, le relevé reste valable si aucun changement
-    /// n'a été observé depuis son acquisition et si son âge reste sous `quietReuseCap`. O(1).
+    /// n'a été observé depuis son acquisition et si son âge reste sous `quietReuseCap`.
+    /// `reuseAnyRecent` (Lot I) : autorise un lecteur `followFocus: false` à réutiliser un relevé
+    /// `followFocus: true` déjà valide (lecture pure sans mutation). O(1).
     func recentSnapshot(followFocus: Bool, now: Date, stateStamp: [Int64], config: RoadieConfig,
-                        allowQuietReuse: Bool = false) -> DaemonSnapshot? {
+                        allowQuietReuse: Bool = false, reuseAnyRecent: Bool = false) -> DaemonSnapshot? {
         lock.withLock {
-            guard let entry = published[followFocus] else { return nil }
-            let age = now.timeIntervalSince(entry.at)
-            let quiet = allowQuietReuse && entry.observationGeneration == observation && age < quietReuseCap
-            guard age >= 0, age < entry.maxAge || quiet,
-                  entry.stateStamp == stateStamp,
-                  entry.config == config
-            else { return nil }
-            return entry.snapshot
+            func valid(_ entry: Published?) -> DaemonSnapshot? {
+                guard let entry else { return nil }
+                let age = now.timeIntervalSince(entry.at)
+                let quiet = allowQuietReuse && entry.observationGeneration == observation && age < quietReuseCap
+                guard age >= 0, age < entry.maxAge || quiet,
+                      entry.stateStamp == stateStamp,
+                      entry.config == config
+                else { return nil }
+                return entry.snapshot
+            }
+            if let exact = valid(published[followFocus]) { return exact }
+            if reuseAnyRecent, !followFocus, let other = valid(published[true]) { return other }
+            return nil
         }
     }
 

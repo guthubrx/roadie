@@ -474,6 +474,21 @@ public final class TargetModeRuntimeController: NSObject {
         )
     }
 
+    /// Stores disque du lanceur préchargés hors `@MainActor` en parallèle de l'acquisition snapshot (Lot I).
+    private struct PreloadedLauncherStores: Sendable {
+        let state: PersistentStageState
+        let stateStamp: [Int64]
+        let ranking: LauncherRanking?
+        let aliases: LauncherAliasBook
+        let projects: [StageProject]
+        let memory: LauncherMemoryBook
+        let history: LauncherHistoryBook
+        let viewBook: LauncherViewBook
+        let barPlacement: SearchBarPlacement?
+        let loadedBarPlacement: Bool
+        let settingPanes: [LauncherSystemCommand]?
+    }
+
     /// Mode recherche (SPEC-021) : toutes sources, cibles d'app incluses ; activation de la cible figée.
     private func startTargetsSearch(_ command: TargetModeRuntimeCommand) {
         let config = service.effectiveConfig.experimental.targetMode
@@ -503,35 +518,79 @@ public final class TargetModeRuntimeController: NSObject {
         }
         searchOpening = Task { [weak self] in
             guard let self else { return }
-            let readFocused = command.name == "targets.screen" ? nil : self.service.focusedWindowReader()
+            let isScreenOnly = command.name == "targets.screen"
+            let readFocused = isScreenOnly ? nil : self.service.focusedWindowReader()
+            let stageStore = self.service.effectiveStageStore
+            let memoryStore = self.memoryStore
+            let learns = config.learningEnabled
+            let savePosition = config.barSavePosition
+            let settingsInSearch = config.settingsInSearch
+            // Lot I : lecture du focus et préchargement des stores JSON en parallèle du snapshot (0 I/O disque sur MainActor).
+            let focusedTask: Task<WindowID?, Never>? = readFocused.map { reader in
+                Task.detached(priority: .userInitiated) { reader() }
+            }
+            let storesTask: Task<PreloadedLauncherStores, Never>? = isScreenOnly ? nil : Task.detached(priority: .userInitiated) {
+                let statePath = stageStore.fileURL.path
+                let stampBefore = fileModificationStamp(statePath)
+                let state = stageStore.state()
+                let stampAfter = fileModificationStamp(statePath)
+                let stateStamp = stampBefore == stampAfter ? stampAfter : []
+                let ranking = learns ? LauncherRankingStore().load() : nil
+                let aliases = LauncherAliasStore().load()
+                let projects = StageProjectStore().load().projects.values
+                    .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                let memory = memoryStore.load()
+                let history = LauncherHistoryStore().load()
+                let viewBook = LauncherViewStore().load()
+                let barPlacement = savePosition ? LauncherPositionStore().load() : nil
+                let settingPanes = settingsInSearch ? LauncherSettingTargetsCache.shared.systemPanes() : nil
+                return PreloadedLauncherStores(
+                    state: state, stateStamp: stateStamp, ranking: ranking, aliases: aliases, projects: projects,
+                    memory: memory, history: history, viewBook: viewBook,
+                    barPlacement: barPlacement, loadedBarPlacement: savePosition,
+                    settingPanes: settingPanes
+                )
+            }
             var snapshot: DaemonSnapshot?
             for attempt in 0..<4 {
-                guard !Task.isCancelled else { return }
-                snapshot = await self.service.readerSnapshot(followFocus: false)
+                if Task.isCancelled {
+                    focusedTask?.cancel()
+                    storesTask?.cancel()
+                    return
+                }
+                snapshot = await self.service.readerSnapshot(followFocus: false, reuseAnyRecent: true)
                 if snapshot != nil { break }
                 if attempt < 3 { try? await Task.sleep(for: .milliseconds(100)) }
             }
-            let focusedWindowID: WindowID?
-            if let readFocused, !Task.isCancelled {
-                focusedWindowID = await Task.detached(priority: .userInitiated) { readFocused() }.value
-            } else {
-                focusedWindowID = nil
+            guard !Task.isCancelled, self.currentCommand == command.name else {
+                focusedTask?.cancel()
+                storesTask?.cancel()
+                return
             }
-            guard !Task.isCancelled, self.currentCommand == command.name else { return }
-            self.searchEscapeMonitors.forEach(NSEvent.removeMonitor)
-            self.searchEscapeMonitors.removeAll()
-            self.searchOpening = nil
             guard let snapshot else {
+                focusedTask?.cancel()
+                storesTask?.cancel()
+                self.searchEscapeMonitors.forEach(NSEvent.removeMonitor)
+                self.searchEscapeMonitors.removeAll()
+                self.searchOpening = nil
                 clock.finish(events: self.events)
                 self.finish(TargetActionResult(changed: false, message: "snapshot_unavailable", error: "snapshot_unavailable"), command: command.name)
                 return
             }
-            self.showTargetsSearch(command, snapshot: snapshot, focusedWindowID: focusedWindowID, clock: clock)
+            let focusedWindowID = await focusedTask?.value
+            let preloaded = await storesTask?.value
+            guard !Task.isCancelled, self.currentCommand == command.name else { return }
+            self.searchEscapeMonitors.forEach(NSEvent.removeMonitor)
+            self.searchEscapeMonitors.removeAll()
+            self.searchOpening = nil
+            self.showTargetsSearch(command, snapshot: snapshot, focusedWindowID: focusedWindowID,
+                                   preloaded: preloaded, clock: clock)
         }
     }
 
     private func showTargetsSearch(_ command: TargetModeRuntimeCommand, snapshot: DaemonSnapshot,
-                                   focusedWindowID: WindowID? = nil, clock: LauncherOpenClock) {
+                                   focusedWindowID: WindowID? = nil, preloaded: PreloadedLauncherStores? = nil,
+                                   clock: LauncherOpenClock) {
         let config = service.effectiveConfig.experimental.targetMode
         // Barre immédiate (FR-009) : cibles Roadie tout de suite, puis toutes les fenêtres visibles, lues
         // en arrière-plan, chacune affichée dès qu'elle est lue. 2 s par fenêtre au moins : la barre
@@ -606,7 +665,7 @@ public final class TargetModeRuntimeController: NSObject {
             // Recherche à l'écran (session 133) : ni liste ni index des applications.
             launcher: command.name == "targets.screen" ? .disabled
                 : launcherContext(initialSubject: initialSubject, targets: roadieTargets, initialQuery: command.string("query"),
-                                  snapshot: snapshot, preloadedFocusedWindowID: focusedWindowID),
+                                  snapshot: snapshot, preloadedFocusedWindowID: focusedWindowID, preloaded: preloaded),
             screenOnly: command.name == "targets.screen",
             onFinish: { [weak self] result in
                 if let self { clock.finish(events: self.events) }
@@ -635,11 +694,14 @@ public final class TargetModeRuntimeController: NSObject {
     }
 
     private func launcherContext(initialSubject: LauncherSubject? = nil, targets: [RoadieTarget] = [], initialQuery: String? = nil,
-                                 snapshot provided: DaemonSnapshot? = nil, preloadedFocusedWindowID: WindowID?? = nil) -> LauncherSearchContext {
+                                 snapshot provided: DaemonSnapshot? = nil, preloadedFocusedWindowID: WindowID?? = nil,
+                                 preloaded: PreloadedLauncherStores? = nil) -> LauncherSearchContext {
         let catalog = LauncherAppCatalog.shared
         catalog.setExtraRoots(service.effectiveConfig.experimental.targetMode.appSearchPaths)
         let rankingStore = LauncherRankingStore()
-        let state = service.effectiveStageStore.state()
+        let currentStateStamp = fileModificationStamp(service.effectiveStageStore.fileURL.path)
+        let state = preloaded.flatMap { !$0.stateStamp.isEmpty && $0.stateStamp == currentStateStamp ? $0.state : nil }
+            ?? service.effectiveStageStore.state()
         let running = Set(NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular }.compactMap(\.bundleIdentifier))
         let snapshot = provided ?? service.snapshot(followFocus: false)
@@ -660,7 +722,7 @@ public final class TargetModeRuntimeController: NSObject {
         var context = LauncherSearchContext(
             apps: catalog.current,
             details: LauncherPlacement.details(runningBundleIDs: running, state: state, stageNames: names),
-            ranking: learns ? rankingStore.load() : LauncherRanking(),
+            ranking: learns ? (preloaded?.ranking ?? rankingStore.load()) : LauncherRanking(),
             refreshApps: { done in catalog.refresh(done: done) },
             launch: { [weak self] app in self?.launch(app) ?? TargetActionResult(changed: false, message: "launcher_unavailable") },
             recordVisit: { key, query in if learns { rankingStore.recordVisit(key, query: query, context: rankingContext) } },
@@ -695,11 +757,11 @@ public final class TargetModeRuntimeController: NSObject {
         }
         context.preview = { [weak self] request, done in self?.preview(request, ghost: done) ?? done(nil) }
         let aliasStore = LauncherAliasStore()
-        context.aliases = aliasStore.load()
-        context.projects = StageProjectStore().load().projects.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        context.aliases = preloaded?.aliases ?? aliasStore.load()
+        context.projects = preloaded?.projects ?? StageProjectStore().load().projects.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         // Liste de la barre vide (SPEC-081).
         let now = Date()
-        let memory = memoryStore.load()
+        let memory = preloaded?.memory ?? memoryStore.load()
         let rules = service.effectiveConfig.rules
         let stageInfo: (StageScope) -> (key: String, title: String)? = { scope in
             guard let stage = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
@@ -769,7 +831,7 @@ public final class TargetModeRuntimeController: NSObject {
             if !habits.isEmpty { idle += [.header(tr("Souvent ici", "Often here"))] + habits.map { .app($0, detail: tr("souvent dans cette stage", "often in this stage")) } }
         }
         let historyStore = LauncherHistoryStore()
-        let history = historyStore.load()
+        let history = preloaded?.history ?? historyStore.load()
         let recent = targetModeConfig.idleRecentSearchesEnabled
             ? history.recent(targetModeConfig.idleRecentSearchesCount) : []
         if !recent.isEmpty { idle += [.header(tr("Recherches récentes", "Recent searches"))] + recent.map(LauncherList.Row.history) }
@@ -820,15 +882,20 @@ public final class TargetModeRuntimeController: NSObject {
         LauncherOpenClock.current?.mark("workflows")
         context.workflowGrid = pendingGrid
         let viewStore = LauncherViewStore()
-        context.viewBook = viewStore.load()
+        context.viewBook = preloaded?.viewBook ?? viewStore.load()
         context.saveViews = { book in viewStore.save(book) }
         context.viewCycleKey = service.effectiveConfig.experimental.targetMode.viewCycleHotkey
         context.barKeys = service.effectiveConfig.experimental.targetMode.barKeys
         // Place et écran de la barre (session 102).
         let barConfig = service.effectiveConfig.experimental.targetMode
+        context.expectsOnScreenScan = barConfig.launcherOnScreen
         let positionStore = LauncherPositionStore()
         context.defaultBarPlacement = SearchBarPlacement(setting: barConfig.barPosition)
-        context.barPlacement = (barConfig.barSavePosition ? positionStore.load() : nil) ?? context.defaultBarPlacement
+        let savedPlacement: SearchBarPlacement? = if barConfig.barSavePosition {
+            if let preloaded, preloaded.loadedBarPlacement { preloaded.barPlacement }
+            else { positionStore.load() }
+        } else { nil }
+        context.barPlacement = savedPlacement ?? context.defaultBarPlacement
         let focusedFrame = snapshot.focusedWindowID.flatMap { id in snapshot.windows.first { $0.window.id == id } }
             .map { RoadieScreenCoordinate.axRectToNS($0.window.frame.cgRect) }
         context.barScreenFrame = Self.barScreen(barConfig.barScreen, focused: focusedFrame, screens: NSScreen.screens.map(\.frame))
@@ -838,7 +905,8 @@ public final class TargetModeRuntimeController: NSObject {
         context.calcOpensCalculator = barConfig.calcOpensCalculator
         context.learnsVerbOrder = barConfig.learnVerbOrder
         if barConfig.settingsInSearch {
-            context.settingTargets = LauncherSettingTargets.roadie() + LauncherSettingTargetsCache.shared.systemPanes()
+            context.settingTargets = LauncherSettingTargets.roadie()
+                + (preloaded?.settingPanes ?? LauncherSettingTargetsCache.shared.systemPanes())
         }
         context.fileKeywords = LauncherFileKeywords(content: barConfig.contentSearchKeyword, tag: barConfig.tagSearchKeyword,
                                                     open: barConfig.openKeyword, find: barConfig.findKeyword)

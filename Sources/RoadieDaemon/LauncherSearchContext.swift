@@ -97,6 +97,8 @@ struct LauncherSearchContext {
     var barPlacement = SearchBarPlacement.bottom
     var defaultBarPlacement = SearchBarPlacement.bottom
     var barScreenFrame: CGRect?
+    /// Vrai si un scan asynchrone des éléments à l'écran va tourner après l'ouverture (Lot I).
+    var expectsOnScreenScan = false
     var savePlacement: (SearchBarPlacement?) -> Void = { _ in }
     /// Commandes système proposées (session 105).
     var systemCommands = LauncherSystemCommand.all()

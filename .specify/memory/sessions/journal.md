@@ -518,3 +518,10 @@ Session 167, 24 novembre 2026. Optimisation Lot H — observation AX rapide (cac
 (3) `LiveSystemSnapshotProvider.windows()` exclut `roadied`/`com.apple.WindowManager` de `requiredWindowIDs`, n'envoie dans `observeWindowGroups` que les fenêtres candidates au tuilage et passe au work-stealing dynamique (jusqu'à 8 workers IPC) pour qu'une application lente ne retienne plus les applications rapides ;
 (4) `AXUnresponsiveApps.markResponsive(_:)` sort immédiatement de quarantaine une application qui émet à nouveau une notification AX vivante dans `AXWindowEventObserver`.
 2 610 tests Swift dans 391 suites et 29 tests de scripts réussis.
+
+Session 168, 24 novembre 2026. Optimisation Lot I — ouverture instantanée du lanceur (`Cmd+Space`) :
+(1) `SnapshotProcessState.recentSnapshot` et `SnapshotService.readerSnapshot` ajoutent `reuseAnyRecent: Bool = false` permettant à `TargetModeRuntimeController.startTargetsSearch` (`followFocus: false`) de réutiliser un relevé `followFocus: true` déjà publié et valide (0 IPC AX, sans mutation d'état ni impact sur `sharedSnapshot(followFocus: false)`), tout en lançant la lecture du focus et le préchargement disque en parallèle ;
+(2) `PreloadedLauncherStores` précharge hors `@MainActor` (`Task.detached`) les 8 stores JSON (`stages.json`, classement, abréviations, projets, mémoire, historique, vues, position) et les panneaux Réglages Système en parallèle de l'acquisition snapshot, supprimant les lectures/décodages disque synchrones sur `@MainActor` ;
+(3) `TargetSearchSession` supprime le double `render()` synchrone avant `first_draw` lorsque aucun scan à l'écran ne tourne (`expectsOnScreenScan == false`, `finishLoading()` ne redessine plus quand `isLoading` est déjà faux) ;
+(4) `TargetOverlayPresenter.initialOverlayFrames` / `missingOverlayFrames` n'allouent au lancement du lanceur seul que la fenêtre overlay de l'écran portant la barre et créent paresseusement les fenêtres des autres écrans dès qu'un badge ou un aperçu fantôme y apparaît.
+2 612 tests Swift dans 391 suites et 29 tests de scripts réussis.

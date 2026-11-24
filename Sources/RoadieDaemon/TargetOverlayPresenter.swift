@@ -280,6 +280,37 @@ public enum TargetOverlayPresenter {
         let targetFrames = visibleFrames.isEmpty ? frames : visibleFrames
         return targetFrames.map { TargetOverlayWindow(frame: $0, badges: badges, style: style) }
     }
+
+    /// Écrans sur lesquels créer une fenêtre overlay dès l'ouverture (Lot I) : en recherche à l'écran ou
+    /// `launcher_on_screen`, tous les écrans ; pour le lanceur seul, uniquement l'écran de la barre. O(s).
+    static func initialOverlayFrames(
+        screens: [CGRect],
+        barScreen: CGRect?,
+        pointerScreen: CGRect?,
+        expectsOnScreenScan: Bool
+    ) -> [CGRect] {
+        guard !expectsOnScreenScan, !screens.isEmpty else { return screens }
+        if let target = barScreen ?? pointerScreen, let matched = screens.first(where: { $0 == target }) {
+            return [matched]
+        }
+        return [screens[0]]
+    }
+
+    /// Écrans supplémentaires à ouvrir paresseusement dès qu'une étiquette ou un aperçu fantôme
+    /// apparaît sur un autre moniteur (Lot I). O(s · b).
+    static func missingOverlayFrames(
+        existing: [CGRect],
+        screens: [CGRect],
+        badgeFrames: [CGRect],
+        hasGhost: Bool
+    ) -> [CGRect] {
+        guard hasGhost || !badgeFrames.isEmpty else { return [] }
+        return screens.filter { frame in
+            guard !existing.contains(frame) else { return false }
+            if hasGhost { return true }
+            return badgeFrames.contains { frame.insetBy(dx: -80, dy: -80).intersects($0) }
+        }
+    }
 }
 
 /// Session interactive pilotée par un tap clavier (CGEventTap) : installation et réactivation
@@ -930,7 +961,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var placement: SearchBarPlacement = .bottom
     private var drag: (start: CGPoint, center: CGPoint, moved: Bool)?
     /// Des fenêtres sont encore en cours de lecture.
-    private var isLoading = true
+    private var isLoading: Bool
+    /// Un scan asynchrone des éléments à l'écran est prévu pour cette session (Lot I).
+    private let expectsOnScreenScan: Bool
     /// Lanceur (SPEC-073) : liste en sections au-dessus de la barre, et ligne choisie.
     private var launcher: LauncherSearchContext
     /// Recherche à l'écran (session 133) : aucune liste, seulement les étiquettes des éléments visibles.
@@ -1026,6 +1059,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     ) {
         self.screenOnly = screenOnly
         self.launcher = launcher
+        let expectsScan = screenOnly || launcher.expectsOnScreenScan
+        self.expectsOnScreenScan = expectsScan
+        self.isLoading = expectsScan
         let mouse = NSEvent.mouseLocation
         let pointerScreen = NSScreen.screens.first { $0.frame.contains(mouse) }?.frame
         self.pointerScreen = pointerScreen
@@ -1060,6 +1096,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     func finishLoading() {
         guard !finished else { return }
         LauncherOpenClock.current?.mark("scan_done")
+        guard isLoading else { return }
         isLoading = false
         render()
     }
@@ -1071,8 +1108,15 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         LauncherOpenClock.current?.mark("event_tap")
         NSApplication.shared.setActivationPolicy(.accessory)
-        // Une fenêtre par écran : la barre reste sur l'écran du pointeur choisi à l'ouverture.
-        windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: style) }
+        // Lanceur seul : n'alloue qu'une fenêtre sur l'écran de la barre ; les autres écrans sont
+        // ouverts paresseusement si un badge ou un aperçu fantôme y apparaît (Lot I).
+        let initialFrames = TargetOverlayPresenter.initialOverlayFrames(
+            screens: NSScreen.screens.map(\.frame),
+            barScreen: launcher.barScreenFrame,
+            pointerScreen: pointerScreen,
+            expectsOnScreenScan: expectsOnScreenScan
+        )
+        windows = initialFrames.map { TargetOverlayWindow(frame: $0, badges: [], style: style) }
         windows.forEach { EffectAnimator.shared.visibility($0, visible: true, action: .launcher, ignoresMouseEvents: true) }
         let input = SearchInputPanel()
         let layout = TargetSearchHotkey.currentLayoutTable()
@@ -3117,6 +3161,17 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 frame: SearchBarRenderer.inputFrame(bar, bar: layout.bar, style: style),
                 font: SearchBarRenderer.font(family: style.searchFontFamily, size: style.searchTextFontSize),
                 color: LauncherTheme.color(style.theme.searchText.color))
+        }
+        let missingFrames = TargetOverlayPresenter.missingOverlayFrames(
+            existing: windows.map(\.frame),
+            screens: NSScreen.screens.map(\.frame),
+            badgeFrames: badges.map(\.frame),
+            hasGhost: ghost != nil
+        )
+        if !missingFrames.isEmpty {
+            let added = missingFrames.map { TargetOverlayWindow(frame: $0, badges: [], style: style) }
+            added.forEach { EffectAnimator.shared.visibility($0, visible: true, action: .launcher, ignoresMouseEvents: true) }
+            windows.append(contentsOf: added)
         }
         for window in windows {
             window.update(badges: badges, searchBar: window === barWindow ? bar : nil, ghost: ghost)

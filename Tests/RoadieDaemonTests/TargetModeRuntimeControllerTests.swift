@@ -673,4 +673,118 @@ extension TargetModeRuntimeControllerTests {
         #expect(LauncherOpenClock.current == nil)
         #expect(try String(contentsOf: fixture.eventURL, encoding: .utf8).contains("launcher.timing"))
     }
+
+    @Test @MainActor func lotIStartTargetsSearchReusesFreshFollowFocusSnapshotWithoutExtraScan() async throws {
+        let sandbox = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-loti-snap-\(UUID())")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let display = powerDisplay()
+        let window = WindowSnapshot(
+            id: WindowID(rawValue: 77), pid: 500, appName: "Notes", bundleID: "com.apple.Notes",
+            title: "Notes", frame: Rect(x: 0, y: 0, width: 600, height: 500), isOnScreen: true, isTileCandidate: true
+        )
+        let provider = LotICountingProvider(displays: [display], windows: [window])
+        let clock = LotIManualClock()
+        let store = StageStore(path: sandbox.appendingPathComponent("stages.json").path)
+        let config = RoadieConfig(experimental: ExperimentalConfig(targetMode: TargetModeConfig(overlayEnabled: true, launcherOnScreen: false)))
+        let service = SnapshotService(
+            provider: provider, frameWriter: PowerUserWriter(provider: PowerUserProvider(displays: [display], windows: [window])),
+            config: config, stageStore: store,
+            events: EventLog(path: sandbox.appendingPathComponent("events.jsonl").path),
+            clock: { clock.now }
+        )
+        service.enableQuietReaderReuse(cap: 5.0)
+        // Le producteur publie un snapshot `followFocus: true`.
+        _ = service.producerSnapshot(cycle: 1.0)
+        #expect(provider.windowsCalls == 1)
+
+        let presenter = SpyTargetModeOverlayPresenter()
+        let controller = TargetModeRuntimeController(
+            service: service,
+            events: EventLog(path: sandbox.appendingPathComponent("events.jsonl").path),
+            presenter: presenter,
+            memoryStore: LauncherMemoryStore(path: sandbox.appendingPathComponent("memory.json").path)
+        )
+        // L'ouverture du lanceur réutilise ce snapshot sans relancer de scan AX.
+        clock.advance(0.2)
+        controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
+        await controller.searchOpening?.value
+        #expect(provider.windowsCalls == 1)
+        #expect(presenter.searchLauncher != nil)
+        #expect(presenter.searchLauncher?.expectsOnScreenScan == false)
+
+        // `sharedSnapshot(followFocus: false)` conserve son contrat strict (ne réutilise pas `published[true]`).
+        _ = service.sharedSnapshot(followFocus: false)
+        #expect(provider.windowsCalls == 2)
+
+        // Après un changement observé + expiration de maxAge, un scan frais repart bien.
+        service.noteObservationChange()
+        clock.advance(1.5)
+        let fresh = await service.readerSnapshot(followFocus: false, reuseAnyRecent: true)
+        #expect(fresh != nil)
+        #expect(provider.windowsCalls == 3)
+    }
+
+    @Test @MainActor func lotIInitialAndLazyOverlayFramesAvoidUnusedMultiScreenWindows() {
+        let screenA = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let screenB = CGRect(x: 1512, y: 0, width: 2560, height: 1440)
+        let screens = [screenA, screenB]
+
+        // Lanceur seul : n'ouvre que l'écran de la barre.
+        #expect(TargetOverlayPresenter.initialOverlayFrames(
+            screens: screens, barScreen: screenB, pointerScreen: screenA, expectsOnScreenScan: false
+        ) == [screenB])
+        #expect(TargetOverlayPresenter.initialOverlayFrames(
+            screens: screens, barScreen: nil, pointerScreen: screenB, expectsOnScreenScan: false
+        ) == [screenB])
+        // Recherche à l'écran / launcher_on_screen : ouvre tous les écrans dès le départ.
+        #expect(TargetOverlayPresenter.initialOverlayFrames(
+            screens: screens, barScreen: screenB, pointerScreen: screenA, expectsOnScreenScan: true
+        ) == screens)
+
+        // Aucune fenêtre supplémentaire tant qu'aucun badge ni aperçu fantôme ne vise l'autre écran.
+        #expect(TargetOverlayPresenter.missingOverlayFrames(
+            existing: [screenB], screens: screens, badgeFrames: [], hasGhost: false
+        ).isEmpty)
+        let badgeOnB = CGRect(x: 1600, y: 200, width: 400, height: 300)
+        #expect(TargetOverlayPresenter.missingOverlayFrames(
+            existing: [screenB], screens: screens, badgeFrames: [badgeOnB], hasGhost: false
+        ).isEmpty)
+        let badgeOnA = CGRect(x: 100, y: 100, width: 400, height: 300)
+        #expect(TargetOverlayPresenter.missingOverlayFrames(
+            existing: [screenB], screens: screens, badgeFrames: [badgeOnA], hasGhost: false
+        ) == [screenA])
+        #expect(TargetOverlayPresenter.missingOverlayFrames(
+            existing: [screenB], screens: screens, badgeFrames: [], hasGhost: true
+        ) == [screenA])
+    }
+}
+
+private final class LotIManualClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = Date(timeIntervalSince1970: 1_800_000_000)
+    var now: Date { lock.withLock { current } }
+    func advance(_ delta: TimeInterval) { lock.withLock { current = current.addingTimeInterval(delta) } }
+}
+
+private final class LotICountingProvider: SystemSnapshotProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private let displayList: [DisplaySnapshot]
+    private let windowList: [WindowSnapshot]
+    private var calls = 0
+
+    init(displays: [DisplaySnapshot], windows: [WindowSnapshot]) {
+        self.displayList = displays
+        self.windowList = windows
+    }
+
+    var windowsCalls: Int { lock.withLock { calls } }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: true) }
+    func displays() -> [DisplaySnapshot] { displayList }
+    func windows() -> [WindowSnapshot] {
+        lock.withLock { calls += 1 }
+        return windowList
+    }
+    func focusedWindowID() -> WindowID? { windowList.first?.id }
 }
