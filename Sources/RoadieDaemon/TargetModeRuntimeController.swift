@@ -57,6 +57,93 @@ public struct TargetModeRuntimeCommand: Equatable, Sendable {
     }
 }
 
+/// Cache événementiel des applications ordinaires en cours d'exécution (Lot K).
+/// Évite l'appel synchrone `NSWorkspace.shared.runningApplications` (13–23 ms d'IPC LaunchServices)
+/// sur `@MainActor` à chaque ouverture du lanceur : initialisé une fois, maintenu par les
+/// notifications lancement/fermeture/activation de `NSWorkspace`.
+@MainActor
+final class RunningApplicationsCache {
+    static let shared = RunningApplicationsCache(observeWorkspace: true)
+
+    private var regularByPID: [pid_t: String] = [:]
+    private var seeded = false
+    nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
+
+    init(observeWorkspace: Bool = false) {
+        guard observeWorkspace else { return }
+        let center = NSWorkspace.shared.notificationCenter
+        let launch = center.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let pid = app?.processIdentifier ?? 0
+            let bundleID = app?.bundleIdentifier
+            let isRegular = app?.activationPolicy == .regular
+            MainActor.assumeIsolated {
+                guard let self, self.seeded, pid > 0 else { return }
+                self.noteLaunched(pid: pid, bundleID: bundleID, isRegular: isRegular)
+            }
+        }
+        let terminate = center.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let pid = app?.processIdentifier ?? 0
+            MainActor.assumeIsolated {
+                guard let self, self.seeded, pid > 0 else { return }
+                self.noteTerminated(pid: pid)
+            }
+        }
+        let activate = center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let pid = app?.processIdentifier ?? 0
+            let bundleID = app?.bundleIdentifier
+            let isRegular = app?.activationPolicy == .regular
+            MainActor.assumeIsolated {
+                guard let self, self.seeded, pid > 0 else { return }
+                self.noteActivated(pid: pid, bundleID: bundleID, isRegular: isRegular)
+            }
+        }
+        observers = [launch, terminate, activate]
+    }
+
+    deinit {
+        let center = NSWorkspace.shared.notificationCenter
+        observers.forEach { center.removeObserver($0) }
+    }
+
+    func seed(_ entries: [(pid: pid_t, bundleID: String?, isRegular: Bool)]) {
+        regularByPID.removeAll(keepingCapacity: true)
+        for entry in entries where entry.isRegular {
+            if let bundleID = entry.bundleID, !bundleID.isEmpty {
+                regularByPID[entry.pid] = bundleID
+            }
+        }
+        seeded = true
+    }
+
+    func noteLaunched(pid: pid_t, bundleID: String?, isRegular: Bool) {
+        guard isRegular, let bundleID, !bundleID.isEmpty else {
+            regularByPID.removeValue(forKey: pid)
+            return
+        }
+        regularByPID[pid] = bundleID
+    }
+
+    func noteTerminated(pid: pid_t) {
+        regularByPID.removeValue(forKey: pid)
+    }
+
+    func noteActivated(pid: pid_t, bundleID: String?, isRegular: Bool) {
+        noteLaunched(pid: pid, bundleID: bundleID, isRegular: isRegular)
+    }
+
+    func regularBundleIDs() -> Set<String> {
+        if !seeded {
+            seed(NSWorkspace.shared.runningApplications.map {
+                ($0.processIdentifier, $0.bundleIdentifier, $0.activationPolicy == .regular)
+            })
+        }
+        return Set(regularByPID.values)
+    }
+}
+
 /// Ouverture des overlays du mode cible. Point d'injection des tests (TEST-002) : un espion reçoit
 /// la liste affichée et les fermetures d'activation, sans fenêtre ni tap clavier réels.
 @MainActor
@@ -718,9 +805,11 @@ public final class TargetModeRuntimeController: NSObject {
         let currentStateStamp = fileModificationStamp(service.effectiveStageStore.fileURL.path)
         let state = preloaded.flatMap { !$0.stateStamp.isEmpty && $0.stateStamp == currentStateStamp ? $0.state : nil }
             ?? service.effectiveStageStore.state()
-        let running = Set(NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular }.compactMap(\.bundleIdentifier))
         let snapshot = provided ?? service.snapshot(followFocus: false)
+        var running = RunningApplicationsCache.shared.regularBundleIDs()
+        for entry in snapshot.windows where !entry.window.bundleID.isEmpty {
+            running.insert(entry.window.bundleID)
+        }
         LauncherOpenClock.current?.mark("context_snapshot")
         let names = WindowSwitcherService.stageLabels(in: state, liveWindowIDs: Set(snapshot.windows.map(\.window.id)))
         let homeDisplay = state.activeDisplayID ?? snapshot.displays.first?.id ?? DisplayID(rawValue: "none")

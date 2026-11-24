@@ -10,21 +10,24 @@ enum LauncherWebHistory {
     static var folder: String { tr("Historique", "History") }
 
     /// Pages qui correspondent, hors adresses déjà proposées (signets) ; meilleur appariement, puis les plus
-    /// visitées. Index déjà plié (session 123) : 2 300 pages en quelques millisecondes. O(h × q × t + k log k).
+    /// visitées. Index déjà plié (session 123) + empreinte de requête unique (Lot K). O(h × t + k log k).
     static func matches(_ query: String, in index: LauncherBookmarkIndex, excluding shown: Set<String>, limit: Int = 4) -> [LauncherBookmark] {
         let needle = LauncherMatch.fold(query)
         guard needle.count >= 2 else { return [] }
         let prepared = LauncherMatch.Query(query)
-        var scored: [(page: LauncherBookmark, score: Int)] = []
+        let needleLetters = LauncherMatch.letters(needle)
+        var scored: [(entry: LauncherBookmarkIndex.Entry, score: Int)] = []
         for entry in index.entries {
-            guard let score = entry.score(prepared, needle: needle), !shown.contains(normalized(entry.bookmark.url)) else { continue }
-            scored.append((entry.bookmark, score))
+            guard !shown.contains(entry.normalizedURL),
+                  let score = entry.score(prepared, needle: needle, needleLetters: needleLetters)
+            else { continue }
+            scored.append((entry, score))
         }
-        scored.sort { $0.score != $1.score ? $0.score > $1.score : $0.page.visits > $1.page.visits }
+        scored.sort { $0.score != $1.score ? $0.score > $1.score : $0.entry.bookmark.visits > $1.entry.bookmark.visits }
         var seen: Set<String> = []
         var result: [LauncherBookmark] = []
-        for entry in scored where result.count < limit && seen.insert(normalized(entry.page.url)).inserted {
-            result.append(entry.page)
+        for item in scored where result.count < limit && seen.insert(item.entry.normalizedURL).inserted {
+            result.append(item.entry.bookmark)
         }
         return result
     }

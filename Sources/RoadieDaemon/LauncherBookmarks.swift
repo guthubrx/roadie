@@ -49,20 +49,24 @@ struct LauncherBookmark: Equatable, Hashable, Sendable {
         let needle = LauncherMatch.fold(query)
         guard needle.count >= 2 else { return [] }
         let prepared = LauncherMatch.Query(query)
-        var scored: [(bookmark: LauncherBookmark, score: Int)] = []
+        let needleLetters = LauncherMatch.letters(needle)
+        var scored: [(entry: LauncherBookmarkIndex.Entry, score: Int)] = []
         for entry in index.entries {
-            if let score = entry.score(prepared, needle: needle) { scored.append((entry.bookmark, score)) }
+            if let score = entry.score(prepared, needle: needle, needleLetters: needleLetters) {
+                scored.append((entry, score))
+            }
         }
-        scored.sort { $0.score != $1.score ? $0.score > $1.score : $0.bookmark.title.count < $1.bookmark.title.count }
+        scored.sort { $0.score != $1.score ? $0.score > $1.score : $0.entry.bookmark.title.count < $1.entry.bookmark.title.count }
         // Un même signet dans plusieurs profils ou navigateurs : une seule ligne (adresse ou titre déjà vus).
         var seen: Set<String> = []
         var result: [LauncherBookmark] = []
-        for entry in scored where result.count < limit {
-            let url = entry.bookmark.url.hasSuffix("/") ? String(entry.bookmark.url.dropLast()) : entry.bookmark.url
-            guard !seen.contains(url), !seen.contains("title:" + LauncherMatch.fold(entry.bookmark.title)) else { continue }
+        for item in scored where result.count < limit {
+            let url = item.entry.normalizedURL
+            let titleKey = "title:" + item.entry.foldedTitle
+            guard !seen.contains(url), !seen.contains(titleKey) else { continue }
             seen.insert(url)
-            seen.insert("title:" + LauncherMatch.fold(entry.bookmark.title))
-            result.append(entry.bookmark)
+            seen.insert(titleKey)
+            result.append(item.entry.bookmark)
         }
         return result
     }
@@ -550,6 +554,8 @@ struct LauncherBookmarkIndex: Sendable {
     struct Entry: Sendable {
         let bookmark: LauncherBookmark
         let title: LauncherMatch.Prepared
+        let foldedTitle: String
+        let normalizedURL: String
         let tags: [String]
         let url: String
         let urlLetters: UInt64
@@ -557,16 +563,20 @@ struct LauncherBookmarkIndex: Sendable {
         init(_ bookmark: LauncherBookmark) {
             self.bookmark = bookmark
             title = LauncherMatch.Prepared(bookmark.title)
+            foldedTitle = LauncherMatch.fold(bookmark.title)
+            normalizedURL = LauncherWebHistory.normalized(bookmark.url)
             tags = bookmark.tags.map(LauncherMatch.fold)
             url = LauncherMatch.fold(bookmark.url)
             urlLetters = LauncherMatch.letters(url)
         }
 
         /// Titre, puis étiquettes et mot-clé, puis adresse (3 lettres au moins). O(q × t).
-        func score(_ query: LauncherMatch.Query?, needle: String) -> Int? {
+        /// `needleLetters` est calculé une seule fois avant la boucle sur tout l'index (Lot K).
+        func score(_ query: LauncherMatch.Query?, needle: String, needleLetters: UInt64? = nil) -> Int? {
             if let query, let score = LauncherMatch.score(query, in: title) { return score }
             if tags.contains(where: { $0.hasPrefix(needle) }) { return 3 }
-            guard needle.count >= 3, LauncherMatch.letters(needle) & ~urlLetters == 0, url.contains(needle) else { return nil }
+            let mask = needleLetters ?? LauncherMatch.letters(needle)
+            guard needle.count >= 3, mask & ~urlLetters == 0, url.contains(needle) else { return nil }
             return 1
         }
     }

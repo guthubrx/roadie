@@ -82,6 +82,46 @@ struct Spec073LauncherListTests {
         #expect(learned.neighbour(of: learned.best, step: 1) == firefox.rankingKey)
         #expect(learned.neighbour(of: firefox.rankingKey, step: 1) == "target:window:1")
     }
+
+    @MainActor
+    @Test func lotKRunningApplicationsCacheTracksMultiInstanceAndActivationPolicy() {
+        let cache = RunningApplicationsCache(observeWorkspace: false)
+        cache.seed([
+            (pid: 100, bundleID: "org.mozilla.firefox", isRegular: true),
+            (pid: 101, bundleID: "org.mozilla.firefox", isRegular: true),
+            (pid: 200, bundleID: "com.agent.helper", isRegular: false),
+        ])
+        #expect(cache.regularBundleIDs() == ["org.mozilla.firefox"])
+
+        // Fermer une seule des deux instances conserve le bundle tant que l'autre tourne.
+        cache.noteTerminated(pid: 100)
+        #expect(cache.regularBundleIDs() == ["org.mozilla.firefox"])
+        cache.noteTerminated(pid: 101)
+        #expect(cache.regularBundleIDs().isEmpty)
+
+        // Une app qui passe `.regular` à l'activation est aussitôt suivie ; si elle quitte, elle disparaît.
+        cache.noteActivated(pid: 200, bundleID: "com.agent.helper", isRegular: true)
+        #expect(cache.regularBundleIDs() == ["com.agent.helper"])
+        cache.noteLaunched(pid: 300, bundleID: "com.apple.Safari", isRegular: true)
+        #expect(cache.regularBundleIDs() == ["com.agent.helper", "com.apple.Safari"])
+        cache.noteTerminated(pid: 200)
+        #expect(cache.regularBundleIDs() == ["com.apple.Safari"])
+    }
+
+    @Test func lotKPrecomputedSystemAndBookmarkIndexesPreserveMatchingResults() {
+        let commands = LauncherSystemCommand.all()
+        let byTitle = LauncherSystemCommand.matches("verrouil", in: commands)
+        #expect(byTitle.first?.id == "lock")
+        let byKeyword = LauncherSystemCommand.matches("screensav", in: commands)
+        #expect(byKeyword.first?.id == "screensaver")
+
+        let bookmark = LauncherBookmark(title: "Documentation Roadie", url: "https://example.org/roadie/guide/", folder: "Dev", browser: "firefox", profile: "", tags: ["tiling"])
+        let index = LauncherBookmarkIndex([bookmark])
+        #expect(LauncherBookmark.matches("guide", in: index).map(\.url) == [bookmark.url])
+        #expect(LauncherBookmark.matches("tiling", in: index).map(\.url) == [bookmark.url])
+        let history = LauncherWebHistory.matches("roadie", in: index, excluding: ["https://example.org/roadie/guide"])
+        #expect(history.isEmpty)
+    }
 }
 
 struct Spec073LauncherCatalogTests {

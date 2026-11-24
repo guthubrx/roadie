@@ -14,6 +14,10 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
     let confirms: Bool
     /// Détail de la ligne ; nil : « Système » (session 115 : « Réglages Système », « Paramètres de Roadie »).
     var detail: String? = nil
+    /// Titre et mots-clés pré-pliés une seule fois à la construction (Lot K : supprime les milliers d'appels
+    /// `String.folding` par touche sur les réglages et commandes système).
+    let preparedTitle: LauncherMatch.Prepared
+    let foldedKeywords: [String]
 
     /// Titre dans la langue de l'interface ; les deux noms restent des mots-clés (session 126).
     init(id: String, fr: String, en: String, keywords: [String], symbol: String, confirms: Bool) {
@@ -27,6 +31,22 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
         self.symbol = symbol
         self.confirms = confirms
         self.detail = detail
+        self.preparedTitle = LauncherMatch.Prepared(title)
+        self.foldedKeywords = keywords.map(LauncherMatch.fold)
+    }
+
+    static func == (lhs: LauncherSystemCommand, rhs: LauncherSystemCommand) -> Bool {
+        lhs.id == rhs.id && lhs.title == rhs.title && lhs.keywords == rhs.keywords
+            && lhs.symbol == rhs.symbol && lhs.confirms == rhs.confirms && lhs.detail == rhs.detail
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(title)
+        hasher.combine(keywords)
+        hasher.combine(symbol)
+        hasher.combine(confirms)
+        hasher.combine(detail)
     }
 
     /// `confirmQuitAll` : réglage `confirm_quit_all`.
@@ -69,17 +89,23 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
 
     /// Titre, puis début d'un mot-clé (3 lettres au moins). O(k × t).
     func score(_ query: String) -> Int? {
-        if let score = LauncherMatch.score(query, in: title) { return score }
-        let needle = LauncherMatch.fold(query)
-        guard needle.count >= 3, keywords.contains(where: { LauncherMatch.fold($0).hasPrefix(needle) }) else { return nil }
+        score(LauncherMatch.Query(query), needle: LauncherMatch.fold(query))
+    }
+
+    /// Variante sur requête déjà pliée une seule fois par frappe (Lot K). O(t + k).
+    func score(_ query: LauncherMatch.Query?, needle: String) -> Int? {
+        if let query, let score = LauncherMatch.score(query, in: preparedTitle) { return score }
+        guard needle.count >= 3, foldedKeywords.contains(where: { $0.hasPrefix(needle) }) else { return nil }
         return 2
     }
 
     /// Commandes qui correspondent, `limit` au plus (trois), dès deux lettres ; à score égal, le titre le plus
-    /// court. O(c × q × t + c log c).
+    /// court. O(c × t + k log k) grâce au pré-pliage unique de la saisie et des commandes (Lot K).
     static func matches(_ query: String, in commands: [LauncherSystemCommand], limit: Int = 3) -> [LauncherSystemCommand] {
-        guard LauncherMatch.fold(query).count >= 2 else { return [] }
-        return commands.compactMap { command in command.score(query).map { (command, $0) } }
+        let needle = LauncherMatch.fold(query)
+        guard needle.count >= 2 else { return [] }
+        let prepared = LauncherMatch.Query(query)
+        return commands.compactMap { command in command.score(prepared, needle: needle).map { (command, $0) } }
             .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.title.count < $1.0.title.count }.prefix(limit).map(\.0)
     }
 

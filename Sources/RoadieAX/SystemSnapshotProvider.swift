@@ -492,8 +492,10 @@ final class AXAttributeCache: @unchecked Sendable {
     /// Âge minimal avant mise en cache : une fenêtre neuve n'expose pas toujours tous ses boutons.
     static let minimumAge: TimeInterval = 0.5
     /// Durée maximale de réutilisation des attributs volatils d'une fenêtre d'arrière-plan immobile
-    /// sans événement AX ni changement de cadre CGWindow (Lot H).
-    static let volatileTTL: TimeInterval = 2.0
+    /// sans événement AX ni changement de cadre CGWindow (Lot H : 2 s, Lot K : 15 s car
+    /// `AXWindowEventObserver` invalide immédiatement le PID sur tout événement AX et tout
+    /// changement de cadre CGWindow force déjà une relecture fraîche).
+    static let volatileTTL: TimeInterval = 15.0
 
     private struct Entry {
         var pid: pid_t

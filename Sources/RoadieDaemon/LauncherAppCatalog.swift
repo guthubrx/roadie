@@ -10,6 +10,22 @@ struct LauncherApp: Equatable, Sendable {
     let alternateNames: [String]
     /// Catégorie déclarée dans `Info.plist` (`LSApplicationCategoryType`), pour la grille Apps (session 131).
     var category = ""
+    /// Noms pré-pliés une seule fois hors frappe pour éviter des centaines d'appels `String.folding` à chaque touche (Lot K).
+    let preparedNames: [LauncherMatch.Prepared]
+
+    init(bundleID: String, path: String, name: String, alternateNames: [String], category: String = "") {
+        self.bundleID = bundleID
+        self.path = path
+        self.name = name
+        self.alternateNames = alternateNames
+        self.category = category
+        self.preparedNames = ([name] + alternateNames).map(LauncherMatch.Prepared.init)
+    }
+
+    static func == (lhs: LauncherApp, rhs: LauncherApp) -> Bool {
+        lhs.bundleID == rhs.bundleID && lhs.path == rhs.path && lhs.name == rhs.name
+            && lhs.alternateNames == rhs.alternateNames && lhs.category == rhs.category
+    }
 
     var rankingKey: String { "app:\(bundleID)" }
 }

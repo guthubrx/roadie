@@ -33,8 +33,12 @@ struct LauncherOpenItem: Equatable, Hashable, Sendable {
 
     /// Correspondance : le titre, puis l'adresse (qui contient la saisie). O(q × t).
     func score(_ query: String) -> Int? {
-        if let score = LauncherMatch.score(query, in: title) { return score }
-        let needle = LauncherMatch.fold(query)
+        score(LauncherMatch.Query(query), needle: LauncherMatch.fold(query))
+    }
+
+    /// Variante sur requête déjà pliée une seule fois par frappe (Lot K).
+    func score(_ query: LauncherMatch.Query?, needle: String) -> Int? {
+        if let query, let score = LauncherMatch.score(query, in: LauncherMatch.Prepared(title)) { return score }
         guard needle.count >= 3, let url, LauncherMatch.fold(url).contains(needle) else { return nil }
         return 1
     }

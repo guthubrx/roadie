@@ -146,29 +146,31 @@ struct LauncherList: Equatable, Sendable {
         let fileQuery = LauncherFileQuery.parse(rawQuery, keywords: fileKeywords)
         let filesOnly = fileQuery.filesOnly
         let query = filesOnly ? fileQuery.needle : rawQuery
-        guard !LauncherMatch.fold(query).isEmpty else { return }
+        let foldedQuery = LauncherMatch.fold(query)
+        guard !foldedQuery.isEmpty else { return }
+        let preparedQuery = LauncherMatch.Query(query)
         struct Candidate { let row: Row; let id: String; let key: String; let section: Section; let score: Int; let name: String; var order = 0
             /// Fichier déjà ouvert (date d'usage connue de Spotlight).
             var used = true }
         var candidates: [Candidate] = []
         for (order, file) in files.enumerated() {
             // Spotlight a trouvé le nom par « contient » : retenu même si l'appariement est faible.
-            let score = LauncherMatch.score(query, in: file.name) ?? 1
+            let score = preparedQuery.flatMap { LauncherMatch.score($0, in: LauncherMatch.Prepared(file.name)) } ?? 1
             candidates.append(Candidate(row: .file(file), id: file.rankingKey, key: file.rankingKey, section: .files,
                                         score: score, name: file.name, order: order, used: file.lastUsed != nil))
         }
         for item in filesOnly ? [] : openItems {
-            guard let score = item.score(query) else { continue }
+            guard let score = item.score(preparedQuery, needle: foldedQuery) else { continue }
             let key = "open:\(item.kind.rawValue):\(item.bundleID):\(item.title)"
             candidates.append(Candidate(row: .openItem(item), id: item.id, key: key, section: .openItems, score: score, name: item.title))
         }
         for project in filesOnly ? [] : projects {
-            guard let score = LauncherMatch.score(query, in: project.name) else { continue }
+            guard let preparedQuery, let score = LauncherMatch.score(preparedQuery, in: LauncherMatch.Prepared(project.name)) else { continue }
             let key = "project:\(LauncherMatch.fold(project.name))"
             candidates.append(Candidate(row: .project(project), id: key, key: key, section: .projects, score: score, name: project.name))
         }
         for app in filesOnly ? [] : apps {
-            let score = ([app.name] + app.alternateNames).compactMap { LauncherMatch.score(query, in: $0) }.max()
+            let score = preparedQuery.flatMap { query in app.preparedNames.compactMap { LauncherMatch.score(query, in: $0) }.max() }
                 ?? (ranking.exactUses(app.rankingKey, query: query) > 0 ? 1 : nil)
             guard let score else { continue }
             candidates.append(Candidate(row: .app(app, detail: details[app.bundleID] ?? Self.shortPath(app.path)), id: app.rankingKey, key: app.rankingKey,
@@ -176,7 +178,9 @@ struct LauncherList: Equatable, Sendable {
         }
         for target in filesOnly || targetsCorrected ? [] : targets {
             // Trouvée par le texte de ses enfants seulement (lien web) : retenue, en dernier.
-            let score = [target.title, target.subtitle].compactMap { LauncherMatch.score(query, in: $0) }.max() ?? 1
+            let score = preparedQuery.flatMap { query in
+                [target.title, target.subtitle].compactMap { LauncherMatch.score(query, in: LauncherMatch.Prepared($0)) }.max()
+            } ?? 1
             candidates.append(Candidate(row: .target(target), id: "target:\(target.id)", key: Self.rankingKey(target),
                                         section: Section.of(target.kind), score: score, name: target.title))
         }

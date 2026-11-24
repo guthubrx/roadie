@@ -188,10 +188,12 @@ struct AXAttributeCacheTests {
         cache.record(attributes(focused: true), for: 1, pid: 9, stableIsFresh: false, frame: frame)
         #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) == nil)
 
-        // Expiration du volatileTTL (2 s) : force une relecture fraîche.
+        // Expiration du volatileTTL (15 s en Lot K) : encore réutilisable à 10 s, expiré au-delà de volatileTTL.
         cache.record(attributes(focused: false), for: 1, pid: 9, stableIsFresh: false, frame: frame)
         #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) != nil)
-        clock.advance(AXAttributeCache.volatileTTL + 0.1)
+        clock.advance(10.0)
+        #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) != nil)
+        clock.advance(AXAttributeCache.volatileTTL - 10.0 + 0.1)
         #expect(cache.reusableAttributes(for: 1, frame: frame, isFrontmostPID: false, stableTTL: 600) == nil)
     }
 }
