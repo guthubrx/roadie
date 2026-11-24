@@ -768,12 +768,15 @@ public final class RailController {
         }
 
         menu.addItem(.separator())
+        let clickedDesktopID = snapshot.state.activeScope(on: displayID)?.desktopID
+            ?? store.state().currentDesktopID(for: displayID)
+        let clickedScope = StageScope(displayID: displayID, desktopID: clickedDesktopID, stageID: stageID)
         let transformMenu = NSMenu(title: tr("Disposition", "Layout"))
         for (title, action) in [
-            (tr("Pivoter de 90°", "Rotate 90°"), RailAction.rotateLayout(stageID, 90)),
-            (tr("Pivoter de 180°", "Rotate 180°"), RailAction.rotateLayout(stageID, 180)),
-            (tr("Miroir horizontal", "Mirror horizontal"), RailAction.mirrorLayout(stageID, "x")),
-            (tr("Miroir vertical", "Mirror vertical"), RailAction.mirrorLayout(stageID, "y")),
+            (tr("Pivoter de 90°", "Rotate 90°"), RailAction.rotateLayout(clickedScope, 90)),
+            (tr("Pivoter de 180°", "Rotate 180°"), RailAction.rotateLayout(clickedScope, 180)),
+            (tr("Miroir horizontal", "Mirror horizontal"), RailAction.mirrorLayout(clickedScope, "x")),
+            (tr("Miroir vertical", "Mirror vertical"), RailAction.mirrorLayout(clickedScope, "y")),
         ] {
             let target = RailMenuActionTarget { [weak self] in
                 self?.perform(action, displayID: displayID)
@@ -1221,23 +1224,17 @@ public final class RailController {
                     .gatherApp(windowID: windowID)
                 await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.gather_app") }
             }
-        case .rotateLayout(let stageID, let degrees):
+        case .rotateLayout(let targetScope, let degrees):
             let service = snapshotService
-            let stageStore = store
             let eventLog = events
             Task.detached(priority: .userInitiated) {
-                let desktopID = stageStore.state().currentDesktopID(for: displayID)
-                let targetScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
                 _ = LayoutCommandService(service: service, events: eventLog).rotate(degrees, scope: targetScope)
                 await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.layout_rotate") }
             }
-        case .mirrorLayout(let stageID, let axis):
+        case .mirrorLayout(let targetScope, let axis):
             let service = snapshotService
-            let stageStore = store
             let eventLog = events
             Task.detached(priority: .userInitiated) {
-                let desktopID = stageStore.state().currentDesktopID(for: displayID)
-                let targetScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
                 _ = LayoutCommandService(service: service, events: eventLog).mirror(axis, scope: targetScope)
                 await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.layout_mirror") }
             }
@@ -1976,8 +1973,8 @@ enum RailAction {
     case pruneEmptyStages
     case closeWindow(WindowID)
     case gatherAppWindows(WindowID)
-    case rotateLayout(StageID, Int)
-    case mirrorLayout(StageID, String)
+    case rotateLayout(StageScope, Int)
+    case mirrorLayout(StageScope, String)
 }
 
 struct RailWindowDropTarget {

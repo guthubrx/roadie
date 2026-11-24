@@ -32,6 +32,14 @@ struct Spec160QuickWinsWMRailTests {
             lock.withLock { closedWindowIDs.append(window.id) }
             return closeResult
         }
+
+        func clearWrittenFrames() {
+            lock.withLock { writtenFrames.removeAll() }
+        }
+
+        func writtenFramesSnapshot() -> [WindowID: CGRect] {
+            lock.withLock { writtenFrames }
+        }
     }
 
     private struct StaticProvider: SystemSnapshotProviding {
@@ -229,7 +237,8 @@ struct Spec160QuickWinsWMRailTests {
         #expect(router.run(["layout", "rotate", "90"]).exitCode == 0)
         #expect(router.run(["layout", "mirror", "x"]).exitCode == 0)
 
-        // Périmètre explicite (ex. clic droit sur une stage inactive) : mute la stage ciblée sans toucher l'active.
+        // Périmètre explicite (ex. clic droit sur une stage inactive dont les fenêtres existent) :
+        // mute l'arbre de la stage ciblée (rotate et mirror) sans toucher la stage active ni écrire de cadre AX.
         let inactiveScopeKey = StageScope(displayID: d1.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
         let w3 = window(3)
         let w4 = window(4)
@@ -245,10 +254,22 @@ struct Spec160QuickWinsWMRailTests {
             state.update(scope)
             state.setBSPTree(inactiveTree, for: inactiveScopeKey)
         }
+        let inactiveService = SnapshotService(
+            provider: StaticProvider(displaysList: [d1], windowsList: [w1, w2, w3, w4], focusedID: w1.id),
+            frameWriter: writer,
+            config: bspConfig(),
+            intentStore: LayoutIntentStore(path: dir.appendingPathComponent("intents.json").path),
+            stageStore: store
+        )
+        let inactiveCommands = LayoutCommandService(service: inactiveService, events: events)
         let activeBefore = store.state().bspTree(for: scopeKey)
-        #expect(commands.rotate(90, scope: inactiveScopeKey).changed)
+        writer.clearWrittenFrames()
+        #expect(inactiveCommands.rotate(90, scope: inactiveScopeKey).changed)
         #expect(store.state().bspTree(for: inactiveScopeKey) == inactiveTree.rotated(degrees: 90))
+        #expect(inactiveCommands.mirror("x", scope: inactiveScopeKey).changed)
+        #expect(store.state().bspTree(for: inactiveScopeKey) == inactiveTree.rotated(degrees: 90)?.mirrored(.x))
         #expect(store.state().bspTree(for: scopeKey) == activeBefore)
+        #expect(writer.writtenFramesSnapshot().isEmpty)
     }
 
     // MARK: - Window close & gather-app
