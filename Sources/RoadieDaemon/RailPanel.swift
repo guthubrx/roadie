@@ -17,6 +17,7 @@ final class RailDragGhostWindow: NSPanel {
         )
         isOpaque = false
         backgroundColor = .clear
+        colorSpace = .sRGB
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         ignoresMouseEvents = true
@@ -156,6 +157,7 @@ final class RailPanel: NSPanel {
         )
         isOpaque = false
         backgroundColor = .clear
+        colorSpace = .sRGB
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         ignoresMouseEvents = false

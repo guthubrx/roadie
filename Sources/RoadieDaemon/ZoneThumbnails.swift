@@ -24,13 +24,27 @@ final class ZoneThumbnails {
     }
 
     let folder: String
+    static let maxCachedImages = 32
     private var images: [String: NSImage] = [:]
+    private var cacheOrder: [String] = []
     private var generations: [String: UInt64] = [:]
     private var nextGeneration: UInt64 = 0
 
     init(folder: String = NSString(string: TestEnvironment.launcherFile("zone-thumbs")).expandingTildeInPath) {
         self.folder = folder
     }
+
+    private func cacheImage(_ image: NSImage, for key: String) {
+        images[key] = image
+        cacheOrder.removeAll { $0 == key }
+        cacheOrder.append(key)
+        while cacheOrder.count > Self.maxCachedImages {
+            let evicted = cacheOrder.removeFirst()
+            images.removeValue(forKey: evicted)
+        }
+    }
+
+    var cachedImageCount: Int { images.count }
 
     /// Rectangle à découper, relatif à la fenêtre : `area` centré sur la zone, décalé pour rester dans la fenêtre,
     /// réduit à la fenêtre si elle est plus petite. O(1).
@@ -49,9 +63,13 @@ final class ZoneThumbnails {
     func path(for key: String) -> String { (folder as NSString).appendingPathComponent(Self.fileName(key)) }
 
     func image(for key: String) -> NSImage? {
-        if let cached = images[key] { return cached }
-        let image = NSImage(contentsOfFile: path(for: key))
-        images[key] = image
+        if let cached = images[key] {
+            cacheOrder.removeAll { $0 == key }
+            cacheOrder.append(key)
+            return cached
+        }
+        guard let image = NSImage(contentsOfFile: path(for: key)) else { return nil }
+        cacheImage(image, for: key)
         return image
     }
 
@@ -65,6 +83,7 @@ final class ZoneThumbnails {
         nextGeneration &+= 1
         generations[key] = nextGeneration
         images[key] = nil
+        cacheOrder.removeAll { $0 == key }
         try? FileManager.default.removeItem(atPath: path(for: key))
     }
 
@@ -144,6 +163,8 @@ final class ZoneThumbnails {
         let scale = scale(forWindowFrame: window.frame)
         configuration.width = Int((area.width * scale).rounded())
         configuration.height = Int((area.height * scale).rounded())
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        configuration.colorSpaceName = CGColorSpace.sRGB
         configuration.scalesToFit = true
         configuration.preservesAspectRatio = true
         configuration.showsCursor = false
@@ -178,19 +199,23 @@ final class ZoneThumbnails {
         let target = path(for: key)
         let temporary = "\(target).tmp-\(UUID().uuidString)"
         let folder = folder
-        let data = NSBitmapImageRep(cgImage: image.cgImage).representation(using: .png, properties: [:])
-        let wrote: Bool = await Task.detached(priority: .utility) {
-            guard let data else { return false }
+        let sourceCG = image.cgImage
+        // Détacher le recadrage de l'IOSurface plein-fenêtre et encoder le PNG hors du fil principal.
+        let prepared: (cgImage: CGImage, wrote: Bool) = await Task.detached(priority: .utility) {
+            let detached = sourceCG.detachedSRGBBitmapCopy() ?? sourceCG
+            guard let data = NSBitmapImageRep(cgImage: detached).representation(using: .png, properties: [:]) else {
+                return (detached, false)
+            }
             do {
                 try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
                 try data.write(to: URL(fileURLWithPath: temporary), options: [])
-                return true
+                return (detached, true)
             } catch {
                 try? FileManager.default.removeItem(atPath: temporary)
-                return false
+                return (detached, false)
             }
         }.value
-        guard wrote else { return false }
+        guard prepared.wrote else { return false }
         afterTemporaryWrite?()
         guard isCaptureValid(token, for: key) else {
             try? FileManager.default.removeItem(atPath: temporary)
@@ -200,7 +225,7 @@ final class ZoneThumbnails {
             try? FileManager.default.removeItem(atPath: temporary)
             return false
         }
-        images[key] = NSImage(cgImage: image.cgImage, size: crop.size)
+        cacheImage(NSImage(cgImage: prepared.cgImage, size: crop.size), for: key)
         return true
     }
 }

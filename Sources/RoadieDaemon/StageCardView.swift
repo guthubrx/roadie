@@ -75,6 +75,7 @@ final class RailHeaderView: NSView {
 @MainActor
 final class StageCardView: NSControl {
     private static var appIconCache: [String: NSImage] = [:]
+    private static let appIconCacheMaxCount = 64
 
     let stageID: StageID
     private let stage: PersistentStage
@@ -679,9 +680,11 @@ final class StageCardView: NSControl {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
             return nil
         }
-        let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSWorkspace.shared.icon(forFile: url.path)
-        icon.size = NSSize(width: 64, height: 64)
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
         let cleanedIcon = icon.removingEdgeWhiteBackground()
+        if appIconCache.count >= appIconCacheMaxCount {
+            appIconCache.removeAll(keepingCapacity: true)
+        }
         appIconCache[bundleID] = cleanedIcon
         return cleanedIcon
     }
@@ -861,6 +864,7 @@ private extension NSImage {
         let bytesPerPixel = 4
         let bytesPerRow = pixelWidth * bytesPerPixel
         var pixels = [UInt8](repeating: 0, count: pixelHeight * bytesPerRow)
+        var proposed = CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight)
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(
                   data: &pixels,
@@ -871,7 +875,7 @@ private extension NSImage {
                   space: colorSpace,
                   bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
               ),
-              let cgImage = cgImage(forProposedRect: nil, context: nil, hints: nil)
+              let cgImage = cgImage(forProposedRect: &proposed, context: nil, hints: nil)
         else {
             return self
         }

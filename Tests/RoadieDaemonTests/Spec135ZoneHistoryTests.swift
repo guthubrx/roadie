@@ -140,4 +140,53 @@ struct Spec135ZoneHistoryTests {
         #expect(!history.setThumbnail(CGRect(x: 0, y: 0, width: 8, height: 8), for: kept.key))
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: roDir.path)
     }
+
+    @Test func detachedBitmapCopyProducesStandaloneSRGBImageForCroppedRegion() throws {
+        var sourcePixels = [UInt8](repeating: 0, count: 64 * 64 * 4)
+        for y in 0..<64 {
+            for x in 0..<64 {
+                let offset = (y * 64 + x) * 4
+                sourcePixels[offset] = UInt8(x * 4)
+                sourcePixels[offset + 1] = UInt8(y * 4)
+                sourcePixels[offset + 2] = 200
+                sourcePixels[offset + 3] = 255
+            }
+        }
+        let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let ctx = try #require(CGContext(
+            data: &sourcePixels, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 64 * 4,
+            space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let full = try #require(ctx.makeImage())
+        let cropped = try #require(full.cropping(to: CGRect(x: 10, y: 12, width: 16, height: 14)))
+        let detached = try #require(cropped.detachedSRGBBitmapCopy())
+        #expect(detached.width == 16)
+        #expect(detached.height == 14)
+        #expect(detached.bitsPerComponent == 8)
+        #expect(detached.bytesPerRow < full.bytesPerRow)
+    }
+
+    @Test @MainActor func zoneThumbnailsEvictsMemoryCacheAtLimitWhileKeepingDiskFiles() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-161-zthumb-lru-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let thumbs = ZoneThumbnails(folder: dir.path)
+        var pixel: [UInt8] = [10, 20, 30, 255]
+        let ctx = try #require(CGContext(
+            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let image = try #require(ctx.makeImage())
+        let crop = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let total = ZoneThumbnails.maxCachedImages + 6
+        for idx in 0..<total {
+            let key = "lru-\(idx)"
+            let token = thumbs.beginCapture(for: key)
+            let ok = await thumbs.store((image, CGSize(width: 1, height: 1)), key: key, crop: crop, token: token)
+            #expect(ok)
+        }
+        #expect(thumbs.cachedImageCount == ZoneThumbnails.maxCachedImages)
+        // Une clé évincée de la RAM reste lisible depuis le disque sans perte.
+        #expect(thumbs.image(for: "lru-0") != nil)
+        #expect(thumbs.cachedImageCount == ZoneThumbnails.maxCachedImages)
+    }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import RoadieAX
 import RoadieCore
 
@@ -340,6 +341,7 @@ private final class BorderPanel: NSPanel, BorderRendering {
         )
         isOpaque = false
         backgroundColor = .clear
+        colorSpace = .sRGB
         level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue - 1)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         ignoresMouseEvents = true
@@ -372,30 +374,70 @@ private final class BorderPanel: NSPanel, BorderRendering {
 
 @MainActor
 private final class BorderView: NSView {
-    var color: NSColor = .systemBlue { didSet { needsDisplay = true } }
-    var thickness: CGFloat = 2 { didSet { needsDisplay = true } }
-    var cornerRadius: CGFloat = 10 { didSet { needsDisplay = true } }
-    var groupLabel: String? { didSet { needsDisplay = true } }
+    var color: NSColor = .systemBlue { didSet { updateVisuals() } }
+    var thickness: CGFloat = 2 { didSet { updateVisuals() } }
+    var cornerRadius: CGFloat = 10 { didSet { updateVisuals() } }
+    var groupLabel: String? { didSet { updateVisuals() } }
+
+    /// Rendu vectoriel par `CAShapeLayer` : aucun tampon bitmap plein-cadre alloué par CoreAnimation
+    /// pour l'intérieur transparent de la bordure (Lot B).
+    private let strokeLayer = CAShapeLayer()
+    private let pillView = BorderGroupPillView()
 
     override var isOpaque: Bool { false }
 
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let path = NSBezierPath(
-            roundedRect: bounds.insetBy(dx: thickness / 2, dy: thickness / 2),
-            xRadius: cornerRadius,
-            yRadius: cornerRadius
-        )
-        path.lineWidth = thickness
-        color.setStroke()
-        path.stroke()
-        drawGroupLabel()
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = nil
+        strokeLayer.fillColor = nil
+        layer?.addSublayer(strokeLayer)
+        pillView.isHidden = true
+        addSubview(pillView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        updateVisuals()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateVisuals()
+    }
+
+    private func updateVisuals() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        strokeLayer.frame = bounds
+        let rect = bounds.insetBy(dx: thickness / 2, dy: thickness / 2)
+        if rect.width > 0, rect.height > 0 {
+            let clampedRadius = min(cornerRadius, rect.width / 2, rect.height / 2)
+            strokeLayer.path = CGPath(roundedRect: rect, cornerWidth: clampedRadius, cornerHeight: clampedRadius, transform: nil)
+        } else {
+            strokeLayer.path = nil
+        }
+        strokeLayer.lineWidth = thickness
+        var resolvedColor = color.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            resolvedColor = color.cgColor
+        }
+        strokeLayer.strokeColor = resolvedColor
+        CATransaction.commit()
+        updateGroupPill()
     }
 
     /// Pastille dans le coin haut droit, à l'intérieur de la bordure, couleur de la bordure.
     /// Largeur bornée à la place disponible ; libellé tronqué sur une ligne ; rien si la place manque.
-    private func drawGroupLabel() {
-        guard let groupLabel else { return }
+    private func updateGroupPill() {
+        guard let groupLabel else {
+            pillView.isHidden = true
+            return
+        }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
@@ -404,10 +446,37 @@ private final class BorderView: NSView {
             .paragraphStyle: paragraph
         ]
         let text = NSAttributedString(string: groupLabel, attributes: attributes)
-        guard let geometry = BorderGroupPill.geometry(bounds: bounds, thickness: thickness, textSize: text.size()) else { return }
+        guard let geometry = BorderGroupPill.geometry(bounds: bounds, thickness: thickness, textSize: text.size()) else {
+            pillView.isHidden = true
+            return
+        }
+        pillView.frame = geometry.pill
+        pillView.color = color
+        pillView.text = text
+        pillView.textRect = CGRect(
+            x: geometry.text.minX - geometry.pill.minX,
+            y: geometry.text.minY - geometry.pill.minY,
+            width: geometry.text.width,
+            height: geometry.text.height
+        )
+        pillView.isHidden = false
+        pillView.needsDisplay = true
+    }
+}
+
+@MainActor
+private final class BorderGroupPillView: NSView {
+    var color: NSColor = .systemBlue
+    var text: NSAttributedString?
+    var textRect: CGRect = .zero
+
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
         color.setFill()
-        NSBezierPath(roundedRect: geometry.pill, xRadius: geometry.pill.height / 2, yRadius: geometry.pill.height / 2).fill()
-        text.draw(in: geometry.text)
+        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
+        text?.draw(in: textRect)
     }
 }
 

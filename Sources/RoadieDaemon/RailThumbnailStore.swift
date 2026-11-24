@@ -29,8 +29,10 @@ final class RailThumbnailStore {
     /// Dernière capture nette de chaque fenêtre (vue d’ensemble), gardée quand le rail recapture plus petit.
     /// Affichée tout de suite à l’ouverture suivante ; une capture fraîche la remplace si elle est aussi nette.
     private var detailed: [WindowID: (image: NSImage, at: Date)] = [:]
-    /// Durée de conservation d’une capture nette dont la fenêtre n’est plus suivie par personne.
-    private let detailedRetention: TimeInterval = 600
+    /// Durée et capacité maximales des captures nettes non suivies (Lot B : évite la dérive RAM).
+    private let detailedRetention: TimeInterval = 180
+    static let detailedMaxCount = 24
+    static let iconsMaxCount = 64
     private var fallbacks: [WindowID: NSImage] = [:]
     private var icons: [String: NSImage] = [:]
     private var signatures: [WindowID: String] = [:]
@@ -81,6 +83,7 @@ final class RailThumbnailStore {
         let ids = retainedByOwner.values.reduce(into: Set<WindowID>()) { $0.formUnion($1) }
         let now = Date()
         detailed = detailed.filter { ids.contains($0.key) || now.timeIntervalSince($0.value.at) < detailedRetention }
+        trimDetailedToLimit(keeping: ids)
         revisions = revisions.filter { ids.contains($0.key) }
         images = images.filter { ids.contains($0.key) }
         fallbacks = fallbacks.filter { ids.contains($0.key) }
@@ -207,15 +210,36 @@ final class RailThumbnailStore {
             return
         }
         guard !cgImage.looksBlank else { return }
+        // Détacher immédiatement le bitmap en sRGB 8 bits : libère l'IOSurface WindowServer de ScreenCaptureKit.
+        let detached = cgImage.detachedSRGBBitmapCopy() ?? cgImage
         // Taille en points = pixels / 2 : la vignette garde sa netteté sur un écran Retina.
-        let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width / 2, height: cgImage.height / 2))
+        let image = NSImage(cgImage: detached, size: NSSize(width: detached.width / 2, height: detached.height / 2))
         images[id] = image
         // Une capture au moins aussi nette remplace la capture nette ; une vignette du rail plus petite non.
-        if image.size.width >= (detailed[id]?.image.size.width ?? 0) * 0.9 { detailed[id] = (image, Date()) }
+        if image.size.width >= (detailed[id]?.image.size.width ?? 0) * 0.9 {
+            detailed[id] = (image, Date())
+            trimDetailedToLimit(keeping: retainedByOwner.values.reduce(into: Set<WindowID>()) { $0.formUnion($1) })
+        }
         capturedAt[id] = Date()
         version += 1
         revisions[id] = version
         NotificationCenter.default.post(name: .roadieThumbnailsDidUpdate, object: nil)
+    }
+
+    private func trimDetailedToLimit(keeping retained: Set<WindowID>) {
+        guard detailed.count > Self.detailedMaxCount else { return }
+        let overflow = detailed.count - Self.detailedMaxCount
+        let victims = detailed
+            .sorted { lhs, rhs in
+                let lhsRetained = retained.contains(lhs.key)
+                let rhsRetained = retained.contains(rhs.key)
+                if lhsRetained != rhsRetained { return !lhsRetained }
+                return lhs.value.at < rhs.value.at
+            }
+            .prefix(overflow)
+        for (key, _) in victims {
+            detailed.removeValue(forKey: key)
+        }
     }
 
     /// Appelé hors bascule, au démarrage et après changement d'écrans.
@@ -249,6 +273,8 @@ final class RailThumbnailStore {
         let config = SCStreamConfiguration()
         config.width = max(1, Int(frame.width * scale))
         config.height = max(1, Int(frame.height * scale))
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+        config.colorSpaceName = CGColorSpace.sRGB
         let bounds = CGDisplayBounds(display.displayID)
         config.sourceRect = frame.offsetBy(dx: -bounds.minX, dy: -bounds.minY)
         config.showsCursor = false; config.scalesToFit = true
@@ -275,6 +301,8 @@ final class RailThumbnailStore {
         let scale = min(2, sqrt(2_000_000 / (size.width * size.height)))
         let config = SCStreamConfiguration()
         config.width = max(1, Int(size.width * scale)); config.height = max(1, Int(size.height * scale))
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+        config.colorSpaceName = CGColorSpace.sRGB
         config.showsCursor = false; config.scalesToFit = true; config.preservesAspectRatio = true
         config.ignoreShadowsSingleWindow = true
         return try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config)
@@ -288,6 +316,8 @@ final class RailThumbnailStore {
         let configuration = SCStreamConfiguration()
         configuration.width = max(1, Int(pixelWidth.rounded()))
         configuration.height = max(1, Int((pixelWidth * real.height / real.width).rounded()))
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        configuration.colorSpaceName = CGColorSpace.sRGB
         // Sur un écran à 1 pixel par point, la fenêtre est plus petite que le tampon : la mettre à l’échelle
         // au lieu de la déposer dans un coin.
         configuration.scalesToFit = true
@@ -315,24 +345,51 @@ final class RailThumbnailStore {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: member.bundleID) else {
             return nil
         }
-        let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSWorkspace.shared.icon(forFile: url.path)
-        icon.size = NSSize(width: 128, height: 128)
+        let sourceIcon = NSWorkspace.shared.icon(forFile: url.path)
         let size = NSSize(width: 160, height: 104)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor(calibratedWhite: 0.08, alpha: 0.96).setFill()
-        NSBezierPath(roundedRect: CGRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
-        NSColor.white.withAlphaComponent(0.08).setStroke()
-        let border = NSBezierPath(roundedRect: CGRect(x: 0.5, y: 0.5, width: size.width - 1, height: size.height - 1), xRadius: 10, yRadius: 10)
-        border.lineWidth = 1
-        border.stroke()
-        icon.draw(
-            in: CGRect(x: (size.width - 52) / 2, y: (size.height - 52) / 2, width: 52, height: 52),
-            from: CGRect(origin: .zero, size: icon.size),
-            operation: .sourceOver,
-            fraction: 1
-        )
-        image.unlockFocus()
+        let scale: CGFloat = 2
+        let pixelWidth = Int(size.width * scale)
+        let pixelHeight = Int(size.height * scale)
+        let bitmapInfo = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+        let image: NSImage
+        if let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+           let context = CGContext(
+               data: nil, width: pixelWidth, height: pixelHeight, bitsPerComponent: 8,
+               bytesPerRow: 0, space: colorSpace, bitmapInfo: bitmapInfo
+           ) {
+            context.scaleBy(x: scale, y: scale)
+            let graphics = NSGraphicsContext(cgContext: context, flipped: false)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = graphics
+            NSColor(calibratedWhite: 0.08, alpha: 0.96).setFill()
+            NSBezierPath(roundedRect: CGRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
+            NSColor.white.withAlphaComponent(0.08).setStroke()
+            let border = NSBezierPath(roundedRect: CGRect(x: 0.5, y: 0.5, width: size.width - 1, height: size.height - 1), xRadius: 10, yRadius: 10)
+            border.lineWidth = 1
+            border.stroke()
+            var proposed = CGRect(x: 0, y: 0, width: 104, height: 104)
+            if let iconCG = sourceIcon.cgImage(forProposedRect: &proposed, context: nil, hints: nil) {
+                context.draw(iconCG, in: CGRect(x: (size.width - 52) / 2, y: (size.height - 52) / 2, width: 52, height: 52))
+            } else {
+                sourceIcon.draw(
+                    in: CGRect(x: (size.width - 52) / 2, y: (size.height - 52) / 2, width: 52, height: 52),
+                    from: .zero,
+                    operation: .sourceOver,
+                    fraction: 1
+                )
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            if let rendered = context.makeImage() {
+                image = NSImage(cgImage: rendered, size: size)
+            } else {
+                return nil
+            }
+        } else {
+            return nil
+        }
+        if icons.count >= Self.iconsMaxCount {
+            icons.removeAll(keepingCapacity: true)
+        }
         icons[member.bundleID] = image
         return image
     }
@@ -350,6 +407,27 @@ final class RailThumbnailStore {
 }
 
 extension CGImage {
+    /// Copie autonome en sRGB 8 bits BGRA (CPU uniquement) : détache immédiatement les
+    /// `IOSurface` ScreenCaptureKit (`PURGE=N`) ainsi que les images parents retenues par `cropping(to:)`.
+    func detachedSRGBBitmapCopy() -> CGImage? {
+        guard width > 0, height > 0,
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
+        else { return nil }
+        let bitmapInfo = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo
+        ) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(self, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
+
     /// Vrai pour une capture sans contenu utile : quasi transparente, ou presque entièrement noire et uniforme.
     /// Calculé une seule fois, à la capture (jamais au rendu).
     var looksBlank: Bool {

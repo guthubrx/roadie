@@ -468,3 +468,9 @@ Session 160, 24 novembre 2026. Optimisation Lot A — réduction des réveils au
 (5) `TickScheduler` et `roadied` évitent les 3 sondes `deadline:window_discovery` quand l'application activée possède déjà une fenêtre gérée connue, et ne déclenchent plus un tick `drag` après un simple clic sans déplacement (`hasPendingDraggedGesture`).
 Revue indépendante traitée : initialisation de `lastMousePoint` à l'activation de `FocusFollowsMouseController`, gardes `started`/`lifecycleGeneration` contre les tâches différées après `stop()` (`FocusFollowsMouseController`, `BorderController`, `RailController`), surveillance du dossier parent avec `observedFile` pour résister à une suppression/recréation du fichier de config, et filtrage de l'écho de révision sur `.roadieSnapshotDidPublish`.
 2 583 tests Swift dans 391 suites et 29 tests de scripts réussis.
+
+Session 161, 24 novembre 2026. Optimisation Lot B — maîtrise mémoire et surfaces graphiques :
+(1) `CGImage.detachedSRGBBitmapCopy()` détache en sRGB 8 bits CPU les vignettes issues de `SCScreenshotManager` dans `RailThumbnailStore` et les recadrages `window.cgImage.cropping(to:)` dans `ZoneThumbnails` (libération immédiate des `IOSurface` WindowServer non-purgeables `PURGE=N` et encodage PNG de `ZoneThumbnails` déplacé hors du fil principal) ;
+(2) `SCStreamConfiguration` configuré en `32BGRA` / `sRGB`, bornes mémoire LRU sur `ZoneThumbnails.images` (32), `RailThumbnailStore.detailed` (24 / 180 s), `RailThumbnailStore.icons` (64, sans `lockFocus()`) et `StageCardView.appIconCache` (64, avec `proposedRect` 64×64) ;
+(3) `BorderView` passe au rendu vectoriel `CAShapeLayer` + sous-vue pastille dédiée (suppression du tampon bitmap plein-cadre CoreAnimation) et `BorderPanel`/`RailPanel`/`RailDragGhostWindow` fixés en `colorSpace = .sRGB` (évite les tampons 16 bits HDR `RGhA`).
+2 585 tests Swift dans 391 suites et 29 tests de scripts réussis.
