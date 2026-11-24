@@ -790,6 +790,31 @@ public final class RailController {
         transformItem.submenu = transformMenu
         menu.addItem(transformItem)
 
+        // Spec 164 : sélecteur direct de mode de disposition par stage (dont Onglets et Ruban défilant).
+        let modeMenu = NSMenu(title: tr("Mode de disposition", "Layout mode"))
+        let currentMode = snapshot.state.stage(scope: clickedScope)?.mode
+        let modeChoices: [(String, WindowManagementMode)] = [
+            (tr("Arbre automatique (bsp)", "Automatic tree (bsp)"), .bsp),
+            (tr("Arbre persistant (spatialBsp)", "Persistent tree (spatialBsp)"), .spatialBsp),
+            (tr("Fenêtre principale et pile (masterStack)", "Main and stack (masterStack)"), .masterStack),
+            (tr("Onglets (tabbed)", "Tabbed (tabbed)"), .tabbed),
+            (tr("Ruban défilant (scrolling)", "Scrolling ribbon (scrolling)"), .scrolling),
+            (tr("Placement libre (float)", "Free placement (float)"), .float),
+        ]
+        for (title, mode) in modeChoices {
+            let target = RailMenuActionTarget { [weak self] in
+                self?.perform(.setStageMode(clickedScope, mode), displayID: displayID)
+            }
+            let item = NSMenuItem(title: title, action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
+            item.target = target
+            item.state = currentMode == mode ? .on : .off
+            stageMenuTargets.append(target)
+            modeMenu.addItem(item)
+        }
+        let modeItem = NSMenuItem(title: tr("Mode de disposition", "Layout mode"), action: nil, keyEquivalent: "")
+        modeItem.submenu = modeMenu
+        menu.addItem(modeItem)
+
         menu.addItem(.separator())
         let liveWindowIDs = snapshotService.railWindowIDs(in: snapshot)
         let refusal = Self.deleteStageRefusal(stageID: stageID, displayID: displayID, store: store,
@@ -1237,6 +1262,14 @@ public final class RailController {
             Task.detached(priority: .userInitiated) {
                 _ = LayoutCommandService(service: service, events: eventLog).mirror(axis, scope: targetScope)
                 await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.layout_mirror") }
+            }
+        case .setStageMode(let targetScope, let mode):
+            let service = snapshotService
+            let stageStore = store
+            let eventLog = events
+            Task.detached(priority: .userInitiated) {
+                _ = StageCommandService(service: service, store: stageStore, events: eventLog).setMode(mode, scope: targetScope)
+                await MainActor.run { [weak self] in self?.rebuildPanels(reason: "rail.stage_mode") }
             }
         }
     }
@@ -1975,6 +2008,7 @@ enum RailAction {
     case gatherAppWindows(WindowID)
     case rotateLayout(StageScope, Int)
     case mirrorLayout(StageScope, String)
+    case setStageMode(StageScope, WindowManagementMode)
 }
 
 struct RailWindowDropTarget {

@@ -307,7 +307,7 @@ struct SettingsServiceTests {
         let (service, _, _) = try makeService(nil)
         #expect(service.describe("target_grid.rows") == "target_grid.rows = 3 (défaut 3, de 2 à 12)")
         #expect(service.describe("tiling.default_strategy")
-                == "tiling.default_strategy = bsp (défaut bsp, choix : bsp, spatialBsp, masterStack, float)")
+                == "tiling.default_strategy = bsp (défaut bsp, choix : bsp, spatialBsp, masterStack, tabbed, scrolling, float)")
         #expect(service.describe("target_mode.enabled") == "target_mode.enabled = true (défaut true)")
         #expect(service.describe("target_grid.overlay_fill_opacity") == "target_grid.overlay_fill_opacity = 0.1 (défaut 0.1, de 0 à 1)")
         #expect(service.describe("inconnu.reglage") == nil)
@@ -366,7 +366,7 @@ struct SettingsServiceTests {
             }
         }
         guard case .rejected(let reason) = service.set("tiling.default_strategy", to: "spirale") else { return }
-        #expect(reason.contains("bsp, spatialBsp, masterStack, float"))
+        #expect(reason.contains("bsp, spatialBsp, masterStack, tabbed, scrolling, float"))
     }
 
     @Test

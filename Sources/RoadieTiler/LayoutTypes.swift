@@ -25,6 +25,12 @@ public struct LayoutRequest: Equatable, Sendable {
     /// Tailles minimales confirmées par fenêtre (Lot C) : `SpatialBSPLayoutStrategy` (`BSPTree`)
     /// ajuste les splits dès la planification lorsque les minimums tiennent dans le conteneur.
     public var minimumSizes: [WindowID: CGSize]
+    /// Fenêtre focalisée de la stage : centre le ruban en mode `.scrolling` (Spec 164).
+    public var focusedWindowID: WindowID?
+    /// Hauteur réservée en haut de la stage pour la barre d'onglets en mode `.tabbed` (Spec 164).
+    public var tabbedBarHeight: Double
+    /// Largeur relative d'une colonne en mode `.scrolling` (`0.25...1.0`, Spec 164).
+    public var scrollingColumnWidth: Double
 
     public init(
         scope: StageScope,
@@ -39,7 +45,10 @@ public struct LayoutRequest: Equatable, Sendable {
         outerGaps: Insets = .zero,
         innerGap: Double = 0,
         masterRatio: Double = 0.6,
-        minimumSizes: [WindowID: CGSize] = [:]
+        minimumSizes: [WindowID: CGSize] = [:],
+        focusedWindowID: WindowID? = nil,
+        tabbedBarHeight: Double = 28,
+        scrollingColumnWidth: Double = 0.65
     ) {
         self.scope = scope
         self.mode = mode
@@ -54,6 +63,9 @@ public struct LayoutRequest: Equatable, Sendable {
         self.innerGap = max(0, innerGap)
         self.masterRatio = masterRatio
         self.minimumSizes = minimumSizes
+        self.focusedWindowID = focusedWindowID
+        self.tabbedBarHeight = tabbedBarHeight
+        self.scrollingColumnWidth = scrollingColumnWidth
     }
 }
 
@@ -87,6 +99,10 @@ public enum LayoutPlanner {
         case .spatialBsp, .mutableBsp:
             // `mutableBsp` n'est plus qu'un alias décodable de l'arbre (SPEC-017 A8, FR-018).
             return SpatialBSPLayoutStrategy().plan(request)
+        case .tabbed:
+            return TabbedLayoutStrategy(barHeight: CGFloat(request.tabbedBarHeight)).plan(request)
+        case .scrolling:
+            return ScrollingLayoutStrategy(columnWidthRatio: CGFloat(request.scrollingColumnWidth)).plan(request)
         }
     }
 }

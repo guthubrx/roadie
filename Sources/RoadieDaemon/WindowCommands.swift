@@ -63,6 +63,9 @@ public struct WindowCommandService {
             return result
         }
         let ok = focusWindow(pair.neighbor.window)
+        if ok, let scope = pair.active.scope {
+            recenterScrollingRibbonIfNeeded(scope: scope, snapshot: snapshot)
+        }
         let result = WindowCommandResult.changedOrFailed(ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
         appendWindowCommandEvent(
             verb: "focus",
@@ -73,6 +76,18 @@ public struct WindowCommandService {
             result: result
         )
         return result
+    }
+
+    private func recenterScrollingRibbonIfNeeded(scope: StageScope, snapshot: DaemonSnapshot) {
+        guard snapshot.state.stage(scope: scope)?.mode == .scrolling else { return }
+        let gen = PlacementGeneration.shared.next()
+        let refreshed = service.snapshot(followFocus: false)
+        let ordered = refreshed.state.stage(scope: scope)?.windowIDs ?? []
+        guard !ordered.isEmpty else { return }
+        _ = service.apply(
+            service.applyPlan(from: refreshed, scope: scope, orderedWindowIDs: ordered, generation: gen),
+            generation: gen
+        )
     }
 
     public func focusBackAndForth() -> WindowCommandResult {
@@ -94,16 +109,22 @@ public struct WindowCommandService {
             return WindowCommandResult(message: "focus back-and-forth: no previous window", changed: false, outcome: .noOp)
         }
         let ok = focusWindow(target)
+        if ok {
+            recenterScrollingRibbonIfNeeded(scope: scope, snapshot: snapshot)
+        }
         return WindowCommandResult.changedOrFailed(ok ? "focus back-and-forth \(target.id.rawValue)" : "focus back-and-forth failed", changed: ok)
     }
 
     public func focus(windowID: WindowID) -> WindowCommandResult {
         let snapshot = service.snapshot()
-        guard let target = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
+        guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
             return WindowCommandResult(message: "focus: unknown window \(windowID.rawValue)", changed: false, outcome: .failed)
         }
-        let ok = focusWindow(target)
-        return WindowCommandResult.changedOrFailed(ok ? "focused \(target.id.rawValue)" : "focus failed", changed: ok)
+        let ok = focusWindow(entry.window)
+        if ok, let scope = entry.scope {
+            recenterScrollingRibbonIfNeeded(scope: scope, snapshot: snapshot)
+        }
+        return WindowCommandResult.changedOrFailed(ok ? "focused \(entry.window.id.rawValue)" : "focus failed", changed: ok)
     }
 
     /// Fenêtre active et arbre de son scope, si ce scope utilise le moteur à arbre
@@ -274,6 +295,44 @@ public struct WindowCommandService {
             activeID: pair.active.window.id,
             neighborID: pair.neighbor.window.id
         )
+        // Modes `tabbed` et `scrolling` : persister directement le nouvel ordre dans `stages.json`
+        // pour que la barre d'onglets et le ruban reflètent immédiatement l'échange (Spec 164).
+        if snapshot.state.stage(scope: scope)?.mode.allowsWindowOverlapOrOverflow == true {
+            do {
+                try stageStore.mutateChecked { state in
+                    var persistent = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+                    if let idx = persistent.stages.firstIndex(where: { $0.id == scope.stageID }) {
+                        let byID = Dictionary(uniqueKeysWithValues: persistent.stages[idx].members.map { ($0.windowID, $0) })
+                        let reordered = ordered.compactMap { byID[$0] }
+                        let remaining = persistent.stages[idx].members.filter { !Set(ordered).contains($0.windowID) }
+                        persistent.stages[idx].members = reordered + remaining
+                        persistent.stages[idx].focusedWindowID = pair.active.window.id
+                        state.update(persistent)
+                    }
+                }
+            } catch {
+                return .persistenceFailure("move \(direction.rawValue)", error)
+            }
+            let plan = service.applyPlan(from: snapshot, scope: scope, orderedWindowIDs: ordered, generation: generation)
+            let result = service.apply(plan, generation: generation)
+            _ = focusWindow(pair.active.window)
+            let commandResult = WindowCommandResult(
+                message: "move \(direction.rawValue): reordered attempted=\(result.attempted) applied=\(result.applied)",
+                changed: true,
+                outcome: .changed
+            )
+            appendWindowCommandEvent(
+                verb: "move",
+                direction: direction,
+                snapshot: snapshot,
+                active: pair.active,
+                neighbor: pair.neighbor,
+                scope: scope,
+                result: commandResult,
+                applyResult: result
+            )
+            return commandResult
+        }
         let plan = service.applyPlan(
             from: snapshot,
             scope: scope,
@@ -1121,6 +1180,28 @@ public struct WindowCommandService {
         direction: Direction
     ) -> (active: ScopedWindowSnapshot, neighbor: ScopedWindowSnapshot)? {
         guard let active = activeWindow(in: snapshot), let scope = active.scope else { return nil }
+        if let stage = snapshot.state.stage(scope: scope), stage.mode.allowsWindowOverlapOrOverflow {
+            let liveByID = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, ScopedWindowSnapshot)? in
+                guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
+                return (entry.window.id, entry)
+            })
+            let ordered = stage.windowIDs.compactMap { liveByID[$0] }
+            guard ordered.count > 1,
+                  let idx = ordered.firstIndex(where: { $0.window.id == active.window.id })
+            else { return nil }
+            switch stage.mode {
+            case .tabbed:
+                let step = (direction == .left || direction == .up) ? -1 : 1
+                let nextIdx = (idx + step + ordered.count) % ordered.count
+                return (active, ordered[nextIdx])
+            case .scrolling:
+                if direction == .left, idx > 0 { return (active, ordered[idx - 1]) }
+                if direction == .right, idx + 1 < ordered.count { return (active, ordered[idx + 1]) }
+                return nil
+            default:
+                break
+            }
+        }
         if let context = activeTree(in: snapshot),
            let frames = service.commandTreeGeometry(for: scope, tree: context.tree, in: snapshot)?.frames(of: context.tree),
            frames[active.window.id] != nil {

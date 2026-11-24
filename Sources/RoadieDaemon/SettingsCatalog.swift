@@ -161,6 +161,8 @@ public struct SettingDescriptor: Equatable, Sendable {
         case ("tiling.default_strategy", "bsp"): label = tr("Arbre automatique", "Automatic tree")
         case ("tiling.default_strategy", "spatialBsp"): label = tr("Arbre persistant", "Persistent tree")
         case ("tiling.default_strategy", "masterStack"): label = tr("Fenêtre principale et pile", "Main window and stack")
+        case ("tiling.default_strategy", "tabbed"): label = tr("Onglets", "Tabbed")
+        case ("tiling.default_strategy", "scrolling"): label = tr("Ruban défilant", "Scrolling ribbon")
         case ("tiling.default_strategy", "float"): label = tr("Placement libre", "Free placement")
         case ("tiling.split_policy", "largest_dim"): label = tr("Répartition équilibrée par défaut", "Balanced split (default)")
         case ("tiling.split_policy", "balanced"): label = tr("Répartition équilibrée héritée", "Balanced split (legacy)")
@@ -259,6 +261,8 @@ public enum SettingsCatalog {
             "spatial_bsp": "spatialBsp", "spatial-bsp": "spatialBsp", "spatial": "spatialBsp", "tree": "spatialBsp",
             "mutableBsp": "spatialBsp", "mutable_bsp": "spatialBsp", "mutable-bsp": "spatialBsp", "yabai": "spatialBsp",
             "master_stack": "masterStack", "master-stack": "masterStack",
+            "tabs": "tabbed", "onglets": "tabbed",
+            "scroll": "scrolling", "ribbon": "scrolling", "niri": "scrolling", "ruban": "scrolling",
             "floating": "float",
         ],
     ]
@@ -364,8 +368,8 @@ extension SettingsCatalog {
 extension SettingsCatalog {
     static let tilingDescriptors: [SettingDescriptor] = [
         entry(.tuilage, "tiling", "default_strategy", tr("Méthode de tuilage", "Tiling method"),
-              tr("Dispose les fenêtres automatiquement en arbre, conserve un arbre ajustable, privilégie une fenêtre principale ou laisse le placement libre.", "Arranges windows automatically in a tree, keeps an adjustable tree, favors a main window, or leaves placement free."),
-              .choice(["bsp", "spatialBsp", "masterStack", "float"]), .string("bsp")),
+              tr("Dispose les fenêtres automatiquement en arbre, conserve un arbre ajustable, privilégie une fenêtre principale, empile en onglets, défile en ruban ou laisse le placement libre.", "Arranges windows automatically in a tree, keeps an adjustable tree, favors a main window, stacks in tabs, scrolls in a horizontal ribbon, or leaves placement free."),
+              .choice(["bsp", "spatialBsp", "masterStack", "tabbed", "scrolling", "float"]), .string("bsp")),
         entry(.tuilage, "tiling", "split_policy", tr("Découpage de l'espace", "Space splitting"),
               tr("En mode Arbre automatique (bsp), la répartition équilibrée partage le groupe en deux à chaque découpe. La spirale réserve la moitié à la première fenêtre, puis découpe le reste. Sans effet en mode Arbre persistant.", "In Automatic tree mode (bsp), the balanced split halves the group at each cut. The spiral gives half to the first window, then splits the rest. No effect in Persistent tree mode."),
               .choice(["largest_dim", "balanced", "dwindle"]), .string("largest_dim")),
@@ -392,6 +396,12 @@ extension SettingsCatalog {
         entry(.tuilage, "tiling", "master_ratio", tr("Part de la fenêtre principale", "Main window share"),
               tr("Proportion de l'écran donnée à la fenêtre principale en mode maître et pile (0,6 = 60 %).", "Share of the display given to the main window in main-and-stack mode (0.6 = 60%)."),
               .double(nil), .double(0.6)),
+        entry(.tuilage, "tiling", "tabbed_bar_height", tr("Hauteur de la barre d'onglets (points)", "Tab bar height (points)"),
+              tr("Hauteur réservée en haut de la stage pour la barre d'onglets cliquable en mode onglets (20 à 44 points).", "Height reserved at the top of the stage for the clickable tab bar in tabbed mode (20 to 44 points)."),
+              .double(20...44), .double(28)),
+        entry(.tuilage, "tiling", "scrolling_column_width", tr("Largeur d'une colonne en ruban", "Scrolling ribbon column width"),
+              tr("Proportion de la largeur d'écran accordée à chaque colonne en mode ruban défilant (0,25 à 1,0 ; défaut 0,65).", "Share of the display width given to each column in scrolling ribbon mode (0.25 to 1.0; default 0.65)."),
+              .double(0.25...1.0), .double(0.65)),
         entry(.tuilage, "tiling", "smart_gaps_solo", tr("Marges en fenêtre unique", "Gaps with a single window"),
               tr("Retire les marges quand une seule fenêtre est affichée.", "Removes the gaps when only one window is shown."), .bool, .bool(false)),
         entry(.tuilage, "tiling", "popup_filter", tr("Ignorer les fenêtres temporaires", "Ignore transient windows"),

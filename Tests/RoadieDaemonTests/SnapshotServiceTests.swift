@@ -1975,7 +1975,9 @@ struct SnapshotServiceTests {
 
             #expect(assignResult.changed)
             #expect(assignWriter.requestedFrames[left.id] == Rect(x: 999, y: 0, width: 495, height: 500))
-            if mode != .float {
+            if mode == .scrolling {
+                #expect(assignWriter.requestedFrames[right.id] == Rect(x: 180, y: 8, width: 639, height: 484))
+            } else if mode != .float {
                 #expect(assignWriter.requestedFrames[right.id] == Rect(x: 8, y: 8, width: 984, height: 484))
             }
             #expect(assignWriter.focusedWindowIDs == [right.id])

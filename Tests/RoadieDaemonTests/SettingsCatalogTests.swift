@@ -23,9 +23,9 @@ struct SettingsCatalogTests {
         // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
         // terminal, signets, tri, apprentissage, confirmation). Session 108 : douze touches de la barre.
         // Session 110 : Calculette ouverte par un calcul. Session 111 : ordre appris des verbes. Session 113 : mots-clés in et tags. Session 114 : historique web. Session 115 : réglages dans la barre et touche ⌘,. Session 119 : cinq réglages simples de la barre. Session 121 : icône du sélecteur et sa taille. Session 127 : langue de l'interface. Session 131 : trois modificateurs de Retour et style des fenêtres de workflow. Session 132 : fenêtres flottantes hors du rail. Session 133 : raccourci de la recherche à l'écran. Session 134 : fautes de frappe rattrapées, éléments à l'écran dans le lanceur. Session 136 : trois réglages des zones (le raccourci de la 135 retiré).
-        #expect(simple.count == 328) // Session 181 (Spec 163) : clipboard.{enabled,max_items,retention_days}, snippets.{enabled,auto_expand}.
+        #expect(simple.count == 330) // Session 182 (Spec 164) : tiling.tabbed_bar_height, tiling.scrolling_column_width.
         #expect(railSimple.count == 82)
-        #expect(simple.count - railSimple.count == 246)
+        #expect(simple.count - railSimple.count == 248)
     }
 
     @Test
@@ -60,7 +60,7 @@ struct SettingsCatalogTests {
     func strategyAliasesMatchTheLoader() throws {
         let strategy = try #require(SettingsCatalog.find(id: "tiling.default_strategy"))
         guard case .choice(let choices) = strategy.kind else { Issue.record("choix attendu"); return }
-        for alias in ["spatial_bsp", "master_stack", "mutable_bsp", "bsp", "float", "SPATIAL_BSP", " tree "] {
+        for alias in ["spatial_bsp", "master_stack", "mutable_bsp", "bsp", "float", "tabbed", "tabs", "onglets", "scrolling", "scroll", "ribbon", "niri", "SPATIAL_BSP", " tree "] {
             let canonical = SettingsCatalog.canonicalChoice(alias, for: strategy.id)
             #expect(choices.contains(canonical), "\(alias) → \(canonical)")
             // Même résultat que le chargeur : `mutableBsp` y devient `spatialBsp`.
@@ -169,7 +169,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 328)
+        #expect(expected.count == 330)
     }
 
     // MARK: - Défauts
@@ -279,8 +279,8 @@ struct SettingsCatalogTests {
             }
             checked += 1
         }
-        // 78 réglages hors rail ont une plage (session 181 : clipboard.max_items, clipboard.retention_days).
-        #expect(checked == 78)
+        // 80 réglages hors rail ont une plage (session 182 : tiling.tabbed_bar_height, tiling.scrolling_column_width).
+        #expect(checked == 80)
     }
 
     // MARK: - Recherche

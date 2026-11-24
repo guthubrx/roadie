@@ -21,6 +21,7 @@ let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
 var dimInactiveController: DimInactiveController?
+var stageTabBarController: StageTabBarController?
 var dividerResizeRuntime: DividerResizeRuntime?
 var nativeResizeRuntime: NativeResizeRuntime?
 var focusFollowsMouseController: FocusFollowsMouseController?
@@ -201,6 +202,9 @@ func startBorderComponent() {
     dimInactiveController = DimInactiveController()
     dimInactiveController?.start()
     ShutdownRegistry.register { dimInactiveController?.stop() }
+    stageTabBarController = StageTabBarController()
+    stageTabBarController?.start()
+    ShutdownRegistry.register { stageTabBarController?.stop() }
 }
 
 @MainActor

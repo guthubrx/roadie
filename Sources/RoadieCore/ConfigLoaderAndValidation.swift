@@ -247,7 +247,7 @@ private enum ConfigValidationRules {
             "fx.animations.overview": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
 
             "interface": ["settings_text_font_size", "settings_help_font_size", "settings_title_font_size", "language"],
-            "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "live_drag_preview", "drag_move_modifier", "drag_resize_modifier", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter", "float_picture_in_picture", "scratchpad_enabled"]),
+            "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "live_drag_preview", "drag_move_modifier", "drag_resize_modifier", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter", "float_picture_in_picture", "scratchpad_enabled", "tabbed_bar_height", "scrolling_column_width"]),
             "tiling.display_overrides": gapKeys.union(["display_id", "display_name"]),
             "desktops": ["enabled", "count", "back_and_forth", "mode"],
             "stage_manager": ["enabled", "hide_strategy", "default_stage", "workspaces"],

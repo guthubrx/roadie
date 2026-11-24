@@ -272,7 +272,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "focus back-and-forth|left|right|up|down"),
         CLICommandSpec(usage: "bookmark set|focus|jump|clear|list NAME"),
         CLICommandSpec(usage: "move|warp|resize left|right|up|down"),
-        CLICommandSpec(usage: "mode bsp|spatialBsp|masterStack|float"),
+        CLICommandSpec(usage: "mode bsp|spatialBsp|masterStack|tabbed|scrolling|float"),
         CLICommandSpec(usage: "toggle maximize|fullscreen|native-fullscreen"),
         CLICommandSpec(usage: "toggle floating"),
         CLICommandSpec(usage: "window display N"),
@@ -300,7 +300,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "stage assign-empty"),
         CLICommandSpec(usage: "stage summon WINDOW_ID"),
         CLICommandSpec(usage: "stage move-to-display N|left|right|up|down [--follow|--no-follow]"),
-        CLICommandSpec(usage: "stage mode bsp|spatialBsp|masterStack|float"),
+        CLICommandSpec(usage: "stage mode bsp|spatialBsp|masterStack|tabbed|scrolling|float"),
         CLICommandSpec(usage: "stage prev|next"),
         CLICommandSpec(usage: "balance"),
         CLICommandSpec(usage: "daemon health|heal [--json]"),
@@ -2349,7 +2349,7 @@ public final class CLICommandRouter {
 
     private func runModeCommand(_ rawMode: String?) throws -> Int32 {
         guard let rawMode, let parsed = WindowManagementMode(roadieValue: rawMode) else {
-            err("roadie: mode requires bsp|spatialBsp|masterStack|float")
+            err("roadie: mode requires bsp|spatialBsp|masterStack|tabbed|scrolling|float")
             return 64
         }
         // `mutableBsp` (et `yabai`) reste accepté comme alias de l'arbre (SPEC-017 A8).

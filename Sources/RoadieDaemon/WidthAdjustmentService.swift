@@ -63,7 +63,7 @@ public struct WidthAdjustmentService {
         if stage.mode.usesTreeEngine {
             return .failure("width: unavailable in tree mode (spatialBsp), use resize")
         }
-        guard stage.mode == .bsp || stage.mode == .masterStack else {
+        guard stage.mode == .bsp || stage.mode == .masterStack || stage.mode == .scrolling else {
             return .noChange("width: unsupported layout")
         }
 

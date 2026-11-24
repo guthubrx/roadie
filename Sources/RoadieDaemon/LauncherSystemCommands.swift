@@ -118,6 +118,13 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             .init(id: "roadie-scratchpad-toggle", fr: "Scratchpad (afficher/masquer)", en: "Toggle scratchpad",
                   keywords: ["scratchpad", "tiroir", "flottant", "floating", "drawer", "toggle"],
                   symbol: "macwindow.on.rectangle", confirms: false),
+            // Session 182 (SPEC-164) : modes de disposition avancés (Onglets & Ruban défilant).
+            .init(id: "roadie-mode-tabbed", fr: "Disposition : Onglets (tabbed)", en: "Layout: Tabbed",
+                  keywords: ["tabbed", "tabs", "onglets", "mode", "disposition", "layout"],
+                  symbol: "rectangle.topthird.inset.filled", confirms: false),
+            .init(id: "roadie-mode-scrolling", fr: "Disposition : Ruban défilant (scrolling)", en: "Layout: Scrolling ribbon",
+                  keywords: ["scrolling", "scroll", "ribbon", "ruban", "niri", "mode", "disposition", "layout"],
+                  symbol: "rectangle.split.3x1", confirms: false),
         ]
     }
 
@@ -210,6 +217,10 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             }
         case "roadie-scratchpad-toggle":
             Task.detached(priority: .userInitiated) { _ = ScratchpadCommandService().toggle() }
+        case "roadie-mode-tabbed":
+            Task.detached(priority: .userInitiated) { _ = StageCommandService().setMode(.tabbed) }
+        case "roadie-mode-scrolling":
+            Task.detached(priority: .userInitiated) { _ = StageCommandService().setMode(.scrolling) }
         case "roadie-timer-cancel-all":
             let count = LauncherTimerService.shared.cancelAll()
             LauncherTimerService.postLocalNotification(

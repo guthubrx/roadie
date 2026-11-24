@@ -4,6 +4,8 @@ public enum WindowManagementMode: String, Codable, Sendable, CaseIterable {
     case masterStack
     case float
     case spatialBsp
+    case tabbed
+    case scrolling
 
     public init?(roadieValue: String) {
         switch roadieValue {
@@ -17,6 +19,10 @@ public enum WindowManagementMode: String, Codable, Sendable, CaseIterable {
             self = .float
         case "spatialBsp", "spatial_bsp", "spatial-bsp", "spatial", "tree":
             self = .spatialBsp
+        case "tabbed", "tabs", "onglets":
+            self = .tabbed
+        case "scrolling", "scroll", "ribbon", "niri", "ruban":
+            self = .scrolling
         default:
             return nil
         }
@@ -24,6 +30,12 @@ public enum WindowManagementMode: String, Codable, Sendable, CaseIterable {
 
     public var isTiled: Bool {
         self != .float
+    }
+
+    /// Modes où les fenêtres se superposent volontairement (`tabbed`) ou débordent sur les bords du
+    /// ruban (`scrolling`) : exclus des heuristiques anti-chevauchement BSP (Spec 164).
+    public var allowsWindowOverlapOrOverflow: Bool {
+        self == .tabbed || self == .scrolling
     }
 
     public var usesSpatialBSPOrdering: Bool {

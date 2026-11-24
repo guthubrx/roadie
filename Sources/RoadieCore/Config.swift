@@ -236,6 +236,10 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     public var floatPictureInPicture: Bool
     /// Quand true (defaut), active le scratchpad flottant nommé (`roadie scratchpad`, Spec 162).
     public var scratchpadEnabled: Bool
+    /// Hauteur réservée en haut de la stage pour la barre d'onglets en mode `.tabbed` (`20...44`, Spec 164).
+    public var tabbedBarHeight: Double
+    /// Largeur d'une colonne en mode `.scrolling`, en proportion de la largeur utile (`0.25...1.0`, Spec 164).
+    public var scrollingColumnWidth: Double
 
     public init(
         defaultStrategy: WindowManagementMode = .bsp,
@@ -257,7 +261,9 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         allowedSubroles: [String] = ["AXStandardWindow"],
         popupFilter: Bool = true,
         floatPictureInPicture: Bool = true,
-        scratchpadEnabled: Bool = true
+        scratchpadEnabled: Bool = true,
+        tabbedBarHeight: Double = 28,
+        scrollingColumnWidth: Double = 0.65
     ) {
         self.defaultStrategy = defaultStrategy
         self.splitPolicy = splitPolicy
@@ -279,6 +285,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.popupFilter = popupFilter
         self.floatPictureInPicture = floatPictureInPicture
         self.scratchpadEnabled = scratchpadEnabled
+        self.tabbedBarHeight = tabbedBarHeight.isFinite ? min(44, max(20, tabbedBarHeight)) : 28
+        self.scrollingColumnWidth = scrollingColumnWidth.isFinite ? min(1.0, max(0.25, scrollingColumnWidth)) : 0.65
     }
 
     enum CodingKeys: String, CodingKey {
@@ -302,6 +310,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         case popupFilter = "popup_filter"
         case floatPictureInPicture = "float_picture_in_picture"
         case scratchpadEnabled = "scratchpad_enabled"
+        case tabbedBarHeight = "tabbed_bar_height"
+        case scrollingColumnWidth = "scrolling_column_width"
     }
 
     public init(from decoder: Decoder) throws {
@@ -312,7 +322,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
             throw DecodingError.dataCorruptedError(
                 forKey: .defaultStrategy,
                 in: c,
-                debugDescription: tr("default_strategy inconnu : \"\(rawStrategy)\" (attendu : bsp, mutableBsp, masterStack, float, spatialBsp ou un alias)", "unknown default_strategy: \"\(rawStrategy)\" (expected: bsp, mutableBsp, masterStack, float, spatialBsp or an alias)")
+                debugDescription: tr("default_strategy inconnu : \"\(rawStrategy)\" (attendu : bsp, mutableBsp, masterStack, tabbed, scrolling, float, spatialBsp ou un alias)", "unknown default_strategy: \"\(rawStrategy)\" (expected: bsp, mutableBsp, masterStack, tabbed, scrolling, float, spatialBsp or an alias)")
             )
         }
         self.defaultStrategy = strategy
@@ -336,6 +346,10 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.popupFilter = try c.decodeIfPresent(Bool.self, forKey: .popupFilter) ?? true
         self.floatPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .floatPictureInPicture) ?? true
         self.scratchpadEnabled = try c.decodeIfPresent(Bool.self, forKey: .scratchpadEnabled) ?? true
+        let rawTabHeight = try c.decodeFlexibleDouble(forKey: .tabbedBarHeight) ?? 28
+        self.tabbedBarHeight = min(44, max(20, rawTabHeight))
+        let rawColWidth = try c.decodeFlexibleDouble(forKey: .scrollingColumnWidth) ?? 0.65
+        self.scrollingColumnWidth = min(1.0, max(0.25, rawColWidth))
     }
 }
 

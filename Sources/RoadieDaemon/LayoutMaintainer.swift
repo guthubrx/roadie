@@ -3475,7 +3475,10 @@ public final class LayoutMaintainer {
                 newWindowIDs: [],
                 splitPolicy: service.effectiveConfig.tiling.splitPolicy,
                 innerGap: service.innerGap(),
-                masterRatio: service.effectiveConfig.tiling.masterRatio
+                masterRatio: service.effectiveConfig.tiling.masterRatio,
+                focusedWindowID: stage.focusedWindowID ?? snapshot.focusedWindowID,
+                tabbedBarHeight: service.effectiveConfig.tiling.tabbedBarHeight,
+                scrollingColumnWidth: service.effectiveConfig.tiling.scrollingColumnWidth
             ))
             let windowsByID = siblingEntries.reduce(into: [WindowID: WindowSnapshot]()) { result, entry in
                 result[entry.window.id] = entry.window
@@ -3529,6 +3532,7 @@ public final class LayoutMaintainer {
                   let stage = snapshot.state.stage(scope: scope),
                   stage.mode.isTiled,
                   !stage.mode.usesTreeEngine,
+                  !stage.mode.allowsWindowOverlapOrOverflow,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID })
             else { continue }
 

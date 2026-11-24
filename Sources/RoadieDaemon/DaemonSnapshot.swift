@@ -670,10 +670,11 @@ public struct SnapshotService: Sendable {
         // Pre-compute inverse index O(total_members) pour eviter O(w * scopes * stages * members) sur le hot path.
         var stageIndex = persistedStages.stageScopeIndex()
         let pinsByWindow = Dictionary(persistedStages.windowPins.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
-        var metadata: [StageScope: (mode: WindowManagementMode, groups: [WindowGroup])] = [:]
+        var metadata: [StageScope: (mode: WindowManagementMode, groups: [WindowGroup], memberRanks: [WindowID: Int])] = [:]
         for persisted in persistedStages.scopes {
             for stage in persisted.stages {
-                metadata[StageScope(displayID: persisted.displayID, desktopID: persisted.desktopID, stageID: stage.id)] = (stage.mode, stage.groups)
+                let ranks = Dictionary(stage.members.enumerated().map { ($0.element.windowID, $0.offset) }, uniquingKeysWith: { first, _ in first })
+                metadata[StageScope(displayID: persisted.displayID, desktopID: persisted.desktopID, stageID: stage.id)] = (stage.mode, stage.groups, ranks)
             }
         }
         var initializedScopes: Set<StageScope> = []
@@ -778,7 +779,32 @@ public struct SnapshotService: Sendable {
             ))
         }
         // PERF-010 : l'état est neuf ; éviter removeWindow/insert pour chaque fenêtre.
-        try? state.initializeWindowMemberships(initialMemberships)
+        // Spec 164 : pour les modes ordonnés (`tabbed`, `scrolling`), préserver l'ordre persisté des
+        // membres dans `stages.json` afin que `move` réordonne durablement onglets et colonnes.
+        let orderedMemberships: [(WindowID, StageScope)]
+        if initialMemberships.contains(where: { metadata[$0.1]?.mode.allowsWindowOverlapOrOverflow == true }) {
+            let grouped = Dictionary(grouping: initialMemberships.enumerated(), by: { $0.element.1 })
+            var result: [(WindowID, StageScope)] = []
+            result.reserveCapacity(initialMemberships.count)
+            var emittedScopes: Set<StageScope> = []
+            for entry in initialMemberships {
+                guard emittedScopes.insert(entry.1).inserted, let entries = grouped[entry.1] else { continue }
+                if let meta = metadata[entry.1], meta.mode.allowsWindowOverlapOrOverflow {
+                    let sorted = entries.sorted { lhs, rhs in
+                        let lr = meta.memberRanks[lhs.element.0] ?? Int.max
+                        let rr = meta.memberRanks[rhs.element.0] ?? Int.max
+                        return lr != rr ? lr < rr : lhs.offset < rhs.offset
+                    }
+                    result.append(contentsOf: sorted.map(\.element))
+                } else {
+                    result.append(contentsOf: entries.map(\.element))
+                }
+            }
+            orderedMemberships = result
+        } else {
+            orderedMemberships = initialMemberships
+        }
+        try? state.initializeWindowMemberships(orderedMemberships)
         correctSoloMaximizedStates(
             in: &observedPresentations, scopedWindows: scopedWindows, hiddenWindowIDs: input.hiddenWindowIDs,
             displays: displays
@@ -849,6 +875,12 @@ public struct SnapshotService: Sendable {
                 } else {
                     desktop.stages[persisted.id]?.name = persisted.name
                     desktop.stages[persisted.id]?.mode = persisted.mode
+                    if persisted.mode.allowsWindowOverlapOrOverflow,
+                       desktop.stages[persisted.id]?.focusedWindowID == nil,
+                       let persistedFocus = persisted.focusedWindowID,
+                       desktop.stages[persisted.id]?.windowIDs.contains(persistedFocus) == true {
+                        desktop.stages[persisted.id]?.focusedWindowID = persistedFocus
+                    }
                 }
             }
             if scope.desktopID != display.currentDesktopID, desktop.stages[scope.activeStageID] != nil {
@@ -2025,8 +2057,16 @@ public extension SnapshotService {
             splitPolicy: config.tiling.splitPolicy,
             outerGaps: outerGaps(windowCount: liveOrderedWindowIDs.count, display: display),
             innerGap: config.tiling.gapsInner,
-            masterRatio: config.tiling.masterRatio
+            masterRatio: config.tiling.masterRatio,
+            focusedWindowID: stage.focusedWindowID ?? snapshot.focusedWindowID,
+            tabbedBarHeight: config.tiling.tabbedBarHeight,
+            scrollingColumnWidth: config.tiling.scrollingColumnWidth
         ))
+    }
+
+    /// Marges extérieures effectives pour un écran et un nombre de fenêtres, partagées avec `StageTabBarController`.
+    func effectiveOuterGaps(windowCount: Int, display: DisplaySnapshot) -> Insets {
+        outerGaps(windowCount: windowCount, display: display)
     }
 
     /// FR-005 : point d'ancrage BSP d'une nouvelle fenêtre = premier candidat déjà feuille vivante
@@ -2095,6 +2135,10 @@ public extension SnapshotService {
         from snapshot: DaemonSnapshot,
         requireReasonableTileSizes: Bool
     ) -> Bool {
+        // Les modes `tabbed` et `scrolling` recalculent directement depuis le focus et l'ordre des membres.
+        if snapshot.state.stage(scope: scope)?.mode.allowsWindowOverlapOrOverflow == true {
+            return false
+        }
         guard let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
               !intent.windowIDs.isEmpty
         else { return false }
@@ -3162,7 +3206,10 @@ extension SnapshotService {
             outerGaps: outerGaps(windowCount: live.count + 1, display: display),
             innerGap: config.tiling.gapsInner,
             masterRatio: config.tiling.masterRatio,
-            minimumSizes: knownMinimums
+            minimumSizes: knownMinimums,
+            focusedWindowID: incoming,
+            tabbedBarHeight: config.tiling.tabbedBarHeight,
+            scrollingColumnWidth: config.tiling.scrollingColumnWidth
         )).placements
     }
 }

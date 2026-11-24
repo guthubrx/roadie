@@ -1315,19 +1315,25 @@ public struct StageCommandService {
         return switchDisplay(display, to: ordered[nextIndex], snapshot: snapshot, navigation: direction)
     }
 
-    public func setMode(_ mode: WindowManagementMode) -> StageCommandResult {
+    public func setMode(_ mode: WindowManagementMode, scope explicitScope: StageScope? = nil) -> StageCommandResult {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
-        guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "mode \(mode.rawValue): no display", changed: false, outcome: .noOp)
+        let modeScope: StageScope
+        if let explicitScope {
+            modeScope = explicitScope
+        } else {
+            guard let display = activeDisplay(in: snapshot) else {
+                return StageCommandResult(message: "mode \(mode.rawValue): no display", changed: false, outcome: .noOp)
+            }
+            var current = store.state()
+            let currentScope = activeScope(displayID: display.id, in: &current)
+            modeScope = StageScope(displayID: display.id, desktopID: currentScope.desktopID, stageID: currentScope.activeStageID)
         }
+        let isActiveScope = snapshot.state.activeScope(on: modeScope.displayID) == modeScope
         // Seul l'écran de la commande est soustrait au maintien (FR-040).
-        let commandScopes = Set([snapshot.state.activeScope(on: display.id)].compactMap { $0 })
+        let commandScopes = Set(isActiveScope ? [modeScope] : [])
         beginLayoutCommand("stage.mode", scopes: commandScopes)
         defer { finishLayoutCommand("stage.mode", scopes: commandScopes) }
-        var current = store.state()
-        let currentScope = activeScope(displayID: display.id, in: &current)
-        let modeScope = StageScope(displayID: display.id, desktopID: currentScope.desktopID, stageID: currentScope.activeStageID)
         // Intent retiré avant le mode (R2-01) : un mode écrit sans ce retrait serait appliqué par
         // la maintenance avec l'ancien intent. Si le mode n'est pas écrit, l'intent revient.
         let removedIntent = intentStore.intent(for: modeScope)
@@ -1335,7 +1341,7 @@ public struct StageCommandService {
             try intentStore.removeChecked(scope: modeScope)
             do {
                 try store.mutateChecked { state in
-                    var scope = state.scope(displayID: display.id, desktopID: modeScope.desktopID, defaultMode: config.tiling.defaultStrategy)
+                    var scope = state.scope(displayID: modeScope.displayID, desktopID: modeScope.desktopID, defaultMode: config.tiling.defaultStrategy)
                     scope.setMode(mode, for: modeScope.stageID)
                     state.update(scope)
                 }
@@ -1351,14 +1357,20 @@ public struct StageCommandService {
             return .persistenceFailure("mode \(mode.rawValue)", error)
         }
         let stageID = modeScope.stageID
-        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false), generation: generation), generation: generation)
+        let attempted: Int
+        if isActiveScope {
+            let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false), generation: generation), generation: generation)
+            attempted = result.attempted
+        } else {
+            attempted = 0
+        }
         events.append(RoadieEvent(
             type: "stage_mode",
             scope: modeScope,
-            details: ["mode": mode.rawValue, "layout": String(result.attempted)]
+            details: ["mode": mode.rawValue, "layout": String(attempted)]
         ))
         return StageCommandResult(
-            message: "mode \(mode.rawValue): stage=\(stageID.rawValue) layout=\(result.attempted)",
+            message: "mode \(mode.rawValue): stage=\(stageID.rawValue) layout=\(attempted)",
             changed: true
         )
     }
