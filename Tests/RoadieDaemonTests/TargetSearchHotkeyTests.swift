@@ -87,6 +87,34 @@ struct TargetSearchHotkeyTests {
         #expect(reads == 5)
     }
 
+    @Test @MainActor
+    func eventDrivenHotkeyReactsToConfigReloadWithoutPollingTimer() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("roadie-160-hotkey-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let config = directory.appendingPathComponent("roadies.toml")
+        try "[experimental.target_mode]\nenabled = false\n".write(to: config, atomically: true, encoding: .utf8)
+        let events = directory.appendingPathComponent("events.jsonl")
+        var reads = 0
+        let hotkey = TargetSearchHotkey(
+            events: EventLog(path: events.path),
+            configLoader: { reads += 1; return TargetModeConfig(enabled: false) },
+            configPathLoader: { config.path },
+            onPress: {}
+        )
+        hotkey.start()
+        defer { hotkey.stop() }
+        #expect(reads == 1)
+        NotificationCenter.default.post(name: .roadieConfigDidReload, object: nil, userInfo: ["path": config.path])
+        await drainNotifications()
+        #expect(reads == 2)
+        hotkey.stop()
+        NotificationCenter.default.post(name: .roadieConfigDidReload, object: nil, userInfo: ["path": config.path])
+        await drainNotifications()
+        #expect(reads == 2)
+    }
+
     @MainActor
     private func drainNotifications() async {
         await withCheckedContinuation { continuation in

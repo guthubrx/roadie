@@ -654,4 +654,47 @@ extension Spec149SchedulerTests {
         #expect(ticks == ["ax:didWake"])
         scheduler.stop()
     }
+
+    @Test func knownAppActivationSkipsRedundantWindowDiscoveryProbes() {
+        let timer = ManualTimer()
+        var causes: [String] = []
+        let scheduler = TickScheduler(
+            tick: { cause in
+                causes.append(cause)
+                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+            },
+            nextDeadline: { _ in nil },
+            isBlocked: { false },
+            now: { timer.clock.now },
+            schedule: timer.schedule,
+            events: nil
+        )
+        scheduler.request(cause: "ax:didActivateApplication", discoverWindows: false)
+        timer.advance(by: 2)
+        #expect(causes == ["ax:didActivateApplication"])
+        #expect(timer.armedCount == 0)
+
+        scheduler.request(cause: "ax:didActivateApplication", discoverWindows: true)
+        timer.advance(by: 2)
+        #expect(causes.count == 5)
+        #expect(causes.dropFirst(2).allSatisfy { $0 == "deadline:window_discovery" })
+        scheduler.stop()
+    }
+
+    @Test func hasPendingDraggedGestureDistinguishesPlainClickFromDrag() {
+        let input = UserInputActivity()
+        input.observeGestures(target: { _ in (42, CGRect(x: 0, y: 0, width: 400, height: 300)) }, onRelease: { _ in })
+
+        input.mouseDown(at: CGPoint(x: 20, y: 20))
+        input.mouseUp(leftButton: true)
+        #expect(!input.hasPendingDraggedGesture)
+        #expect(input.takeGesture()?.didDrag == false)
+
+        input.mouseDown(at: CGPoint(x: 20, y: 20))
+        input.mouseDragged()
+        input.mouseUp(leftButton: true)
+        #expect(input.hasPendingDraggedGesture)
+        #expect(input.takeGesture()?.didDrag == true)
+        #expect(!input.hasPendingDraggedGesture)
+    }
 }

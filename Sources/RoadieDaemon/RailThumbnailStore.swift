@@ -6,6 +6,10 @@ import RoadieCore
 import RoadieStages
 import ScreenCaptureKit
 
+extension Notification.Name {
+    static let roadieThumbnailsDidUpdate = Notification.Name("roadie.thumbnails.didUpdate")
+}
+
 /// Cache des vignettes du rail (SPEC-016 FR-024, FR-029, FR-043).
 /// - Les vignettes sont réduites à 2x la largeur d'affichage de la carte.
 /// - La capture est asynchrone (ScreenCaptureKit) : le rendu ne l'attend jamais et lit seulement le cache.
@@ -211,6 +215,7 @@ final class RailThumbnailStore {
         capturedAt[id] = Date()
         version += 1
         revisions[id] = version
+        NotificationCenter.default.post(name: .roadieThumbnailsDidUpdate, object: nil)
     }
 
     /// Appelé hors bascule, au démarrage et après changement d'écrans.

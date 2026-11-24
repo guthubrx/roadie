@@ -459,3 +459,11 @@ Session 159, 24 novembre 2026. Correctifs issus de l'analyse des 70 175 événem
 (8) lecture de la fenêtre focalisée hors du fil principal à l'ouverture du lanceur.
 Revue indépendante traitée (garde d'époque sur `TickScheduler.suspend()`, test de suppression pendant l'écriture détachée de `ZoneThumbnails`, propagation du statut de persistance dans `ZoneHistory.setThumbnail`).
 2 578 tests Swift dans 391 suites et 29 tests de scripts réussis.
+
+Session 160, 24 novembre 2026. Optimisation Lot A — réduction des réveils au repos et des ticks à vide :
+(1) Notifications événementielles `.roadieConfigDidReload` (`ConfigReloadService`), `.roadieSnapshotDidPublish` (`DaemonSnapshot`) et `.roadieThumbnailsDidUpdate` (`RailThumbnailStore`) ;
+(2) `TargetSearchHotkey` et `RoadieCommandHotkeys` passent en événementiel (réglages, rechargement config, watcher vnode, `kTISNotifySelectedKeyboardInputSourceChanged`) avec cache `currentLayoutTable()` par identifiant `TISInputSource` (suppression des 5 timers à 2 s et des 640 `UCKeyTranslate`/2 s) ;
+(3) `BorderController`, `FocusFollowsMouseController` et `TargetModeRuntimeController` suppriment le polling permanent au repos (suivi bordure sur publication snapshot / focus / espace / écran + timer temporaire uniquement pendant un drag en mode monolithique ; `FocusFollowsMouse` sans timer quand désactivé et sur mouvement souris quand activé ; style `TargetMode` sans timer 100 ms) ;
+(4) `RailController` remplace le timer de survol 80 ms par un suivi `.mouseMoved` coalescé + timer armé seulement pendant un drag ou un auto-masquage en cours, et passe le rafraîchissement périodique des vignettes à 5 s avec tolérance (coupé quand tous les panneaux sont repliés/masqués) ;
+(5) `TickScheduler` et `roadied` évitent les 3 sondes `deadline:window_discovery` quand l'application activée possède déjà une fenêtre gérée connue, et ne déclenchent plus un tick `drag` après un simple clic sans déplacement (`hasPendingDraggedGesture`).
+2 581 tests Swift dans 391 suites et 29 tests de scripts réussis.

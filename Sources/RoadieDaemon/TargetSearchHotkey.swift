@@ -4,14 +4,16 @@ import RoadieCore
 
 /// Raccourci global du mode recherche (SPEC-021), enregistré par Carbon (`RegisterEventHotKey`) :
 /// aucune permission, la combinaison est consommée. Défaut : Cmd+Option+Ctrl+F (hyper key + F).
-/// Les réglages de recherche sont appliqués immédiatement ; la relecture toutes les 2 s
-/// couvre les modifications externes et la disposition clavier, sans redémarrage.
+/// Les changements de réglages, de fichier de configuration et de disposition clavier sont suivis
+/// par notifications système et surveillance vnode (zéro polling périodique par défaut).
 @MainActor
 public final class TargetSearchHotkey {
     public struct Resolved: Equatable, Sendable {
         public var keyCode: UInt32
         public var modifiers: UInt32
     }
+
+    private static var cachedLayout: (sourceID: String, table: [UInt32: String])?
 
     private let onPress: @MainActor () -> Void
     private let events: EventLog
@@ -20,13 +22,17 @@ public final class TargetSearchHotkey {
     private let signature: OSType
     private let eventType: String
     private let settingsIDs: Set<String>
-    private let pollingInterval: TimeInterval
+    private let pollingInterval: TimeInterval?
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private var registered: Resolved?
     private var lastState: String?
+    private var started = false
     private var timer: Timer?
     private var settingsObserver: NSObjectProtocol?
+    private var reloadObserver: NSObjectProtocol?
+    private var keyboardObserver: NSObjectProtocol?
+    private var configWatcher: RailFileWatcher?
 
     public init(
         events: EventLog = EventLog(),
@@ -34,7 +40,7 @@ public final class TargetSearchHotkey {
         configPathLoader: @escaping () -> String = {
             ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
         },
-        pollingInterval: TimeInterval = 2,
+        pollingInterval: TimeInterval? = nil,
         signature: OSType = 0x5244_5352,
         eventType: String = "target_mode.search_hotkey",
         settingsIDs: Set<String> = ["target_mode.search_hotkey", "target_mode.enabled", "target_mode.overlay_enabled", "*"],
@@ -51,7 +57,8 @@ public final class TargetSearchHotkey {
     }
 
     public func start() {
-        guard timer == nil else { return }
+        guard !started else { return }
+        started = true
         installHandler()
         refresh()
         settingsObserver = NotificationCenter.default.addObserver(
@@ -60,24 +67,62 @@ public final class TargetSearchHotkey {
             let path = notification.userInfo?["configPath"] as? String
             let settingID = notification.userInfo?["settingID"] as? String
             Task { @MainActor in
-                guard let self, self.timer != nil, let path, let settingID,
+                guard let self, self.started, let path, let settingID,
                       self.settingsIDs.contains(settingID),
                       URL(fileURLWithPath: path).resolvingSymlinksInPath()
                         == URL(fileURLWithPath: self.configPathLoader()).resolvingSymlinksInPath() else { return }
                 self.refresh()
             }
         }
-        timer = Timer.scheduledTimer(withTimeInterval: pollingInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
+        reloadObserver = NotificationCenter.default.addObserver(
+            forName: .roadieConfigDidReload, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.started else { return }
+                self.refresh()
+            }
+        }
+        keyboardObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                Self.invalidateLayoutCache()
+                guard let self, self.started else { return }
+                self.refresh()
+            }
+        }
+        let pathLoader = configPathLoader
+        configWatcher = RailFileWatcher(
+            path: { NSString(string: pathLoader()).expandingTildeInPath },
+            onChange: { [weak self] in
+                guard let self, self.started else { return }
+                self.refresh()
+            }
+        )
+        configWatcher?.start()
+        if let pollingInterval, pollingInterval > 0 {
+            let newTimer = Timer.scheduledTimer(withTimeInterval: pollingInterval, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refresh() }
+            }
+            newTimer.tolerance = min(pollingInterval * 0.25, 1)
+            timer = newTimer
         }
     }
 
     /// Libère le raccourci et les observateurs ; aucune session de recherche n'est modifiée.
     public func stop() {
+        started = false
         timer?.invalidate()
         timer = nil
+        configWatcher?.stop()
+        configWatcher = nil
         if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
         settingsObserver = nil
+        if let reloadObserver { NotificationCenter.default.removeObserver(reloadObserver) }
+        reloadObserver = nil
+        if let keyboardObserver { DistributedNotificationCenter.default().removeObserver(keyboardObserver) }
+        keyboardObserver = nil
         unregister()
         if let handlerRef { RemoveEventHandler(handlerRef) }
         handlerRef = nil
@@ -121,11 +166,17 @@ public final class TargetSearchHotkey {
     }
 
     /// Caractère produit par chaque touche 0-127 sans modificateur, selon la disposition active.
-    /// Complexité : O(128) appels `UCKeyTranslate`, à chaque relecture (2 s).
+    /// Mis en cache par identifiant `TISInputSource` : O(1) tant que la disposition ne change pas,
+    /// O(128) appels `UCKeyTranslate` au premier appel ou après un changement de disposition.
     public static func currentLayoutTable() -> [UInt32: String] {
-        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
-              let raw = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
-        else { return [:] }
+        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue() else { return [:] }
+        let sourceID: String? = TISGetInputSourceProperty(source, kTISPropertyInputSourceID).map {
+            Unmanaged<CFString>.fromOpaque($0).takeUnretainedValue() as String
+        }
+        if let sourceID, let cached = cachedLayout, cached.sourceID == sourceID {
+            return cached.table
+        }
+        guard let raw = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return [:] }
         let data = Unmanaged<CFData>.fromOpaque(raw).takeUnretainedValue()
         guard let bytes = CFDataGetBytePtr(data) else { return [:] }
         var table: [UInt32: String] = [:]
@@ -143,7 +194,12 @@ public final class TargetSearchHotkey {
                 }
             }
         }
+        if let sourceID { cachedLayout = (sourceID, table) }
         return table
+    }
+
+    static func invalidateLayoutCache() {
+        cachedLayout = nil
     }
 
     // MARK: - Enregistrement

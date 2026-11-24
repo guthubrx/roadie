@@ -39,8 +39,11 @@ public final class RoadieCommandHotkeys {
     private var refs: [EventHotKeyRef] = []
     private var entries: [Entry] = []
     private var handlerRef: EventHandlerRef?
-    private var timer: Timer?
+    private var started = false
     private var observer: NSObjectProtocol?
+    private var reloadObserver: NSObjectProtocol?
+    private var keyboardObserver: NSObjectProtocol?
+    private var configWatcher: RailFileWatcher?
 
     public init(events: EventLog = EventLog(),
          configLoader: @escaping () -> [CommandShortcut] = { ConfigReloadService.shared.currentConfig().shortcuts },
@@ -50,24 +53,52 @@ public final class RoadieCommandHotkeys {
         self.run = run
     }
 
-    /// Relecture à chaque changement de réglage et toutes les 2 s (fichier modifié ailleurs, disposition).
+    /// Relecture événementielle : réglages, rechargement de configuration, édition du fichier et
+    /// changement de disposition clavier (zéro polling périodique).
     public func start() {
-        guard timer == nil else { return }
+        guard !started else { return }
+        started = true
         installHandler()
         refresh()
         observer = NotificationCenter.default.addObserver(forName: .roadieSettingsDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        reloadObserver = NotificationCenter.default.addObserver(forName: .roadieConfigDidReload, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+        keyboardObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                TargetSearchHotkey.invalidateLayoutCache()
+                guard let self, self.started else { return }
+                self.refresh()
+            }
+        }
+        configWatcher = RailFileWatcher(
+            path: {
+                let active = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+                return NSString(string: active).expandingTildeInPath
+            },
+            onChange: { [weak self] in
+                guard let self, self.started else { return }
+                self.refresh()
+            }
+        )
+        configWatcher?.start()
     }
 
     public func stop() {
-        timer?.invalidate()
-        timer = nil
+        started = false
+        configWatcher?.stop()
+        configWatcher = nil
         if let observer { NotificationCenter.default.removeObserver(observer) }
         observer = nil
+        if let reloadObserver { NotificationCenter.default.removeObserver(reloadObserver) }
+        reloadObserver = nil
+        if let keyboardObserver { DistributedNotificationCenter.default().removeObserver(keyboardObserver) }
+        keyboardObserver = nil
         unregister()
         if let handlerRef { RemoveEventHandler(handlerRef) }
         handlerRef = nil

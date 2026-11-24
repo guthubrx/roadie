@@ -37,10 +37,16 @@ public final class RailController {
     private var recordingStatusDirty = true
     private var refreshTimer: Timer?
     private var hoverTimer: Timer?
+    private var hoverCoalesceWorkItem: DispatchWorkItem?
+    private var lastHoverUpdateAt: Date = .distantPast
+    private var hoverMonitors: [Any] = []
     private var stageLabelTimer: Timer?
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
+    private var snapshotObserver: NSObjectProtocol?
+    private var configReloadObserver: NSObjectProtocol?
+    private var thumbnailObserver: NSObjectProtocol?
     private var stageStoreWatcher: RailFileWatcher?
     private var configWatcher: RailFileWatcher?
     private var recordingStatusWatcher: RailFileWatcher?
@@ -50,8 +56,8 @@ public final class RailController {
     private var lastInteractiveRailRefreshAt: Date = .distantPast
     private var clickMonitors: [Any] = []
     private var lastLeftPress: (timestamp: TimeInterval, point: CGPoint)?
-    private var pendingDrag: PendingRailDrag?
-    private var pendingStageReorder: PendingStageReorder?
+    private var pendingDrag: PendingRailDrag? { didSet { syncHoverTimer() } }
+    private var pendingStageReorder: PendingStageReorder? { didSet { syncHoverTimer() } }
     private var defersPanelRebuild: Bool {
         pendingDrag != nil || pendingStageReorder != nil || windowDragController.hasActiveDrag || dropPreview.isHoldingLayout
     }
@@ -86,15 +92,11 @@ public final class RailController {
         rebuildPanels(reason: "start")
         startClickMonitors()
         windowDragController.configureMouseCapture()
-        startHoverTimer()
+        startHoverTracking()
         startWatchers()
         startSettingsObserver()
-        refreshTimer?.invalidate()
-        let newRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.rebuildPanels(reason: "timer") }
-        }
-        refreshTimer = newRefreshTimer
-        RunLoop.main.add(newRefreshTimer, forMode: .common)
+        startEventObservers()
+        syncRefreshTimer(hasExpandedVisiblePanel: true)
         if let screenObserver {
             NotificationCenter.default.removeObserver(screenObserver)
         }
@@ -132,6 +134,10 @@ public final class RailController {
         refreshTimer = nil
         hoverTimer?.invalidate()
         hoverTimer = nil
+        hoverCoalesceWorkItem?.cancel()
+        hoverCoalesceWorkItem = nil
+        hoverMonitors.forEach { NSEvent.removeMonitor($0) }
+        hoverMonitors.removeAll()
         stageLabelTimer?.invalidate()
         stageLabelTimer = nil
         pendingStageStoreRefresh?.cancel()
@@ -148,6 +154,12 @@ public final class RailController {
         spaceObserver = nil
         if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
         settingsObserver = nil
+        if let snapshotObserver { NotificationCenter.default.removeObserver(snapshotObserver) }
+        snapshotObserver = nil
+        if let configReloadObserver { NotificationCenter.default.removeObserver(configReloadObserver) }
+        configReloadObserver = nil
+        if let thumbnailObserver { NotificationCenter.default.removeObserver(thumbnailObserver) }
+        thumbnailObserver = nil
         cancelRailDrags()
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
@@ -298,19 +310,111 @@ public final class RailController {
         }
     }
 
-    private func startHoverTimer() {
+    private func startEventObservers() {
+        if let snapshotObserver { NotificationCenter.default.removeObserver(snapshotObserver) }
+        snapshotObserver = NotificationCenter.default.addObserver(
+            forName: .roadieSnapshotDidPublish, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.rebuildPanels(reason: "snapshot") }
+        }
+        if let configReloadObserver { NotificationCenter.default.removeObserver(configReloadObserver) }
+        configReloadObserver = NotificationCenter.default.addObserver(
+            forName: .roadieConfigDidReload, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.refreshPanelsForConfigChange(reason: "config") }
+        }
+        if let thumbnailObserver { NotificationCenter.default.removeObserver(thumbnailObserver) }
+        thumbnailObserver = NotificationCenter.default.addObserver(
+            forName: .roadieThumbnailsDidUpdate, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.rebuildPanels(reason: "thumbnail") }
+        }
+    }
+
+    /// Minuterie de rafraîchissement des vignettes : 5 s avec tolérance quand au moins un panneau
+    /// est visible et déplié, 0 réveil sinon (les autres changements sont événementiels).
+    private func syncRefreshTimer(hasExpandedVisiblePanel: Bool) {
+        let interval: TimeInterval = snapshotService.isQuietReaderReuseEnabled ? 5 : 1
+        let needsTimer = hasExpandedVisiblePanel || !snapshotService.isQuietReaderReuseEnabled
+        guard needsTimer else {
+            refreshTimer?.invalidate()
+            refreshTimer = nil
+            return
+        }
+        if let existing = refreshTimer, existing.timeInterval == interval { return }
+        refreshTimer?.invalidate()
+        let newRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.rebuildPanels(reason: "timer") }
+        }
+        newRefreshTimer.tolerance = interval >= 5 ? 1 : 0.2
+        refreshTimer = newRefreshTimer
+        RunLoop.main.add(newRefreshTimer, forMode: .common)
+    }
+
+    private func startHoverTracking() {
         hoverTimer?.invalidate()
-        let newHoverTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.updateRailHover()
+        hoverTimer = nil
+        hoverCoalesceWorkItem?.cancel()
+        hoverCoalesceWorkItem = nil
+        guard hoverMonitors.isEmpty else { return }
+        let onMove: @MainActor () -> Void = { [weak self] in
+            self?.scheduleHoverUpdate()
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged], handler: { _ in
+            MainActor.assumeIsolated { onMove() }
+        }) { hoverMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged], handler: { event in
+            MainActor.assumeIsolated { onMove() }
+            return event
+        }) { hoverMonitors.append(local) }
+    }
+
+    private func scheduleHoverUpdate() {
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastHoverUpdateAt)
+        if elapsed >= 0.08 {
+            hoverCoalesceWorkItem?.cancel()
+            hoverCoalesceWorkItem = nil
+            updateRailHover()
+            return
+        }
+        guard hoverCoalesceWorkItem == nil else { return }
+        let remaining = max(0.01, 0.08 - elapsed)
+        let item = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.hoverCoalesceWorkItem = nil
+                self.updateRailHover()
             }
         }
-        hoverTimer = newHoverTimer
-        RunLoop.main.add(newHoverTimer, forMode: .common)
+        hoverCoalesceWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: item)
+    }
+
+    /// Minuterie à 80 ms armée uniquement pendant un glisser en cours ou un compte à rebours
+    /// d'auto-masquage ; coupée immédiatement dès le retour au repos (0 réveil/s).
+    private func syncHoverTimer() {
+        let needsTimer = pendingDrag != nil
+            || pendingStageReorder != nil
+            || windowDragController.hasActiveDrag
+            || panels.values.contains(where: { $0.isVisible && $0.hasPendingAutoHide })
+        if needsTimer {
+            guard hoverTimer == nil else { return }
+            let newHoverTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateRailHover() }
+            }
+            newHoverTimer.tolerance = 0.02
+            hoverTimer = newHoverTimer
+            RunLoop.main.add(newHoverTimer, forMode: .common)
+        } else {
+            hoverTimer?.invalidate()
+            hoverTimer = nil
+        }
     }
 
     // Complexite : O(p) par tick - p = nombre de panneaux ; aucun snapshot (cadres du dernier cycle).
     private func updateRailHover() {
+        lastHoverUpdateAt = Date()
         resetStaleRailDrags()
         let point = NSEvent.mouseLocation
         let canHide = pendingDrag == nil && pendingStageReorder == nil && !windowDragController.hasActiveDrag
@@ -320,6 +424,7 @@ public final class RailController {
             panel.updateMousePassthrough(at: point, allowEmptyRail: !overManagedWindow)
             panel.updateAutoHide(mouse: point, canHide: canHide)
         }
+        syncHoverTimer()
     }
 
     /// Un bouton relache hors de nos fenetres peut ne jamais produire de mouse-up : sans cette remise a zero,
@@ -1174,6 +1279,10 @@ public final class RailController {
         for displayID in thumbnailOnlyDisplays where !hiddenDisplayIDs.contains(displayID) {
             panels[displayID]?.refreshThumbnails(thumbnails)
         }
+        let hasExpandedVisiblePanel = screensByDisplayID.keys.contains { displayID in
+            !hiddenDisplayIDs.contains(displayID) && panels[displayID]?.isRailCollapsed != true
+        }
+        syncRefreshTimer(hasExpandedVisiblePanel: hasExpandedVisiblePanel)
         guard !changedDisplays.isEmpty else { return }
         lastRenderSignatures = displaySignatures
         lastRenderedSettings = settings
@@ -1215,6 +1324,9 @@ public final class RailController {
             panels.removeValue(forKey: displayID)
             screenFrames.removeValue(forKey: displayID)
         }
+        syncRefreshTimer(hasExpandedVisiblePanel: screensByDisplayID.keys.contains { displayID in
+            !hiddenDisplayIDs.contains(displayID) && panels[displayID]?.isRailCollapsed != true
+        })
         scheduleStageLabelFade(config.stageLabel)
         let totalMs = Date().timeIntervalSince(startedAt) * 1000
         if reason != "timer" || totalMs >= 80 {

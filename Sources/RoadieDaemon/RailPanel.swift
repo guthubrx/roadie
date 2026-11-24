@@ -133,6 +133,7 @@ final class RailPanel: NSPanel {
     private var isCollapsed = false
     /// Rail replié (masquage automatique) : ses vignettes ne sont pas capturées (SPEC-051 C-06).
     var isRailCollapsed: Bool { isCollapsed }
+    var hasPendingAutoHide: Bool { autoHide && !isCollapsed && hideAfter != nil }
     private var lastPersistedVisibleWidth: Double?
     private var hideAfter: Date?
     private var recordingIndicatorView: RecordingIndicatorView?

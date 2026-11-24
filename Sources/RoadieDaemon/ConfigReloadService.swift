@@ -2,6 +2,11 @@ import Foundation
 import os
 import RoadieCore
 
+public extension Notification.Name {
+    /// Publié sur le fil principal lorsqu'une nouvelle configuration a été appliquée par `ConfigReloadService`.
+    static let roadieConfigDidReload = Notification.Name("roadie.config.didReload")
+}
+
 public enum ConfigReloadValidation: String, Codable, Sendable, Equatable {
     case success
     case failed
@@ -134,6 +139,7 @@ public final class ConfigReloadService: @unchecked Sendable {
         guard Self.stamp(for: path) == stamp else { return activeConfig }
 
         var pendingEvents: [RoadieEvent] = []
+        var didApplyNewConfig = false
         let config: RoadieConfig = lock.withLock {
             // L'I/O se fait hors verrou : un reload ou un autre lecteur peut avoir publié
             // entre-temps. Son résultat prime sur cette ancienne tentative.
@@ -158,6 +164,7 @@ public final class ConfigReloadService: @unchecked Sendable {
                     storedState.lastValidation = .success
                     storedState.lastError = nil
                     if !isFirstLoad {
+                        didApplyNewConfig = true
                         pendingEvents = [RoadieEvent(
                             type: "config.reload_applied",
                             details: appliedDetails(path: path),
@@ -171,6 +178,7 @@ public final class ConfigReloadService: @unchecked Sendable {
             return storedConfig
         }
         pendingEvents.forEach { eventLog.append($0) }
+        if didApplyNewConfig { Self.postConfigReloaded(path: path) }
         return config
     }
 
@@ -214,9 +222,21 @@ public final class ConfigReloadService: @unchecked Sendable {
                 return RoadieEvent(type: "config.reload_applied", details: appliedDetails(path: path), timestamp: appliedAt)
             }
             eventLog.append(applied)
+            Self.postConfigReloaded(path: path)
             return ConfigReloadResult(status: .applied, path: path, version: version, appliedAt: appliedAt)
         } catch {
             return failed("config decode failed: \(error)")
+        }
+    }
+
+    private static func postConfigReloaded(path: String) {
+        let info: [AnyHashable: Any] = ["path": path]
+        if Thread.isMainThread {
+            NotificationCenter.default.post(name: .roadieConfigDidReload, object: nil, userInfo: info)
+        } else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .roadieConfigDidReload, object: nil, userInfo: info)
+            }
         }
     }
 

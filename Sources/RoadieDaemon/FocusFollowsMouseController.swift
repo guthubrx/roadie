@@ -11,6 +11,10 @@ public final class FocusFollowsMouseController {
     private let snapshotService: SnapshotService
     private let configLoader: () -> RoadieConfig
     private var timer: Timer?
+    private var mouseMonitors: [Any] = []
+    private var configObservers: [NSObjectProtocol] = []
+    private var configWatcher: RailFileWatcher?
+    private var started = false
     private var lastFocusedWindowID: WindowID?
     private var lastMousePoint: CGPoint?
     private var isReading = false
@@ -25,19 +29,85 @@ public final class FocusFollowsMouseController {
 
     public func start() {
         UserInputActivity.shared.startMonitoring()
-        schedule(interval: Self.timerInterval(enabled: configLoader().focus.focusFollowsMouse))
+        if !started {
+            started = true
+            let onConfigChange: @MainActor () -> Void = { [weak self] in
+                self?.syncActivation()
+            }
+            for name: Notification.Name in [.roadieConfigDidReload, .roadieSettingsDidChange] {
+                configObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                    Task { @MainActor in onConfigChange() }
+                })
+            }
+            configWatcher = RailFileWatcher(
+                path: {
+                    let active = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+                    return NSString(string: active).expandingTildeInPath
+                },
+                onChange: onConfigChange
+            )
+            configWatcher?.start()
+        }
+        syncActivation()
+    }
+
+    public func stop() {
+        started = false
+        deactivateTracking()
+        configWatcher?.stop()
+        configWatcher = nil
+        configObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        configObservers.removeAll()
     }
 
     /// Option désactivée : un réveil par seconde suffit pour voir un rechargement à chaud (SPEC-051 A-05).
+    /// Conservé pour la compatibilité des tests ; le mode actif s'appuie désormais sur les événements souris et config.
     nonisolated static func timerInterval(enabled: Bool) -> TimeInterval {
         enabled ? 0.1 : 1
     }
 
-    private func schedule(interval: TimeInterval) {
-        timer?.invalidate()
-        let newTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.tick() }
+    private func syncActivation() {
+        let enabled = configLoader().focus.focusFollowsMouse
+        if enabled {
+            activateTrackingIfNeeded()
+        } else {
+            deactivateTracking()
         }
+    }
+
+    private func activateTrackingIfNeeded() {
+        guard mouseMonitors.isEmpty else { return }
+        let interval = Self.timerInterval(enabled: true)
+        let onMove: @MainActor () -> Void = { [weak self] in
+            self?.scheduleOneShotTick(after: interval)
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: { _ in
+            MainActor.assumeIsolated { onMove() }
+        }) { mouseMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { event in
+            MainActor.assumeIsolated { onMove() }
+            return event
+        }) { mouseMonitors.append(local) }
+    }
+
+    private func deactivateTracking() {
+        timer?.invalidate()
+        timer = nil
+        mouseMonitors.forEach { NSEvent.removeMonitor($0) }
+        mouseMonitors.removeAll()
+        lastMousePoint = nil
+    }
+
+    private func scheduleOneShotTick(after interval: TimeInterval) {
+        guard timer == nil else { return }
+        let newTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.timer = nil
+                await self.tick()
+            }
+        }
+        newTimer.tolerance = interval * 0.2
         timer = newTimer
         RunLoop.main.add(newTimer, forMode: .common)
     }
@@ -45,9 +115,11 @@ public final class FocusFollowsMouseController {
     private func tick() async {
         guard !isReading else { return }
         let enabled = configLoader().focus.focusFollowsMouse
-        let interval = Self.timerInterval(enabled: enabled)
-        if timer?.timeInterval != interval { schedule(interval: interval) }
-        guard enabled, let mousePoint = CGEvent(source: nil)?.location else { return }
+        guard enabled else {
+            deactivateTracking()
+            return
+        }
+        guard let mousePoint = CGEvent(source: nil)?.location else { return }
 
         // FR-011 : agir seulement après un mouvement réel, jamais pendant un clic ou un drag.
         let previousPoint = lastMousePoint
@@ -324,6 +396,11 @@ public final class UserInputActivity: @unchecked Sendable {
             defer { finishedGesture = nil }
             return finishedGesture
         }
+    }
+
+    /// Vrai si la session terminée en attente comporte un mouvement effectif (`didDrag`). O(1).
+    public var hasPendingDraggedGesture: Bool {
+        lock.withLock { finishedGesture?.didDrag == true }
     }
 
     public func recordInput(at date: Date = Date()) {

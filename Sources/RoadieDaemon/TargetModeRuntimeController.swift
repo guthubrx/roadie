@@ -200,7 +200,7 @@ public final class TargetModeRuntimeController: NSObject {
     private var escapeFocus: LauncherFocusSnapshot?
     /// Derniers documents et onglets ouverts lus pour la barre (session 123).
     private var lastOpenItems: (at: Date, items: [LauncherOpenItem])?
-    private var styleTimer: Timer?
+    private var styleReloadObserver: NSObjectProtocol?
     /// Aperçu actif du lanceur (SPEC-078) : cadres relevés avant, stage de départ si une bascule a eu lieu.
     private struct ActivePreview {
         let request: LauncherPreviewRequest
@@ -413,16 +413,16 @@ public final class TargetModeRuntimeController: NSObject {
                 self.refreshOverlayStyle()
             }
         }
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        styleReloadObserver = NotificationCenter.default.addObserver(
+            forName: .roadieConfigDidReload, object: nil, queue: .main
+        ) { [weak self] _ in
             Task { @MainActor in self?.refreshOverlayStyle() }
         }
-        styleTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func stopStyleUpdates() {
-        styleTimer?.invalidate()
-        styleTimer = nil
+        if let styleReloadObserver { NotificationCenter.default.removeObserver(styleReloadObserver) }
+        styleReloadObserver = nil
         if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
         settingsObserver = nil
     }

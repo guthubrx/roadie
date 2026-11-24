@@ -5,6 +5,11 @@ import RoadieCore
 import RoadieStages
 import RoadieTiler
 
+public extension Notification.Name {
+    /// Publié sur le fil principal lorsqu'un snapshot partagé vient d'être mis à jour dans le processus.
+    static let roadieSnapshotDidPublish = Notification.Name("roadie.snapshot.didPublish")
+}
+
 public struct DaemonSnapshot: Equatable, Codable, Sendable {
     public var permissions: PermissionSnapshot
     public var displays: [DisplaySnapshot]
@@ -327,6 +332,11 @@ public struct SnapshotService: Sendable {
     /// (mode modulaire, `--no-live-events`) garde la règle des 150 ms. `cap` : intervalle du filet.
     public func enableQuietReaderReuse(cap: TimeInterval) {
         processState.enableQuietReuse(cap: cap)
+    }
+
+    /// Vrai lorsque le tiler du processus signale les changements (mode monolithique avec événements live).
+    public var isQuietReaderReuseEnabled: Bool {
+        processState.isQuietReuseEnabled
     }
 
     /// Oublie le snapshot partagé (après une commande qui change fenêtres ou focus).
@@ -2590,6 +2600,7 @@ final class SnapshotProcessState: @unchecked Sendable {
     /// Elle borne les changements sans notification (titre, application sans observateur).
     private var quietReuseCap: TimeInterval = 0
     func enableQuietReuse(cap: TimeInterval) { lock.withLock { quietReuseCap = max(0, cap) } }
+    var isQuietReuseEnabled: Bool { lock.withLock { quietReuseCap > 0 } }
 
     private let lock = NSLock()
     /// Clé : option `followFocus` du snapshot publié.
@@ -2630,6 +2641,13 @@ final class SnapshotProcessState: @unchecked Sendable {
             gestureSnapshot = snapshot
             published[followFocus] = Published(snapshot: snapshot, maxAge: maxAge, at: date, stateStamp: stateStamp,
                                                config: config, observationGeneration: observationGeneration)
+        }
+        if Thread.isMainThread {
+            NotificationCenter.default.post(name: .roadieSnapshotDidPublish, object: nil)
+        } else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .roadieSnapshotDidPublish, object: nil)
+            }
         }
     }
 

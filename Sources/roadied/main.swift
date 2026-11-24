@@ -196,12 +196,14 @@ func startRailComponent() {
 func startBorderComponent() {
     borderController = BorderController()
     borderController?.start()
+    ShutdownRegistry.register { borderController?.stop() }
 }
 
 @MainActor
 func startFocusMouseComponent() {
     focusFollowsMouseController = FocusFollowsMouseController()
     focusFollowsMouseController?.start()
+    ShutdownRegistry.register { focusFollowsMouseController?.stop() }
 }
 
 @MainActor
@@ -382,8 +384,20 @@ func installWorkspaceObservers(maintainer: LayoutMaintainer, scheduler: TickSche
             events.append(RoadieEvent(type: "space_did_change"))
         }
     })
+    workspaceObservers.append(center.addObserver(
+        forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+    ) { notification in
+        let pid = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+        MainActor.assumeIsolated {
+            let alreadyKnown = pid.flatMap { activatedPID in
+                service.cachedGestureSnapshot()?.windows.contains {
+                    $0.window.pid == activatedPID && $0.window.isTileCandidate
+                }
+            } ?? false
+            scheduler.request(cause: "ax:didActivateApplication", discoverWindows: !alreadyKnown)
+        }
+    })
     let causes: [(NSNotification.Name, String)] = [
-        (NSWorkspace.didActivateApplicationNotification, "ax:didActivateApplication"),
         (NSWorkspace.didHideApplicationNotification, "ax:didHideApplication"),
         (NSWorkspace.didUnhideApplicationNotification, "ax:didUnhideApplication"),
     ]
@@ -491,6 +505,7 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
             }
         }
     }
+    timer.tolerance = min(safetyNetInterval * 0.2, 2.0)
     RunLoop.main.add(timer, forMode: .common)
     scheduler.request(cause: "command:startup")
 
@@ -533,9 +548,10 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
                 "phase": "drag_started"
             ]))
         },
-        onRelease: {
+        onRelease: { gestureEnded in
             nativeResize.end()
-            scheduler.buttonsReleased(gestureEnded: $0)
+            let didDrag = gestureEnded && UserInputActivity.shared.hasPendingDraggedGesture
+            scheduler.buttonsReleased(gestureEnded: didDrag)
         }
     )
     installWorkspaceObservers(maintainer: maintainer, scheduler: scheduler)

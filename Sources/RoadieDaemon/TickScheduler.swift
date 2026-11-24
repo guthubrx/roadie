@@ -105,7 +105,9 @@ public final class TickScheduler {
     /// attente) ; un changement externe prolonge l'épisode ouvert, car c'est souvent la réponse
     /// d'une application à notre écriture (A12). La cause gardée est la première de la demande,
     /// sauf une cause du filet, remplacée par un événement. O(1) hors `nextDeadline`.
-    public func request(cause: String, delay coalescing: Coalescing = .event) {
+    /// `discoverWindows` : `nil` applique la règle historique (`AXWindowCreated` ou `didActivateApplication`) ;
+    /// `false` évite les 3 sondes `deadline:window_discovery` quand l'application activée a déjà une fenêtre connue.
+    public func request(cause: String, delay coalescing: Coalescing = .event, discoverWindows: Bool? = nil) {
         guard !stopped else { return }
         if coalescing != .safetyNet { onObservationChange() }
         let date = now()
@@ -122,7 +124,8 @@ public final class TickScheduler {
             break
         }
         let dueAt = date.addingTimeInterval(coalescing.delay)
-        let probes = cause == "ax:AXWindowCreated" || cause == "ax:didActivateApplication" ? 3 : 0
+        let shouldDiscover = discoverWindows ?? (cause == "ax:AXWindowCreated" || cause == "ax:didActivateApplication")
+        let probes = shouldDiscover ? 3 : 0
         if var current = pending {
             current.dueAt = min(current.dueAt, dueAt)
             if current.coalescing == .safetyNet, coalescing != .safetyNet {

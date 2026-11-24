@@ -25,7 +25,14 @@ public final class BorderController {
     private let configLoader: () -> RoadieConfig
     private let panel: BorderRendering
     private var refreshTimer: Timer?
+    private var dragTimer: Timer?
+    private var observers: [NSObjectProtocol] = []
+    private var workspaceObservers: [NSObjectProtocol] = []
+    private var dragMonitors: [Any] = []
+    private var configWatcher: RailFileWatcher?
+    private var started = false
     private var isRefreshing = false
+    private var needsAnotherRefresh = false
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
@@ -49,19 +56,142 @@ public final class BorderController {
     public func start() {
         NSApplication.shared.setActivationPolicy(.accessory)
         UserInputActivity.shared.startMonitoring()
-        Task { await refresh() }
-        refreshTimer?.invalidate()
-        let newTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.refresh() }
+        if !started {
+            started = true
+            installObservers()
         }
-        refreshTimer = newTimer
-        RunLoop.main.add(newTimer, forMode: .common)
+        requestRefresh()
+        syncPollingFallback()
+    }
+
+    public func stop() {
+        started = false
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+        dragTimer?.invalidate()
+        dragTimer = nil
+        configWatcher?.stop()
+        configWatcher = nil
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers.removeAll()
+        workspaceObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+        workspaceObservers.removeAll()
+        dragMonitors.forEach { NSEvent.removeMonitor($0) }
+        dragMonitors.removeAll()
+    }
+
+    private func installObservers() {
+        let trigger: @MainActor () -> Void = { [weak self] in
+            self?.syncPollingFallback()
+            self?.requestRefresh()
+        }
+        for name: Notification.Name in [
+            .roadieSnapshotDidPublish,
+            .roadieConfigDidReload,
+            .roadieSettingsDidChange,
+            NSApplication.didChangeScreenParametersNotification,
+        ] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                Task { @MainActor in trigger() }
+            })
+        }
+        for name: Notification.Name in [
+            NSWorkspace.didActivateApplicationNotification,
+            NSWorkspace.activeSpaceDidChangeNotification,
+            NSWorkspace.didHideApplicationNotification,
+            NSWorkspace.didUnhideApplicationNotification,
+        ] {
+            workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { _ in
+                Task { @MainActor in trigger() }
+            })
+        }
+        configWatcher = RailFileWatcher(
+            path: {
+                let active = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+                return NSString(string: active).expandingTildeInPath
+            },
+            onChange: trigger
+        )
+        configWatcher?.start()
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp], handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.handlePointerEvent(event.type) }
+        }) { dragMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp], handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.handlePointerEvent(event.type) }
+            return event
+        }) { dragMonitors.append(local) }
+    }
+
+    private func handlePointerEvent(_ type: NSEvent.EventType) {
+        guard configLoader().fx.borders.enabled else {
+            dragTimer?.invalidate()
+            dragTimer = nil
+            return
+        }
+        if type == .leftMouseDragged {
+            guard dragTimer == nil else { return }
+            let newTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if NSEvent.pressedMouseButtons == 0 && !UserInputActivity.shared.isCapturedPointerHeld {
+                        self.dragTimer?.invalidate()
+                        self.dragTimer = nil
+                    }
+                    self.requestRefresh()
+                }
+            }
+            newTimer.tolerance = 0.02
+            dragTimer = newTimer
+            RunLoop.main.add(newTimer, forMode: .common)
+        } else if type == .leftMouseUp {
+            dragTimer?.invalidate()
+            dragTimer = nil
+            requestRefresh()
+        }
+    }
+
+    /// En mode monolithique (`isQuietReaderReuseEnabled`), le tiler publie chaque snapshot :
+    /// aucun polling permanent au repos. En mode modulaire (processus `border` isolé), un timer
+    /// à 120 ms avec tolérance reste actif tant que les bordures sont activées.
+    private func syncPollingFallback() {
+        let needsPolling = !snapshotService.isQuietReaderReuseEnabled && configLoader().fx.borders.enabled
+        if needsPolling {
+            guard refreshTimer == nil else { return }
+            let newTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.requestRefresh() }
+            }
+            newTimer.tolerance = 0.03
+            refreshTimer = newTimer
+            RunLoop.main.add(newTimer, forMode: .common)
+        } else {
+            refreshTimer?.invalidate()
+            refreshTimer = nil
+        }
+    }
+
+    private func requestRefresh() {
+        if isRefreshing {
+            needsAnotherRefresh = true
+            return
+        }
+        Task { @MainActor [weak self] in
+            await self?.refresh()
+        }
     }
 
     func refresh() async {
-        guard !isRefreshing else { return }
+        guard !isRefreshing else {
+            needsAnotherRefresh = true
+            return
+        }
         isRefreshing = true
-        defer { isRefreshing = false }
+        defer {
+            isRefreshing = false
+            if needsAnotherRefresh {
+                needsAnotherRefresh = false
+                requestRefresh()
+            }
+        }
         let config = configLoader().fx.borders
         guard config.enabled else {
             hidePanel()
