@@ -1219,3 +1219,11 @@ Valeurs : chaîne vide, `control`, `option`, `command`, `shift` ou une combinais
 ### Sens des animations entre stages
 
 En remontant vers une stage précédente, ses fenêtres arrivent du bas et montent vers leur place. En descendant, elles arrivent du haut et descendent. L'ordre du rail décide du sens lors d'un saut direct ; Suivante et Précédente conservent leur sens au bouclage. La position de rangement hors écran ne détermine pas le trajet visible. Une capture temporaire montre le mouvement pendant la courte transition, puis laisse place aux vraies fenêtres déjà positionnées. Les réglages d'animation existants restent applicables. Si la capture tarde ou n'est pas disponible, la bascule reste directe.
+
+### Quick Wins Switcher & Lanceur (Spec 161)
+
+- **Actions clavier directes dans le Switcher** (`switcher.action_keys_enabled`, activé par défaut dans **Paramètres > Sélecteur**) : hors champ de recherche, appuyez sur `W` (fermer), `Q` (quitter l'app), `M` (réduire/restaurer), `H` (masquer l'app), `S` (rapatrier dans la stage active), `A` (filtrer sur l'application courante) ou `D` (filtrer sur l'écran courant).
+- **Convertisseur hors ligne dans le Lanceur** (`experimental.target_mode.calc_conversions`) : unités (`100 km in mi`, `72 f to c`, `2 gb en mib`, `100 km/h to mph`), bases numériques (`0xff`, `0b101010`, `255 in hex`, `42 to bin`) et fuseaux horaires (`heure Tokyo`, `14:00 EST in Paris`).
+- **Pipette de couleur native** (`color` / `couleur`) : ouvre la pipette système `NSColorSampler`, copie `#RRGGBB` et affiche HEX / RGB / HSL.
+- **Émojis et typographie hors ligne** (`experimental.target_mode.emoji_picker`) : tapez `:mot` ou `emoji mot` (inclut `⌘ ⌥ ⇧ ⌃ → — … € ± ≈ ≠`).
+- **Minuteur et Pomodoro natifs** (`experimental.target_mode.timer_enabled`) : `timer 15m pause`, `pomodoro`, `timer status`, `timer stop` dans le lanceur ou via `roadie timer start|pomodoro|status|cancel`.

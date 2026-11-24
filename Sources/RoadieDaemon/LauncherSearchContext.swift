@@ -113,6 +113,10 @@ struct LauncherSearchContext {
     var fileExcluded: [String] = []
     var calcLocale = Locale.current
     var calcGrouping = false
+    /// Spec 161 : conversions hors ligne (unités, bases, fuseaux), émojis/typographie et minuteur/Pomodoro.
+    var calcConversions = true
+    var emojiPicker = true
+    var timerEnabled = true
     /// Mots-clés de la recherche dans le contenu et par étiquette (session 113).
     var fileKeywords = LauncherFileKeywords()
     /// Les verbes les plus choisis passent en tête (session 111, `learn_verb_order`).

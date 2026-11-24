@@ -86,8 +86,12 @@ struct WindowSwitcherModel {
     private let recentRanks: [WindowID: Int]
     private var excludedBundles: Set<String>
     private(set) var query = ""
+    /// Surcharge temporaire de portée en session (ex. `application` via A ou `display` via D, Spec 161).
+    private(set) var scopeOverride: String?
     private(set) var matches: [WindowSwitcherEntry] = []
     private var selectedID: WindowID?
+
+    var effectiveScope: String { scopeOverride ?? profile.scope }
 
     private struct Ranked {
         let entry: WindowSwitcherEntry
@@ -157,6 +161,23 @@ struct WindowSwitcherModel {
         search(query)
     }
 
+    /// Bascule un filtre rapide de portée en session (`application` ou `display`) sans toucher au profil (Spec 161).
+    mutating func toggleScopeOverride(_ scope: String) {
+        scopeOverride = (scopeOverride == scope) ? nil : scope
+        matches = computeMatches()
+        if !matches.contains(where: { $0.id == selectedID }) {
+            selectedID = initialSelection() ?? matches.first?.id
+        }
+    }
+
+    mutating func setScopeOverride(_ scope: String?) {
+        scopeOverride = scope
+        matches = computeMatches()
+        if !matches.contains(where: { $0.id == selectedID }) {
+            selectedID = initialSelection() ?? matches.first?.id
+        }
+    }
+
     mutating func remove(id: WindowID) {
         let previousIndex = matches.firstIndex { $0.id == id }
         entries.removeAll { $0.id == id }
@@ -211,7 +232,7 @@ struct WindowSwitcherModel {
     }
 
     private func inScope(_ entry: WindowSwitcherEntry) -> Bool {
-        switch profile.scope {
+        switch effectiveScope {
         case "stage":
             guard let displayID = context.displayID, let desktopID = context.desktopID, let stageID = context.stageID else {
                 return false

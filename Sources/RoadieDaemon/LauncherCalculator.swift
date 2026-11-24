@@ -1,13 +1,17 @@
 import Foundation
 import RoadieCore
 
-/// Résultat d'un calcul tapé dans la barre (SPEC-087).
+/// Résultat d'un calcul ou d'une conversion tapé dans la barre (SPEC-087, Spec 161).
 struct LauncherCalculation: Equatable, Sendable {
     /// Saisie relue, sans espaces autour.
     let expression: String
     let value: Double
     /// Résultat mis en forme : 12 chiffres significatifs, séparateur décimal de la langue, sans groupement.
     let text: String
+    /// Sous-titre optionnel (ex. conversion d'unités, bases numériques ou fuseau horaire).
+    var detail: String? = nil
+    /// Vrai pour une conversion hors ligne (ne déclenche pas l'ouverture de Calculette sur Retour).
+    var isConversion: Bool = false
 }
 
 /// Calculatrice du lanceur : analyseur à descente récursive, sans `NSExpression` qui lève une exception

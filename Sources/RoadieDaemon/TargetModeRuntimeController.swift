@@ -1083,6 +1083,9 @@ public final class TargetModeRuntimeController: NSObject {
         context.fileExcluded = barConfig.fileExcludedFolders
         context.calcLocale = LauncherCalculator.locale(barConfig.calcDecimal)
         context.calcGrouping = barConfig.calcGrouping
+        context.calcConversions = barConfig.calcConversions
+        context.emojiPicker = barConfig.emojiPicker
+        context.timerEnabled = barConfig.timerEnabled
         context.pathSort = barConfig.pathSort
         // Session 131 : raccourcis de l'app Raccourcis, lus en fond pour les prochaines ouvertures.
         LauncherAppleShortcuts.shared.refresh()

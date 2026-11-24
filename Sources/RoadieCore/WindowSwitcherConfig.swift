@@ -20,6 +20,9 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
     public var appIcon: Bool
     /// 0 : taille automatique, selon le texte. Sinon bornée à 12…64 points.
     public var appIconSize: Double
+    /// Touches d'action directe dans le sélecteur hors recherche : W fermer, Q quitter, M réduire, H masquer,
+    /// S rapatrier dans la stage active, A filtrer par application courante, D par écran courant (Spec 161).
+    public var actionKeysEnabled: Bool
     public var excludedBundles: [String]
     /// Au plus neuf profils. Un identifiant déjà vu est ignoré : le premier profil gagne.
     public var shortcuts: [WindowSwitcherShortcutConfig]
@@ -50,8 +53,10 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         zoneHistoryHours: Int = 24,
         zoneClicksPerWindow: Int = 3,
         zoneClickExcludedBundles: [String] = [],
-        zoneClicksPerApp: [ZoneClicksAppConfig] = []
+        zoneClicksPerApp: [ZoneClicksAppConfig] = [],
+        actionKeysEnabled: Bool = true
     ) {
+        self.actionKeysEnabled = actionKeysEnabled
         self.zoneClickExcludedBundles = zoneClickExcludedBundles
         self.zoneClicksPerApp = zoneClicksPerApp
         self.zoneHistorySize = min(50, max(1, zoneHistorySize))
@@ -100,6 +105,7 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
         case zoneClickExcludedBundles = "zone_click_excluded_bundles"
         case zoneClicksPerApp = "zone_clicks_per_app"
         case excludedBundles = "excluded_bundles"
+        case actionKeysEnabled = "action_keys_enabled"
         case shortcuts
     }
 
@@ -123,7 +129,8 @@ public struct WindowSwitcherConfig: Equatable, Codable, Sendable {
             zoneHistoryHours: try c.decodeIfPresent(Int.self, forKey: .zoneHistoryHours) ?? defaults.zoneHistoryHours,
             zoneClicksPerWindow: try c.decodeIfPresent(Int.self, forKey: .zoneClicksPerWindow) ?? defaults.zoneClicksPerWindow,
             zoneClickExcludedBundles: try c.decodeIfPresent([String].self, forKey: .zoneClickExcludedBundles) ?? [],
-            zoneClicksPerApp: try c.decodeIfPresent([ZoneClicksAppConfig].self, forKey: .zoneClicksPerApp) ?? []
+            zoneClicksPerApp: try c.decodeIfPresent([ZoneClicksAppConfig].self, forKey: .zoneClicksPerApp) ?? [],
+            actionKeysEnabled: try c.decodeIfPresent(Bool.self, forKey: .actionKeysEnabled) ?? defaults.actionKeysEnabled
         )
     }
 }

@@ -1177,3 +1177,11 @@ Values: an empty string, `control`, `option`, `command`, `shift`, or a combinati
 ### Stage transition direction
 
 When moving up to a previous stage, its windows enter from below and move upward into place. When moving down, they enter from above and move downward. Direct jumps follow the rail order; Next and Previous retain their direction when wrapping. Offscreen storage does not determine the visible path. Temporary screenshots show the short transition while the real windows are placed underneath. Existing animation settings still apply. When capture is late or unavailable, the stage switches directly.
+
+### Switcher & Launcher Quick Wins (Spec 161)
+
+- **Direct action keys in the Switcher** (`switcher.action_keys_enabled`, enabled by default in **Settings > Switcher**): outside the search field, press `W` (close), `Q` (quit app), `M` (minimize/restore), `H` (hide app), `S` (summon to the active stage), `A` (filter by current app), or `D` (filter by current display).
+- **Offline Launcher Converter** (`experimental.target_mode.calc_conversions`): units (`100 km in mi`, `72 f to c`, `2 gb to mib`, `100 km/h to mph`), number bases (`0xff`, `0b101010`, `255 in hex`, `42 to bin`), and time zones (`time Tokyo`, `14:00 EST in Paris`).
+- **Native Color Picker** (`color` / `couleur`): launches `NSColorSampler`, copies `#RRGGBB`, and reports HEX / RGB / HSL.
+- **Offline Emoji & Typography Picker** (`experimental.target_mode.emoji_picker`): type `:word` or `emoji word` (includes `⌘ ⌥ ⇧ ⌃ → — … € ± ≈ ≠`).
+- **Native Timer & Pomodoro** (`experimental.target_mode.timer_enabled`): `timer 15m break`, `pomodoro`, `timer status`, `timer stop` in the launcher or via `roadie timer start|pomodoro|status|cancel`.

@@ -153,6 +153,8 @@ public final class CLICommandRouter {
             return verb == "list"
         case "daemon":
             return verb == "health"
+        case "timer":
+            return verb == "status"
         default:
             return false
         }
@@ -242,6 +244,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "launch --open-items [--tabs]"),
         CLICommandSpec(usage: "launch PATH [--stage NAME | --here [--mouse] | --new-stage] [--position left|right|full|float] [--preview-only]"),
         CLICommandSpec(usage: "switcher show [--profile ID] | cycle [--profile ID] [--hold cmd] [--backwards] | next | previous | accept | cancel [--json]"),
+        CLICommandSpec(usage: "timer start DURATION [LABEL] | pomodoro [DURATION] [LABEL] | status | cancel [ID]"),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
         CLICommandSpec(usage: "record start NAME [--duration S] [--stop-file PATH]"),
         CLICommandSpec(usage: "record replay|list|inspect|delete ..."),
@@ -771,6 +774,8 @@ public final class CLICommandRouter {
             guard let command = WindowSwitcherRuntimeBridge.command(arguments) else { return usageError() }
             return try queueTargetModeRuntimeCommand(command, json: args.contains("--json"),
                                                       notificationName: WindowSwitcherRuntimeBridge.notificationName)
+        case "timer":
+            return runTimerCommand(Array(args.dropFirst()))
         case "grid":
             return try runGridCommand(Array(args.dropFirst()))
         case "record":
@@ -2300,6 +2305,60 @@ public final class CLICommandRouter {
             err("roadie: launchctl kickstart failed (status \(process.terminationStatus)); is the \(Self.launchdLabel) LaunchAgent installed? see roadie doctor")
         }
         return process.terminationStatus
+    }
+
+    private func runTimerCommand(_ args: [String]) -> Int32 {
+        guard let verb = args.first?.lowercased() else { return usageError() }
+        let service = LauncherTimerService.shared
+        switch verb {
+        case "start":
+            guard args.count >= 2, let seconds = LauncherTimerService.parseDurationSeconds(args[1]) else {
+                return usageError()
+            }
+            let label = args.dropFirst(2).joined(separator: " ")
+            let timer = service.start(seconds: seconds, label: label)
+            out("timer started id=\(timer.id) duration=\(LauncherTimerService.formatDuration(timer.totalSeconds)) label=\(timer.label)")
+            return 0
+        case "pomodoro":
+            let seconds: Int
+            let labelParts: ArraySlice<String>
+            if args.count >= 2, let parsed = LauncherTimerService.parseDurationSeconds(args[1]) {
+                seconds = parsed
+                labelParts = args.dropFirst(2)
+            } else {
+                seconds = 25 * 60
+                labelParts = args.dropFirst(1)
+            }
+            let extra = labelParts.joined(separator: " ")
+            let label = extra.isEmpty ? "Pomodoro" : "Pomodoro · \(extra)"
+            let timer = service.start(seconds: seconds, label: label)
+            out("timer started id=\(timer.id) duration=\(LauncherTimerService.formatDuration(timer.totalSeconds)) label=\(timer.label)")
+            return 0
+        case "status":
+            let now = Date()
+            let active = service.activeTimers()
+            if active.isEmpty {
+                out("timers: none")
+            } else {
+                for timer in active {
+                    let rem = LauncherTimerService.formatDuration(timer.remainingSeconds(at: now))
+                    out("timer id=\(timer.id) remaining=\(rem) label=\(timer.label)")
+                }
+            }
+            return 0
+        case "cancel":
+            if let rawID = args.dropFirst().first {
+                guard let id = Int(rawID) else { return usageError() }
+                let cancelled = service.cancel(id: id)
+                out("timer cancel id=\(id) cancelled=\(cancelled)")
+                return cancelled ? 0 : 1
+            }
+            let count = service.cancelAll()
+            out("timers cancelled=\(count)")
+            return 0
+        default:
+            return usageError()
+        }
     }
 }
 

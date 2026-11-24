@@ -9,6 +9,7 @@ enum WindowSwitcherAction: String, CaseIterable {
     case quitApp
     case maximize
     case fullscreen
+    case summon
 }
 
 struct WindowSwitcherService {
@@ -213,7 +214,91 @@ struct WindowSwitcherService {
             guard activation.changed, activation.outcome != .failed else { return activation }
             let commands = WindowCommandService(service: service)
             return action == .maximize ? commands.toggleMaximize(windowID: entry.id) : commands.toggleFullscreen(windowID: entry.id)
+        case .summon:
+            return summonToActiveStage(entry, snapshot: snapshot)
         }
+    }
+
+    /// Rapatrie la fenêtre sélectionnée dans la stage active de l'écran actif et lui donne le focus (Spec 161).
+    private func summonToActiveStage(_ entry: WindowSwitcherEntry, snapshot: DaemonSnapshot) -> WindowCommandResult {
+        let generation = PlacementGeneration.shared.next()
+        let store = service.effectiveStageStore
+        var state = store.state()
+        let focusedDisplayID: DisplayID? = snapshot.focusedWindowID.flatMap { focusedID in
+            snapshot.windows.first(where: { $0.window.id == focusedID })?.scope?.displayID
+        }
+        guard let display = snapshot.displays.first(where: { $0.id == focusedDisplayID })
+            ?? state.activeDisplayID.flatMap({ id in snapshot.displays.first(where: { $0.id == id }) })
+            ?? snapshot.displays.first(where: \.isMain)
+            ?? snapshot.displays.first
+        else {
+            return .failure("switcher summon: no active display")
+        }
+        let desktopID = state.currentDesktopID(for: display.id)
+        let activeStageID = state.scope(displayID: display.id, desktopID: desktopID).activeStageID
+        let targetScope = StageScope(displayID: display.id, desktopID: desktopID, stageID: activeStageID)
+        let sourceScope = state.stageScope(for: entry.id)
+        if sourceScope == targetScope {
+            return activate(entry)
+        }
+        if entry.isHidden {
+            _ = WindowSwitcherWindowAccess.unhideApplication(pid: entry.window.pid, bundleID: entry.window.bundleID)
+        }
+        let liveWindow = snapshot.windows.first { $0.window.id == entry.id }?.window ?? entry.window
+        let defaultMode = service.effectiveConfig.tiling.defaultStrategy
+        do {
+            try store.mutateChecked { persisted in
+                for index in persisted.scopes.indices {
+                    persisted.scopes[index].remove(windowID: entry.id)
+                }
+                if let sourceScope, let sourceTree = persisted.bspTree(for: sourceScope) {
+                    persisted.setBSPTree(sourceTree.removing(entry.id), for: sourceScope)
+                }
+                persisted.suppressRulePlacement(window: liveWindow)
+                var destScope = persisted.scope(displayID: display.id, desktopID: desktopID)
+                let usesTree = destScope.stages.first(where: { $0.id == activeStageID })?.mode.usesTreeEngine ?? defaultMode.usesTreeEngine
+                destScope.assign(window: liveWindow, to: activeStageID, insertionIndex: nil, focusWindow: true, defaultMode: defaultMode)
+                persisted.update(destScope)
+                if usesTree {
+                    var tree = persisted.bspTree(for: targetScope) ?? .empty
+                    if !tree.windowIDs.contains(entry.id) {
+                        if let anchor = tree.windowIDs.last {
+                            tree = tree.inserting(entry.id, at: anchor, side: .right, in: display.visibleFrame.cgRect)
+                        } else {
+                            tree = .leaf(entry.id)
+                        }
+                        persisted.setBSPTree(tree, for: targetScope)
+                    }
+                }
+            }
+        } catch {
+            return .persistenceFailure("switcher summon", error)
+        }
+        let affected = Set([targetScope, sourceScope].compactMap { $0 })
+        for scope in affected {
+            try? service.removeLayoutIntentChecked(scope: scope)
+        }
+        let visible = display.visibleFrame.cgRect
+        let centered = CGRect(
+            x: visible.midX - liveWindow.frame.width / 2,
+            y: visible.midY - liveWindow.frame.height / 2,
+            width: liveWindow.frame.width,
+            height: liveWindow.frame.height
+        ).integral
+        let fresh = service.snapshot(followFocus: false)
+        _ = service.applyCommandPlacement(
+            CommandPlacement(restoring: [entry.id: centered], layoutScopes: affected),
+            snapshot: fresh,
+            cause: "switcher.summon",
+            generation: generation,
+            events: service.effectiveEvents
+        )
+        _ = service.focus(liveWindow)
+        return WindowCommandResult(
+            message: "switcher summon: window=\(entry.id.rawValue) stage=\(activeStageID.rawValue)",
+            changed: true,
+            outcome: .changed
+        )
     }
 
     private func collectDrafts(snapshot: DaemonSnapshot, persisted: PersistentStageState) -> [Draft] {

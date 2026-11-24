@@ -250,6 +250,7 @@ public final class WindowSwitcherController {
             current.config = config
             current.appearance = WindowSwitcherAppearance(config: config, profile: profile)
             current.panel?.switcherAppearance = current.appearance
+            current.panel?.actionKeysEnabled = config.actionKeysEnabled
             current.panel?.configure(profile: profile, navigationModifiers: current.required)
             current.model?.configure(profile: profile, excludedBundles: config.excludedBundles)
             hotkeys?.holdEscape(true)
@@ -289,6 +290,7 @@ public final class WindowSwitcherController {
         hotkeys?.holdEscape(true)
 
         let panel = WindowSwitcherPanel(appearance: newSession.appearance)
+        panel.actionKeysEnabled = config.actionKeysEnabled
         panel.onQueryChange = { [weak self] query in self?.queryChanged(query) }
         panel.onNavigate = { [weak self] backwards in self?.advance(backwards: backwards) }
         panel.onConfirm = { [weak self] in self?.accept() }
@@ -297,6 +299,7 @@ public final class WindowSwitcherController {
         panel.onHighlight = { [weak self] id in self?.highlight(id) }
         panel.onDismiss = { [weak self] id in self?.dismiss(id) }
         panel.onBan = { [weak self] id in self?.ban(id) }
+        panel.onToggleScope = { [weak self] scope in self?.toggleScope(scope) }
         panel.onSearchMode = { [weak self] editing in self?.session?.state.searchChanged(isEmpty: !editing) }
         panel.configure(profile: profile, forceSearch: !fromHotkey, navigationModifiers: required)
 
@@ -348,8 +351,10 @@ public final class WindowSwitcherController {
             }
             let previous = session.model?.selected?.id
             let query = session.model?.query ?? ""
+            let scopeOverride = session.model?.scopeOverride
             thumbnails.prune(keeping: Set(entries.map(\.id)), owner: "switcher")
             var model = makeModel(entries: entries, context: context, session: session)
+            model.setScopeOverride(scopeOverride)
             model.search(query)
             if let previous { model.select(id: previous) }
             session.model = model
@@ -515,7 +520,8 @@ public final class WindowSwitcherController {
                 : tr("Aucune fenêtre dans ce contexte", "No windows here"),
             iconOnlyIDs: session.appearance.style != .thumbnails ? []
                 : !session.zones.isEmpty ? Set(entries.lazy.filter { session.zones[$0.id].flatMap { ZoneThumbnails.shared.photo(for: $0.record) } == nil }.map(\.id))
-                : Set(entries.lazy.filter { !self.thumbnails.hasCapturedImage(for: $0.id) }.map(\.id))
+                : Set(entries.lazy.filter { !self.thumbnails.hasCapturedImage(for: $0.id) }.map(\.id)),
+            scopeFilter: model.scopeOverride
         )
         if session.appearance.style == .thumbnails, session.zones.isEmpty {
             thumbnails.requestCaptures(
@@ -562,13 +568,20 @@ public final class WindowSwitcherController {
         if session.state.confirm() { validate(session) }
     }
 
+    private func toggleScope(_ scope: String) {
+        guard let session, session.model != nil else { return }
+        session.actionFailed = false
+        session.model?.toggleScopeOverride(scope)
+        refresh(session)
+    }
+
     private func perform(_ action: WindowSwitcherAction) {
         guard let session, let selected = session.model?.selected else { return }
         // Zone : l'action vise sa fenêtre.
         let entry = session.zones[selected.id]?.window ?? selected
         session.loadTask?.cancel()
         session.loadRevision += 1
-        let closesOnSuccess = action == .maximize || action == .fullscreen || action == .hideApp || action == .quitApp
+        let closesOnSuccess = action == .maximize || action == .fullscreen || action == .hideApp || action == .quitApp || action == .summon
         if closesOnSuccess { session.panel?.orderOut(nil) }
         let result = switcher.perform(action, on: entry)
         events.append(RoadieEvent(
@@ -595,6 +608,7 @@ public final class WindowSwitcherController {
         let revision = session.loadRevision
         let previous = session.model?.selected?.id
         let query = session.model?.query ?? ""
+        let scopeOverride = session.model?.scopeOverride
         session.loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let loaded = await self.switcher.load()
@@ -602,6 +616,7 @@ public final class WindowSwitcherController {
             current.acquisitionUnavailable = loaded.snapshot == nil
             guard loaded.snapshot != nil else { self.refresh(current); return }
             var model = self.makeModel(entries: loaded.entries, context: loaded.context, session: current)
+            model.setScopeOverride(scopeOverride)
             model.search(query)
             if let previous { model.select(id: previous) }
             current.model = model

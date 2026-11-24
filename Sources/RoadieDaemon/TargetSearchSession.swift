@@ -889,9 +889,31 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         if let url = LauncherWeb.address(model.query) {
             launcherList.prepend(.web(LauncherWebRow(kind: .address(url), title: tr("Ouvrir", "Open") + " \(url.absoluteString)")), header: tr("Adresse", "Address"))
         }
-        // Calcul (SPEC-087) : son résultat passe en tête et devient la ligne choisie.
+        // Calcul (SPEC-087) ou conversion hors ligne (Spec 161) : passe en tête et devient la ligne choisie.
         if let calc = LauncherCalculator.evaluate(model.query, locale: launcher.calcLocale, grouping: launcher.calcGrouping) {
             launcherList.prepend(.calc(calc), header: tr("Calcul", "Calculation"))
+        } else if launcher.calcConversions,
+                  let conversion = LauncherConverter.evaluate(model.query, locale: launcher.calcLocale, grouping: launcher.calcGrouping) {
+            launcherList.prepend(.calc(conversion), header: tr("Conversion", "Conversion"))
+        }
+        // Émojis & symboles typographiques hors ligne (Spec 161 : `:…` ou `emoji …`).
+        if launcher.emojiPicker, let emojis = LauncherEmojiCatalog.matches(model.query) {
+            let emojiRows: [LauncherList.Row] = emojis.map { item in
+                .system(LauncherSystemCommand(
+                    id: "emoji-copy:\(item.glyph)",
+                    title: "\(item.glyph)  \(item.name)",
+                    keywords: item.keywords,
+                    symbol: "face.smiling",
+                    confirms: false,
+                    detail: "\(item.category) · " + tr("Retour copie", "Return copies")
+                ))
+            }
+            launcherList.prependSection(tr("Émojis et symboles", "Emojis & symbols"), emojiRows)
+        }
+        // Minuteur & Pomodoro locaux (Spec 161 : `timer …`, `pomodoro`).
+        if launcher.timerEnabled, let timerQuery = LauncherTimerService.parseQuery(model.query) {
+            let timerRows = Self.timerRows(for: timerQuery)
+            launcherList.prependSection(tr("Minuteur", "Timer"), timerRows)
         }
         if queryChanged || launcherList.row(for: launcherSelection) == nil { launcherSelection = launcherList.best }
         syncHighlight()
@@ -1151,6 +1173,65 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         }
     }
 
+    /// Lignes du lanceur pour une requête minuteur / Pomodoro (Spec 161).
+    private static func timerRows(for query: LauncherTimerService.ParsedQuery) -> [LauncherList.Row] {
+        switch query {
+        case .start(let seconds, let label):
+            let formatted = LauncherTimerService.formatDuration(seconds)
+            return [.system(LauncherSystemCommand(
+                id: "roadie-timer-start:\(seconds):\(label)",
+                title: tr("Démarrer « \(label) » (\(formatted))", "Start “\(label)” (\(formatted))"),
+                keywords: ["timer", "pomodoro", label],
+                symbol: "timer",
+                confirms: false,
+                detail: tr("Notification locale macOS à la fin", "Local macOS notification when finished")
+            ))]
+        case .cancelAll:
+            let count = LauncherTimerService.shared.activeTimers().count
+            return [.system(LauncherSystemCommand(
+                id: "roadie-timer-cancel-all",
+                title: tr("Arrêter tous les minuteurs (\(count) actif(s))", "Stop all timers (\(count) active)"),
+                keywords: ["timer", "stop", "cancel"],
+                symbol: "stop.circle",
+                confirms: false,
+                detail: tr("Retour arrête tous les décomptes", "Return stops all active timers")
+            ))]
+        case .status:
+            let now = Date()
+            let active = LauncherTimerService.shared.activeTimers()
+            var rows: [LauncherList.Row] = active.map { timer in
+                let remaining = LauncherTimerService.formatDuration(timer.remainingSeconds(at: now))
+                return .system(LauncherSystemCommand(
+                    id: "roadie-timer-cancel:\(timer.id)",
+                    title: "\(timer.label) · \(remaining)",
+                    keywords: ["timer", timer.label],
+                    symbol: "timer",
+                    confirms: false,
+                    detail: tr("En cours · Retour pour annuler", "Running · Return to cancel")
+                ))
+            }
+            if active.isEmpty {
+                rows.append(.system(LauncherSystemCommand(
+                    id: "roadie-timer-start:1500:Pomodoro",
+                    title: tr("Pomodoro (25:00)", "Pomodoro (25:00)"),
+                    keywords: ["pomodoro", "timer"],
+                    symbol: "timer",
+                    confirms: false,
+                    detail: tr("Démarrer un cycle de 25 min", "Start a 25 min session")
+                )))
+                rows.append(.system(LauncherSystemCommand(
+                    id: "roadie-timer-start:300:" + tr("Pause", "Break"),
+                    title: tr("Pause rapide (05:00)", "Quick break (05:00)"),
+                    keywords: ["pause", "break", "timer"],
+                    symbol: "cup.and.saucer",
+                    confirms: false,
+                    detail: tr("Démarrer un minuteur de 5 min", "Start a 5 min timer")
+                )))
+            }
+            return rows
+        }
+    }
+
     /// Retour sur une ligne web ou une recherche récente ; vrai si c'en était une (SPEC-090).
     private func confirmWeb() -> Bool {
         switch launcherList.row(for: launcherSelection) {
@@ -1273,7 +1354,7 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
     private func finishCalc(_ calc: LauncherCalculation) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(calc.text, forType: .string)
-        if launcher.calcOpensCalculator, let calculator = LauncherCalculator.calculator(in: launcher.apps) {
+        if !calc.isConversion, launcher.calcOpensCalculator, let calculator = LauncherCalculator.calculator(in: launcher.apps) {
             guard !finished else { return }
             finished = true
             launcher.recordQuery(model.query)
@@ -1338,7 +1419,8 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         case .web(let row): row.url?.absoluteString
         case .history(let query): query
         case .terminal(let command): command
-        case .system(let command): command.title
+        case .system(let command):
+            command.id.hasPrefix("emoji-copy:") ? String(command.id.dropFirst("emoji-copy:".count)) : command.title
         case .rule, .header, nil: nil
         }
     }
@@ -2186,8 +2268,9 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         case .workflowItem(let entry, let item, _):
             return SlashSuggestion(text: item.title, detail: item.subtitle, kind: .result, icon: workflowIcon(item.icon, entry: entry))
         case .calc(let calc):
-            return SlashSuggestion(text: calc.text, detail: "\(calc.expression) · \(LauncherCalculator.returnHint(opensCalculator: calcOpens))",
-                                   kind: .result, icon: .symbol("equal.square"))
+            let detail = calc.detail ?? "\(calc.expression) · \(LauncherCalculator.returnHint(opensCalculator: calcOpens))"
+            return SlashSuggestion(text: calc.text, detail: detail, kind: .result,
+                                   icon: .symbol(calc.isConversion ? "arrow.left.arrow.right.square" : "equal.square"))
         case .rule(let suggestion, let choice):
             let text = switch choice {
             case .create: tr("Créer la règle : \(suggestion.appName) toujours dans \(suggestion.stageTitle)",

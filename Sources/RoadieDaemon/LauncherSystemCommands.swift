@@ -110,6 +110,10 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             .init(id: "roadie-layout-mirror-y", fr: "Miroir vertical de la disposition", en: "Mirror layout vertically",
                   keywords: ["miroir", "mirror", "flip", "inverser", "vertical", "layout", "disposition"],
                   symbol: "arrow.up.and.down.righttriangle.up.righttriangle.down", confirms: false),
+            // Session 179 (SPEC-161) : pipette de couleur native (NSColorSampler).
+            .init(id: "color-picker", fr: "Pipette de couleur", en: "Color picker",
+                  keywords: ["color", "couleur", "pipette", "eyedropper", "hex", "rgb", "hsl", "picker"],
+                  symbol: "eyedropper", confirms: false),
         ]
     }
 
@@ -195,7 +199,43 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             Task.detached(priority: .userInitiated) { _ = LayoutCommandService().mirror("x") }
         case "roadie-layout-mirror-y":
             Task.detached(priority: .userInitiated) { _ = LayoutCommandService().mirror("y") }
+        case "color-picker":
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(200))
+                LauncherColorFormat.pickColor()
+            }
+        case "roadie-timer-cancel-all":
+            let count = LauncherTimerService.shared.cancelAll()
+            LauncherTimerService.postLocalNotification(
+                title: tr("Minuteurs annulés", "Timers cancelled"),
+                body: tr("\(count) minuteur(s) arrêté(s)", "\(count) timer(s) stopped")
+            )
         default:
+            if id.hasPrefix("emoji-copy:") {
+                let glyph = String(id.dropFirst("emoji-copy:".count))
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(glyph, forType: .string)
+                return
+            }
+            if id.hasPrefix("roadie-timer-start:") {
+                let payload = String(id.dropFirst("roadie-timer-start:".count))
+                let parts = payload.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+                if let secStr = parts.first, let seconds = Int(secStr), seconds > 0 {
+                    let label = parts.count > 1 ? String(parts[1]) : tr("Minuteur", "Timer")
+                    let timer = LauncherTimerService.shared.start(seconds: seconds, label: label)
+                    LauncherTimerService.postLocalNotification(
+                        title: tr("Minuteur démarré : \(timer.label)", "Timer started: \(timer.label)"),
+                        body: LauncherTimerService.formatDuration(timer.totalSeconds)
+                    )
+                }
+                return
+            }
+            if id.hasPrefix("roadie-timer-cancel:") {
+                if let timerID = Int(id.dropFirst("roadie-timer-cancel:".count)) {
+                    _ = LauncherTimerService.shared.cancel(id: timerID)
+                }
+                return
+            }
             // Navigateur SF Symbols (session 131), avec la recherche tapée après `symbols`.
             if id.hasPrefix("sf-symbols:") {
                 LauncherSymbolsPanel.show(query: String(id.dropFirst("sf-symbols:".count)))

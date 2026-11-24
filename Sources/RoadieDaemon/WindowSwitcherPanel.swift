@@ -171,6 +171,7 @@ extension WindowSwitcherAction {
         case .quitApp: tr("Quitter l'application", "Quit app")
         case .maximize: tr("Maximiser", "Maximize")
         case .fullscreen: tr("Plein écran Roadie", "Roadie full screen")
+        case .summon: tr("Rapatrier dans la stage active", "Summon to active stage")
         }
     }
 }
@@ -325,7 +326,14 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         case cancel, confirm, next, previous, left, right, up, down
     }
 
+    /// Commande directe déclenchée par une lettre hors champ de recherche (Spec 161).
+    enum DirectCommand: Equatable {
+        case action(WindowSwitcherAction)
+        case toggleScope(String)
+    }
+
     var switcherAppearance: WindowSwitcherAppearance
+    var actionKeysEnabled = true
     var onQueryChange: ((String) -> Void)?
     var onNavigate: ((_ backwards: Bool) -> Void)?
     var onConfirm: (() -> Void)?
@@ -335,9 +343,11 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
     var onDismiss: ((WindowID) -> Void)?
     var onBan: ((WindowID) -> Void)?
     var onAction: ((WindowSwitcherAction) -> Void)?
+    var onToggleScope: ((String) -> Void)?
     var onHighlight: ((WindowID) -> Void)?
     var onSearchMode: ((Bool) -> Void)?
     private(set) var isSearchEditing = false
+    private var activeScopeFilter: String?
     private var searchStartedOpen = false
     private var profile = WindowSwitcherShortcutConfig()
     private var navigationModifiers: Set<WindowSwitcherModifier> = []
@@ -525,8 +535,10 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         images: [WindowID: NSImage],
         previewImage: NSImage?,
         emptyMessage: String,
-        iconOnlyIDs: Set<WindowID> = []
+        iconOnlyIDs: Set<WindowID> = [],
+        scopeFilter: String? = nil
     ) {
+        activeScopeFilter = scopeFilter
         needsSelectionReveal = needsSelectionReveal || selectedID != selectedWindowID || field.stringValue != query
         renderedEntries = entries
         renderedImages = images
@@ -552,7 +564,14 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
         if (usesDesktopTabs && oldDesktop != browsing.desktop) || (switcherAppearance.presentation == .hierarchy && oldStage != browsing.stage) {
             rebuildContent()
         }
-        selectionLabel.stringValue = ""
+        if let scopeFilter = activeScopeFilter {
+            selectionLabel.textColor = .secondaryLabelColor
+            selectionLabel.stringValue = scopeFilter == "application"
+                ? tr("Filtre actif : application courante (A pour tout afficher)", "Active filter: current app (A to show all)")
+                : tr("Filtre actif : écran courant (D pour tout afficher)", "Active filter: current display (D to show all)")
+        } else {
+            selectionLabel.stringValue = ""
+        }
         for card in cards { card.isSelected = card.entryID == id }
         let entry = renderedEntries.first { $0.id == id }
         previewPane.update(entry: entry, image: previewImage, icon: entry.flatMap { appIcons[$0.window.pid] }, appearance: switcherAppearance)
@@ -639,7 +658,48 @@ final class WindowSwitcherPanel: NSPanel, NSSearchFieldDelegate {
             }
             return
         }
+        if event.type == .keyDown,
+           (field.currentEditor() as? NSTextView)?.hasMarkedText() != true,
+           let direct = Self.directCommand(
+               characters: event.charactersIgnoringModifiers,
+               modifierFlags: event.modifierFlags,
+               allowing: navigationModifiers,
+               isSearchEditing: isSearchEditing,
+               enabled: actionKeysEnabled
+           ) {
+            switch direct {
+            case .action(let action): onAction?(action)
+            case .toggleScope(let scope): onToggleScope?(scope)
+            }
+            return
+        }
         super.sendEvent(event)
+    }
+
+    /// Résout une touche d'action directe hors édition de recherche (Spec 161). Pur et testable sans AppKit actif.
+    nonisolated static func directCommand(
+        characters: String?,
+        modifierFlags: NSEvent.ModifierFlags,
+        allowing modifiers: Set<WindowSwitcherModifier>,
+        isSearchEditing: Bool,
+        enabled: Bool
+    ) -> DirectCommand? {
+        guard enabled, !isSearchEditing, let letter = characters?.lowercased(), letter.count == 1 else {
+            return nil
+        }
+        let flags = modifierFlags.intersection([.command, .control, .option, .shift])
+        let held = WindowSwitcherHotkey.held(in: CGEventFlags(rawValue: UInt64(flags.rawValue)))
+        guard held.isSubset(of: modifiers) else { return nil }
+        switch letter {
+        case "w": return .action(.close)
+        case "q": return .action(.quitApp)
+        case "m": return .action(.minimize)
+        case "h": return .action(.hideApp)
+        case "s": return .action(.summon)
+        case "a": return .toggleScope("application")
+        case "d": return .toggleScope("display")
+        default: return nil
+        }
     }
 
     /// Cmd+A/C/X/V vont à l'éditeur du champ : il n'y a pas de menu Édition dans le démon.

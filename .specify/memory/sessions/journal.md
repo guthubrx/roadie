@@ -589,3 +589,11 @@ Session 178, 24 novembre 2026. Spec 160 (Lot 3) — Quick Wins WM & NavRail :
 (4) `MouseFollower` (`focus.mouse_follows_focus`) est étendu à `StageCommandService.switchDisplay` et `DisplayCommandService.focus` ;
 (5) `StageCardView.updateHoveredAppIcon(at:)` et `RailPanel.updateHoveredAppIcon(at:)` (branchés sur `RailController.updateRailHover()`) ajoutent un halo discret, un agrandissement léger (1,12×) et une infobulle dynamique `App — Titre` au survol des icônes d'application sous les vignettes du NavRail.
 2 654 tests Swift dans 395 suites et 29 tests de scripts réussis.
+
+Session 179, 24 novembre 2026. Spec 161 (Lot 4) — Quick Wins Switcher & Lanceur :
+(1) ajout de `WindowSwitcherAction.summon` (rapatriement d'une fenêtre dans la stage active + mise à jour BSP + focus), surcharge de portée temporaire `scopeOverride` (`A` application courante / `D` écran courant) dans `WindowSwitcherModel`, et touches d'action directe `W/Q/M/H/S/A/D` dans `WindowSwitcherPanel` (hors champ de recherche, réglable via `switcher.action_keys_enabled`) ;
+(2) création de `LauncherConverter` (conversions 100 % hors ligne d'unités longueur/masse/température/données/temps/vitesse, bases hex/bin/oct/dec et fuseaux horaires, réglable via `experimental.target_mode.calc_conversions`) ;
+(3) ajout de la pipette de couleur native `NSColorSampler` (`LauncherColorFormat`, commande système `color-picker` copiant `#RRGGBB` et notifiant HEX/RGB/HSL) ;
+(4) création de `LauncherEmojiCatalog` (catalogue bilingue FR/EN émojis + symboles macOS et typographie, `:…` / `emoji …`, réglable via `experimental.target_mode.emoji_picker`) ;
+(5) création de `LauncherTimerService` (minuteurs et Pomodoro locaux thread-safe avec `OSAllocatedUnfairLock` + notification macOS locale, intégrés au lanceur et au CLI `roadie timer start|pomodoro|status|cancel`, réglable via `experimental.target_mode.timer_enabled`).
+2 661 tests Swift dans 396 suites et 29 tests de scripts réussis.

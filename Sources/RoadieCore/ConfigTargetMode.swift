@@ -224,6 +224,10 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var fileExcludedFolders: [String]
     public var calcDecimal: String
     public var calcGrouping: Bool
+    /// Spec 161 : conversions hors ligne (unités, bases, fuseaux horaires), sélecteur d'émojis/typographie et minuteur/Pomodoro.
+    public var calcConversions: Bool
+    public var emojiPicker: Bool
+    public var timerEnabled: Bool
     public var showScrollbar: Bool
     /// Touches de la barre (session 108), par action de `LauncherBarKeys.actions` ; forme normalisée,
     /// vide : touche désactivée. Clés TOML `<action>_key`.
@@ -305,6 +309,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         fileExcludedFolders: [String] = [],
         calcDecimal: String = "system",
         calcGrouping: Bool = false,
+        calcConversions: Bool = true,
+        emojiPicker: Bool = true,
+        timerEnabled: Bool = true,
         showScrollbar: Bool = false,
         barKeys: [String: String] = [:],
         bttPauseKeys: [String] = []
@@ -367,6 +374,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.fileExcludedFolders = fileExcludedFolders.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         self.calcDecimal = TargetModeConfig.calcDecimals.contains(calcDecimal) ? calcDecimal : "system"
         self.calcGrouping = calcGrouping
+        self.calcConversions = calcConversions
+        self.emojiPicker = emojiPicker
+        self.timerEnabled = timerEnabled
         self.showScrollbar = showScrollbar
         self.barKeys = LauncherBarKeys.resolved(barKeys)
         self.bttPauseKeys = bttPauseKeys.map { TargetGridConfig.normalizedKey($0, fallback: "") }.filter { !$0.isEmpty }
@@ -442,6 +452,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case fileExcludedFolders = "file_excluded_folders"
         case calcDecimal = "calc_decimal"
         case calcGrouping = "calc_grouping"
+        case calcConversions = "calc_conversions"
+        case emojiPicker = "emoji_picker"
+        case timerEnabled = "timer_enabled"
         case showScrollbar = "show_scrollbar"
         case bttPauseKeys = "btt_pause_keys"
     }
@@ -522,6 +535,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             fileExcludedFolders: try c.decodeIfPresent([String].self, forKey: .fileExcludedFolders) ?? defaults.fileExcludedFolders,
             calcDecimal: try c.decodeIfPresent(String.self, forKey: .calcDecimal) ?? defaults.calcDecimal,
             calcGrouping: try c.decodeIfPresent(Bool.self, forKey: .calcGrouping) ?? defaults.calcGrouping,
+            calcConversions: try c.decodeIfPresent(Bool.self, forKey: .calcConversions) ?? defaults.calcConversions,
+            emojiPicker: try c.decodeIfPresent(Bool.self, forKey: .emojiPicker) ?? defaults.emojiPicker,
+            timerEnabled: try c.decodeIfPresent(Bool.self, forKey: .timerEnabled) ?? defaults.timerEnabled,
             showScrollbar: try c.decodeIfPresent(Bool.self, forKey: .showScrollbar) ?? defaults.showScrollbar,
             barKeys: defaults.barKeys.merging(barKeys) { _, new in new },
             bttPauseKeys: try c.decodeIfPresent([String].self, forKey: .bttPauseKeys) ?? defaults.bttPauseKeys
