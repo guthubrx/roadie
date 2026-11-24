@@ -1137,24 +1137,98 @@ extension AXWindowFrameWriterTests {
     }
 
     @Test func spec158ParallelMultiPIDRestoresEnhancedUIOnCancellation() {
-        let f = WriterFixture()
-        f.io.enhancedUserInterface = true
-        f.io.windows[10] = index(pid: 10, ids: [101, 102])
-        f.io.windows[20] = index(pid: 20, ids: [201, 202])
-        let generations = f.generations
+        final class CancellationAXFrameIO: AXFrameIO, @unchecked Sendable {
+            private let lock = NSLock()
+            private let bothDisabled = DispatchSemaphore(value: 0)
+            private var disabled: [pid_t] = []
+            private var restored: [pid_t] = []
+            private var positionedElements: Set<UInt32> = []
+            private var waitTimedOut = false
+            private let onBothDisabled: @Sendable () -> Void
+            var windows: [pid_t: AXApplicationWindows] = [:]
+
+            init(onBothDisabled: @escaping @Sendable () -> Void) {
+                self.onBothDisabled = onBothDisabled
+            }
+
+            func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
+                lock.withLock { windows[pid] }
+            }
+
+            func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?) {
+                if attribute == "AXFullScreen" { return (.success, kCFBooleanFalse) }
+                if attribute == AXWindowFrameWriter.enhancedUserInterface { return (.success, kCFBooleanTrue) }
+                return (.attributeUnsupported, nil)
+            }
+
+            func values(of attributes: [String], on element: AXUIElement) -> (AXError, [AnyObject]) {
+                var origin = CGPoint(x: 10, y: 20)
+                var size = CGSize(width: 400, height: 300)
+                return (.success, [AXValueCreate(.cgPoint, &origin)!, AXValueCreate(.cgSize, &size)!])
+            }
+
+            func setValue(_ value: CFTypeRef, of attribute: String, on element: AXUIElement) -> AXError {
+                var pid: pid_t = 0
+                AXUIElementGetPid(element, &pid)
+                if attribute == AXWindowFrameWriter.enhancedUserInterface {
+                    let isRestoring = (value as? Bool) == true
+                    if isRestoring {
+                        lock.withLock { restored.append(pid) }
+                        return .success
+                    }
+                    let isSecond: Bool = lock.withLock {
+                        disabled.append(pid)
+                        return Set(disabled).count == 2
+                    }
+                    if isSecond {
+                        // Annuler la génération avant de libérer le premier fil : garantit que ni
+                        // l'un ni l'autre ne poursuit l'écriture de cadre et que les deux restaurent.
+                        onBothDisabled()
+                        bothDisabled.signal()
+                    } else if bothDisabled.wait(timeout: .now() + .seconds(2)) == .timedOut {
+                        lock.withLock { waitTimedOut = true }
+                    }
+                    return .success
+                }
+                if attribute == kAXPositionAttribute {
+                    lock.withLock { _ = positionedElements.insert(UInt32(pid)) }
+                }
+                return .success
+            }
+
+            func performAction(_ action: String, on element: AXUIElement) -> AXError { .success }
+
+            var disabledPIDs: [pid_t] { lock.withLock { disabled } }
+            var restoredPIDs: [pid_t] { lock.withLock { restored } }
+            var positionedWindowIDs: Set<UInt32> { lock.withLock { positionedElements } }
+            var timedOut: Bool { lock.withLock { waitTimedOut } }
+        }
+
+        let generations = PlacementGeneration()
         let expected = generations.current
-        f.io.afterFrameWrite = { _ = generations.next() }
+        let io = CancellationAXFrameIO(onBothDisabled: { _ = generations.next() })
+        io.windows[10] = index(pid: 10, ids: [101, 102])
+        io.windows[20] = index(pid: 20, ids: [201, 202])
+        let writer = AXWindowFrameWriter(
+            io: io,
+            windowIndex: AXWindowIndexCache(),
+            writtenFrames: WrittenFrameRegistry(),
+            registry: AXUnresponsiveApps(),
+            generations: generations
+        )
         let target = CGRect(x: 10, y: 20, width: 400, height: 300)
-        _ = f.writer.setFrames([
+        _ = writer.setFrames([
             WindowFrameUpdate(window: window(101, pid: 10), frame: target),
             WindowFrameUpdate(window: window(102, pid: 10), frame: target),
             WindowFrameUpdate(window: window(201, pid: 20), frame: target),
             WindowFrameUpdate(window: window(202, pid: 20), frame: target),
         ], generation: expected, isCurrent: { generations.current == expected })
 
-        let disabledCount = f.io.calls.filter { $0 == "set AXEnhancedUserInterface=false" }.count
-        let restoredCount = f.io.calls.filter { $0 == "set AXEnhancedUserInterface=true" }.count
-        #expect(disabledCount >= 1)
-        #expect(disabledCount == restoredCount)
+        #expect(!io.timedOut)
+        #expect(Set(io.disabledPIDs) == [10, 20])
+        #expect(io.disabledPIDs.count == 2)
+        #expect(Set(io.restoredPIDs) == [10, 20])
+        #expect(io.restoredPIDs.count == 2)
+        #expect(io.positionedWindowIDs.isEmpty)
     }
 }
