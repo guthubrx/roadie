@@ -518,5 +518,27 @@ final class Spec165TabbedBSPTreeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(sevenFrames[id(10)]!.height, 140)
         XCTAssertGreaterThanOrEqual(sevenFrames[id(12)]!.height, 140)
         XCTAssertGreaterThanOrEqual(sevenFrames[id(20)]!.height, 300)
+
+        // Constat Bridget R9 : somme des plafonds sans barre avec espacement fractionnaire (800x312, gap 10.5,
+        // barre 28, deux groupes A/B demandant 140 chacun -> 151 et 150.5 sans barre, contenus 151 et 151).
+        let fracTwoBox = CGRect(x: 0, y: 0, width: 800, height: 312)
+        let fracTwoTree: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 160.5 / 301.5,
+            first: .tabGroup(windowIDs: [w1, w2], active: w1),
+            second: .tabGroup(windowIDs: [w3, w4], active: w3)
+        )
+        let fracTwoSolved = fracTwoTree.correctingForMinimumSize(
+            of: w1,
+            minimum: CGSize(width: 100, height: 140),
+            in: fracTwoBox,
+            innerGap: 10.5,
+            tabBarHeight: 28,
+            knownMinimums: [w3: CGSize(width: 100, height: 140)]
+        )
+        XCTAssertNotNil(fracTwoSolved)
+        let fracTwoFrames = fracTwoSolved!.place(in: fracTwoBox, innerGap: 10.5, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(fracTwoFrames[w1]!.height, 140)
+        XCTAssertGreaterThanOrEqual(fracTwoFrames[w3]!.height, 140)
     }
 }

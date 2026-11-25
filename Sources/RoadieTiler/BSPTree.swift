@@ -1090,7 +1090,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                                             let upperRatio = floor(usable * Self.ratioBounds.upperBound)
                                             let firstCapOK = a.max.map { lowerRatio <= floor($0) } ?? true
                                             let secondCapOK = b.max.map { ceil(usable - $0) <= upperRatio } ?? true
-                                            let sumCapOK = (a.max != nil && b.max != nil) ? usable <= floor(a.max!) + floor(b.max!) : true
+                                            let sumCapOK = (a.max != nil && b.max != nil) ? ceil(usable - b.max!) <= floor(a.max!) : true
                                             return firstCapOK && secondCapOK && sumCapOK
                                         }), minH <= upper else { continue }
                                         maxH = upper
