@@ -93,6 +93,23 @@ public struct WindowContextActions {
         case .floatTitleAlways, .clearTitleFloat:
             let result = floatingWindows.setFloating(action.kind == .floatTitleAlways, window: entry.window)
             return WindowContextActionResult(message: result.message, changed: result.changed)
+        case .tabStack:
+            guard let direction = Direction(rawValue: action.targetID) else {
+                return WindowContextActionResult(message: "tab stack: invalid direction", changed: false, outcome: .failed)
+            }
+            let result = WindowCommandService(
+                service: snapshotService,
+                stageStore: stageStore,
+                events: eventLog
+            ).tabStack(direction, windowID: action.windowID)
+            return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
+        case .tabUnstack:
+            let result = WindowCommandService(
+                service: snapshotService,
+                stageStore: stageStore,
+                events: eventLog
+            ).tabUnstack(nil, windowID: action.windowID)
+            return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
         case .floatStage:
             return setPin(window: entry.window, sourceScope: scope, pinScope: .stage, snapshot: snapshot)
         case .pinDesktop:

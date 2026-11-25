@@ -188,7 +188,8 @@ d'une stage à l'autre. Nous ne connaissons pas d'autre outil pour macOS qui le 
 </p>
 
 Roadie répartit les fenêtres et ajuste leur place quand tu en ouvres ou en fermes
-une. Choisis parmi six dispositions par stage : arbre persistant (`spatialBsp`),
+une. Choisis parmi six dispositions par stage : arbre persistant (`spatialBsp`) avec
+**tuiles à onglets intégrées** (empile n'importe quelles fenêtres dans une même tuile en maintenant `⌥ Option` au centre ou en déposant sur une barre d'onglets, réordonne horizontalement, ou glisse un onglet hors de sa barre pour le détacher en tuile),
 tuilage équilibré (`bsp`), fenêtre principale + pile (`masterStack`), **onglets
 (`tabbed`)** avec barre d'onglets flottante cliquable, **ruban défilant
 (`scrolling`)** façon Niri avec colonnes centrées et bords voisins cliquables, ou

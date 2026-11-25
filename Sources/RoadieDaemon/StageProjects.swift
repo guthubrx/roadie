@@ -165,6 +165,9 @@ struct StageProject: Codable, Equatable, Sendable {
         switch tree {
         case .empty: return .empty
         case .leaf(let id): return name(id).map(BSPTree.leaf) ?? .empty
+        case .tabGroup(let ids, let active):
+            let renamedIDs = ids.compactMap(name)
+            return BSPTree.normalizedTabGroup(renamedIDs, active: name(active))
         case .split(let orientation, let ratio, let first, let second):
             let a = renamed(first, name), b = renamed(second, name)
             if a.isEmpty { return b }

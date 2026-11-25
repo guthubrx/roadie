@@ -22,6 +22,7 @@ struct Audit022R2LotFTests {
         switch tree {
         case .empty: return []
         case .leaf(let id): return [id]
+        case .tabGroup(let ids, _): return ids
         case .split(_, _, let first, let second): return referenceIDs(first) + referenceIDs(second)
         }
     }

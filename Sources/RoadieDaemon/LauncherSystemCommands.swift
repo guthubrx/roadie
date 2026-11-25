@@ -125,6 +125,28 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             .init(id: "roadie-mode-scrolling", fr: "Disposition : Ruban défilant (scrolling)", en: "Layout: Scrolling ribbon",
                   keywords: ["scrolling", "scroll", "ribbon", "ruban", "niri", "mode", "disposition", "layout"],
                   symbol: "rectangle.split.3x1", confirms: false),
+            // Session 186 (SPEC-165) : tuiles à onglets intégrées dans spatialBsp.
+            .init(id: "roadie-tab-next", fr: "Onglet suivant", en: "Next tab",
+                  keywords: ["tab", "onglet", "suivant", "next", "tuile", "bsp"],
+                  symbol: "arrow.right.square", confirms: false),
+            .init(id: "roadie-tab-prev", fr: "Onglet précédent", en: "Previous tab",
+                  keywords: ["tab", "onglet", "precedent", "previous", "prev", "tuile", "bsp"],
+                  symbol: "arrow.left.square", confirms: false),
+            .init(id: "roadie-tab-stack-left", fr: "Empiler en onglet (gauche)", en: "Stack as tab (left)",
+                  keywords: ["tab", "stack", "empiler", "onglet", "gauche", "left", "tuile"],
+                  symbol: "square.stack.3d.up", confirms: false),
+            .init(id: "roadie-tab-stack-right", fr: "Empiler en onglet (droite)", en: "Stack as tab (right)",
+                  keywords: ["tab", "stack", "empiler", "onglet", "droite", "right", "tuile"],
+                  symbol: "square.stack.3d.up", confirms: false),
+            .init(id: "roadie-tab-stack-up", fr: "Empiler en onglet (haut)", en: "Stack as tab (up)",
+                  keywords: ["tab", "stack", "empiler", "onglet", "haut", "up", "tuile"],
+                  symbol: "square.stack.3d.up", confirms: false),
+            .init(id: "roadie-tab-stack-down", fr: "Empiler en onglet (bas)", en: "Stack as tab (down)",
+                  keywords: ["tab", "stack", "empiler", "onglet", "bas", "down", "tuile"],
+                  symbol: "square.stack.3d.up", confirms: false),
+            .init(id: "roadie-tab-unstack", fr: "Détacher l'onglet en tuile", en: "Detach tab to tile",
+                  keywords: ["tab", "unstack", "detach", "detacher", "onglet", "tuile", "separer"],
+                  symbol: "rectangle.split.2x1", confirms: false),
         ]
     }
 
@@ -221,6 +243,20 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             Task.detached(priority: .userInitiated) { _ = StageCommandService().setMode(.tabbed) }
         case "roadie-mode-scrolling":
             Task.detached(priority: .userInitiated) { _ = StageCommandService().setMode(.scrolling) }
+        case "roadie-tab-next":
+            Task.detached(priority: .userInitiated) { _ = WindowCommandService().tabCycle(delta: 1) }
+        case "roadie-tab-prev":
+            Task.detached(priority: .userInitiated) { _ = WindowCommandService().tabCycle(delta: -1) }
+        case "roadie-tab-stack-left":
+            Task.detached(priority: .userInitiated) { _ = WindowCommandService().tabStack(.left) }
+        case "roadie-tab-stack-right":
+            Task.detached(priority: .userInitiated) { _ = WindowCommandService().tabStack(.right) }
+        case "roadie-tab-stack-up":
+            Task.detached(priority: .userInitiated) { _ = WindowCommandService().tabStack(.up) }
+        case "roadie-tab-stack-down":
+            Task.detached(priority: .userInitiated) { _ = WindowCommandService().tabStack(.down) }
+        case "roadie-tab-unstack":
+            Task.detached(priority: .userInitiated) { _ = WindowCommandService().tabUnstack(nil) }
         case "roadie-timer-cancel-all":
             let count = LauncherTimerService.shared.cancelAll()
             LauncherTimerService.postLocalNotification(

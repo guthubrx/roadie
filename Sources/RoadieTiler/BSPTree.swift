@@ -51,10 +51,38 @@ public enum BSPEdge: String, Equatable, Sendable {
 /// construction (typiquement < 20, plafond observé ~50) → au pire ~2500 opérations, hors hot
 /// path serré. Compromis accepté : la lisibilité d'un arbre immuable récursif prime sur une
 /// optimisation non nécessaire à cette échelle.
+/// Emplacement géométrique d'une barre d'onglets de tuile `.tabGroup` en coordonnées AX (Spec 165).
+public struct BSPTabBarPlacement: Equatable, Sendable {
+    public let windowIDs: [WindowID]
+    public let active: WindowID
+    public let barFrame: CGRect
+    public let tileFrame: CGRect
+
+    public init(windowIDs: [WindowID], active: WindowID, barFrame: CGRect, tileFrame: CGRect) {
+        self.windowIDs = windowIDs
+        self.active = active
+        self.barFrame = barFrame
+        self.tileFrame = tileFrame
+    }
+}
+
 public indirect enum BSPTree: Equatable, Codable, Sendable {
     case empty
     case leaf(WindowID)
+    /// Tuile contenant au moins deux fenêtres empilées en onglets (Spec 165).
+    /// Invariant : `windowIDs` sans doublon, `windowIDs.count >= 2`, `active` présent dans `windowIDs`.
+    case tabGroup(windowIDs: [WindowID], active: WindowID)
     case split(orientation: BSPOrientation, ratio: Double, first: BSPTree, second: BSPTree)
+
+    /// Construit un nœud normalisé à partir d'une liste d'onglets (0 → `.empty`, 1 → `.leaf`, ≥ 2 → `.tabGroup`).
+    public static func normalizedTabGroup(_ ids: [WindowID], active: WindowID? = nil) -> BSPTree {
+        var seen = Set<WindowID>()
+        let deduped = ids.filter { seen.insert($0).inserted }
+        guard let first = deduped.first else { return .empty }
+        if deduped.count == 1 { return .leaf(first) }
+        let resolvedActive = active.flatMap { deduped.contains($0) ? $0 : nil } ?? first
+        return .tabGroup(windowIDs: deduped, active: resolvedActive)
+    }
 
     // MARK: - Lecture
 
@@ -73,9 +101,70 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             break
         case .leaf(let id):
             result.append(id)
+        case .tabGroup(let ids, _):
+            result.append(contentsOf: ids)
         case .split(_, _, let first, let second):
             first.appendWindowIDs(to: &result)
             second.appendWindowIDs(to: &result)
+        }
+    }
+
+    /// Fenêtres visibles au premier plan de chaque tuile (`.leaf` ou onglet `active` d'un `.tabGroup`). O(n).
+    public var activeWindowIDs: Set<WindowID> {
+        var result: Set<WindowID> = []
+        appendActiveWindowIDs(to: &result)
+        return result
+    }
+
+    private func appendActiveWindowIDs(to result: inout Set<WindowID>) {
+        switch self {
+        case .empty:
+            break
+        case .leaf(let id):
+            result.insert(id)
+        case .tabGroup(let ids, let active):
+            if ids.contains(active) {
+                result.insert(active)
+            } else if let first = ids.first {
+                result.insert(first)
+            }
+        case .split(_, _, let first, let second):
+            first.appendActiveWindowIDs(to: &result)
+            second.appendActiveWindowIDs(to: &result)
+        }
+    }
+
+    /// Tous les groupes d'onglets de l'arbre, dans l'ordre de parcours. O(n).
+    public var tabGroups: [(windowIDs: [WindowID], active: WindowID)] {
+        var result: [(windowIDs: [WindowID], active: WindowID)] = []
+        appendTabGroups(to: &result)
+        return result
+    }
+
+    private func appendTabGroups(to result: inout [(windowIDs: [WindowID], active: WindowID)]) {
+        switch self {
+        case .empty, .leaf:
+            break
+        case .tabGroup(let ids, let active):
+            if ids.count >= 2 {
+                result.append((ids, ids.contains(active) ? active : ids[0]))
+            }
+        case .split(_, _, let first, let second):
+            first.appendTabGroups(to: &result)
+            second.appendTabGroups(to: &result)
+        }
+    }
+
+    /// Groupe d'onglets contenant `windowID`, ou nil si `windowID` est une feuille simple ou absente. O(n).
+    public func tabGroup(containing windowID: WindowID) -> (windowIDs: [WindowID], active: WindowID)? {
+        switch self {
+        case .empty, .leaf:
+            return nil
+        case .tabGroup(let ids, let active):
+            guard ids.contains(windowID) else { return nil }
+            return (ids, ids.contains(active) ? active : ids[0])
+        case .split(_, _, let first, let second):
+            return first.tabGroup(containing: windowID) ?? second.tabGroup(containing: windowID)
         }
     }
 
@@ -85,6 +174,8 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             return false
         case .leaf(let id):
             return id == windowID
+        case .tabGroup(let ids, _):
+            return ids.contains(windowID)
         case .split(_, _, let first, let second):
             return first.contains(windowID) || second.contains(windowID)
         }
@@ -97,36 +188,111 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
 
     // MARK: - Placement
 
+    /// Écart vertical entre la barre d'onglets d'une tuile `.tabGroup` et la fenêtre de contenu.
+    public static let tabBarGap: CGFloat = 4
+
+    /// Hauteur minimale de contenu requise sous une barre d'onglets de tuile.
+    public static let minimumContentHeightForTabBar: CGFloat = 120
+
+    /// Découpe une tuile `.tabGroup` (≥ 2 fenêtres) en barre d'onglets et zone de contenu.
+    static func splitTabBar(in rect: CGRect, tabBarHeight: CGFloat, count: Int) -> (bar: CGRect?, content: CGRect) {
+        let tile = rect.integral
+        guard count >= 2, tabBarHeight > 0, tabBarHeight.isFinite,
+              tile.width > 0, tile.height >= tabBarHeight + tabBarGap + minimumContentHeightForTabBar else {
+            return (nil, tile)
+        }
+        let effectiveHeight = min(floor(tabBarHeight), floor(tile.height / 4))
+        guard effectiveHeight > 0 else { return (nil, tile) }
+        let bar = CGRect(x: tile.minX, y: tile.minY, width: tile.width, height: effectiveHeight).integral
+        let contentY = bar.maxY + tabBarGap
+        let contentHeight = max(1, tile.maxY - contentY)
+        let content = CGRect(x: tile.minX, y: contentY, width: tile.width, height: contentHeight).integral
+        return (bar, content)
+    }
+
     /// Calcule la frame de chaque fenêtre en répartissant `rect` selon l'arbre.
     /// `innerGap` est l'espace laissé entre deux enfants d'un split.
+    /// `tabBarHeight` réserve une barre d'onglets en haut de chaque tuile `.tabGroup` (≥ 2 fenêtres).
     /// Avec `minimumSizes`, pré-calcule en une traversée ascendante O(n) les besoins minimaux
     /// de chaque sous-arbre (y compris l'écart et le plancher enfant quand un côté porte un minimum),
     /// puis place en O(n) en contraignant les splits quand les minimums tiennent dans l'étendue.
     public func place(
         in rect: CGRect,
         innerGap: CGFloat,
+        tabBarHeight: CGFloat = 0,
         minimumSizes: [WindowID: CGSize] = [:]
     ) -> [WindowID: CGRect] {
         var result: [WindowID: CGRect] = [:]
         if minimumSizes.isEmpty {
-            place(in: rect, innerGap: innerGap, into: &result)
+            place(in: rect, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
         } else {
-            let sized = SizedTree.build(from: self, innerGap: innerGap, minimumSizes: minimumSizes)
-            sized.place(in: rect, innerGap: innerGap, into: &result)
+            let sized = SizedTree.build(from: self, innerGap: innerGap, tabBarHeight: tabBarHeight, minimumSizes: minimumSizes)
+            sized.place(in: rect, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
         }
         return result
     }
 
-    private func place(in rect: CGRect, innerGap: CGFloat, into result: inout [WindowID: CGRect]) {
+    /// Emplacements des barres d'onglets pour toutes les tuiles `.tabGroup` (≥ 2 fenêtres) dans `rect`. O(n).
+    public func tabBarFrames(
+        in rect: CGRect,
+        innerGap: CGFloat,
+        tabBarHeight: CGFloat,
+        minimumSizes: [WindowID: CGSize] = [:]
+    ) -> [BSPTabBarPlacement] {
+        guard tabBarHeight > 0, tabBarHeight.isFinite else { return [] }
+        var result: [BSPTabBarPlacement] = []
+        if minimumSizes.isEmpty {
+            collectTabBarFrames(in: rect, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
+        } else {
+            let sized = SizedTree.build(from: self, innerGap: innerGap, tabBarHeight: tabBarHeight, minimumSizes: minimumSizes)
+            sized.collectTabBarFrames(in: rect, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
+        }
+        return result
+    }
+
+    private func place(in rect: CGRect, innerGap: CGFloat, tabBarHeight: CGFloat, into result: inout [WindowID: CGRect]) {
         switch self {
         case .empty:
             return
         case .leaf(let id):
             result[id] = rect.integral
+        case .tabGroup(let ids, _):
+            let (_, content) = Self.splitTabBar(in: rect, tabBarHeight: tabBarHeight, count: ids.count)
+            for id in ids {
+                result[id] = content
+            }
         case .split(let orientation, let ratio, let first, let second):
             let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
-            first.place(in: rects.first, innerGap: innerGap, into: &result)
-            second.place(in: rects.second, innerGap: innerGap, into: &result)
+            first.place(in: rects.first, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
+            second.place(in: rects.second, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
+        }
+    }
+
+    private func collectTabBarFrames(
+        in rect: CGRect,
+        innerGap: CGFloat,
+        tabBarHeight: CGFloat,
+        into result: inout [BSPTabBarPlacement]
+    ) {
+        switch self {
+        case .empty, .leaf:
+            return
+        case .tabGroup(let ids, let active):
+            guard ids.count >= 2 else { return }
+            let (bar, _) = Self.splitTabBar(in: rect, tabBarHeight: tabBarHeight, count: ids.count)
+            if let bar {
+                let resolvedActive = ids.contains(active) ? active : ids[0]
+                result.append(BSPTabBarPlacement(
+                    windowIDs: ids,
+                    active: resolvedActive,
+                    barFrame: bar,
+                    tileFrame: rect.integral
+                ))
+            }
+        case .split(let orientation, let ratio, let first, let second):
+            let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
+            first.collectTabBarFrames(in: rects.first, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
+            second.collectTabBarFrames(in: rects.second, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
         }
     }
 
@@ -134,12 +300,14 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     private indirect enum SizedTree {
         case empty
         case leaf(WindowID, minSize: CGSize)
+        case tabGroup([WindowID], active: WindowID, minSize: CGSize)
         case split(orientation: BSPOrientation, ratio: Double, first: SizedTree, second: SizedTree, minSize: CGSize)
 
         var minSize: CGSize {
             switch self {
             case .empty: .zero
             case .leaf(_, let size): size
+            case .tabGroup(_, _, let size): size
             case .split(_, _, _, _, let size): size
             }
         }
@@ -149,16 +317,33 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             return false
         }
 
-        static func build(from tree: BSPTree, innerGap: CGFloat, minimumSizes: [WindowID: CGSize]) -> SizedTree {
+        static func build(
+            from tree: BSPTree,
+            innerGap: CGFloat,
+            tabBarHeight: CGFloat,
+            minimumSizes: [WindowID: CGSize]
+        ) -> SizedTree {
             switch tree {
             case .empty:
                 return .empty
             case .leaf(let id):
                 let raw = minimumSizes[id] ?? .zero
                 return .leaf(id, minSize: CGSize(width: max(0, raw.width), height: max(0, raw.height)))
+            case .tabGroup(let ids, let active):
+                var maxWidth: CGFloat = 0
+                var maxHeight: CGFloat = 0
+                for id in ids {
+                    let raw = minimumSizes[id] ?? .zero
+                    maxWidth = max(maxWidth, max(0, raw.width))
+                    maxHeight = max(maxHeight, max(0, raw.height))
+                }
+                let barReserve: CGFloat = (ids.count >= 2 && tabBarHeight > 0 && maxHeight > 0)
+                    ? floor(tabBarHeight) + BSPTree.tabBarGap : 0
+                let resolvedActive = ids.contains(active) ? active : (ids.first ?? active)
+                return .tabGroup(ids, active: resolvedActive, minSize: CGSize(width: maxWidth, height: maxHeight + barReserve))
             case .split(let orientation, let ratio, let firstTree, let secondTree):
-                let first = build(from: firstTree, innerGap: innerGap, minimumSizes: minimumSizes)
-                let second = build(from: secondTree, innerGap: innerGap, minimumSizes: minimumSizes)
+                let first = build(from: firstTree, innerGap: innerGap, tabBarHeight: tabBarHeight, minimumSizes: minimumSizes)
+                let second = build(from: secondTree, innerGap: innerGap, tabBarHeight: tabBarHeight, minimumSizes: minimumSizes)
                 let a = first.minSize
                 let b = second.minSize
                 let splitGap = BSPTree.gap(for: orientation, innerGap: innerGap)
@@ -186,12 +371,17 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             }
         }
 
-        func place(in rect: CGRect, innerGap: CGFloat, into result: inout [WindowID: CGRect]) {
+        func place(in rect: CGRect, innerGap: CGFloat, tabBarHeight: CGFloat, into result: inout [WindowID: CGRect]) {
             switch self {
             case .empty:
                 return
             case .leaf(let id, _):
                 result[id] = rect.integral
+            case .tabGroup(let ids, _, _):
+                let (_, content) = BSPTree.splitTabBar(in: rect, tabBarHeight: tabBarHeight, count: ids.count)
+                for id in ids {
+                    result[id] = content
+                }
             case .split(let orientation, let ratio, let first, let second, _):
                 let minFirst = orientation == .vertical ? first.minSize.width : first.minSize.height
                 let minSecond = orientation == .vertical ? second.minSize.width : second.minSize.height
@@ -203,8 +393,44 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                     minFirstExtent: minFirst,
                     minSecondExtent: minSecond
                 )
-                first.place(in: rects.first, innerGap: innerGap, into: &result)
-                second.place(in: rects.second, innerGap: innerGap, into: &result)
+                first.place(in: rects.first, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
+                second.place(in: rects.second, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
+            }
+        }
+
+        func collectTabBarFrames(
+            in rect: CGRect,
+            innerGap: CGFloat,
+            tabBarHeight: CGFloat,
+            into result: inout [BSPTabBarPlacement]
+        ) {
+            switch self {
+            case .empty, .leaf:
+                return
+            case .tabGroup(let ids, let active, _):
+                guard ids.count >= 2 else { return }
+                let (bar, _) = BSPTree.splitTabBar(in: rect, tabBarHeight: tabBarHeight, count: ids.count)
+                if let bar {
+                    result.append(BSPTabBarPlacement(
+                        windowIDs: ids,
+                        active: ids.contains(active) ? active : ids[0],
+                        barFrame: bar,
+                        tileFrame: rect.integral
+                    ))
+                }
+            case .split(let orientation, let ratio, let first, let second, _):
+                let minFirst = orientation == .vertical ? first.minSize.width : first.minSize.height
+                let minSecond = orientation == .vertical ? second.minSize.width : second.minSize.height
+                let rects = BSPTree.childRects(
+                    of: rect,
+                    orientation: orientation,
+                    ratio: ratio,
+                    innerGap: innerGap,
+                    minFirstExtent: minFirst,
+                    minSecondExtent: minSecond
+                )
+                first.collectTabBarFrames(in: rects.first, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
+                second.collectTabBarFrames(in: rects.second, innerGap: innerGap, tabBarHeight: tabBarHeight, into: &result)
             }
         }
     }
@@ -313,19 +539,52 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         return replacingLeaf(nil, transform: replacement) ?? self
     }
 
-    /// Retire la première occurrence ; remonte son frère sans revisiter les sous-arbres. O(n).
+    /// Retire la première occurrence ; dans un `.tabGroup`, retire uniquement le membre demandé
+    /// (avec repli 2→1 vers `.leaf` et passage à l'onglet adjacent si l'actif est retiré).
+    /// Sur une feuille simple, remonte son frère sans revisiter les sous-arbres. O(n).
     public func removing(_ window: WindowID) -> BSPTree {
-        replacingLeaf(window) { _ in .empty } ?? self
+        removingMember(window) ?? self
+    }
+
+    private func removingMember(_ window: WindowID) -> BSPTree? {
+        switch self {
+        case .empty:
+            return nil
+        case .leaf(let id):
+            return id == window ? .empty : nil
+        case .tabGroup(let ids, let active):
+            guard let removedIndex = ids.firstIndex(of: window) else { return nil }
+            var remaining = ids
+            remaining.remove(at: removedIndex)
+            let nextActive: WindowID?
+            if active == window {
+                nextActive = remaining.isEmpty ? nil : remaining[min(removedIndex, remaining.count - 1)]
+            } else {
+                nextActive = active
+            }
+            return Self.normalizedTabGroup(remaining, active: nextActive)
+        case .split(let orientation, let ratio, let first, let second):
+            if let changed = first.removingMember(window) {
+                return changed.isEmpty ? second : .split(orientation: orientation, ratio: ratio, first: changed, second: second)
+            }
+            if let changed = second.removingMember(window) {
+                return changed.isEmpty ? first : .split(orientation: orientation, ratio: ratio, first: first, second: changed)
+            }
+            return nil
+        }
     }
 
     /// nil cible la première branche gauche (y compris vide), comme l'insertion historique.
     /// nil en résultat signifie « cible absente », distinct d'une suppression vers `.empty`.
+    /// Cible une tuile entière (`.leaf` ou `.tabGroup` contenant `target`).
     private func replacingLeaf(_ target: WindowID?, transform: (BSPTree) -> BSPTree) -> BSPTree? {
         switch self {
         case .empty:
             return target == nil ? transform(self) : nil
         case .leaf(let id):
             return target == nil || id == target ? transform(self) : nil
+        case .tabGroup(let ids, _):
+            return target == nil || ids.contains(target!) ? transform(self) : nil
         case .split(let orientation, let ratio, let first, let second):
             if let changed = first.replacingLeaf(target, transform: transform) {
                 return changed.isEmpty ? second : .split(orientation: orientation, ratio: ratio, first: changed, second: second)
@@ -356,6 +615,27 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             if id == a { return .leaf(b) }
             if id == b { return .leaf(a) }
             return self
+        case .tabGroup(let ids, let active):
+            let hasA = ids.contains(a)
+            let hasB = ids.contains(b)
+            guard hasA || hasB else { return self }
+            let mapped = ids.map { id -> WindowID in
+                if id == a { return b }
+                if id == b { return a }
+                return id
+            }
+            let nextActive: WindowID
+            if hasA && hasB {
+                // Réordonnancement interne : l'onglet actif reste la même fenêtre.
+                nextActive = active
+            } else if active == a {
+                nextActive = b
+            } else if active == b {
+                nextActive = a
+            } else {
+                nextActive = active
+            }
+            return Self.normalizedTabGroup(mapped, active: nextActive)
         case .split(let orientation, let ratio, let first, let second):
             return .split(orientation: orientation, ratio: ratio,
                           first: first.relabelling(a, b),
@@ -376,6 +656,9 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             return self
         case .leaf(let id):
             return absent.contains(id) ? .empty : self
+        case .tabGroup(let ids, let active):
+            let kept = ids.filter { !absent.contains($0) }
+            return Self.normalizedTabGroup(kept, active: active)
         case .split(let orientation, let ratio, let first, let second):
             let newFirst = first.projected(excluding: absent)
             let newSecond = second.projected(excluding: absent)
@@ -417,6 +700,8 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             return nil
         case .leaf(let id):
             return id
+        case .tabGroup(let ids, _):
+            return ids.first
         case .split(let orientation, let ratio, let first, let second):
             let a = first.collectSplits(into: &splits)
             let b = second.collectSplits(into: &splits)
@@ -435,6 +720,8 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             return (self, nil)
         case .leaf(let id):
             return (self, present.contains(id) ? id : nil)
+        case .tabGroup(let ids, _):
+            return (self, ids.first(where: { present.contains($0) }))
         case .split(let orientation, let ratio, let first, let second):
             let newFirst = first.adoptingSplits(splits, present: present)
             let newSecond = second.adoptingSplits(splits, present: present)
@@ -455,7 +742,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     // O(n)
     public func balanced() -> BSPTree {
         switch self {
-        case .empty, .leaf:
+        case .empty, .leaf, .tabGroup:
             return self
         case .split(let orientation, _, let first, let second):
             return .split(orientation: orientation, ratio: 0.5, first: first.balanced(), second: second.balanced())
@@ -616,6 +903,14 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                         // Une voisine déjà sous son minimum peut rester identique, mais pas rétrécir.
                         let leafNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
                         required = minimumExtent(in: rect) { extent($0.integral) >= leafNeed }
+                    case .tabGroup(let ids, _):
+                        var groupNeed: CGFloat = 0
+                        for id in ids {
+                            let known = knownMinimums[id].map { ceil(axis == .vertical ? $0.width : $0.height) } ?? 0
+                            let memberNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
+                            groupNeed = max(groupNeed, memberNeed)
+                        }
+                        required = minimumExtent(in: rect) { extent($0.integral) >= groupNeed }
                     case .split(let orientation, let ratio, let first, let second):
                         let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
                         guard let a = requiredExtent(of: first, in: rects.first, path: path + [true]),
@@ -713,7 +1008,14 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             nodeRect = inFirst ? rects.first : rects.second
             path.append(inFirst)
         }
-        return node == .leaf(window) ? result : []
+        switch node {
+        case .leaf(let id) where id == window:
+            return result
+        case .tabGroup(let ids, _) where ids.contains(window):
+            return result
+        default:
+            return []
+        }
     }
 
     /// Remplace orientation et ratio du split au bout de `path` (depuis la racine).
@@ -888,7 +1190,7 @@ public extension BSPTree {
     ///   donc `second` à gauche avec ratio `1 - ratio` et `first` à droite).
     func rotated90() -> BSPTree {
         switch self {
-        case .empty, .leaf:
+        case .empty, .leaf, .tabGroup:
             return self
         case .split(let orientation, let ratio, let first, let second):
             switch orientation {
@@ -923,7 +1225,7 @@ public extension BSPTree {
     /// Miroir de l'arbre BSP selon l'axe `.x` (gauche ↔ droite) ou `.y` (haut ↔ bas). Involutif. O(n).
     func mirrored(_ axis: BSPMirrorAxis) -> BSPTree {
         switch self {
-        case .empty, .leaf:
+        case .empty, .leaf, .tabGroup:
             return self
         case .split(let orientation, let ratio, let first, let second):
             let flipsThisNode = (axis == .x && orientation == .vertical)
@@ -943,5 +1245,122 @@ public extension BSPTree {
                 second: second.mirrored(axis)
             )
         }
+    }
+}
+
+// MARK: - Tuiles à onglets (Spec 165)
+
+public extension BSPTree {
+    /// Empile `source` en onglet dans la tuile contenant `target` (`.leaf(target)` → `.tabGroup([target, source])`,
+    /// `.tabGroup(ids, _)` → `.tabGroup(ids + [source])`) et rend `source` actif.
+    /// Si `source == target` ou `target` absent → arbre inchangé.
+    /// Si `source` est déjà dans le même groupe que `target` → active simplement `source`. O(n).
+    func stacking(_ source: WindowID, onto target: WindowID) -> BSPTree {
+        guard source != target, contains(target) else { return self }
+        if let group = tabGroup(containing: target), group.windowIDs.contains(source) {
+            return selectingTab(source)
+        }
+        let cleaned = removing(source)
+        return cleaned.mergingTab(source, into: target) ?? self
+    }
+
+    private func mergingTab(_ source: WindowID, into target: WindowID) -> BSPTree? {
+        switch self {
+        case .empty:
+            return nil
+        case .leaf(let id):
+            guard id == target else { return nil }
+            return Self.normalizedTabGroup([id, source], active: source)
+        case .tabGroup(let ids, _):
+            guard ids.contains(target) else { return nil }
+            return Self.normalizedTabGroup(ids + [source], active: source)
+        case .split(let orientation, let ratio, let first, let second):
+            if let changed = first.mergingTab(source, into: target) {
+                return .split(orientation: orientation, ratio: ratio, first: changed, second: second)
+            }
+            if let changed = second.mergingTab(source, into: target) {
+                return .split(orientation: orientation, ratio: ratio, first: first, second: changed)
+            }
+            return nil
+        }
+    }
+
+    /// Détache `window` de son `.tabGroup` et la place dans sa propre tuile à côté du groupe restant.
+    /// No-op si `window` n'est pas dans un `.tabGroup` d'au moins 2 fenêtres. O(n).
+    func unstacking(_ window: WindowID, side: BSPInsertionSide, containerIsWide: Bool) -> BSPTree {
+        guard let group = tabGroup(containing: window), group.windowIDs.count >= 2,
+              let anchor = group.windowIDs.first(where: { $0 != window }) else { return self }
+        return removing(window).inserting(window, nextTo: anchor, side: side, containerIsWide: containerIsWide)
+    }
+
+    /// Détache `window` de son `.tabGroup` en déduisant l'orientation de la coupe depuis la géométrie de la tuile. O(n).
+    func unstacking(
+        _ window: WindowID,
+        side: BSPInsertionSide = .right,
+        in container: CGRect,
+        innerGap: CGFloat = 0,
+        excluding absent: Set<WindowID> = []
+    ) -> BSPTree {
+        guard let group = tabGroup(containing: window), group.windowIDs.count >= 2,
+              let anchor = group.windowIDs.first(where: { $0 != window && !absent.contains($0) })
+                ?? group.windowIDs.first(where: { $0 != window })
+        else { return self }
+        return removing(window).inserting(window, at: anchor, side: side, in: container, innerGap: innerGap, excluding: absent)
+    }
+
+    /// Définit `window` comme onglet actif du `.tabGroup` qui la contient. O(n).
+    func selectingTab(_ window: WindowID) -> BSPTree {
+        switch self {
+        case .empty, .leaf:
+            return self
+        case .tabGroup(let ids, let active):
+            guard ids.contains(window), active != window else { return self }
+            return .tabGroup(windowIDs: ids, active: window)
+        case .split(let orientation, let ratio, let first, let second):
+            let newFirst = first.selectingTab(window)
+            let newSecond = second.selectingTab(window)
+            if newFirst == first && newSecond == second { return self }
+            return .split(orientation: orientation, ratio: ratio, first: newFirst, second: newSecond)
+        }
+    }
+
+    /// Fait défiler l'onglet actif du `.tabGroup` contenant `window` de `delta` crans (cyclique).
+    /// Retourne `nil` si `window` n'appartient pas à un groupe d'au moins 2 onglets. O(n).
+    func cyclingTab(from window: WindowID, delta: Int) -> (tree: BSPTree, nextActive: WindowID)? {
+        guard let group = tabGroup(containing: window), group.windowIDs.count >= 2,
+              let idx = group.windowIDs.firstIndex(of: window) else { return nil }
+        let count = group.windowIDs.count
+        let nextIdx = ((idx + delta) % count + count) % count
+        let nextID = group.windowIDs[nextIdx]
+        return (selectingTab(nextID), nextID)
+    }
+
+    /// Déplace l'onglet `window` à l'index `toIndex` (borné) dans son `.tabGroup`. O(n).
+    func reorderingTab(_ window: WindowID, toIndex rawIndex: Int) -> BSPTree {
+        switch self {
+        case .empty, .leaf:
+            return self
+        case .tabGroup(let ids, let active):
+            guard let oldIndex = ids.firstIndex(of: window) else { return self }
+            let clamped = min(max(0, rawIndex), ids.count - 1)
+            guard clamped != oldIndex else { return self }
+            var reordered = ids
+            let moved = reordered.remove(at: oldIndex)
+            reordered.insert(moved, at: clamped)
+            return Self.normalizedTabGroup(reordered, active: active)
+        case .split(let orientation, let ratio, let first, let second):
+            let newFirst = first.reorderingTab(window, toIndex: rawIndex)
+            let newSecond = second.reorderingTab(window, toIndex: rawIndex)
+            if newFirst == first && newSecond == second { return self }
+            return .split(orientation: orientation, ratio: ratio, first: newFirst, second: newSecond)
+        }
+    }
+
+    /// Déplace l'onglet `window` de `delta` positions (borné aux extrémités) dans son `.tabGroup`. O(n).
+    func reorderingTab(_ window: WindowID, delta: Int) -> BSPTree {
+        guard delta != 0,
+              let group = tabGroup(containing: window),
+              let idx = group.windowIDs.firstIndex(of: window) else { return self }
+        return reorderingTab(window, toIndex: idx + delta)
     }
 }

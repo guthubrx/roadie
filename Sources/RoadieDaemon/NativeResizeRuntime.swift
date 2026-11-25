@@ -87,7 +87,7 @@ public final class NativeResizeRuntime: NSObject {
         guard members.count > 1, !members.contains(where: { $0.window.furniture?.isNativeFullscreen == true }) else { return false }
         let known = minimums(scope, snapshot)
         guard let prepared = BSPNativeResize(tree: tree, windowID: entry.window.id, in: geometry.container,
-            innerGap: geometry.innerGap, excluding: geometry.absent, knownMinimums: known, startFrame: start)
+            innerGap: geometry.innerGap, tabBarHeight: geometry.tabBarHeight, excluding: geometry.absent, knownMinimums: known, startFrame: start)
         else { return false }
         let current = Session(gesture: gesture, window: entry.window, scope: scope, tree: tree,
             config: service.effectiveConfig.tiling, prepared: prepared,

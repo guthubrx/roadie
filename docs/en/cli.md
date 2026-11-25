@@ -115,6 +115,11 @@ roadie layout width prev
 roadie layout width nudge 0.05
 roadie layout width ratio 0.67
 roadie balance
+roadie tab next
+roadie tab prev
+roadie tab stack left|right|up|down
+roadie tab unstack [left|right|up|down]
+roadie tab move left|right
 ```
 
 Use cases:

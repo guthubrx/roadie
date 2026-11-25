@@ -997,6 +997,12 @@ public struct SnapshotService: Sendable {
                 }
             }
         }
+        // Spec 165 : synchroniser l'onglet actif d'un `.tabGroup` avec la fenêtre focalisée.
+        if let activeFocus = [globalFocus, stage.focusedWindowID]
+            .compactMap({ $0 })
+            .first(where: { tree.tabGroup(containing: $0) != nil }) {
+            tree = tree.selectingTab(activeFocus)
+        }
         return tree
     }
 
@@ -2044,7 +2050,8 @@ public extension SnapshotService {
                 bspTree: stageStore.state().bspTree(for: scope),
                 outerGaps: outerGaps(windowCount: placed.count, display: display),
                 innerGap: config.tiling.gapsInner,
-                minimumSizes: knownMinimums
+                minimumSizes: knownMinimums,
+                tabbedBarHeight: config.tiling.tabbedBarHeight
             ))
         }
         let liveOrderedWindowIDs = orderedWindowIDs.filter { windowsByID[$0] != nil }
@@ -3199,7 +3206,8 @@ extension SnapshotService {
                 bspTree: next,
                 outerGaps: outerGaps(windowCount: placed.count + 1, display: display),
                 innerGap: config.tiling.gapsInner,
-                minimumSizes: knownMinimums
+                minimumSizes: knownMinimums,
+                tabbedBarHeight: config.tiling.tabbedBarHeight
             )).placements
         }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })

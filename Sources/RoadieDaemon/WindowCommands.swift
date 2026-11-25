@@ -122,6 +122,20 @@ public struct WindowCommandService {
         }
         let ok = focusWindow(entry.window)
         if ok, let scope = entry.scope {
+            if snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true {
+                _ = try? stageStore.mutateChecked { state in
+                    if let tree = state.bspTree(for: scope), tree.tabGroup(containing: windowID) != nil {
+                        let updated = tree.selectingTab(windowID)
+                        if updated != tree {
+                            state.setBSPTree(updated, for: scope)
+                        }
+                        var persistent = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+                        persistent.setFocusedWindow(windowID, in: scope.stageID)
+                        state.update(persistent)
+                    }
+                }
+                _ = service.snapshot(followFocus: false)
+            }
             recenterScrollingRibbonIfNeeded(scope: scope, snapshot: snapshot)
         }
         return WindowCommandResult.changedOrFailed(ok ? "focused \(entry.window.id.rawValue)" : "focus failed", changed: ok)
@@ -186,7 +200,7 @@ public struct WindowCommandService {
             }
         case .move, .warp:
             guard let geometry,
-                  let neighborID = treeNeighbor(of: id, direction: direction, frames: frames),
+                  let neighborID = treeNeighbor(of: id, direction: direction, frames: frames, tree: tree, absent: geometry.absent),
                   let found = snapshot.windows.first(where: { $0.window.id == neighborID })
             else {
                 let result = sendActiveToAdjacentDisplay(direction, from: snapshot, verb: verb.rawValue)
@@ -252,11 +266,21 @@ public struct WindowCommandService {
     }
 
     /// Voisine de `id` dans `direction`, mesurée sur les frames de l'arbre projeté (A9).
+    /// Exclut les co-onglets de `id` et privilégie l'onglet actif de chaque tuile voisine (Spec 165).
     /// Égalité départagée par identifiant, pour un résultat déterministe. O(n).
-    private func treeNeighbor(of id: WindowID, direction: Direction, frames: [WindowID: CGRect]) -> WindowID? {
+    private func treeNeighbor(
+        of id: WindowID,
+        direction: Direction,
+        frames: [WindowID: CGRect],
+        tree: BSPTree? = nil,
+        absent: Set<WindowID> = []
+    ) -> WindowID? {
         guard let origin = frames[id] else { return nil }
+        let projected = tree?.projected(excluding: absent)
+        let ownGroup = Set(projected?.tabGroup(containing: id)?.windowIDs ?? [id])
+        let activeIDs = projected?.activeWindowIDs
         let best = frames
-            .filter { $0.key != id }
+            .filter { !ownGroup.contains($0.key) && (activeIDs == nil || activeIDs!.contains($0.key)) }
             .map { (id: $0.key, score: neighborScore(from: origin, to: $0.value, direction: direction)) }
             .min { $0.score != $1.score ? $0.score < $1.score : $0.id.rawValue < $1.id.rawValue }
         guard let best, best.score.isFinite else { return nil }
@@ -1204,12 +1228,14 @@ public struct WindowCommandService {
             }
         }
         if let context = activeTree(in: snapshot),
-           let frames = service.commandTreeGeometry(for: scope, tree: context.tree, in: snapshot)?.frames(of: context.tree),
-           frames[active.window.id] != nil {
-            guard let neighborID = treeNeighbor(of: active.window.id, direction: direction, frames: frames),
-                  let neighbor = snapshot.windows.first(where: { $0.window.id == neighborID })
-            else { return nil }
-            return (active, neighbor)
+           let geometry = service.commandTreeGeometry(for: scope, tree: context.tree, in: snapshot) {
+            let frames = geometry.frames(of: context.tree)
+            if frames[active.window.id] != nil {
+                guard let neighborID = treeNeighbor(of: active.window.id, direction: direction, frames: frames, tree: context.tree, absent: geometry.absent),
+                      let neighbor = snapshot.windows.first(where: { $0.window.id == neighborID })
+                else { return nil }
+                return (active, neighbor)
+            }
         }
         let activeFrame = active.window.frame.cgRect
         // Pre-compute score once per candidate to avoid O(2n) score calls in min(by:).
@@ -1618,6 +1644,308 @@ public struct WindowCommandService {
         ).integral
     }
 
+    // MARK: - Commandes d'onglets BSP (Spec 165)
+
+    /// Fait défiler l'onglet actif (`delta = +1` suivant, `-1` précédent) dans le `.tabGroup`
+    /// de la fenêtre active (en `spatialBsp`) ou dans la stage entière (en mode `.tabbed`).
+    public func tabCycle(delta: Int) -> WindowCommandResult {
+        guard delta != 0 else {
+            return .noChange("tab cycle: zero delta")
+        }
+        let snapshot = service.snapshot()
+        guard let active = activeWindow(in: snapshot), let scope = active.scope else {
+            return .noChange("tab cycle: no active window")
+        }
+        if snapshot.state.stage(scope: scope)?.mode == .tabbed {
+            return focus(delta > 0 ? .right : .left)
+        }
+        guard let context = activeTree(in: snapshot),
+              let geometry = service.commandTreeGeometry(for: scope, tree: context.tree, in: snapshot)
+        else {
+            return .noChange("tab cycle: stage does not use tree engine")
+        }
+        let projected = context.tree.projected(excluding: geometry.absent)
+        guard let cycled = projected.cyclingTab(from: active.window.id, delta: delta),
+              let targetEntry = snapshot.windows.first(where: { $0.window.id == cycled.nextActive && $0.scope == scope })
+        else {
+            return .noChange("tab cycle: window is not in a tab group")
+        }
+        do {
+            try stageStore.mutateChecked { state in
+                let existing = state.bspTree(for: scope) ?? .empty
+                state.setBSPTree(existing.selectingTab(cycled.nextActive), for: scope)
+                var persistent = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+                persistent.setFocusedWindow(cycled.nextActive, in: scope.stageID)
+                state.update(persistent)
+            }
+        } catch {
+            return .persistenceFailure("tab cycle", error)
+        }
+        let ok = focusWindow(targetEntry.window)
+        _ = service.snapshot(followFocus: false)
+        let result = WindowCommandResult.changedOrFailed(
+            ok ? "tab \(delta > 0 ? "next" : "prev"): focused \(cycled.nextActive.rawValue)" : "tab cycle: focus failed",
+            changed: ok
+        )
+        appendWindowCommandEvent(
+            verb: delta > 0 ? "tab_next" : "tab_prev",
+            direction: delta > 0 ? .right : .left,
+            snapshot: snapshot,
+            active: active,
+            neighbor: targetEntry,
+            scope: scope,
+            result: result
+        )
+        return result
+    }
+
+    /// Empile la fenêtre active (ou `windowID`) en onglet dans la tuile voisine dans `direction`.
+    public func tabStack(_ direction: Direction, windowID: WindowID? = nil) -> WindowCommandResult {
+        let generation = PlacementGeneration.shared.next()
+        let snapshot = service.snapshot()
+        let targetEntry: ScopedWindowSnapshot?
+        if let windowID {
+            targetEntry = snapshot.windows.first(where: { $0.window.id == windowID })
+        } else {
+            targetEntry = activeWindow(in: snapshot)
+        }
+        guard let active = targetEntry,
+              let scope = active.scope,
+              snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
+        else {
+            return .noChange("tab stack \(direction.rawValue): no active BSP window")
+        }
+        let tree = stageStore.state().bspTree(for: scope) ?? .empty
+        guard let geometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot) else {
+            return .noChange("tab stack \(direction.rawValue): no tree geometry")
+        }
+        let frames = geometry.frames(of: tree)
+        guard let neighborID = treeNeighbor(of: active.window.id, direction: direction, frames: frames, tree: tree, absent: geometry.absent),
+              let neighbor = snapshot.windows.first(where: { $0.window.id == neighborID })
+        else {
+            return .noChange("tab stack \(direction.rawValue): no neighbor")
+        }
+        let changed: Bool
+        do {
+            changed = try stageStore.mutateChecked { state -> Bool in
+                let existing = state.bspTree(for: scope) ?? .empty
+                let mutated = existing.stacking(active.window.id, onto: neighborID)
+                guard mutated != existing else { return false }
+                state.setBSPTree(mutated, for: scope)
+                var persistent = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+                persistent.setFocusedWindow(active.window.id, in: scope.stageID)
+                state.update(persistent)
+                return true
+            }
+            if changed {
+                try service.removeLayoutIntentChecked(scope: scope)
+            }
+        } catch {
+            return .persistenceFailure("tab stack \(direction.rawValue)", error)
+        }
+        guard changed else {
+            return .noChange("tab stack \(direction.rawValue): unchanged")
+        }
+        let tick = service.applyTreeScope(
+            scope,
+            cause: "window.tab.stack.\(direction.rawValue)",
+            generation: generation,
+            using: snapshot
+        )
+        _ = focusWindow(active.window)
+        _ = service.snapshot(followFocus: false)
+        let result = WindowCommandResult(
+            message: "tab stack \(direction.rawValue): stacked \(active.window.id.rawValue) onto \(neighborID.rawValue) applied=\(tick.applied)",
+            changed: true,
+            outcome: .changed
+        )
+        appendWindowCommandEvent(
+            verb: "tab_stack",
+            direction: direction,
+            snapshot: snapshot,
+            active: active,
+            neighbor: neighbor,
+            scope: scope,
+            result: result
+        )
+        return result
+    }
+
+    /// Détache la fenêtre active (ou `windowID`) de son `.tabGroup` dans sa propre tuile BSP.
+    public func tabUnstack(_ direction: Direction? = nil, windowID: WindowID? = nil) -> WindowCommandResult {
+        let generation = PlacementGeneration.shared.next()
+        let snapshot = service.snapshot()
+        let targetEntry: ScopedWindowSnapshot?
+        if let windowID {
+            targetEntry = snapshot.windows.first(where: { $0.window.id == windowID })
+        } else {
+            targetEntry = activeWindow(in: snapshot)
+        }
+        guard let active = targetEntry,
+              let scope = active.scope,
+              snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
+        else {
+            return .noChange("tab unstack: no active BSP window")
+        }
+        let tree = stageStore.state().bspTree(for: scope) ?? .empty
+        guard let geometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot),
+              tree.tabGroup(containing: active.window.id) != nil
+        else {
+            return .noChange("tab unstack: window is not in a tab group")
+        }
+        let changed: Bool
+        do {
+            changed = try stageStore.mutateChecked { state -> Bool in
+                let existing = state.bspTree(for: scope) ?? .empty
+                let mutated: BSPTree
+                if let direction {
+                    let side: BSPInsertionSide = (direction == .left || direction == .up) ? .left : .right
+                    let wide = (direction == .left || direction == .right)
+                    mutated = existing.unstacking(active.window.id, side: side, containerIsWide: wide)
+                } else {
+                    mutated = existing.unstacking(
+                        active.window.id,
+                        side: .right,
+                        in: geometry.container,
+                        innerGap: geometry.innerGap,
+                        excluding: geometry.absent
+                    )
+                }
+                guard mutated != existing else { return false }
+                state.setBSPTree(mutated, for: scope)
+                return true
+            }
+            if changed {
+                try service.removeLayoutIntentChecked(scope: scope)
+            }
+        } catch {
+            return .persistenceFailure("tab unstack", error)
+        }
+        guard changed else {
+            return .noChange("tab unstack: unchanged")
+        }
+        let tick = service.applyTreeScope(
+            scope,
+            cause: "window.tab.unstack",
+            generation: generation,
+            using: snapshot
+        )
+        _ = focusWindow(active.window)
+        _ = service.snapshot(followFocus: false)
+        let result = WindowCommandResult(
+            message: "tab unstack: detached \(active.window.id.rawValue) applied=\(tick.applied)",
+            changed: true,
+            outcome: .changed
+        )
+        appendWindowCommandEvent(
+            verb: "tab_unstack",
+            direction: direction ?? .right,
+            snapshot: snapshot,
+            active: active,
+            scope: scope,
+            result: result
+        )
+        return result
+    }
+
+    /// Déplace l'onglet actif d'un cran à gauche (`-1`) ou à droite (`+1`) dans sa barre d'onglets.
+    public func tabMove(delta: Int) -> WindowCommandResult {
+        guard delta != 0 else { return .noChange("tab move: zero delta") }
+        let snapshot = service.snapshot()
+        guard let active = activeWindow(in: snapshot), let scope = active.scope else {
+            return .noChange("tab move: no active window")
+        }
+        if snapshot.state.stage(scope: scope)?.mode == .tabbed {
+            return move(delta < 0 ? .left : .right)
+        }
+        guard snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true else {
+            return .noChange("tab move: stage does not use tree engine")
+        }
+        let changed: Bool
+        do {
+            changed = try stageStore.mutateChecked { state -> Bool in
+                let existing = state.bspTree(for: scope) ?? .empty
+                let mutated = existing.reorderingTab(active.window.id, delta: delta)
+                guard mutated != existing else { return false }
+                state.setBSPTree(mutated, for: scope)
+                return true
+            }
+        } catch {
+            return .persistenceFailure("tab move", error)
+        }
+        if changed {
+            _ = service.snapshot(followFocus: false)
+        }
+        return .changedOrNoOp(
+            changed ? "tab move: reordered \(active.window.id.rawValue)" : "tab move: unchanged",
+            changed: changed
+        )
+    }
+
+    /// Place l'onglet `windowID` à l'index `toIndex` (réordonnancement par glisser horizontal dans la barre).
+    public func tabReorder(windowID: WindowID, toIndex: Int) -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }),
+              let scope = entry.scope,
+              let stage = snapshot.state.stage(scope: scope)
+        else {
+            return .noChange("tab reorder: unknown window")
+        }
+        let changed: Bool
+        do {
+            if stage.mode == .tabbed {
+                changed = try stageStore.mutateChecked { state -> Bool in
+                    var persistent = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+                    guard let idx = persistent.stages.firstIndex(where: { $0.id == scope.stageID }) else { return false }
+                    let liveSet = Set(stage.windowIDs)
+                    var liveMembers = persistent.stages[idx].members.filter { liveSet.contains($0.windowID) }
+                    let hiddenMembers = persistent.stages[idx].members.filter { !liveSet.contains($0.windowID) }
+                    guard let oldIdx = liveMembers.firstIndex(where: { $0.windowID == windowID }) else { return false }
+                    let clamped = min(max(0, toIndex), liveMembers.count - 1)
+                    guard clamped != oldIdx else { return false }
+                    let moved = liveMembers.remove(at: oldIdx)
+                    liveMembers.insert(moved, at: clamped)
+                    persistent.stages[idx].members = liveMembers + hiddenMembers
+                    state.update(persistent)
+                    return true
+                }
+            } else if stage.mode.usesTreeEngine {
+                changed = try stageStore.mutateChecked { state -> Bool in
+                    let existing = state.bspTree(for: scope) ?? .empty
+                    let mutated = existing.reorderingTab(windowID, toIndex: toIndex)
+                    guard mutated != existing else { return false }
+                    state.setBSPTree(mutated, for: scope)
+                    return true
+                }
+            } else {
+                changed = false
+            }
+        } catch {
+            return .persistenceFailure("tab reorder", error)
+        }
+        if changed {
+            _ = service.snapshot(followFocus: false)
+        }
+        return .changedOrNoOp(
+            changed ? "tab reorder: moved \(windowID.rawValue) to \(toIndex)" : "tab reorder: unchanged",
+            changed: changed
+        )
+    }
+
+    /// Directions voisines disponibles pour empiler `windowID` dans son arbre BSP (utilisé par le menu contextuel).
+    func availableTabStackDirections(for windowID: WindowID, in snapshot: DaemonSnapshot) -> [Direction] {
+        guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }),
+              let scope = entry.scope,
+              snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
+        else { return [] }
+        let tree = stageStore.state().bspTree(for: scope) ?? .empty
+        guard let geometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot) else { return [] }
+        let frames = geometry.frames(of: tree)
+        return [.left, .right, .up, .down].filter { direction in
+            treeNeighbor(of: windowID, direction: direction, frames: frames, tree: tree, absent: geometry.absent) != nil
+        }
+    }
+
 }
 
 private extension BSPEdge {
@@ -1632,15 +1960,21 @@ private extension BSPEdge {
 }
 
 /// Géométrie de l'arbre d'un scope pour les commandes (SPEC-017 R12, A9) : conteneur, marge
-/// intérieure et feuilles absentes du snapshot (gardées pendant leur grâce, non affichées).
+/// intérieure, hauteur de barre d'onglets et feuilles absentes du snapshot.
 struct CommandTreeGeometry {
     var container: CGRect
     var innerGap: CGFloat
     var absent: Set<WindowID>
+    var tabBarHeight: CGFloat = 0
 
     /// Frames de `tree` projeté sans les feuilles absentes. O(n).
     func frames(of tree: BSPTree) -> [WindowID: CGRect] {
-        tree.projected(excluding: absent).place(in: container, innerGap: innerGap)
+        tree.projected(excluding: absent).place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
+    }
+
+    /// Emplacements des barres d'onglets des tuiles `.tabGroup` projetées. O(n).
+    func tabBarFrames(of tree: BSPTree) -> [BSPTabBarPlacement] {
+        tree.projected(excluding: absent).tabBarFrames(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
     }
 }
 
@@ -1657,7 +1991,8 @@ extension SnapshotService {
         return CommandTreeGeometry(
             container: container,
             innerGap: CGFloat(innerGap()),
-            absent: Set(tree.windowIDs).subtracting(live)
+            absent: Set(tree.windowIDs).subtracting(live),
+            tabBarHeight: CGFloat(effectiveConfig.tiling.tabbedBarHeight)
         )
     }
 }

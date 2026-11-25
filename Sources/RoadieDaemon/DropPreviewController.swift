@@ -21,6 +21,7 @@ final class DropPreviewController {
     var candidate: DropPreviewCandidate? {
         lastCandidate
     }
+    var snapshotService: SnapshotService { engine.service }
     var isHoldingLayout: Bool { live.isActive }
     var requestsRealSource: Bool { engine.service.effectiveConfig.fx.dropPreview == "real" }
     var pointerConfig: EffectsConfig { engine.service.publishedConfig.fx }
@@ -116,8 +117,10 @@ struct DropPreviewCandidate: Equatable {
     var operation: DropPreviewOperation
     /// Fenêtre visée par le dépôt (nil : dépôt hors de toute fenêtre).
     var targetWindowID: WindowID? = nil
+    /// Vrai lorsque la stage cible utilise le moteur à arbre `spatialBsp` (indice visuel `⌥ Onglet`).
+    var isTreeMode: Bool = false
 
-    /// Mutation de l'arbre de la stage cible pour ce dépôt (SPEC-017 R12), appliquée sur l'état
+    /// Mutation de l'arbre de la stage cible pour ce dépôt (SPEC-017 R12, Spec 165), appliquée sur l'état
     /// frais au moment du dépôt. nil sans fenêtre visée.
     var treeMutation: ((BSPTree) -> BSPTree)? {
         guard let targetWindowID else { return nil }
@@ -133,14 +136,16 @@ enum DropPreviewOperation: String, Equatable {
     case insertUp
     case insertDown
     case swap
+    case stackTab
 
-    /// Dépôt sur l'arbre (SPEC-017 R12, T092) : échange des feuilles au centre ; sur un bord, la
-    /// fenêtre est retirée puis insérée du côté visé de la cible, la coupe suivant ce bord (bord
-    /// gauche ou droit : côte à côte, bord haut ou bas : empilées). O(n²) au pire, n borné.
+    /// Dépôt sur l'arbre (SPEC-017 R12, T092, Spec 165) : échange au centre, empilement en onglet
+    /// sur la barre d'onglets ou au centre avec Option, ou découpe sur un bord. O(n²) au pire, n borné.
     func applied(to tree: BSPTree, source: WindowID, target: WindowID) -> BSPTree {
         switch self {
         case .swap:
             return tree.swapping(source, target)
+        case .stackTab:
+            return tree.stacking(source, onto: target)
         case .append:
             return tree
         case .insertLeft, .insertRight, .insertUp, .insertDown:
@@ -154,6 +159,8 @@ enum DropPreviewOperation: String, Equatable {
         switch self {
         case .swap:
             return NSColor.systemOrange
+        case .stackTab:
+            return NSColor.systemTeal
         default:
             return NSColor.systemGreen
         }
@@ -186,14 +193,16 @@ struct DropPreviewEngine {
         sourceWindowID: WindowID,
         at point: CGPoint,
         displayID forcedDisplayID: DisplayID? = nil,
-        context: DropPreviewContext? = nil
+        context: DropPreviewContext? = nil,
+        optionHeld: Bool? = nil
     ) -> DropPreviewCandidate? {
         let axPoint = ScreenCoordinate.nsPointToAX(point)
         return candidate(
             sourceWindowID: sourceWindowID,
             atAXPoint: axPoint,
             displayID: forcedDisplayID,
-            context: context
+            context: context,
+            optionHeld: optionHeld
         )
     }
 
@@ -201,7 +210,8 @@ struct DropPreviewEngine {
         sourceWindowID: WindowID,
         atAXPoint axPoint: CGPoint,
         displayID forcedDisplayID: DisplayID? = nil,
-        context: DropPreviewContext? = nil
+        context: DropPreviewContext? = nil,
+        optionHeld: Bool? = nil
     ) -> DropPreviewCandidate? {
         let context = context ?? makeContext()
         let snapshot = context.snapshot
@@ -214,6 +224,7 @@ struct DropPreviewEngine {
               snapshot.state.activeScope(on: sourceScope.displayID) == sourceScope,
               WindowDragReorderEligibility.accepts(source.window)
         else { return nil }
+        let optionPressed = optionHeld ?? NSEvent.modifierFlags.contains(.option)
         if stage.mode.usesTreeEngine {
             return treeCandidate(
                 sourceWindowID: sourceWindowID,
@@ -222,7 +233,8 @@ struct DropPreviewEngine {
                 scope: scope,
                 sourceIsInScope: sourceScope == scope,
                 snapshot: snapshot,
-                tree: context.persistedStateBeforeSnapshot.bspTree(for: scope) ?? .empty
+                tree: context.persistedStateBeforeSnapshot.bspTree(for: scope) ?? .empty,
+                optionHeld: optionPressed
             )
         }
 
@@ -285,19 +297,56 @@ struct DropPreviewEngine {
         scope: StageScope,
         sourceIsInScope: Bool,
         snapshot: DaemonSnapshot,
-        tree: BSPTree
+        tree: BSPTree,
+        optionHeld: Bool
     ) -> DropPreviewCandidate? {
         // La cible est mesurée avant le transfert : ses smart gaps sont encore ceux du drag.
         let currentGeometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot)
         let currentFrames = currentGeometry?.frames(of: tree) ?? [:]
-        let target = currentFrames
-            .filter({ $0.key != sourceWindowID && $0.value.contains(axPoint) })
-            .min(by: { $0.value.area < $1.value.area })
+        let projectedTree = tree.projected(excluding: currentGeometry?.absent ?? [])
+        let activeIDs = projectedTree.activeWindowIDs
+        let ownGroup = Set(projectedTree.tabGroup(containing: sourceWindowID)?.windowIDs ?? [sourceWindowID])
+
+        // Spec 165 : dépôt direct sur la barre d'onglets d'une tuile `.tabGroup` existante -> `.stackTab`.
+        let tabBarTarget = currentGeometry?.tabBarFrames(of: tree).first { placement in
+            placement.barFrame.contains(axPoint) && !placement.windowIDs.contains(sourceWindowID)
+        }
+
+        let target: (key: WindowID, value: CGRect)?
+        if let tabBarTarget {
+            target = (key: tabBarTarget.active, value: tabBarTarget.tileFrame)
+        } else {
+            target = currentFrames
+                .filter { $0.key != sourceWindowID && $0.value.contains(axPoint) }
+                .min { lhs, rhs in
+                    if lhs.value.area != rhs.value.area { return lhs.value.area < rhs.value.area }
+                    let lhsActive = activeIDs.contains(lhs.key)
+                    let rhsActive = activeIDs.contains(rhs.key)
+                    if lhsActive != rhsActive { return lhsActive }
+                    return lhs.key.rawValue < rhs.key.rawValue
+                }
+        }
+
         let operation: DropPreviewOperation
         let mutated: BSPTree
         let orderedWindowIDs: [WindowID]
         if let target {
-            operation = dropOperation(at: axPoint, in: target.value, sourceIsActive: sourceIsInScope && tree.contains(sourceWindowID))
+            if tabBarTarget != nil {
+                operation = .stackTab
+            } else {
+                let rawOperation = dropOperation(
+                    at: axPoint,
+                    in: target.value,
+                    sourceIsActive: sourceIsInScope && tree.contains(sourceWindowID),
+                    optionHeld: optionHeld,
+                    allowsStackTab: true
+                )
+                // Glisser un onglet sur le centre de sa propre tuile annule proprement le détachement.
+                if ownGroup.contains(target.key), (rawOperation == .swap || rawOperation == .stackTab) {
+                    return nil
+                }
+                operation = rawOperation
+            }
             mutated = operation.applied(to: tree, source: sourceWindowID, target: target.key)
             orderedWindowIDs = mutated.windowIDs
         } else {
@@ -329,16 +378,24 @@ struct DropPreviewEngine {
         }
         guard let geometry = service.commandTreeGeometry(for: scope, tree: mutated, in: projected) else { return nil }
         let placements = geometry.frames(of: mutated)
-        guard let frame = placements[sourceWindowID], !frame.isEmpty else { return nil }
+        guard let placedFrame = placements[sourceWindowID], !placedFrame.isEmpty else { return nil }
+        let previewFrame: CGRect
+        if operation == .stackTab,
+           let stackedTile = geometry.tabBarFrames(of: mutated).first(where: { $0.windowIDs.contains(sourceWindowID) })?.tileFrame {
+            previewFrame = stackedTile.integral
+        } else {
+            previewFrame = placedFrame.integral
+        }
         return DropPreviewCandidate(
             sourceWindowID: sourceWindowID,
             displayID: display.id,
             scope: scope,
             orderedWindowIDs: orderedWindowIDs,
             placements: placements.mapValues { Rect($0.integral) },
-            frame: frame.integral,
+            frame: previewFrame,
             operation: operation,
-            targetWindowID: target?.key
+            targetWindowID: target?.key,
+            isTreeMode: true
         )
     }
 
@@ -349,7 +406,13 @@ struct DropPreviewEngine {
         return displays.first { $0.frame.cgRect.contains(point) }
     }
 
-    private func dropOperation(at point: CGPoint, in frame: CGRect, sourceIsActive: Bool) -> DropPreviewOperation {
+    private func dropOperation(
+        at point: CGPoint,
+        in frame: CGRect,
+        sourceIsActive: Bool,
+        optionHeld: Bool = false,
+        allowsStackTab: Bool = false
+    ) -> DropPreviewOperation {
         let unitX = (point.x - frame.minX) / max(1, frame.width)
         let unitY = (point.y - frame.minY) / max(1, frame.height)
         let edge: CGFloat = 0.28
@@ -357,6 +420,7 @@ struct DropPreviewEngine {
         if unitX > 1 - edge { return .insertRight }
         if unitY < edge { return .insertUp }
         if unitY > 1 - edge { return .insertDown }
+        if allowsStackTab && optionHeld { return .stackTab }
         return sourceIsActive ? .swap : .insertRight
     }
 
@@ -379,7 +443,7 @@ struct DropPreviewEngine {
         switch operation {
         case .insertLeft, .insertUp:
             insertionIndex = adjustedTargetIndex
-        case .insertRight, .insertDown, .append, .swap:
+        case .insertRight, .insertDown, .append, .swap, .stackTab:
             insertionIndex = min(adjustedTargetIndex + 1, result.count)
         }
         result.insert(sourceID, at: insertionIndex)
@@ -393,14 +457,14 @@ struct DropPreviewEngine {
         activeEntries: [ScopedWindowSnapshot],
         display: DisplaySnapshot
     ) -> [WindowID: CGRect]? {
-        guard operation != .swap, operation != .append else { return nil }
+        guard operation != .swap, operation != .append, operation != .stackTab else { return nil }
         let horizontal: Bool
         switch operation {
         case .insertLeft, .insertUp:
             horizontal = operation == .insertLeft
         case .insertRight, .insertDown:
             horizontal = operation == .insertRight
-        case .append, .swap:
+        case .append, .swap, .stackTab:
             return nil
         }
         guard let sourceFrame = activeEntries.first(where: { $0.window.id == sourceID })?.window.frame.cgRect,
@@ -451,7 +515,7 @@ struct DropPreviewEngine {
             result.insert(sourceID, at: targetIndex)
         case .insertRight, .insertDown:
             result.insert(sourceID, at: min(targetIndex + 1, result.count))
-        case .append, .swap:
+        case .append, .swap, .stackTab:
             result.append(sourceID)
         }
         return result
@@ -495,7 +559,7 @@ struct DropPreviewEngine {
             return candidate.midY < source.midY
         case .insertDown:
             return candidate.midY > source.midY
-        case .append, .swap:
+        case .append, .swap, .stackTab:
             return false
         }
     }
@@ -614,7 +678,7 @@ final class WindowDragReorderController {
             return
         }
         guard mouseTap == nil else { return }
-        let mask: CGEventMask = [CGEventType.leftMouseDown, .leftMouseDragged, .mouseMoved, .leftMouseUp, .keyDown].reduce(0) { $0 | (1 << $1.rawValue) }
+        let mask: CGEventMask = [CGEventType.leftMouseDown, .leftMouseDragged, .mouseMoved, .leftMouseUp, .keyDown, .flagsChanged].reduce(0) { $0 | (1 << $1.rawValue) }
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon else { return Unmanaged.passUnretained(event) }
             let controller = Unmanaged<WindowDragReorderController>.fromOpaque(refcon).takeUnretainedValue()
@@ -699,6 +763,15 @@ final class WindowDragReorderController {
             draining = true
             Task { @MainActor [weak self] in self?.cancelPendingDrag() }
             return true
+        }
+        if type == .flagsChanged, owned, !draining {
+            let point = CGPoint(x: event.location.x, y: dragPrimaryHeight - event.location.y)
+            let sequence = pointerSequence
+            Task { @MainActor [weak self] in
+                guard let self, self.pointerSequence == sequence, self.pending != nil, !self.draining else { return }
+                self.routeOwnedDrag?(point)
+            }
+            return false
         }
         if type == .leftMouseDragged || (type == .mouseMoved && nativeReleaseSent && (owned || draining)) {
             if draining { return true }
@@ -1038,6 +1111,9 @@ final class WindowDragReorderController {
                 placements: candidate.placements,
                 treeMutation: candidate.treeMutation
             )
+            if candidate.operation == .stackTab {
+                _ = WindowCommandService(service: preview.snapshotService).focus(windowID: candidate.sourceWindowID)
+            }
             dragActivity.finish(droppedWindowID: candidate.sourceWindowID)
             events.append(RoadieEvent(type: "window_drag_apply", scope: candidate.scope, details: [
                 "windowID": String(candidate.sourceWindowID.rawValue),
@@ -1157,6 +1233,7 @@ final class DropPreviewOverlayWindow: NSPanel {
     func show(_ candidate: DropPreviewCandidate) {
         let frame = ScreenCoordinate.axRectToNS(candidate.frame).insetBy(dx: -5, dy: -5)
         previewView.operation = candidate.operation
+        previewView.isTreeMode = candidate.isTreeMode
         setFrame(frame, display: true)
         orderFrontRegardless()
         previewView.needsDisplay = true
@@ -1170,6 +1247,7 @@ final class DropPreviewOverlayWindow: NSPanel {
 @MainActor
 private final class DropPreviewOverlayView: NSView {
     var operation: DropPreviewOperation = .append
+    var isTreeMode: Bool = false
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -1177,7 +1255,7 @@ private final class DropPreviewOverlayView: NSView {
         let color = operation.tint
         let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
 
-        color.withAlphaComponent(operation == .swap ? 0.20 : 0.15).setFill()
+        color.withAlphaComponent(operation == .swap || operation == .stackTab ? 0.20 : 0.15).setFill()
         path.fill()
 
         color.withAlphaComponent(0.92).setStroke()
@@ -1188,6 +1266,59 @@ private final class DropPreviewOverlayView: NSView {
         color.withAlphaComponent(0.36).setStroke()
         inner.lineWidth = 1
         inner.stroke()
+
+        if operation == .stackTab, rect.width >= 120, rect.height >= 90 {
+            // Bandeau supérieur simulant la barre d'onglets de la tuile (AppKit : y croît vers le haut).
+            let barHeight: CGFloat = min(26, max(18, rect.height * 0.12))
+            let barRect = NSRect(
+                x: rect.minX + 6,
+                y: rect.maxY - barHeight - 6,
+                width: rect.width - 12,
+                height: barHeight
+            )
+            let barPath = NSBezierPath(roundedRect: barRect, xRadius: 6, yRadius: 6)
+            color.withAlphaComponent(0.35).setFill()
+            barPath.fill()
+            color.withAlphaComponent(0.85).setStroke()
+            barPath.lineWidth = 1.5
+            barPath.stroke()
+
+            let pillWidth = max(24, (barRect.width - 14) / 2)
+            let leftPill = NSRect(x: barRect.minX + 4, y: barRect.minY + 3, width: pillWidth, height: barRect.height - 6)
+            let rightPill = NSRect(x: leftPill.maxX + 6, y: barRect.minY + 3, width: pillWidth, height: barRect.height - 6)
+            color.withAlphaComponent(0.28).setFill()
+            NSBezierPath(roundedRect: leftPill, xRadius: 4, yRadius: 4).fill()
+            color.withAlphaComponent(0.75).setFill()
+            NSBezierPath(roundedRect: rightPill, xRadius: 4, yRadius: 4).fill()
+
+            drawBadge(tr("Empiler en onglet", "Stack as tab"), in: rect, color: color)
+        } else if operation == .swap, isTreeMode, rect.width >= 140, rect.height >= 70 {
+            drawBadge(tr("Échanger · ⌥ Onglet", "Swap · ⌥ Tab"), in: rect, color: color)
+        }
+    }
+
+    private func drawBadge(_ text: String, in rect: NSRect, color: NSColor) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.white,
+        ]
+        let size = (text as NSString).size(withAttributes: attributes)
+        let padX: CGFloat = 14
+        let padY: CGFloat = 6
+        let badgeRect = NSRect(
+            x: rect.midX - (size.width + padX * 2) / 2,
+            y: rect.midY - (size.height + padY * 2) / 2,
+            width: size.width + padX * 2,
+            height: size.height + padY * 2
+        )
+        let badgePath = NSBezierPath(roundedRect: badgeRect, xRadius: 8, yRadius: 8)
+        NSColor.black.withAlphaComponent(0.68).setFill()
+        badgePath.fill()
+        color.withAlphaComponent(0.95).setStroke()
+        badgePath.lineWidth = 1.5
+        badgePath.stroke()
+        let textOrigin = NSPoint(x: badgeRect.minX + padX, y: badgeRect.minY + padY)
+        (text as NSString).draw(at: textOrigin, withAttributes: attributes)
     }
 }
 

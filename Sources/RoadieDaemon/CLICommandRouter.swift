@@ -272,6 +272,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "focus back-and-forth|left|right|up|down"),
         CLICommandSpec(usage: "bookmark set|focus|jump|clear|list NAME"),
         CLICommandSpec(usage: "move|warp|resize left|right|up|down"),
+        CLICommandSpec(usage: "tab next|prev|stack left|right|up|down|unstack [left|right|up|down]|move left|right"),
         CLICommandSpec(usage: "mode bsp|spatialBsp|masterStack|tabbed|scrolling|float"),
         CLICommandSpec(usage: "toggle maximize|fullscreen|native-fullscreen"),
         CLICommandSpec(usage: "toggle floating"),
@@ -376,7 +377,7 @@ public final class CLICommandRouter {
         switch command {
         // `bookmark` : `set` lit la fenêtre active, donc l'Accessibilité du daemon. En local, un
         // raccourci Karabiner ne voyait aucune fenêtre (« no active tiled window »).
-        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark", "timer", "scratchpad", "clipboard", "snippet":
+        case "focus", "move", "warp", "wrap", "resize", "tab", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark", "timer", "scratchpad", "clipboard", "snippet":
             return true
         // `floating` lit la fenêtre active : il faut l'Accessibilité du daemon (SPEC-047).
         case "toggle":
@@ -398,6 +399,48 @@ public final class CLICommandRouter {
 
     private func dispatch(_ args: [String]) throws -> Int32 {
         switch args.first {
+        case "tab":
+            guard let verb = args.dropFirst().first else {
+                return usageError()
+            }
+            let commands = WindowCommandService(service: service)
+            switch verb {
+            case "next":
+                return finish(commands.tabCycle(delta: 1))
+            case "prev", "previous":
+                return finish(commands.tabCycle(delta: -1))
+            case "stack":
+                guard let rawDir = args.dropFirst(2).first, let dir = Direction(rawValue: rawDir) else {
+                    err("roadie: tab stack requires left|right|up|down")
+                    return 64
+                }
+                return finish(commands.tabStack(dir))
+            case "unstack", "detach":
+                if let rawDir = args.dropFirst(2).first {
+                    guard let dir = Direction(rawValue: rawDir) else {
+                        err("roadie: tab unstack accepts optional left|right|up|down")
+                        return 64
+                    }
+                    return finish(commands.tabUnstack(dir))
+                }
+                return finish(commands.tabUnstack(nil))
+            case "move":
+                guard let rawDir = args.dropFirst(2).first else {
+                    err("roadie: tab move requires left|right")
+                    return 64
+                }
+                switch rawDir {
+                case "left", "prev":
+                    return finish(commands.tabMove(delta: -1))
+                case "right", "next":
+                    return finish(commands.tabMove(delta: 1))
+                default:
+                    err("roadie: tab move requires left|right")
+                    return 64
+                }
+            default:
+                return usageError()
+            }
         case "windows":
             guard args.dropFirst().first == "list" else {
                 return usageError()

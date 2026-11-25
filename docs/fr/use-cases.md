@@ -205,9 +205,15 @@ roadie move left         # réordonner l'onglet vers la gauche
 roadie mode scrolling    # colonnes horizontales centrées (largeur 65 % par défaut)
 roadie focus right       # faire défiler vers la colonne suivante
 roadie layout width next # ajuster la largeur de colonne
+
+# Ou empiler des onglets dans n'importe quelle tuile sans quitter spatialBsp :
+roadie tab stack right   # empiler la fenêtre active dans la tuile BSP de droite
+roadie tab next          # passer à l'onglet suivant dans la tuile
+roadie tab move left     # déplacer l'onglet actif vers la gauche
+roadie tab unstack       # détacher l'onglet actif en tuile BSP indépendante
 ```
 
-Le mode de disposition est aussi sélectionnable par clic droit sur une carte de stage dans le NavRail ou depuis la barre de recherche.
+Le mode de disposition est aussi sélectionnable par clic droit sur une carte de stage dans le NavRail ou depuis la barre de recherche. En `spatialBsp`, maintiens `⌥ Option` lors d'un dépôt au centre d'une tuile (ou dépose directement sur une barre d'onglets) pour empiler, et glisse un onglet hors de sa barre pour le détacher en tuile.
 
 ## 13. Scratchpad flottant, Dim Inactive et scènes de projet
 

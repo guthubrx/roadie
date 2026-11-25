@@ -108,6 +108,9 @@ public enum WindowContextActionKind: String, Equatable, Codable, Sendable {
     /// Les fenêtres de ce titre dans l'application flottent toujours, ou plus (session 125).
     case floatTitleAlways = "float_title_always"
     case clearTitleFloat = "clear_title_float"
+    /// Tuiles à onglets intégrées dans `spatialBsp` (Spec 165).
+    case tabStack = "tab_stack"
+    case tabUnstack = "tab_unstack"
 }
 
 public struct WindowContextAction: Equatable, Sendable {
@@ -300,7 +303,7 @@ public final class TitlebarContextMenuController {
 
         let destinations = actions.destinations(for: windowID, in: snapshot, settings: settings)
         let pin = snapshot.windows.first(where: { $0.window.id == windowID })?.pin
-        let menu = buildMenu(window: window, windowID: windowID, sourceScope: hit.scope, destinations: destinations, pin: pin)
+        let menu = buildMenu(window: window, windowID: windowID, sourceScope: hit.scope, destinations: destinations, pin: pin, snapshot: snapshot)
         guard menu.items.contains(where: { $0.submenu != nil }) else {
             var noDestination = hit
             noDestination.isEligible = false
@@ -396,17 +399,61 @@ public final class TitlebarContextMenuController {
         windowID: WindowID,
         sourceScope: StageScope?,
         destinations: [WindowDestination],
-        pin: PersistentWindowPin?
+        pin: PersistentWindowPin?,
+        snapshot: DaemonSnapshot
     ) -> NSMenu {
         menuTargets.removeAll(keepingCapacity: true)
         let menu = NSMenu(title: "Roadie")
         addWindowSubmenu(window: window, windowID: windowID, sourceScope: sourceScope, pin: pin, to: menu)
+        addTabsSubmenu(windowID: windowID, sourceScope: sourceScope, snapshot: snapshot, to: menu)
         addAffinitySubmenu(window: window, windowID: windowID, sourceScope: sourceScope, to: menu)
         addSubmenu(title: tr("Envoyer la fenêtre vers stage", "Send window to stage"), kind: .stage, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         addDesktopStageSubmenu(windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         addSubmenu(title: tr("Envoyer la fenêtre vers desktop", "Send window to desktop"), kind: .desktop, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         addSubmenu(title: tr("Envoyer la fenêtre vers écran", "Send window to display"), kind: .display, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         return menu
+    }
+
+    private func addTabsSubmenu(
+        windowID: WindowID,
+        sourceScope: StageScope?,
+        snapshot: DaemonSnapshot,
+        to menu: NSMenu
+    ) {
+        guard let sourceScope,
+              snapshot.state.stage(scope: sourceScope)?.mode.usesTreeEngine == true else { return }
+        let tree = snapshotService.effectiveStageStore.state().bspTree(for: sourceScope) ?? .empty
+        let inTabGroup = tree.tabGroup(containing: windowID) != nil
+        let stackDirs = WindowCommandService(service: snapshotService).availableTabStackDirections(for: windowID, in: snapshot)
+        guard inTabGroup || !stackDirs.isEmpty else { return }
+
+        let parent = NSMenuItem(title: tr("Onglets (tuile BSP)", "Tabs (BSP tile)"), action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: parent.title)
+        let dirLabels: [Direction: (fr: String, en: String)] = [
+            .left: ("Empiler dans la tuile de gauche", "Stack into left tile"),
+            .right: ("Empiler dans la tuile de droite", "Stack into right tile"),
+            .up: ("Empiler dans la tuile du haut", "Stack into upper tile"),
+            .down: ("Empiler dans la tuile du bas", "Stack into lower tile"),
+        ]
+        for dir in stackDirs {
+            guard let label = dirLabels[dir] else { continue }
+            let item = NSMenuItem(title: tr(label.fr, label.en), action: #selector(TitlebarMenuActionTarget.choose(_:)), keyEquivalent: "")
+            item.representedObject = dir.rawValue
+            item.target = actionTarget(windowID: windowID, kind: .tabStack, sourceScope: sourceScope)
+            submenu.addItem(item)
+        }
+        if inTabGroup {
+            if !stackDirs.isEmpty { submenu.addItem(.separator()) }
+            addActionItem(
+                title: tr("Détacher cet onglet en tuile", "Detach this tab to tile"),
+                kind: .tabUnstack,
+                windowID: windowID,
+                sourceScope: sourceScope,
+                to: submenu
+            )
+        }
+        parent.submenu = submenu
+        menu.addItem(parent)
     }
 
     private func addAffinitySubmenu(

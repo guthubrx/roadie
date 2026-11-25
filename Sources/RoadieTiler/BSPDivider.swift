@@ -106,6 +106,7 @@ private indirect enum BSPDividerNode {
         switch tree {
         case .empty: self = .empty
         case .leaf(let id): self = absent.contains(id) ? .empty : .leaf
+        case .tabGroup(let ids, _): self = ids.contains(where: { !absent.contains($0) }) ? .leaf : .empty
         case .split(let orientation, let ratio, let first, let second):
             let a = BSPDividerNode(first, excluding: absent, path: path + [true])
             let b = BSPDividerNode(second, excluding: absent, path: path + [false])

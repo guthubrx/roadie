@@ -12,6 +12,7 @@ public struct BSPNativeResize: Sendable {
     private indirect enum Node: Sendable {
         case empty(BSPTree)
         case leaf(WindowID, CGSize)
+        case tabGroup([WindowID], WindowID, [WindowID], CGSize)
         case split(Int, BSPOrientation, Double, Node, Node)
 
         var visible: Bool {
@@ -24,6 +25,7 @@ public struct BSPNativeResize: Sendable {
     private let startFrame: CGRect
     private let container: CGRect
     private let gap: CGFloat
+    private let tabBarHeight: CGFloat
     private let controls: [Int: BSPEdge]
 
     /// Bords pilotables par une séparation interne ; les limites du bureau restent fixes.
@@ -31,12 +33,13 @@ public struct BSPNativeResize: Sendable {
 
     /// O(n + d), n feuilles, d profondeur. Les feuilles absentes restent dans l'arbre rendu.
     public init?(tree: BSPTree, windowID: WindowID, in container: CGRect,
-                 innerGap: CGFloat = 0, excluding absent: Set<WindowID> = [],
+                 innerGap: CGFloat = 0, tabBarHeight: CGFloat = 0, excluding absent: Set<WindowID> = [],
                  knownMinimums: [WindowID: CGSize] = [:], startFrame: CGRect? = nil) {
-        let frames = tree.projected(excluding: absent).place(in: container, innerGap: innerGap)
+        let frames = tree.projected(excluding: absent).place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
         guard let placed = frames[windowID], Self.valid(container), Self.valid(startFrame ?? placed) else { return nil }
         self.startFrame = startFrame ?? placed
         self.container = container
+        self.tabBarHeight = tabBarHeight
         gap = max(0, innerGap)
         var nextID = 0
         var nearest: [BSPEdge: Int] = [:]
@@ -49,6 +52,20 @@ public struct BSPNativeResize: Sendable {
                 let minimum = knownMinimums[id] ?? .zero
                 return (.leaf(id, CGSize(width: min(max(0, minimum.width), frame.width),
                                         height: min(max(0, minimum.height), frame.height))), id == windowID)
+            case let .tabGroup(ids, active):
+                let visibleIDs = ids.filter { frames[$0] != nil }
+                guard !visibleIDs.isEmpty, let sampleFrame = frames[visibleIDs[0]] else { return (.empty(tree), false) }
+                var minW: CGFloat = 0
+                var minH: CGFloat = 0
+                for id in visibleIDs {
+                    let m = knownMinimums[id] ?? .zero
+                    minW = max(minW, min(max(0, m.width), sampleFrame.width))
+                    minH = max(minH, min(max(0, m.height), sampleFrame.height))
+                }
+                let barReserve: CGFloat = (visibleIDs.count >= 2 && tabBarHeight > 0 && minH > 0)
+                    ? floor(tabBarHeight) + BSPTree.tabBarGap : 0
+                return (.tabGroup(ids, active, visibleIDs, CGSize(width: minW, height: minH + barReserve)),
+                        visibleIDs.contains(windowID))
             case let .split(orientation, ratio, first, second):
                 let id = nextID
                 nextID += 1
@@ -91,6 +108,7 @@ public struct BSPNativeResize: Sendable {
             switch node {
             case .empty: return .zero
             case let .leaf(_, size): return size
+            case let .tabGroup(_, _, _, size): return size
             case let .split(id, orientation, _, a, b):
                 let x = minimum(a), y = minimum(b)
                 let size: CGSize
@@ -110,6 +128,7 @@ public struct BSPNativeResize: Sendable {
             switch node {
             case .empty: .zero
             case let .leaf(_, size): size
+            case let .tabGroup(_, _, _, size): size
             case let .split(id, _, _, _, _): minimums[id] ?? .zero
             }
         }
@@ -118,6 +137,12 @@ public struct BSPNativeResize: Sendable {
             switch node {
             case let .empty(tree): return tree
             case let .leaf(id, _): frames[id] = rect.integral; return .leaf(id)
+            case let .tabGroup(ids, active, visibleIDs, _):
+                let (_, content) = BSPTree.splitTabBar(in: rect, tabBarHeight: tabBarHeight, count: visibleIDs.count)
+                for id in visibleIDs {
+                    frames[id] = content
+                }
+                return .tabGroup(windowIDs: ids, active: active)
             case let .split(id, orientation, original, a, b):
                 if !a.visible {
                     return .split(orientation: orientation, ratio: original,
