@@ -253,3 +253,19 @@ Objectif : convertir une unité, lancer un Pomodoro, prélever une couleur ou fa
 
 - Dans le lanceur : `100 km in mi`, `0xff in dec`, `14:00 NYC in Paris`, `timer 25m focus`, `pomodoro`, `pipette`, `:fusée`.
 - Dans le sélecteur (`Cmd+Tab`, hors champ de recherche) : `W` ferme la fenêtre, `Q` quitte l'app, `M` réduit/restaure, `H` masque l'app, `S` rapatrie dans la stage active, `A` filtre sur l'application courante, `D` filtre sur l'écran courant.
+
+## 16. Piloter Roadie en 100 % autonomie (sans BetterTouchTool ni Karabiner)
+
+Objectif : installer Roadie sur un Mac neuf ou alléger une configuration existante en confiant à Roadie ses raccourcis clavier, le `⌘ Tab` natif, les gestes trackpad (ruban `scrolling` et Vue d'ensemble) et la persistance du scratchpad au redémarrage — tout en gardant la liberté d'utiliser BTT ou Karabiner à la carte.
+
+```bash
+# Initialiser une configuration complète avec un pack de raccourcis sans collision (compatible AZERTY/QWERTY)
+roadie config init --preset standard    # ou : vim | minimal
+roadie shortcuts list
+roadie shortcuts check
+```
+
+- **Sélecteur `⌘ Tab` / `⌘ Maj Tab` natif** : dans **Paramètres > Sélecteur** (ou `[[switcher.shortcuts]]`), régler `hotkey = "command+tab"` et `trigger_source = "roadie"`. Roadie intercepte `⌘ Tab` et `⌘ Maj Tab` directement via `CGEventTap`.
+- **Gestes trackpad natifs** : glisse à 3 doigts horizontalement (ou `⌥ Option + molette`) pour faire défiler le ruban `scrolling` à 120 Hz ProMotion ; glisse à 4 doigts vers le haut pour ouvrir la Vue d'ensemble et vers le bas pour la fermer (`overview.trackpad_gesture = true`).
+- **Scratchpad en un clic droit** : clic droit sur la barre de titre d'une fenêtre → **Fenêtre → Transformer en scratchpad** (ou **Retirer du scratchpad**). Au redémarrage du Mac, `tiling.scratchpad_reboot_policy = "reattach_or_relaunch"` (défaut) réattache ou relance automatiquement l'application au prochain `toggle` (configurable en `reattach` ou `ephemeral`).
+- **Migration depuis BetterTouchTool** : dans **Paramètres > Raccourcis**, clique sur **Importer depuis BetterTouchTool** pour rapatrier tes raccourcis Roadie existants sans modifier ton profil BTT.

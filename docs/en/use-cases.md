@@ -252,3 +252,19 @@ Goal: convert units, start a Pomodoro, sample a screen color, or triage open win
 
 - In the launcher: `100 km in mi`, `0xff in dec`, `14:00 NYC in Paris`, `timer 25m focus`, `pomodoro`, `color picker`, `:rocket`.
 - In the window switcher (`Cmd+Tab`, outside search): `W` closes the window, `Q` quits the app, `M` minimizes/restores, `H` hides the app, `S` summons into the active stage, `A` filters by current app, `D` filters by current display.
+
+## 16. Run Roadie 100% Standalone (No BetterTouchTool Or Karabiner Required)
+
+Goal: set up Roadie on a fresh Mac or simplify an existing stack by letting Roadie natively handle keyboard shortcuts, `⌘ Tab` switching, trackpad gestures (`scrolling` ribbon and Overview), and scratchpad reboot persistence — while keeping BetterTouchTool or Karabiner optional.
+
+```bash
+# Bootstrap a clean config with a collision-free preset (AZERTY/QWERTY hardware-key aware)
+roadie config init --preset standard    # or: vim | minimal
+roadie shortcuts list
+roadie shortcuts check
+```
+
+- **Native `⌘ Tab` / `⌘ Shift Tab` switcher**: in **Settings > Switcher** (or `[[switcher.shortcuts]]`), set `hotkey = "command+tab"` and `trigger_source = "roadie"`. Roadie intercepts both directions natively through `CGEventTap`.
+- **Native trackpad gestures**: swipe horizontally with 3 fingers (or `⌥ Option + scrollWheel`) to smoothly glide the `scrolling` ribbon at up to 120 Hz ProMotion; swipe up with 4 fingers to open Overview and down to close (`overview.trackpad_gesture = true`).
+- **One-click scratchpad from the title bar**: right-click any window title bar → **Fenêtre → Transformer en scratchpad** (or **Retirer du scratchpad**). After a reboot, `tiling.scratchpad_reboot_policy = "reattach_or_relaunch"` (default) reattaches or relaunches the app on the next `toggle` (configurable to `reattach` or `ephemeral`).
+- **Optional BetterTouchTool import**: in **Settings > Shortcuts**, click **Importer depuis BetterTouchTool** to import your existing Roadie bindings without altering your BTT profile.

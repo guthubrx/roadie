@@ -240,7 +240,8 @@ dans la catégorie Recherche ; `roadie targets search` ouvre aussi la barre.
 
 Le **sélecteur de fenêtres** ouvre la fenêtre choisie dans son bureau et sa
 stage Roadie. Dans Réglages Roadie > Sélecteur, crée des profils pour un écran, un
-bureau, une stage ou une application. Enregistre directement une combinaison,
+bureau, une stage ou une application. Enregistre directement une combinaison — **y compris
+`⌘Tab` / `⌘⇧Tab` capturés nativement par Roadie** (sans BetterTouchTool ni AltTab) —,
 confie-la à BetterTouchTool ou utilise une commande externe. Au relâchement,
 choisis entre activer la fenêtre, garder le sélecteur ouvert et passer en recherche.
 Navigue avec les quatre flèches ou la souris. Hors champ de recherche, des touches
@@ -254,8 +255,9 @@ arbre, sections ou vue d'ensemble des bureaux. La grille classique reste disponi
 
 La **vue d’ensemble** montre toutes les fenêtres sur une seule page, par écran
 et par bureau, en Archipel ou en Baies, sur ton fond d’écran flouté. La loupe
-agrandit le bureau survolé de 100 à 250 %. Ouvre-la avec `roadie overview show`,
-un geste BTT (quatre doigts vers le haut, par exemple) ou un raccourci facultatif.
+agrandit le bureau survolé de 100 à 250 %. Ouvre-la par **balayage natif à quatre doigts
+vers le haut** (`overview.trackpad_gesture`, sans BetterTouchTool ; vers le bas pour fermer),
+avec `roadie overview show`, un geste BTT ou un raccourci facultatif.
 Glisse une puce pour réordonner les bureaux ou déplacer une stage, et une carte
 pour envoyer une fenêtre dans une autre stage, avec un aperçu en direct du résultat. [Guide de la vue d’ensemble](docs/fr/overview.md).
 

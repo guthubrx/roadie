@@ -2,7 +2,7 @@
 
 La vue d’ensemble montre votre organisation Roadie : écrans, bureaux, stages et fenêtres. Elle complète le sélecteur Cmd+Tab. Elle couvre tout l’écran, y compris la barre de menus et le Dock, comme un aperçu global. Elle ne crée pas de Space macOS.
 
-Ouvrez-la avec `roadie overview show`. Un geste BetterTouchTool, par exemple quatre doigts vers le haut, peut appeler `roadie overview toggle`. Le second geste ferme la vue. `roadie overview hide` ferme aussi la vue ; `roadie overview status` affiche les réglages et la disponibilité du démon, sans garantir que la vue soit visible.
+Ouvrez-la par **balayage natif à quatre doigts vers le haut** au trackpad (`overview.trackpad_gesture = true`, sans BetterTouchTool ; quatre doigts vers le bas la ferme), ou avec `roadie overview show`. Un geste BetterTouchTool, par exemple quatre doigts vers le haut, peut aussi appeler `roadie overview toggle` (désactivez alors `overview.trackpad_gesture`). Le second geste ferme la vue. `roadie overview hide` ferme aussi la vue ; `roadie overview status` affiche les réglages et la disponibilité du démon, sans garantir que la vue soit visible.
 
 Dans **Réglages Roadie > Vue d’ensemble**, choisissez :
 
@@ -12,6 +12,7 @@ Dans **Réglages Roadie > Vue d’ensemble**, choisissez :
 - **Grossissement**, de 100 à 250 %, défaut 150 % : taille des cartes du bureau survolé par rapport aux autres. Les autres bureaux se resserrent si la place manque. Les vraies fenêtres gardent leur taille.
 - **Flou du fond d’écran**, de 0 à 100 %, défaut 20 % : un curseur et un aperçu de votre fond d’écran montrent le résultat en direct.
 - **Couleur** et **épaisseur** (1 à 8 points, défaut 2) du contour de sélection.
+- **Geste trackpad 4 doigts (haut/bas)**, activé par défaut (`trackpad_gesture = true`) : ouvre la vue par balayage à 4 doigts vers le haut et la ferme vers le bas, sans outil externe. Désactivez-le si vous utilisez un geste BetterTouchTool dédié.
 - **Raccourci interne**, facultatif : utilisez le bouton d’enregistrement pour saisir la combinaison au clavier. Vide, Roadie ne réserve aucune touche. BetterTouchTool, Karabiner ou un autre outil peuvent appeler la CLI.
 
 La composition est centrée en hauteur. La vue n’affiche aucun contrôle : ces réglages se changent dans les paramètres et s’appliquent à la vue ouverte. Le fond reprend le fond d’écran de l’écran, flouté, et masque les icônes du bureau. Sans image lisible, Roadie floute ce qui se trouve sous la vue. Les bureaux gardent leur ordre. La loupe ne change pas de bureau quand la souris reste immobile après un agrandissement.
@@ -37,6 +38,7 @@ magnification = 150
 background_blur = 20 # 0 = net, 100 = très flou
 selection_color = "#66C2F7"
 selection_width = 2 # points, de 1 à 8
+trackpad_gesture = true # balayage 4 doigts haut/bas natif (sans BetterTouchTool)
 hotkey = "" # combinaison facultative ; préférer l’enregistrement au clavier
 ```
 
@@ -44,4 +46,4 @@ Les images utilisent le cache partagé du rail et du sélecteur. Le mouvement de
 
 Les cartes restent compactes : les stages utilisent plusieurs rangées et colonnes selon leur contenu. Une stage avec une seule fenêtre ne prend pas toute la hauteur. La fenêtre survolée gagne de la place dans sa stage. La loupe reste dans la composition, sans panneau superposé. Le clic ouvre la fenêtre.
 
-Si Mission Control apparaît aussi après le balayage, désactivez le geste macOS correspondant dans Réglages Système > Trackpad > Gestes supplémentaires > Mission Control. Conservez le geste Roadie dans BetterTouchTool.
+Si Mission Control apparaît aussi après le balayage, désactivez le geste macOS correspondant dans Réglages Système > Trackpad > Gestes supplémentaires > Mission Control. Roadie gère alors le geste nativement (ou conservez votre geste dans BetterTouchTool si vous avez désactivé `trackpad_gesture`).

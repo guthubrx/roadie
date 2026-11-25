@@ -24,9 +24,17 @@ master_ratio = 0.6
 # FR: Hauteur de la barre d'onglets (20..44 pt) et largeur de colonne du ruban défilant (0.25..1.0).
 tabbed_bar_height = 28
 scrolling_column_width = 0.65
-# EN: Enable named floating scratchpads (roadie scratchpad).
-# FR: Activer les scratchpads flottants nommés (roadie scratchpad).
+# EN: 120 Hz ProMotion spring glide and native trackpad gestures for scrolling mode.
+# FR: Glissement fluide 120 Hz ProMotion et gestes trackpad natifs pour le mode scrolling.
+scrolling_smooth_scroll = true
+scrolling_trackpad_gestures = true
+scrolling_trackpad_fingers = 3
+# EN: Enable named floating scratchpads (roadie scratchpad) and their reboot policy:
+#     reattach_or_relaunch (default) | reattach | ephemeral.
+# FR: Activer les scratchpads flottants nommés (roadie scratchpad) et leur politique au reboot :
+#     reattach_or_relaunch (défaut) | reattach | ephemeral.
 scratchpad_enabled = true
+scratchpad_reboot_policy = "reattach_or_relaunch"
 # EN: Remove the gaps when a stage holds a single window.
 # FR: Supprime les marges quand une stage ne contient qu'une fenêtre.
 smart_gaps_solo = false
@@ -94,7 +102,7 @@ excluded_bundles = []
 [[switcher.shortcuts]]
 id = "all"
 name = "Toutes les fenêtres"
-hotkey = "" # Raccourci externe : roadie switcher cycle --hold cmd
+hotkey = "" # Natif Roadie : hotkey = "command+tab" + trigger_source = "roadie" ; ou externe : roadie switcher cycle --hold cmd
 scope = "all"
 release_action = "focus"
 sort_order = "recent"
@@ -102,6 +110,11 @@ include_minimized = true
 include_hidden = true
 include_fullscreen = true
 one_per_app = false
+
+# EN: Global overview (Archipelago/Bays). Native 4-finger swipe up/down without BTT.
+# FR: Vue d'ensemble globale (Archipel/Baies). Geste natif 4 doigts haut/bas sans BTT.
+[overview]
+trackpad_gesture = true
 
 # EN: Width presets used by: roadie layout width next|prev.
 # FR: Largeurs prédéfinies utilisées par : roadie layout width next|prev.

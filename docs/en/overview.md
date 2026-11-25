@@ -2,7 +2,7 @@
 
 The overview shows your Roadie organization: displays, desktops, stages and windows. It complements the Cmd+Tab switcher. It covers the full screen, including the menu bar and Dock, as a global overview. It does not create a macOS Space.
 
-Open it with `roadie overview show`. BetterTouchTool can bind a gesture, such as a four-finger upward swipe, to `roadie overview toggle`; a second swipe closes it. `roadie overview hide` also closes it. `roadie overview status` reports configuration and daemon availability, not confirmed window visibility.
+Open it with a **native four-finger upward trackpad swipe** (`overview.trackpad_gesture = true`, no BetterTouchTool required; four-finger swipe down closes it), or with `roadie overview show`. BetterTouchTool can also bind a gesture, such as a four-finger upward swipe, to `roadie overview toggle` (turn off `overview.trackpad_gesture` in that case); a second swipe closes it. `roadie overview hide` also closes it. `roadie overview status` reports configuration and daemon availability, not confirmed window visibility.
 
 In **Réglages Roadie > Vue d’ensemble**, choose:
 
@@ -12,6 +12,7 @@ In **Réglages Roadie > Vue d’ensemble**, choose:
 - **Magnification**, from 100 to 250%, default 150%: card size of the hovered desktop relative to the others. Other desktops tighten when space runs out. Real windows keep their sizes.
 - **Wallpaper blur**, from 0 to 100%, default 20%: a slider and a live preview of your wallpaper show the result.
 - **Colour** and **thickness** (1 to 8 points, default 2) of the selection outline.
+- **4-finger trackpad gesture (up/down)** (enabled by default, `trackpad_gesture = true`): opens the overview with a four-finger upward swipe and closes it with a downward swipe, without external tools. Disable it if you prefer a dedicated BetterTouchTool gesture.
 - **Optional internal shortcut**: record a key combination directly. A blank shortcut reserves no keys. BetterTouchTool, Karabiner and other tools can call the CLI instead.
 
 The composition is centered vertically. The overview shows no controls: change these settings in the settings window; they apply to the open view. The background is the display's wallpaper, blurred, which hides desktop icons. Without a readable image, Roadie blurs what lies under the view. Desktop order stays stable. A layout change alone does not move the magnifier while the pointer is still.
@@ -37,6 +38,7 @@ magnification = 150
 background_blur = 20 # 0 = sharp, 100 = very blurred
 selection_color = "#66C2F7"
 selection_width = 2 # points, 1 to 8
+trackpad_gesture = true # native 4-finger swipe up/down (no BetterTouchTool needed)
 hotkey = "" # optional; use the keyboard recorder
 ```
 
@@ -44,4 +46,4 @@ Images use the rail and switcher's shared cache. Pointer movement triggers no wi
 
 Cards remain compact. Stages use rows and columns according to their contents. A single window does not stretch to fill the entire height. Magnification stays inside the stage composition, without an overlay. The whole window image is preserved. Clicking it opens that window.
 
-If Mission Control also appears after the swipe, turn the matching macOS gesture off in System Settings > Trackpad > More Gestures > Mission Control. Keep the Roadie gesture in BetterTouchTool.
+If Mission Control also appears after the swipe, turn the matching macOS gesture off in System Settings > Trackpad > More Gestures > Mission Control. Roadie then handles the gesture natively (or keep your BetterTouchTool gesture if you turned off `trackpad_gesture`).

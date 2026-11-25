@@ -429,10 +429,29 @@ Les fonctionnalités récentes se règlent directement dans **Paramètres** ou d
 default_strategy = "spatialBsp" # spatialBsp | bsp | masterStack | tabbed | scrolling | float
 tabbed_bar_height = 28          # 20..44 pt (mode onglets)
 scrolling_column_width = 0.65   # 0.25..1.0 (mode ruban défilant)
+scrolling_smooth_scroll = true  # glissement fluide à ressort (120 Hz ProMotion, position seule)
+scrolling_trackpad_gestures = true # balayage horizontal 3/4 doigts & Option+molette en mode scrolling
+scrolling_trackpad_fingers = 3  # 3 ou 4 doigts pour le balayage du ruban
 scratchpad_enabled = true
+scratchpad_reboot_policy = "reattach_or_relaunch" # reattach_or_relaunch | reattach | ephemeral
+
+[overview]
+trackpad_gesture = true         # geste natif 4 doigts haut/bas (désactiver pour garder BTT)
 
 [switcher]
 action_keys_enabled = true      # touches directes W/Q/M/H/S/A/D hors recherche
+
+# Capture native de ⌘ Tab / ⌘ Maj Tab sans BetterTouchTool (CGEventTap) :
+# [[switcher.shortcuts]]
+# id = "all"
+# hotkey = "command+tab"
+# trigger_source = "roadie"
+
+# Raccourcis autonomes gérés par Roadie (ou via : roadie shortcuts apply-preset standard|vim|minimal) :
+# [[shortcuts]]
+# hotkey = "alt+left"
+# command = "focus left"
+# description = "Focus gauche"
 
 [fx.rail]
 app_icons_row_size = 24         # taille des icônes d'application sous les cartes 3D

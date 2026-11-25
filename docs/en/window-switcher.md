@@ -5,8 +5,10 @@ that context before focusing the window, without moving it into the current stag
 
 ## Use
 
-Shortcuts can be handled by **BetterTouchTool or Karabiner**, like other Roadie
-commands. Roadie reserves no global opening shortcut by default. For example,
+Roadie can intercept opening shortcuts directly in **Réglages Roadie > Sélecteur > Profils de raccourcis** (manager **Roadie**), **including `Cmd+Tab` and `Cmd+Shift+Tab`** via a native `CGEventTap` — with no BetterTouchTool or AltTab required.
+
+Shortcuts can also remain handled by **BetterTouchTool or Karabiner**, like other Roadie
+commands. Roadie reserves no global opening shortcut by default until configured. For example,
 configure **Cmd+Tab** in BetterTouchTool:
 
 - Cmd+Tab runs `roadie switcher cycle --hold cmd`;

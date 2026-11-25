@@ -231,8 +231,10 @@ Suggestions and history help you enter commands. Set the shortcut in the
 
 The **window switcher** opens a selected window in its own Roadie desktop and
 stage. In Réglages Roadie > Sélecteur, create profiles for a display, desktop, stage or
-application. Record a shortcut directly, let BetterTouchTool manage it, or use an
-external CLI binding. Choose whether releasing the keys activates the selection,
+application. Record a shortcut directly — including `⌘ Tab` / `⌘ Shift Tab`, which
+Roadie now intercepts natively via `CGEventTap` without BetterTouchTool or AltTab — or
+keep BetterTouchTool / Karabiner / an external CLI binding if you prefer. Choose whether
+releasing the keys activates the selection,
 keeps the switcher open or starts search. Navigate with the four arrow keys or
 the mouse. Outside the search field, direct action keys control the selected window
 without opening the Actions menu: `W` (close), `Q` (quit app), `M` (minimize/restore),
@@ -244,8 +246,9 @@ The classic grid remains available.
 
 The **global overview** shows every window on a single page, by display and
 desktop, in Archipelago or Bays layout, over your blurred wallpaper. The
-magnifier enlarges the hovered desktop by 100–250%. Open it with
-`roadie overview show`, a BTT gesture (a four-finger upward swipe, for example)
+magnifier enlarges the hovered desktop by 100–250%. Open it with the native
+four-finger upward trackpad swipe (`overview.trackpad_gesture = true`, swipe down
+to close, no BetterTouchTool required), `roadie overview show`, a BTT gesture,
 or an optional shortcut. Drag a chip to reorder desktops or move a stage, and
 drag a card to send a window to another stage, with a live preview of the result. [Overview guide](docs/en/overview.md).
 

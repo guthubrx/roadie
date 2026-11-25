@@ -7,9 +7,11 @@ fenêtre dans la stage courante.
 
 ## Utilisation
 
-Les raccourcis peuvent être gérés par **BetterTouchTool ou Karabiner**, comme les
+Roadie peut intercepter directement vos raccourcis d'ouverture dans **Réglages Roadie > Sélecteur > Profils de raccourcis** (gestionnaire **Roadie**), **y compris `⌘ Tab` et `⌘ Maj Tab`** grâce à un `CGEventTap` natif — sans BetterTouchTool ni AltTab.
+
+Les raccourcis peuvent aussi rester gérés par **BetterTouchTool ou Karabiner**, comme les
 autres commandes Roadie. Aucun raccourci global d'ouverture n'est enregistré
-par défaut par Roadie. Exemple avec **⌘ Tab** dans BetterTouchTool :
+par défaut par Roadie avant configuration. Exemple avec **⌘ Tab** dans BetterTouchTool :
 
 - ⌘ Tab exécute `roadie switcher cycle --hold cmd` ;
 - ⌘ Maj Tab exécute `roadie switcher cycle --hold cmd --backwards` ;

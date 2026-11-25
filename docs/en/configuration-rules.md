@@ -421,10 +421,29 @@ Recent features are configurable in **Settings** or directly in `~/.config/roadi
 default_strategy = "spatialBsp" # spatialBsp | bsp | masterStack | tabbed | scrolling | float
 tabbed_bar_height = 28          # 20..44 pt (tabbed mode)
 scrolling_column_width = 0.65   # 0.25..1.0 (scrolling ribbon mode)
+scrolling_smooth_scroll = true  # spring position-only smooth glide (up to 120 Hz ProMotion)
+scrolling_trackpad_gestures = true # native 3/4-finger horizontal swipe & Option+scrollWheel in scrolling mode
+scrolling_trackpad_fingers = 3  # 3 or 4 fingers for horizontal ribbon swipes
 scratchpad_enabled = true
+scratchpad_reboot_policy = "reattach_or_relaunch" # reattach_or_relaunch | reattach | ephemeral
+
+[overview]
+trackpad_gesture = true         # native 4-finger swipe up/down (set false to keep BTT)
 
 [switcher]
 action_keys_enabled = true      # direct W/Q/M/H/S/A/D keys outside search
+
+# Native ⌘ Tab / ⌘ Shift Tab capture without BetterTouchTool (CGEventTap):
+# [[switcher.shortcuts]]
+# id = "all"
+# hotkey = "command+tab"
+# trigger_source = "roadie"
+
+# Standalone shortcuts managed by Roadie (or via: roadie shortcuts apply-preset standard|vim|minimal):
+# [[shortcuts]]
+# hotkey = "alt+left"
+# command = "focus left"
+# description = "Focus left"
 
 [fx.rail]
 app_icons_row_size = 24         # app icon row size under 3D cards
