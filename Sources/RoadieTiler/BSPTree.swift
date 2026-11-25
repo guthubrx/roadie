@@ -983,15 +983,16 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                                 return extent(content) >= groupNeed
                             }
                             if axis == .horizontal, ids.count >= 2, tabBarHeight > 0, tabBarHeight.isFinite {
-                                // La hauteur de contenu présente une discontinuité au seuil d'apparition de la barre
-                                // (T = tabBarHeight + tabBarGap + minimumContentHeightForTabBar).
-                                // Chaque groupe teste selon `noBarPaths` le régime sans barre [0, T - 1]
-                                // (avec borne supérieure conservée) ou le régime avec barre [T, max].
+                                // Détermine les bornes exactes des régimes sans barre / avec barre
+                                // directement via `splitTabBar` (incluant l'arrondi `CGRect.integral`
+                                // même avec un `innerGap` ou une origine fractionnaires).
                                 let fraction = extent(rect) - floor(extent(rect))
                                 let maxExtent = Int(max(0, floor(extent(container) - fraction)))
-                                let threshold = Int(ceil(tabBarHeight + Self.tabBarGap + Self.minimumContentHeightForTabBar))
-                                let noBarUpper = min(maxExtent, max(0, threshold - 1))
                                 if noBarPaths.contains(path) {
+                                    guard let noBarCap = maximumExtent(in: rect, fits: {
+                                        Self.splitTabBar(in: $0, tabBarHeight: tabBarHeight, count: ids.count).bar == nil
+                                    }) else { return nil }
+                                    let noBarUpper = Int(floor(noBarCap - fraction))
                                     guard fitsContent(withExtent(CGFloat(noBarUpper) + fraction, in: rect)) else { return nil }
                                     var low = 0
                                     var high = noBarUpper
@@ -1003,8 +1004,11 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                                     required = CGFloat(low) + fraction
                                     upperBounds[path] = CGFloat(noBarUpper) + fraction
                                 } else {
-                                    let barLower = min(maxExtent, threshold)
-                                    if fitsContent(withExtent(CGFloat(maxExtent) + fraction, in: rect)) {
+                                    guard let barFloor = minimumExtent(in: rect, fits: {
+                                        Self.splitTabBar(in: $0, tabBarHeight: tabBarHeight, count: ids.count).bar != nil
+                                    }) else { return nil }
+                                    let barLower = Int(floor(barFloor - fraction))
+                                    if barLower <= maxExtent, fitsContent(withExtent(CGFloat(maxExtent) + fraction, in: rect)) {
                                         var low = barLower
                                         var high = maxExtent
                                         while low < high {

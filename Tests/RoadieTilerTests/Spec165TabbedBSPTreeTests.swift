@@ -451,5 +451,27 @@ final class Spec165TabbedBSPTreeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(nestedFrames[w1]!.height, 140)
         XCTAssertGreaterThanOrEqual(nestedFrames[w2]!.height, 128)
         XCTAssertGreaterThanOrEqual(nestedFrames[w4]!.height, 128)
+
+        // Constat Bridget R7 : espacement fractionnaire (10.5) où l'arrondi `CGRect.integral`
+        // décale le seuil d'apparition de la barre (800x350, gap 10.5, barre 28, A=210 min 200, [B,C] min 140).
+        let fracBox = CGRect(x: 0, y: 0, width: 800, height: 350)
+        let fracTree: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 210.5 / 339.5,
+            first: .leaf(w1),
+            second: .tabGroup(windowIDs: [w2, w3], active: w2)
+        )
+        let fracSolved = fracTree.correctingForMinimumSize(
+            of: w2,
+            minimum: CGSize(width: 100, height: 140),
+            in: fracBox,
+            innerGap: 10.5,
+            tabBarHeight: 28,
+            knownMinimums: [w1: CGSize(width: 100, height: 200)]
+        )
+        XCTAssertNotNil(fracSolved)
+        let fracFrames = fracSolved!.place(in: fracBox, innerGap: 10.5, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(fracFrames[w1]!.height, 200)
+        XCTAssertGreaterThanOrEqual(fracFrames[w2]!.height, 140)
     }
 }
