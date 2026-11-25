@@ -212,7 +212,7 @@ roadie tab move left     # reorder active tab left
 roadie tab unstack       # detach active tab back into its own BSP tile
 ```
 
-Layout modes are also available from the NavRail stage context menu and from the launcher. Inside `spatialBsp`, you can also hold `⌥ Option` while dropping on a tile center (or drop directly onto an existing tile's tab bar) to stack, and drag any tab out of its bar to detach it into a BSP tile.
+Layout modes are also available from the NavRail stage context menu and from the launcher. Across all slotted tiled modes (`spatialBsp`, `scrolling`, `masterStack`, and `bsp`), you can hold `⌥ Option` while dropping on a tile or column center (or drop directly onto an existing tab bar) to stack into tabs, and drag any tab out of its bar to detach it.
 
 ## 13. Floating Scratchpad, Dim Inactive, And Workspace Scenes
 

@@ -497,4 +497,202 @@ struct Spec164TabbedScrollingTests {
         #expect(target.tabs[1].windowID == w2.id && !target.tabs[1].isFocused)
         #expect(target.tabs[0].displayLabel == "Notes — Spec")
     }
+
+    // MARK: - Multi-display scrolling seam containment & gesture boundary
+
+    @Test func scrollingClipsAdjacentDisplaySeamsAndNeverBleeds() throws {
+        // Reproduit la géométrie réelle Retina [0..1800] + LG 4K [1800..5640] côte à côte.
+        let leftDisp = DisplaySnapshot(
+            id: DisplayID(rawValue: "retina"),
+            index: 1,
+            name: "Built-in Retina Display",
+            frame: Rect(x: 0, y: 0, width: 1800, height: 1169),
+            visibleFrame: Rect(x: 0, y: 38, width: 1800, height: 1131),
+            isMain: false
+        )
+        let rightDisp = DisplaySnapshot(
+            id: DisplayID(rawValue: "lg4k"),
+            index: 2,
+            name: "LG HDR 4K",
+            frame: Rect(x: 1800, y: -1266, width: 3840, height: 2160),
+            visibleFrame: Rect(x: 1800, y: -1236, width: 3840, height: 2130),
+            isMain: true
+        )
+        let topDisp = DisplaySnapshot(
+            id: DisplayID(rawValue: "top"),
+            index: 3,
+            name: "Top Monitor",
+            frame: Rect(x: 0, y: -1080, width: 1800, height: 1080),
+            visibleFrame: Rect(x: 0, y: -1080, width: 1800, height: 1080),
+            isMain: false
+        )
+
+        // Détection des jointures horizontales
+        let leftEdges = SnapshotService.scrollingClipEdges(for: leftDisp, among: [leftDisp, rightDisp])
+        #expect(!leftEdges.clipsLeft && leftEdges.clipsRight)
+        let rightEdges = SnapshotService.scrollingClipEdges(for: rightDisp, among: [leftDisp, rightDisp])
+        #expect(rightEdges.clipsLeft && !rightEdges.clipsRight)
+        let singleEdges = SnapshotService.scrollingClipEdges(for: leftDisp, among: [leftDisp])
+        #expect(!singleEdges.clipsLeft && !singleEdges.clipsRight)
+        let stackedEdges = SnapshotService.scrollingClipEdges(for: leftDisp, among: [leftDisp, topDisp])
+        #expect(!stackedEdges.clipsLeft && !stackedEdges.clipsRight)
+
+        let ids = (1...5).map { WindowID(rawValue: UInt32($0)) }
+        let leftScope = StageScope(displayID: leftDisp.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "s1"))
+        let rightScope = StageScope(displayID: rightDisp.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "s2"))
+        let gaps = Insets(top: 8, right: 8, bottom: 8, left: 150)
+
+        // 1. Sur l'écran gauche (clipsRight = true) : aucune fenêtre ne doit dépasser x = 1800
+        for count in [2, 3, 5] {
+            let subset = Array(ids.prefix(count))
+            for focused in subset {
+                let plan = LayoutPlanner.plan(LayoutRequest(
+                    scope: leftScope,
+                    mode: .scrolling,
+                    container: leftDisp.visibleFrame.cgRect,
+                    windowIDs: subset,
+                    outerGaps: gaps,
+                    innerGap: 10,
+                    focusedWindowID: focused,
+                    scrollingColumnWidth: 0.65,
+                    scrollingClipsLeft: false,
+                    scrollingClipsRight: true
+                ))
+                for id in subset {
+                    let rect = try #require(plan.placements[id])
+                    #expect(rect.maxX <= leftDisp.visibleFrame.cgRect.maxX - 8)
+                    #expect(rect.midX < rightDisp.frame.cgRect.minX)
+                    #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(rect, in: [leftDisp, rightDisp]))
+                }
+            }
+        }
+
+        // 2. Sur l'écran droit (clipsLeft = true) : aucune fenêtre ne doit descendre sous x = 1950 (1800 + rail 150)
+        for count in [2, 3, 5] {
+            let subset = Array(ids.prefix(count))
+            for focused in subset {
+                let plan = LayoutPlanner.plan(LayoutRequest(
+                    scope: rightScope,
+                    mode: .scrolling,
+                    container: rightDisp.visibleFrame.cgRect,
+                    windowIDs: subset,
+                    outerGaps: gaps,
+                    innerGap: 10,
+                    focusedWindowID: focused,
+                    scrollingColumnWidth: 0.65,
+                    scrollingClipsLeft: true,
+                    scrollingClipsRight: false
+                ))
+                for id in subset {
+                    let rect = try #require(plan.placements[id])
+                    #expect(rect.minX >= rightDisp.visibleFrame.cgRect.minX + 150)
+                    #expect(rect.midX >= rightDisp.frame.cgRect.minX)
+                    #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(rect, in: [leftDisp, rightDisp]))
+                }
+            }
+        }
+    }
+
+    @Test func scrollingGestureFocusStopsAtRibbonBoundaryWithoutJumpingDisplays() throws {
+        let dir = try tempDir("scroll-boundary")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let stageStore = StageStore(path: dir.appendingPathComponent("stages.json").path)
+        let eventLog = EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+        let leftDisp = DisplaySnapshot(
+            id: DisplayID(rawValue: "d1"),
+            index: 1,
+            name: "Left",
+            frame: Rect(x: 0, y: 0, width: 1600, height: 900),
+            visibleFrame: Rect(x: 0, y: 30, width: 1600, height: 870),
+            isMain: false
+        )
+        let rightDisp = DisplaySnapshot(
+            id: DisplayID(rawValue: "d2"),
+            index: 2,
+            name: "Right",
+            frame: Rect(x: 1600, y: 0, width: 1600, height: 900),
+            visibleFrame: Rect(x: 1600, y: 30, width: 1600, height: 870),
+            isMain: true
+        )
+        let w1 = window(101, app: "Notes", title: "One", x: 100)
+        let w2 = window(102, app: "Terminal", title: "Two", x: 500)
+        let wRight = window(201, app: "Safari", title: "OtherDisplay", x: 1800)
+
+        let provider = MutableProvider(displays: [leftDisp, rightDisp], windows: [w1, w2, wRight], focused: w2.id)
+        let spy = SpyWriter()
+        let config = RoadieConfig(tiling: TilingConfig(defaultStrategy: .scrolling))
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: spy,
+            config: config,
+            stageStore: stageStore,
+            events: eventLog
+        )
+        _ = service.snapshot()
+
+        let commands = WindowCommandService(service: service, stageStore: stageStore, events: eventLog)
+
+        // Déjà sur la dernière fenêtre (w2) du ruban gauche : allowCrossDisplay=false reste en butée
+        let blocked = commands.focus(.right, allowCrossDisplay: false)
+        #expect(!blocked.changed)
+        #expect(blocked.outcome == .noOp)
+        #expect(spy.lastFocused() == nil)
+
+        // Vers la gauche dans le ruban : passe bien à w1
+        let movedLeft = commands.focus(.left, allowCrossDisplay: false)
+        #expect(movedLeft.changed)
+        #expect(spy.lastFocused() == w1.id)
+    }
+
+    @Test func scrollingClipsAdjacentDisplayEvenWhenPlanningSnapshotExcludesNeighborDisplay() throws {
+        let dir = try tempDir("scroll-filtered-displays")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let stageStore = StageStore(path: dir.appendingPathComponent("stages.json").path)
+        let eventLog = EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+        let leftDisp = DisplaySnapshot(
+            id: DisplayID(rawValue: "retina"),
+            index: 1,
+            name: "Built-in Retina Display",
+            frame: Rect(x: 0, y: 0, width: 1800, height: 1169),
+            visibleFrame: Rect(x: 0, y: 38, width: 1800, height: 1131),
+            isMain: false
+        )
+        let rightDisp = DisplaySnapshot(
+            id: DisplayID(rawValue: "lg4k"),
+            index: 2,
+            name: "LG HDR 4K",
+            frame: Rect(x: 1800, y: -1266, width: 3840, height: 2160),
+            visibleFrame: Rect(x: 1800, y: -1236, width: 3840, height: 2130),
+            isMain: true
+        )
+        let w1 = window(301, app: "Teams", title: "One", x: 150)
+        let w2 = window(302, app: "Teams", title: "Two", x: 500)
+        let w3 = window(303, app: "iTerm2", title: "Three", x: 900)
+
+        let provider = MutableProvider(displays: [leftDisp, rightDisp], windows: [w1, w2, w3], focused: w1.id)
+        let config = RoadieConfig(tiling: TilingConfig(defaultStrategy: .scrolling))
+        let service = SnapshotService(
+            provider: provider,
+            config: config,
+            stageStore: stageStore,
+            events: eventLog
+        )
+        let fullSnapshot = service.snapshot()
+        var filtered = fullSnapshot
+        // Simule `LayoutMaintainer.plannedCommands` qui exclut l'écran 2 de `planning.displays`
+        filtered.displays.removeAll { $0.id == rightDisp.id }
+        #expect(filtered.displays.count == 1)
+
+        // 1. Avec `allDisplays: fullSnapshot.displays` (chemin LayoutMaintainer)
+        let planExplicit = service.applyPlan(from: filtered, allDisplays: fullSnapshot.displays)
+        for cmd in planExplicit.commands {
+            #expect(cmd.frame.cgRect.maxX <= leftDisp.frame.cgRect.maxX)
+        }
+
+        // 2. Même sans `allDisplays`, le repli sur `cachedGestureSnapshot()` préserve la jointure
+        let planFallback = service.applyPlan(from: filtered)
+        for cmd in planFallback.commands {
+            #expect(cmd.frame.cgRect.maxX <= leftDisp.frame.cgRect.maxX)
+        }
+    }
 }

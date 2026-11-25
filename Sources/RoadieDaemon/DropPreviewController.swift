@@ -127,6 +127,15 @@ struct DropPreviewCandidate: Equatable {
         let (operation, source) = (self.operation, sourceWindowID)
         return { operation.applied(to: $0, source: source, target: targetWindowID) }
     }
+
+    /// Mutation de groupe d'onglets pour les modes sans arbre (`scrolling`, `masterStack`, `bsp`, Spec 167).
+    var groupMutation: ((inout PersistentStageState, StageScope) -> Void)? {
+        guard operation == .stackTab, let targetWindowID else { return nil }
+        let source = sourceWindowID
+        return { state, scope in
+            _ = state.stackTab(source, onto: targetWindowID, in: scope)
+        }
+    }
 }
 
 enum DropPreviewOperation: String, Equatable {
@@ -246,30 +255,117 @@ struct DropPreviewEngine {
             ordered.append(sourceWindowID)
         }
 
-        let target = activeEntries
-            .filter { $0.window.id != sourceWindowID && $0.window.frame.cgRect.contains(axPoint) }
-            .sorted { $0.window.frame.cgRect.area < $1.window.frame.cgRect.area }
-            .first
+        let allowsSlotTabs = stage.mode.supportsSlotTabGroups
+        let existingSlotGroups = allowsSlotTabs ? SnapshotService.layoutTabGroups(from: stage.groups) : []
+        let ownGroupMembers: Set<WindowID> = Set(
+            existingSlotGroups.first(where: { $0.windowIDs.contains(sourceWindowID) })?.windowIDs ?? [sourceWindowID]
+        )
+
+        // Spec 167 : détection d'un dépôt direct sur une barre d'onglets de slot existante (`scrolling`, `masterStack`, `bsp`).
+        var tabBarTarget: LayoutTabBarPlacement? = nil
+        if allowsSlotTabs && !existingSlotGroups.isEmpty {
+            let liveIDs = activeEntries.map(\.window.id)
+            let clipEdges = SnapshotService.scrollingClipEdges(for: display, among: snapshot.displays)
+            let barReq = LayoutRequest(
+                scope: scope,
+                mode: stage.mode,
+                container: display.visibleFrame.cgRect,
+                windowIDs: ordered.filter { liveIDs.contains($0) },
+                splitPolicy: service.effectiveConfig.tiling.splitPolicy,
+                outerGaps: service.effectiveOuterGaps(windowCount: liveIDs.count, display: display),
+                innerGap: service.effectiveConfig.tiling.gapsInner,
+                masterRatio: service.effectiveConfig.tiling.masterRatio,
+                focusedWindowID: stage.focusedWindowID ?? snapshot.focusedWindowID,
+                tabbedBarHeight: service.effectiveConfig.tiling.tabbedBarHeight,
+                scrollingColumnWidth: service.effectiveConfig.tiling.scrollingColumnWidth,
+                scrollingClipsLeft: clipEdges.clipsLeft,
+                scrollingClipsRight: clipEdges.clipsRight,
+                tabGroups: existingSlotGroups
+            )
+            tabBarTarget = LayoutTabSlots.tabBarFrames(for: barReq).first { placement in
+                placement.barFrame.contains(axPoint) && !placement.windowIDs.contains(sourceWindowID)
+            }
+        }
+
+        let target: ScopedWindowSnapshot?
+        if let tabBarTarget {
+            target = activeEntries.first(where: { $0.window.id == tabBarTarget.active })
+        } else {
+            target = activeEntries
+                .filter { $0.window.id != sourceWindowID && $0.window.frame.cgRect.contains(axPoint) }
+                .sorted { $0.window.frame.cgRect.area < $1.window.frame.cgRect.area }
+                .first
+        }
 
         var placements: [WindowID: CGRect] = [:]
         let operation: DropPreviewOperation
+        var targetWindowID: WindowID? = nil
         if let target {
-            operation = dropOperation(at: axPoint, in: target.window.frame.cgRect, sourceIsActive: activeEntries.contains { $0.window.id == sourceWindowID })
-            ordered = reordered(ordered, sourceID: sourceWindowID, targetID: target.window.id, operation: operation)
-            placements = structuralPlacements(
-                sourceID: sourceWindowID,
-                target: target.window,
-                operation: operation,
-                activeEntries: activeEntries,
-                display: display
-            ) ?? [:]
+            targetWindowID = target.window.id
+            if tabBarTarget != nil {
+                operation = .stackTab
+            } else {
+                let rawOp = dropOperation(
+                    at: axPoint,
+                    in: target.window.frame.cgRect,
+                    sourceIsActive: activeEntries.contains { $0.window.id == sourceWindowID },
+                    optionHeld: optionPressed,
+                    allowsStackTab: allowsSlotTabs
+                )
+                if allowsSlotTabs, ownGroupMembers.contains(target.window.id), (rawOp == .swap || rawOp == .stackTab) {
+                    return nil
+                }
+                operation = rawOp
+            }
+            if operation == .stackTab, allowsSlotTabs {
+                // Aperçu de l'empilement en onglet dans le slot cible
+                var previewGroups = existingSlotGroups.compactMap { group -> LayoutTabGroup? in
+                    let filtered = group.windowIDs.filter { $0 != sourceWindowID }
+                    guard filtered.count >= 2 else { return nil }
+                    let active = filtered.contains(group.activeWindowID ?? filtered[0]) ? group.activeWindowID : filtered[0]
+                    return LayoutTabGroup(windowIDs: filtered, activeWindowID: active)
+                }
+                if let idx = previewGroups.firstIndex(where: { $0.windowIDs.contains(target.window.id) }) {
+                    previewGroups[idx].windowIDs.append(sourceWindowID)
+                    previewGroups[idx].activeWindowID = sourceWindowID
+                } else {
+                    previewGroups.append(LayoutTabGroup(windowIDs: [target.window.id, sourceWindowID], activeWindowID: sourceWindowID))
+                }
+                let clipEdges = SnapshotService.scrollingClipEdges(for: display, among: snapshot.displays)
+                let previewPlan = LayoutPlanner.plan(LayoutRequest(
+                    scope: scope,
+                    mode: stage.mode,
+                    container: display.visibleFrame.cgRect,
+                    windowIDs: ordered,
+                    splitPolicy: service.effectiveConfig.tiling.splitPolicy,
+                    outerGaps: service.effectiveOuterGaps(windowCount: ordered.count, display: display),
+                    innerGap: service.effectiveConfig.tiling.gapsInner,
+                    masterRatio: service.effectiveConfig.tiling.masterRatio,
+                    focusedWindowID: sourceWindowID,
+                    tabbedBarHeight: service.effectiveConfig.tiling.tabbedBarHeight,
+                    scrollingColumnWidth: service.effectiveConfig.tiling.scrollingColumnWidth,
+                    scrollingClipsLeft: clipEdges.clipsLeft,
+                    scrollingClipsRight: clipEdges.clipsRight,
+                    tabGroups: previewGroups
+                ))
+                placements = previewPlan.placements
+            } else {
+                ordered = reordered(ordered, sourceID: sourceWindowID, targetID: target.window.id, operation: operation)
+                placements = structuralPlacements(
+                    sourceID: sourceWindowID,
+                    target: target.window,
+                    operation: operation,
+                    activeEntries: activeEntries,
+                    display: display
+                ) ?? [:]
+            }
         } else {
             operation = .append
             ordered = ordered.filter { $0 != sourceWindowID } + [sourceWindowID]
         }
 
-        let plan = service.layoutPlan(from: snapshot, scope: scope, orderedWindowIDs: ordered, priorityWindowIDs: [sourceWindowID])
         if placements.isEmpty {
+            let plan = service.layoutPlan(from: snapshot, scope: scope, orderedWindowIDs: ordered, priorityWindowIDs: [sourceWindowID])
             placements = plan.placements
         }
         guard let frame = placements[sourceWindowID], !frame.isEmpty else { return nil }
@@ -280,7 +376,9 @@ struct DropPreviewEngine {
             orderedWindowIDs: ordered,
             placements: Dictionary(uniqueKeysWithValues: placements.map { ($0.key, Rect($0.value.integral)) }),
             frame: frame.integral,
-            operation: operation
+            operation: operation,
+            targetWindowID: targetWindowID,
+            isTreeMode: allowsSlotTabs
         )
     }
 
@@ -1109,7 +1207,8 @@ final class WindowDragReorderController {
                 displayID: candidate.displayID,
                 orderedWindowIDs: candidate.orderedWindowIDs,
                 placements: candidate.placements,
-                treeMutation: candidate.treeMutation
+                treeMutation: candidate.treeMutation,
+                groupMutation: candidate.groupMutation
             )
             if candidate.operation == .stackTab {
                 _ = WindowCommandService(service: preview.snapshotService).focus(windowID: candidate.sourceWindowID)

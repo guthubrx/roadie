@@ -236,6 +236,58 @@ public final class StageTabBarController {
                         isTileGroup: true
                     ))
                 }
+            } else if stage.mode.supportsSlotTabGroups {
+                let slotGroups = SnapshotService.layoutTabGroups(from: stage.groups)
+                guard !slotGroups.isEmpty else { continue }
+                let liveByID = Dictionary(uniqueKeysWithValues: liveWindows.map { ($0.id, $0) })
+                let gaps = outerGapsProvider(liveWindows.count, display)
+                let clipEdges = SnapshotService.scrollingClipEdges(for: display, among: snapshot.displays)
+                let request = LayoutRequest(
+                    scope: activeScope,
+                    mode: stage.mode,
+                    container: display.visibleFrame.cgRect,
+                    windowIDs: liveWindows.map(\.id),
+                    splitPolicy: config.tiling.splitPolicy,
+                    outerGaps: gaps,
+                    innerGap: config.tiling.gapsInner,
+                    masterRatio: config.tiling.masterRatio,
+                    focusedWindowID: stage.focusedWindowID ?? snapshot.focusedWindowID,
+                    tabbedBarHeight: config.tiling.tabbedBarHeight,
+                    scrollingColumnWidth: config.tiling.scrollingColumnWidth,
+                    scrollingClipsLeft: clipEdges.clipsLeft,
+                    scrollingClipsRight: clipEdges.clipsRight,
+                    tabGroups: slotGroups
+                )
+                let placements = LayoutTabSlots.tabBarFrames(for: request)
+                for placement in placements {
+                    let groupWindows = placement.windowIDs.compactMap { liveByID[$0] }
+                    guard groupWindows.count >= 2 else { continue }
+                    let activeID: WindowID
+                    if let globalFocus = snapshot.focusedWindowID, placement.windowIDs.contains(globalFocus) {
+                        activeID = globalFocus
+                    } else if placement.windowIDs.contains(placement.active) {
+                        activeID = placement.active
+                    } else {
+                        activeID = groupWindows[0].id
+                    }
+                    let tabs = groupWindows.map { window in
+                        StageTabItem(
+                            windowID: window.id,
+                            appName: window.appName,
+                            title: window.title,
+                            bundleID: window.bundleID,
+                            isFocused: window.id == activeID
+                        )
+                    }
+                    let anchorKey = placement.windowIDs.map(\.rawValue).min() ?? 0
+                    targets.append(StageTabBarTarget(
+                        barID: "\(activeScope.description)#slot-\(anchorKey)",
+                        scope: activeScope,
+                        frame: transform(placement.barFrame),
+                        tabs: tabs,
+                        isTileGroup: true
+                    ))
+                }
             }
         }
         return targets
@@ -387,7 +439,8 @@ public final class StageTabBarController {
                     displayID: candidate.displayID,
                     orderedWindowIDs: candidate.orderedWindowIDs,
                     placements: candidate.placements,
-                    treeMutation: candidate.treeMutation
+                    treeMutation: candidate.treeMutation,
+                    groupMutation: candidate.groupMutation
                 )
                 _ = WindowCommandService(service: service).focus(windowID: candidate.sourceWindowID)
             }

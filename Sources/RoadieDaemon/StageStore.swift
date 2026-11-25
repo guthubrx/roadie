@@ -447,6 +447,148 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         scopes[scopeIndex].stages[stageIndex].bspTree = tree
     }
 
+    // MARK: - Groupes d'onglets par slot (Spec 167 : scrolling, masterStack, bsp)
+
+    /// Groupes d'onglets valides (`presentation == "tabbed"`, >= 2 fenêtres) pour `scope`.
+    public func tabbedGroups(for scope: StageScope) -> [WindowGroup] {
+        guard let stage = scopes
+            .first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
+            .stages.first(where: { $0.id == scope.stageID })
+        else { return [] }
+        return stage.groups.filter { $0.presentation == "tabbed" && $0.windowIDs.count >= 2 }
+    }
+
+    /// Groupe d'onglets contenant `windowID` dans `scope`, s'il existe.
+    public func tabbedGroup(containing windowID: WindowID, in scope: StageScope) -> WindowGroup? {
+        tabbedGroups(for: scope).first { $0.windowIDs.contains(windowID) }
+    }
+
+    /// Empile `source` en onglet dans le groupe de `target` (ou crée un groupe `[target, source]`).
+    @discardableResult
+    public mutating func stackTab(_ source: WindowID, onto target: WindowID, in scope: StageScope) -> Bool {
+        guard source != target,
+              let scopeIndex = scopes.firstIndex(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }),
+              let stageIndex = scopes[scopeIndex].stages.firstIndex(where: { $0.id == scope.stageID })
+        else { return false }
+
+        var stage = scopes[scopeIndex].stages[stageIndex]
+        // Retirer `source` de tout groupe existant dans cette stage (collapse auto < 2).
+        stage.groups = stage.groups.compactMap { group in
+            var updated = group
+            updated.remove(source)
+            return updated.windowIDs.count >= 2 ? updated : nil
+        }
+
+        if let targetGroupIndex = stage.groups.firstIndex(where: { $0.presentation == "tabbed" && $0.windowIDs.contains(target) }) {
+            var group = stage.groups[targetGroupIndex]
+            group.add(source)
+            group.activeWindowID = source
+            stage.groups[targetGroupIndex] = group
+        } else {
+            let group = WindowGroup(
+                id: "tab-\(min(target.rawValue, source.rawValue))-\(UUID().uuidString.prefix(8))",
+                windowIDs: [target, source],
+                activeWindowID: source,
+                presentation: "tabbed"
+            )
+            stage.groups.append(group)
+        }
+        stage.focusedWindowID = source
+        scopes[scopeIndex].stages[stageIndex] = stage
+        return true
+    }
+
+    /// Détache `windowID` de son groupe d'onglets et la place à côté du groupe dans l'ordre des membres.
+    @discardableResult
+    public mutating func unstackTab(_ windowID: WindowID, beforeGroup: Bool = false, in scope: StageScope) -> Bool {
+        guard let scopeIndex = scopes.firstIndex(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }),
+              let stageIndex = scopes[scopeIndex].stages.firstIndex(where: { $0.id == scope.stageID })
+        else { return false }
+
+        var stage = scopes[scopeIndex].stages[stageIndex]
+        guard let groupIndex = stage.groups.firstIndex(where: { $0.presentation == "tabbed" && $0.windowIDs.contains(windowID) }) else {
+            return false
+        }
+        let siblings = Set(stage.groups[groupIndex].windowIDs.filter { $0 != windowID })
+        stage.groups[groupIndex].remove(windowID)
+        if stage.groups[groupIndex].windowIDs.count < 2 {
+            stage.groups.remove(at: groupIndex)
+        }
+
+        // Réordonner `members` pour insérer la fenêtre détachée juste avant ou juste après son ancien groupe.
+        if let memberIdx = stage.members.firstIndex(where: { $0.windowID == windowID }) {
+            let member = stage.members.remove(at: memberIdx)
+            if beforeGroup, let firstSiblingIdx = stage.members.firstIndex(where: { siblings.contains($0.windowID) }) {
+                stage.members.insert(member, at: firstSiblingIdx)
+            } else if let lastSiblingIdx = stage.members.lastIndex(where: { siblings.contains($0.windowID) }) {
+                stage.members.insert(member, at: lastSiblingIdx + 1)
+            } else {
+                stage.members.append(member)
+            }
+        }
+        stage.focusedWindowID = windowID
+        scopes[scopeIndex].stages[stageIndex] = stage
+        return true
+    }
+
+    /// Active l'onglet `windowID` dans son groupe d'onglets (si présent).
+    @discardableResult
+    public mutating func selectTab(_ windowID: WindowID, in scope: StageScope) -> Bool {
+        guard let scopeIndex = scopes.firstIndex(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }),
+              let stageIndex = scopes[scopeIndex].stages.firstIndex(where: { $0.id == scope.stageID }),
+              let groupIndex = scopes[scopeIndex].stages[stageIndex].groups.firstIndex(where: {
+                  $0.presentation == "tabbed" && $0.windowIDs.contains(windowID)
+              })
+        else { return false }
+        if scopes[scopeIndex].stages[stageIndex].groups[groupIndex].activeWindowID == windowID {
+            return false
+        }
+        scopes[scopeIndex].stages[stageIndex].groups[groupIndex].activeWindowID = windowID
+        return true
+    }
+
+    /// Retourne l'onglet suivant (`delta > 0`) ou précédent (`delta < 0`) dans le groupe de `windowID`.
+    public func cyclingTab(
+        from windowID: WindowID,
+        delta: Int,
+        liveWindowIDs: Set<WindowID>,
+        in scope: StageScope
+    ) -> WindowID? {
+        guard delta != 0, let group = tabbedGroup(containing: windowID, in: scope) else { return nil }
+        let live = group.windowIDs.filter { liveWindowIDs.contains($0) }
+        guard live.count >= 2, let idx = live.firstIndex(of: windowID) else { return nil }
+        let step = delta > 0 ? 1 : -1
+        let nextIdx = (idx + step + live.count) % live.count
+        return live[nextIdx]
+    }
+
+    /// Réordonne `windowID` dans son groupe d'onglets d'un cran (`delta`) ou vers `toIndex`.
+    @discardableResult
+    public mutating func reorderTab(_ windowID: WindowID, delta: Int, in scope: StageScope) -> Bool {
+        guard delta != 0, let group = tabbedGroup(containing: windowID, in: scope),
+              let idx = group.windowIDs.firstIndex(of: windowID)
+        else { return false }
+        return reorderTab(windowID, toIndex: idx + (delta > 0 ? 1 : -1), in: scope)
+    }
+
+    @discardableResult
+    public mutating func reorderTab(_ windowID: WindowID, toIndex: Int, in scope: StageScope) -> Bool {
+        guard let scopeIndex = scopes.firstIndex(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }),
+              let stageIndex = scopes[scopeIndex].stages.firstIndex(where: { $0.id == scope.stageID }),
+              let groupIndex = scopes[scopeIndex].stages[stageIndex].groups.firstIndex(where: {
+                  $0.presentation == "tabbed" && $0.windowIDs.contains(windowID)
+              })
+        else { return false }
+        var ids = scopes[scopeIndex].stages[stageIndex].groups[groupIndex].windowIDs
+        guard let oldIdx = ids.firstIndex(of: windowID) else { return false }
+        let clamped = min(max(0, toIndex), ids.count - 1)
+        guard clamped != oldIdx else { return false }
+        let moved = ids.remove(at: oldIdx)
+        ids.insert(moved, at: clamped)
+        scopes[scopeIndex].stages[stageIndex].groups[groupIndex].windowIDs = ids
+        return true
+    }
+
     // Complexite : O(scopes * stages * members) au pire en lookup unique.
     // Si plusieurs lookups consecutifs sont prevus, utiliser stageScopeIndex() pour
     // construire un index inverse une seule fois (O(total_members)) puis lookups O(1).

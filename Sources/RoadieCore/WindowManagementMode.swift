@@ -47,4 +47,15 @@ public enum WindowManagementMode: String, Codable, Sendable, CaseIterable {
     public var usesTreeEngine: Bool {
         self == .spatialBsp || self == .mutableBsp
     }
+
+    /// Modes tuilés sans arbre supportant les groupes d'onglets par tuile / colonne via `LayoutTabSlots` (Spec 167).
+    public var supportsSlotTabGroups: Bool {
+        self == .scrolling || self == .masterStack || self == .bsp
+    }
+
+    /// Tout mode tuilé permettant d'empiler des fenêtres en onglets au sein d'une tuile ou d'une colonne
+    /// (`spatialBsp` par `BSPTree.tabGroup`, `scrolling` / `masterStack` / `bsp` par `LayoutTabSlots`).
+    public var supportsTileTabGroups: Bool {
+        usesTreeEngine || supportsSlotTabGroups
+    }
 }

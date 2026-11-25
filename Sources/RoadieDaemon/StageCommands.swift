@@ -1041,6 +1041,7 @@ public struct StageCommandService {
         orderedWindowIDs: [WindowID],
         placements providedPlacements: [WindowID: Rect] = [:],
         treeMutation: ((BSPTree) -> BSPTree)? = nil,
+        groupMutation: ((inout PersistentStageState, StageScope) -> Void)? = nil,
         deferGeometryUsing suppliedSnapshot: DaemonSnapshot? = nil,
         validating stateCheck: ((PersistentStageState) -> Bool)? = nil
     ) -> StageCommandResult {
@@ -1072,13 +1073,20 @@ public struct StageCommandService {
                 persistentScope.assign(window: window, to: stageID)
                 persistentScope.orderMembers(orderedWindowIDs, in: stageID)
                 state.update(persistentScope)
-                return StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
+                let targetScope = StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
+                groupMutation?(&state, targetScope)
+                return targetScope
             }, clearingIntentsOf: { [$0, sourceScope].compactMap { $0 } })
         } catch {
             return .persistenceFailure("stage place \(windowID.rawValue)", error)
         }
+        let persistedAfter = store.state()
+        let effectiveMode: WindowManagementMode = persistedAfter.scopes
+            .first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
+            .stages.first(where: { $0.id == scope.stageID })?.mode ?? .bsp
+        let hasSlotTabs = effectiveMode.supportsSlotTabGroups && !persistedAfter.tabbedGroups(for: scope).isEmpty
         if suppliedSnapshot != nil {
-            if Set(providedPlacements.keys) == Set(orderedWindowIDs) {
+            if !hasSlotTabs && effectiveMode != .scrolling && Set(providedPlacements.keys) == Set(orderedWindowIDs) {
                 do {
                     try intentStore.saveChecked(LayoutIntent(scope: scope, windowIDs: orderedWindowIDs,
                         placements: providedPlacements, source: .command))
@@ -1096,7 +1104,9 @@ public struct StageCommandService {
             generation: generation
         )
         let ordered = normalizedOrder(orderedWindowIDs, windowID: windowID, in: updated, scope: scope)
-        let layout = layoutPlan(from: updated, scope: scope, ordered: ordered, providedPlacements: providedPlacements)
+        let layout = (hasSlotTabs || groupMutation != nil)
+            ? service.layoutPlan(from: updated, scope: scope, orderedWindowIDs: ordered)
+            : layoutPlan(from: updated, scope: scope, ordered: ordered, providedPlacements: providedPlacements)
         let applyPlan = applyPlan(from: updated, scope: scope, ordered: ordered, layout: layout)
         let result = service.apply(applyPlan, generation: generation)
         let isolated = isolateInfeasibleClampedScope(
@@ -1106,14 +1116,16 @@ public struct StageCommandService {
             keepWindowID: windowID,
             generation: generation
         )
-        do {
-            try persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
-        } catch {
-            // Fenêtre déjà placée (effets appliqués), mais disposition demandée non retenue :
-            // résultat partiel explicite, pas un refus (REL-021).
-            return .partial(JSONPersistence.commandFailureMessage(
-                "stage place \(windowID.rawValue): partial, window placed but layout intent", error
-            ))
+        if !hasSlotTabs && effectiveMode != .scrolling {
+            do {
+                try persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
+            } catch {
+                // Fenêtre déjà placée (effets appliqués), mais disposition demandée non retenue :
+                // résultat partiel explicite, pas un refus (REL-021).
+                return .partial(JSONPersistence.commandFailureMessage(
+                    "stage place \(windowID.rawValue): partial, window placed but layout intent", error
+                ))
+            }
         }
         _ = service.focus(window)
         events.append(RoadieEvent(

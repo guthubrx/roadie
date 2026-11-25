@@ -641,9 +641,19 @@ public final class LayoutMaintainer {
             expiredFailures[raw] = nil
         }
 
+        let retryTrackedNonTreeScopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
+            guard let scope = entry.scope,
+                  !tickExcludedScopes.contains(scope),
+                  !treeScopes.contains(scope),
+                  snapshot.state.activeScope(on: scope.displayID) == scope,
+                  snapshot.state.stage(scope: scope)?.mode.isTiled == true,
+                  preAXFailedTransitionWindows.contains(entry.window.id) || unreadyPlacementWindows.contains(entry.window.id)
+            else { return nil }
+            return scope
+        })
         let waitingPlacementScopes = unreadyPlacementScopes(
             in: snapshot,
-            scopes: treeScopes.subtracting(tickExcludedScopes),
+            scopes: treeScopes.subtracting(tickExcludedScopes).union(retryTrackedNonTreeScopes),
             additionalWaitingWindows: hiddenSiblingsResult.deferredNewcomers,
             now: tickNow
         )
@@ -866,7 +876,8 @@ public final class LayoutMaintainer {
             due.append(("destroyed_window", retryAt, true))
         }
         if let pendingGesture { due.append(("gesture_pending", pendingGesture.pollAt, true)) }
-        if let retryAt = unreadyPlacementRetryAt, !unreadyPlacementWindows.isEmpty {
+        if let retryAt = unreadyPlacementRetryAt,
+           !unreadyPlacementWindows.isEmpty || !preAXFailedTransitionWindows.isEmpty {
             due.append(("ax_ready_retry", retryAt, true))
         }
 
@@ -1059,6 +1070,19 @@ public final class LayoutMaintainer {
         })
         let firstResult = service.apply(plan, generation: generation, immediateWindowIDs: immediateWindowIDs)
         recordWrites(firstResult, before: before, generation: generation)
+        // Une écriture directe échouée alors que la fenêtre est encore illisible en AX
+        // (`writtenFrames.entry == nil` et `readFrame == nil`, ex. app lente au démarrage à froid
+        // en mode `.scrolling` / `.masterStack` / `.bsp`) arme une reprise rapide `ax_ready_retry`
+        // et prolonge la grâce anti-dérive ; un vrai refus sur fenêtre lisible reste dans `failedFrames`.
+        let directNow = now()
+        let directCommandsByID = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id, $0.window) })
+        for item in firstResult.items where item.status == .failed && layoutWindowIDs.contains(item.windowID) {
+            if writtenFrames.entry(for: item.windowID.rawValue) == nil,
+               let window = directCommandsByID[item.windowID],
+               readFrame(window) == nil {
+                schedulePreAXPlacementRetry(for: item.windowID, now: directNow)
+            }
+        }
 
         // Les fenêtres qui refusent de grandir restent hors des réparations, comme du plan (A3).
         let snapshot = snapshotExcludingGrowthClampedWindows(snapshot)
@@ -1107,7 +1131,12 @@ public final class LayoutMaintainer {
                 snapshot.state.activeScope(on: display.id).map(excluded.contains) ?? false
             }
         }
-        return service.applyPlan(from: planning, priorityWindowIDs: priorityWindowIDs, generation: generation)
+        return service.applyPlan(
+            from: planning,
+            priorityWindowIDs: priorityWindowIDs,
+            generation: generation,
+            allDisplays: snapshot.displays
+        )
     }
 
     /// Met à jour la référence d'observation pour les seules fenêtres des scopes donnés (R6).
@@ -1469,6 +1498,7 @@ public final class LayoutMaintainer {
                 failedFrames[id.rawValue] = nil
                 expiredFailures[id.rawValue] = nil
                 failedRestorations[id] = nil
+                failedDriftWindows[id] = nil
                 if wasUnready {
                     events.append(RoadieEvent(type: "layout_window_ax_ready", scope: scope, details: [
                         "windowID": String(id.rawValue)
@@ -3337,18 +3367,47 @@ public final class LayoutMaintainer {
     /// seulement tant que le résultat appartient encore à la génération active.
     public func recordTransition(_ result: ApplyResult, from plan: ApplyPlan, generation: UInt64) {
         guard generation == generations.current else { return }
+        let tickNow = now()
+        let commandsByID = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id, $0.window) })
         for item in result.items {
             if item.status == .failed && writtenFrames.entry(for: item.windowID.rawValue) == nil {
-                // La résolution AX a échoué avant toute écriture réelle : réinitialiser le marqueur
-                // et mémoriser l'échec pré-AX pour purger failedFrames dès que la fenêtre est lisible.
-                placementResolvedPIDs[item.windowID] = nil
-                preAXFailedTransitionWindows.insert(item.windowID)
+                // Seulement si la fenêtre est réellement illisible en AX (démarrage lent / quarantaine),
+                // et non lors d'un vrai refus d'écriture sur une fenêtre déjà lisible.
+                if let window = commandsByID[item.windowID], readFrame(window) == nil {
+                    schedulePreAXPlacementRetry(for: item.windowID, now: tickNow)
+                }
             } else if item.status == .applied || item.status == .clamped {
                 preAXFailedTransitionWindows.remove(item.windowID)
+                unreadyPlacementWindows.remove(item.windowID)
+                if unreadyPlacementWindows.isEmpty && preAXFailedTransitionWindows.isEmpty {
+                    unreadyPlacementRetryAt = nil
+                    unreadyPlacementRetryCount = 0
+                }
             }
         }
         record(result, from: plan)
         appendItemEvents(result, generation: generation)
+    }
+
+    private func schedulePreAXPlacementRetry(for windowID: WindowID, now: Date) {
+        placementResolvedPIDs[windowID] = nil
+        let isNew = preAXFailedTransitionWindows.insert(windowID).inserted
+        if isNew {
+            unreadyPlacementRetryCount = 0
+        }
+        if unreadyPlacementRetryCount < Self.unreadyPlacementRetryDelays.count {
+            let delay = Self.unreadyPlacementRetryDelays[unreadyPlacementRetryCount]
+            let candidate = now.addingTimeInterval(delay)
+            if unreadyPlacementRetryAt == nil || candidate < unreadyPlacementRetryAt! {
+                unreadyPlacementRetryAt = candidate
+            }
+        }
+        let extendedGrace = now.addingTimeInterval(LayoutTolerance.newWindowDriftGrace)
+        if let existing = newWindowDriftGraceUntil[windowID] {
+            newWindowDriftGraceUntil[windowID] = max(existing, extendedGrace)
+        } else {
+            newWindowDriftGraceUntil[windowID] = extendedGrace
+        }
     }
 
     /// Mémoire des refus, des échecs et des annulations des modes sans arbre (FR-004, A3). O(k).
@@ -4103,6 +4162,8 @@ public final class LayoutMaintainer {
             for entry in snapshot.windows {
                 guard let sourceScope = entry.scope,
                       !defersFailedDrift(entry.window, now: tickNow),
+                      !preAXFailedTransitionWindows.contains(entry.window.id),
+                      !unreadyPlacementWindows.contains(entry.window.id),
                       newWindowDriftGraceUntil[entry.window.id].map({ tickNow >= $0 }) ?? true,
                       !excludedScopes.contains(sourceScope),
                       entry.pin == nil,

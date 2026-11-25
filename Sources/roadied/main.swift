@@ -497,7 +497,7 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     let scrollingGestures = ScrollingTrackpadGestureController(
         service: service,
         onNavigate: { direction in
-            _ = WindowCommandService(service: service).focus(direction)
+            _ = WindowCommandService(service: service).focus(direction, allowCrossDisplay: false)
         },
         onOverviewGesture: { direction in
             if direction == .up { overviewController?.toggle() }

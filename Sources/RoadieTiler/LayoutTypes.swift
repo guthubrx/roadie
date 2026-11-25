@@ -31,6 +31,12 @@ public struct LayoutRequest: Equatable, Sendable {
     public var tabbedBarHeight: Double
     /// Largeur relative d'une colonne en mode `.scrolling` (`0.25...1.0`, Spec 164).
     public var scrollingColumnWidth: Double
+    /// Un autre écran jouxte le bord gauche du moniteur courant : interdire le débordement à gauche en `.scrolling`.
+    public var scrollingClipsLeft: Bool
+    /// Un autre écran jouxte le bord droit du moniteur courant : interdire le débordement à droite en `.scrolling`.
+    public var scrollingClipsRight: Bool
+    /// Groupes d'onglets par tuile / colonne pour les stratégies sans arbre (`scrolling`, `masterStack`, `bsp`, Spec 167).
+    public var tabGroups: [LayoutTabGroup]
 
     public init(
         scope: StageScope,
@@ -48,7 +54,10 @@ public struct LayoutRequest: Equatable, Sendable {
         minimumSizes: [WindowID: CGSize] = [:],
         focusedWindowID: WindowID? = nil,
         tabbedBarHeight: Double = 28,
-        scrollingColumnWidth: Double = 0.65
+        scrollingColumnWidth: Double = 0.65,
+        scrollingClipsLeft: Bool = false,
+        scrollingClipsRight: Bool = false,
+        tabGroups: [LayoutTabGroup] = []
     ) {
         self.scope = scope
         self.mode = mode
@@ -66,6 +75,9 @@ public struct LayoutRequest: Equatable, Sendable {
         self.focusedWindowID = focusedWindowID
         self.tabbedBarHeight = tabbedBarHeight
         self.scrollingColumnWidth = scrollingColumnWidth
+        self.scrollingClipsLeft = scrollingClipsLeft
+        self.scrollingClipsRight = scrollingClipsRight
+        self.tabGroups = tabGroups
     }
 }
 
@@ -91,9 +103,9 @@ public enum LayoutPlanner {
     public static func plan(_ request: LayoutRequest) -> LayoutPlan {
         switch request.mode {
         case .bsp:
-            return BSPLayoutStrategy().plan(request)
+            return LayoutTabSlots.plan(request, using: BSPLayoutStrategy())
         case .masterStack:
-            return MasterStackLayoutStrategy(masterRatio: CGFloat(request.masterRatio)).plan(request)
+            return LayoutTabSlots.plan(request, using: MasterStackLayoutStrategy(masterRatio: CGFloat(request.masterRatio)))
         case .float:
             return FloatLayoutStrategy().plan(request)
         case .spatialBsp, .mutableBsp:
@@ -102,7 +114,14 @@ public enum LayoutPlanner {
         case .tabbed:
             return TabbedLayoutStrategy(barHeight: CGFloat(request.tabbedBarHeight)).plan(request)
         case .scrolling:
-            return ScrollingLayoutStrategy(columnWidthRatio: CGFloat(request.scrollingColumnWidth)).plan(request)
+            return LayoutTabSlots.plan(
+                request,
+                using: ScrollingLayoutStrategy(
+                    columnWidthRatio: CGFloat(request.scrollingColumnWidth),
+                    clipsLeft: request.scrollingClipsLeft,
+                    clipsRight: request.scrollingClipsRight
+                )
+            )
         }
     }
 }

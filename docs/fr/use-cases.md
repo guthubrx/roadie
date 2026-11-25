@@ -213,7 +213,7 @@ roadie tab move left     # déplacer l'onglet actif vers la gauche
 roadie tab unstack       # détacher l'onglet actif en tuile BSP indépendante
 ```
 
-Le mode de disposition est aussi sélectionnable par clic droit sur une carte de stage dans le NavRail ou depuis la barre de recherche. En `spatialBsp`, maintiens `⌥ Option` lors d'un dépôt au centre d'une tuile (ou dépose directement sur une barre d'onglets) pour empiler, et glisse un onglet hors de sa barre pour le détacher en tuile.
+Le mode de disposition est aussi sélectionnable par clic droit sur une carte de stage dans le NavRail ou depuis la barre de recherche. Dans tous les modes tuilés à slots (`spatialBsp`, `scrolling`, `masterStack` et `bsp`), maintiens `⌥ Option` lors d'un dépôt au centre d'une tuile ou d'une colonne (ou dépose directement sur une barre d'onglets) pour empiler en onglets, et glisse un onglet hors de sa barre pour le détacher.
 
 ## 13. Scratchpad flottant, Dim Inactive et scènes de projet
 

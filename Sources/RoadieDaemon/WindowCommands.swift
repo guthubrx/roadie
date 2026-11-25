@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import RoadieAX
 import RoadieCore
+import RoadieStages
 import RoadieTiler
 
 public enum Direction: String, Sendable {
@@ -49,9 +50,24 @@ public struct WindowCommandService {
         self.commandActivity = commandActivity
     }
 
-    public func focus(_ direction: Direction) -> WindowCommandResult {
+    public func focus(_ direction: Direction, allowCrossDisplay: Bool = true) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction) else {
+            guard allowCrossDisplay else {
+                let result = WindowCommandResult(
+                    message: "focus \(direction.rawValue): ribbon boundary",
+                    changed: false,
+                    outcome: .noOp
+                )
+                appendWindowCommandEvent(
+                    verb: "focus",
+                    direction: direction,
+                    snapshot: snapshot,
+                    active: activeWindow(in: snapshot),
+                    result: result
+                )
+                return result
+            }
             let result = focusAdjacentDisplayWindow(direction, from: snapshot)
             appendWindowCommandEvent(
                 verb: "focus",
@@ -128,13 +144,24 @@ public struct WindowCommandService {
         }
         let ok = focusWindow(entry.window)
         if ok, let scope = entry.scope {
-            if snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true {
+            let mode = snapshot.state.stage(scope: scope)?.mode
+            if mode?.usesTreeEngine == true {
                 _ = try? stageStore.mutateChecked { state in
                     if let tree = state.bspTree(for: scope), tree.tabGroup(containing: windowID) != nil {
                         let updated = tree.selectingTab(windowID)
                         if updated != tree {
                             state.setBSPTree(updated, for: scope)
                         }
+                        var persistent = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+                        persistent.setFocusedWindow(windowID, in: scope.stageID)
+                        state.update(persistent)
+                    }
+                }
+                _ = service.snapshot(followFocus: false)
+            } else if mode?.supportsSlotTabGroups == true {
+                _ = try? stageStore.mutateChecked { state in
+                    if state.tabbedGroup(containing: windowID, in: scope) != nil {
+                        _ = state.selectTab(windowID, in: scope)
                         var persistent = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
                         persistent.setFocusedWindow(windowID, in: scope.stageID)
                         state.update(persistent)
@@ -1226,8 +1253,20 @@ public struct WindowCommandService {
                 let nextIdx = (idx + step + ordered.count) % ordered.count
                 return (active, ordered[nextIdx])
             case .scrolling:
-                if direction == .left, idx > 0 { return (active, ordered[idx - 1]) }
-                if direction == .right, idx + 1 < ordered.count { return (active, ordered[idx + 1]) }
+                let slots = LayoutTabSlots.resolve(
+                    windowIDs: ordered.map(\.window.id),
+                    tabGroups: SnapshotService.layoutTabGroups(from: stage.groups),
+                    focusedWindowID: active.window.id
+                )
+                guard slots.count > 1,
+                      let slotIdx = slots.firstIndex(where: { $0.windowIDs.contains(active.window.id) })
+                else { return nil }
+                if direction == .left, slotIdx > 0, let target = liveByID[slots[slotIdx - 1].activeWindowID] {
+                    return (active, target)
+                }
+                if direction == .right, slotIdx + 1 < slots.count, let target = liveByID[slots[slotIdx + 1].activeWindowID] {
+                    return (active, target)
+                }
                 return nil
             default:
                 break
@@ -1244,11 +1283,31 @@ public struct WindowCommandService {
             }
         }
         let activeFrame = active.window.frame.cgRect
+        var activeSlotMembers: Set<WindowID> = [active.window.id]
+        var visibleSlotRepresentatives: Set<WindowID>? = nil
+        if let stage = snapshot.state.stage(scope: scope),
+           stage.mode.supportsSlotTabGroups,
+           !stage.groups.isEmpty {
+            let liveIDs = stage.windowIDs.filter { id in
+                snapshot.windows.contains { $0.window.id == id && $0.scope == scope && $0.window.isTileCandidate }
+            }
+            let slots = LayoutTabSlots.resolve(
+                windowIDs: liveIDs,
+                tabGroups: SnapshotService.layoutTabGroups(from: stage.groups),
+                focusedWindowID: active.window.id
+            )
+            if let own = slots.first(where: { $0.windowIDs.contains(active.window.id) }) {
+                activeSlotMembers = Set(own.windowIDs)
+            }
+            visibleSlotRepresentatives = Set(slots.map(\.activeWindowID))
+        }
         // Pre-compute score once per candidate to avoid O(2n) score calls in min(by:).
         let scored = snapshot.windows.compactMap { candidate -> (ScopedWindowSnapshot, CGFloat)? in
             guard candidate.scope == scope,
-                  candidate.window.id != active.window.id,
-                  candidate.window.isTileCandidate else { return nil }
+                  !activeSlotMembers.contains(candidate.window.id),
+                  candidate.window.isTileCandidate,
+                  visibleSlotRepresentatives.map({ $0.contains(candidate.window.id) }) ?? true
+            else { return nil }
             return (candidate, neighborScore(from: activeFrame, to: candidate.window.frame.cgRect, direction: direction))
         }
         guard let best = scored.min(by: { $0.1 < $1.1 }), best.1.isFinite else { return nil }
@@ -1650,25 +1709,69 @@ public struct WindowCommandService {
         ).integral
     }
 
-    // MARK: - Commandes d'onglets BSP (Spec 165)
+    // MARK: - Commandes d'onglets par tuile / colonne (Spec 165 + Spec 167)
 
-    /// Fait défiler l'onglet actif (`delta = +1` suivant, `-1` précédent) dans le `.tabGroup`
-    /// de la fenêtre active (en `spatialBsp`) ou dans la stage entière (en mode `.tabbed`).
+    /// Fait défiler l'onglet actif (`delta = +1` suivant, `-1` précédent) dans le groupe d'onglets
+    /// de la fenêtre active (`spatialBsp`, `scrolling`, `masterStack`, `bsp`) ou dans la stage `.tabbed`.
     public func tabCycle(delta: Int) -> WindowCommandResult {
         guard delta != 0 else {
             return .noChange("tab cycle: zero delta")
         }
         let snapshot = service.snapshot()
-        guard let active = activeWindow(in: snapshot), let scope = active.scope else {
+        guard let active = activeWindow(in: snapshot),
+              let scope = active.scope,
+              let stage = snapshot.state.stage(scope: scope)
+        else {
             return .noChange("tab cycle: no active window")
         }
-        if snapshot.state.stage(scope: scope)?.mode == .tabbed {
+        if stage.mode == .tabbed {
             return focus(delta > 0 ? .right : .left)
+        }
+        if stage.mode.supportsSlotTabGroups {
+            let liveSet = Set(snapshot.windows.compactMap { entry in
+                entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
+            })
+            guard let nextActive = stageStore.state().cyclingTab(
+                from: active.window.id,
+                delta: delta,
+                liveWindowIDs: liveSet,
+                in: scope
+            ),
+                  let targetEntry = snapshot.windows.first(where: { $0.window.id == nextActive && $0.scope == scope })
+            else {
+                return .noChange("tab cycle: window is not in a tab group")
+            }
+            do {
+                try stageStore.mutateChecked { state in
+                    _ = state.selectTab(nextActive, in: scope)
+                    var persistent = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+                    persistent.setFocusedWindow(nextActive, in: scope.stageID)
+                    state.update(persistent)
+                }
+            } catch {
+                return .persistenceFailure("tab cycle", error)
+            }
+            let ok = focusWindow(targetEntry.window)
+            _ = service.snapshot(followFocus: false)
+            let result = WindowCommandResult.changedOrFailed(
+                ok ? "tab \(delta > 0 ? "next" : "prev"): focused \(nextActive.rawValue)" : "tab cycle: focus failed",
+                changed: ok
+            )
+            appendWindowCommandEvent(
+                verb: delta > 0 ? "tab_next" : "tab_prev",
+                direction: delta > 0 ? .right : .left,
+                snapshot: snapshot,
+                active: active,
+                neighbor: targetEntry,
+                scope: scope,
+                result: result
+            )
+            return result
         }
         guard let context = activeTree(in: snapshot),
               let geometry = service.commandTreeGeometry(for: scope, tree: context.tree, in: snapshot)
         else {
-            return .noChange("tab cycle: stage does not use tree engine")
+            return .noChange("tab cycle: stage does not support tab groups")
         }
         let projected = context.tree.projected(excluding: geometry.absent)
         guard let cycled = projected.cyclingTab(from: active.window.id, delta: delta),
@@ -1705,7 +1808,53 @@ public struct WindowCommandService {
         return result
     }
 
-    /// Empile la fenêtre active (ou `windowID`) en onglet dans la tuile voisine dans `direction`.
+    /// Résout le voisin d'une fenêtre dans une stage `supportsSlotTabGroups` (`scrolling`, `masterStack`, `bsp`).
+    private func slotNeighbor(
+        of windowID: WindowID,
+        direction: Direction,
+        in scope: StageScope,
+        stage: StageState,
+        snapshot: DaemonSnapshot
+    ) -> ScopedWindowSnapshot? {
+        let liveByID = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, ScopedWindowSnapshot)? in
+            guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
+            return (entry.window.id, entry)
+        })
+        let liveIDs = stage.windowIDs.filter { liveByID[$0] != nil }
+        let slots = LayoutTabSlots.resolve(
+            windowIDs: liveIDs,
+            tabGroups: SnapshotService.layoutTabGroups(from: stage.groups),
+            focusedWindowID: windowID
+        )
+        guard slots.count >= 2,
+              let ownSlotIdx = slots.firstIndex(where: { $0.windowIDs.contains(windowID) })
+        else { return nil }
+
+        if stage.mode == .scrolling {
+            if direction == .left, ownSlotIdx > 0 {
+                return liveByID[slots[ownSlotIdx - 1].activeWindowID]
+            }
+            if direction == .right, ownSlotIdx + 1 < slots.count {
+                return liveByID[slots[ownSlotIdx + 1].activeWindowID]
+            }
+            return nil
+        }
+
+        let plan = service.layoutPlan(from: snapshot, scope: scope, orderedWindowIDs: liveIDs)
+        let ownFrame = plan.placements[windowID] ?? liveByID[windowID]?.window.frame.cgRect ?? .zero
+        let ownMembers = Set(slots[ownSlotIdx].windowIDs)
+        let candidates = slots.compactMap { slot -> (ScopedWindowSnapshot, CGFloat)? in
+            guard !ownMembers.contains(slot.activeWindowID),
+                  let entry = liveByID[slot.activeWindowID]
+            else { return nil }
+            let targetFrame = plan.placements[slot.activeWindowID] ?? entry.window.frame.cgRect
+            return (entry, neighborScore(from: ownFrame, to: targetFrame, direction: direction))
+        }
+        guard let best = candidates.min(by: { $0.1 < $1.1 }), best.1.isFinite else { return nil }
+        return best.0
+    }
+
+    /// Empile la fenêtre active (ou `windowID`) en onglet dans la tuile / colonne voisine dans `direction`.
     public func tabStack(_ direction: Direction, windowID: WindowID? = nil) -> WindowCommandResult {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
@@ -1717,10 +1866,53 @@ public struct WindowCommandService {
         }
         guard let active = targetEntry,
               let scope = active.scope,
-              snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
+              let stage = snapshot.state.stage(scope: scope),
+              stage.mode.supportsTileTabGroups
         else {
-            return .noChange("tab stack \(direction.rawValue): no active BSP window")
+            return .noChange("tab stack \(direction.rawValue): stage does not support tab groups")
         }
+
+        if stage.mode.supportsSlotTabGroups {
+            guard let neighbor = slotNeighbor(of: active.window.id, direction: direction, in: scope, stage: stage, snapshot: snapshot) else {
+                return .noChange("tab stack \(direction.rawValue): no neighbor")
+            }
+            let changed: Bool
+            do {
+                changed = try stageStore.mutateChecked { state -> Bool in
+                    state.stackTab(active.window.id, onto: neighbor.window.id, in: scope)
+                }
+                if changed {
+                    try service.removeLayoutIntentChecked(scope: scope)
+                }
+            } catch {
+                return .persistenceFailure("tab stack \(direction.rawValue)", error)
+            }
+            guard changed else {
+                return .noChange("tab stack \(direction.rawValue): unchanged")
+            }
+            let refreshed = service.snapshot(followFocus: false)
+            let ordered = refreshed.state.stage(scope: scope)?.windowIDs ?? []
+            let plan = service.applyPlan(from: refreshed, scope: scope, orderedWindowIDs: ordered, generation: generation)
+            let applied = service.apply(plan, generation: generation, animation: .move, transitionDirection: direction).applied
+            _ = focusWindow(active.window)
+            _ = service.snapshot(followFocus: false)
+            let result = WindowCommandResult(
+                message: "tab stack \(direction.rawValue): stacked \(active.window.id.rawValue) onto \(neighbor.window.id.rawValue) applied=\(applied)",
+                changed: true,
+                outcome: .changed
+            )
+            appendWindowCommandEvent(
+                verb: "tab_stack",
+                direction: direction,
+                snapshot: snapshot,
+                active: active,
+                neighbor: neighbor,
+                scope: scope,
+                result: result
+            )
+            return result
+        }
+
         let tree = stageStore.state().bspTree(for: scope) ?? .empty
         guard let geometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot) else {
             return .noChange("tab stack \(direction.rawValue): no tree geometry")
@@ -1777,7 +1969,7 @@ public struct WindowCommandService {
         return result
     }
 
-    /// Détache la fenêtre active (ou `windowID`) de son `.tabGroup` dans sa propre tuile BSP.
+    /// Détache la fenêtre active (ou `windowID`) de son groupe d'onglets dans sa propre tuile / colonne.
     public func tabUnstack(_ direction: Direction? = nil, windowID: WindowID? = nil) -> WindowCommandResult {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
@@ -1789,10 +1981,53 @@ public struct WindowCommandService {
         }
         guard let active = targetEntry,
               let scope = active.scope,
-              snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
+              let stage = snapshot.state.stage(scope: scope),
+              stage.mode.supportsTileTabGroups
         else {
-            return .noChange("tab unstack: no active BSP window")
+            return .noChange("tab unstack: stage does not support tab groups")
         }
+
+        if stage.mode.supportsSlotTabGroups {
+            guard stageStore.state().tabbedGroup(containing: active.window.id, in: scope) != nil else {
+                return .noChange("tab unstack: window is not in a tab group")
+            }
+            let beforeGroup = (direction == .left || direction == .up)
+            let changed: Bool
+            do {
+                changed = try stageStore.mutateChecked { state -> Bool in
+                    state.unstackTab(active.window.id, beforeGroup: beforeGroup, in: scope)
+                }
+                if changed {
+                    try service.removeLayoutIntentChecked(scope: scope)
+                }
+            } catch {
+                return .persistenceFailure("tab unstack", error)
+            }
+            guard changed else {
+                return .noChange("tab unstack: unchanged")
+            }
+            let refreshed = service.snapshot(followFocus: false)
+            let ordered = refreshed.state.stage(scope: scope)?.windowIDs ?? []
+            let plan = service.applyPlan(from: refreshed, scope: scope, orderedWindowIDs: ordered, generation: generation)
+            let applied = service.apply(plan, generation: generation, animation: .move, transitionDirection: direction ?? .right).applied
+            _ = focusWindow(active.window)
+            _ = service.snapshot(followFocus: false)
+            let result = WindowCommandResult(
+                message: "tab unstack: detached \(active.window.id.rawValue) applied=\(applied)",
+                changed: true,
+                outcome: .changed
+            )
+            appendWindowCommandEvent(
+                verb: "tab_unstack",
+                direction: direction ?? .right,
+                snapshot: snapshot,
+                active: active,
+                scope: scope,
+                result: result
+            )
+            return result
+        }
+
         let tree = stageStore.state().bspTree(for: scope) ?? .empty
         guard let geometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot),
               tree.tabGroup(containing: active.window.id) != nil
@@ -1858,14 +2093,34 @@ public struct WindowCommandService {
     public func tabMove(delta: Int) -> WindowCommandResult {
         guard delta != 0 else { return .noChange("tab move: zero delta") }
         let snapshot = service.snapshot()
-        guard let active = activeWindow(in: snapshot), let scope = active.scope else {
+        guard let active = activeWindow(in: snapshot),
+              let scope = active.scope,
+              let stage = snapshot.state.stage(scope: scope)
+        else {
             return .noChange("tab move: no active window")
         }
-        if snapshot.state.stage(scope: scope)?.mode == .tabbed {
+        if stage.mode == .tabbed {
             return move(delta < 0 ? .left : .right)
         }
-        guard snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true else {
-            return .noChange("tab move: stage does not use tree engine")
+        if stage.mode.supportsSlotTabGroups {
+            let changed: Bool
+            do {
+                changed = try stageStore.mutateChecked { state -> Bool in
+                    state.reorderTab(active.window.id, delta: delta, in: scope)
+                }
+            } catch {
+                return .persistenceFailure("tab move", error)
+            }
+            if changed {
+                _ = service.snapshot(followFocus: false)
+            }
+            return .changedOrNoOp(
+                changed ? "tab move: reordered \(active.window.id.rawValue)" : "tab move: unchanged",
+                changed: changed
+            )
+        }
+        guard stage.mode.usesTreeEngine else {
+            return .noChange("tab move: stage does not support tab groups")
         }
         let changed: Bool
         do {
@@ -1915,6 +2170,10 @@ public struct WindowCommandService {
                     state.update(persistent)
                     return true
                 }
+            } else if stage.mode.supportsSlotTabGroups {
+                changed = try stageStore.mutateChecked { state -> Bool in
+                    state.reorderTab(windowID, toIndex: toIndex, in: scope)
+                }
             } else if stage.mode.usesTreeEngine {
                 changed = try stageStore.mutateChecked { state -> Bool in
                     let existing = state.bspTree(for: scope) ?? .empty
@@ -1938,12 +2197,19 @@ public struct WindowCommandService {
         )
     }
 
-    /// Directions voisines disponibles pour empiler `windowID` dans son arbre BSP (utilisé par le menu contextuel).
+    /// Directions voisines disponibles pour empiler `windowID` (utilisé par le menu contextuel barre de titre).
     func availableTabStackDirections(for windowID: WindowID, in snapshot: DaemonSnapshot) -> [Direction] {
         guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }),
               let scope = entry.scope,
-              snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
+              let stage = snapshot.state.stage(scope: scope),
+              stage.mode.supportsTileTabGroups
         else { return [] }
+        if stage.mode.supportsSlotTabGroups {
+            let dirs: [Direction] = stage.mode == .scrolling ? [.left, .right] : [.left, .right, .up, .down]
+            return dirs.filter { direction in
+                slotNeighbor(of: windowID, direction: direction, in: scope, stage: stage, snapshot: snapshot) != nil
+            }
+        }
         let tree = stageStore.state().bspTree(for: scope) ?? .empty
         guard let geometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot) else { return [] }
         let frames = geometry.frames(of: tree)

@@ -1628,7 +1628,8 @@ public extension SnapshotService {
         from snapshot: DaemonSnapshot,
         mode: WindowManagementMode? = nil,
         priorityWindowIDs: Set<WindowID> = [],
-        generation: UInt64 = PlacementGeneration.shared.current
+        generation: UInt64 = PlacementGeneration.shared.current,
+        allDisplays: [DisplaySnapshot]? = nil
     ) -> ApplyPlan {
         var commands: [ApplyCommand] = []
         for display in snapshot.displays {
@@ -1636,9 +1637,12 @@ public extension SnapshotService {
 
             guard let stage = snapshot.state.stage(scope: scope) else { continue }
             let effectiveMode = mode ?? stage.mode
+            let hasSlotTabGroups = effectiveMode.supportsSlotTabGroups
+                && stage.groups.contains(where: { $0.presentation == "tabbed" && $0.windowIDs.count >= 2 })
             if effectiveMode.usesTreeEngine {
                 commands.append(contentsOf: treeApplyPlan(for: scope, in: snapshot, mode: effectiveMode, generation: generation).commands)
-            } else if effectiveMode.isTiled || intentStore.intent(for: scope)?.zoomedWindowID != nil,
+            } else if (!hasSlotTabGroups && effectiveMode != .scrolling && effectiveMode.isTiled)
+                        || intentStore.intent(for: scope)?.zoomedWindowID != nil,
                       let intent = validIntent(for: scope, from: snapshot) {
                 commands.append(contentsOf: applyPlan(from: snapshot, intent: intent).commands)
             } else {
@@ -1648,7 +1652,8 @@ public extension SnapshotService {
                     scope: scope,
                     orderedWindowIDs: orderedWindowIDs,
                     mode: effectiveMode,
-                    priorityWindowIDs: priorityWindowIDs
+                    priorityWindowIDs: priorityWindowIDs,
+                    allDisplays: allDisplays
                 ).commands)
             }
         }
@@ -1995,14 +2000,16 @@ public extension SnapshotService {
         orderedWindowIDs: [WindowID],
         mode: WindowManagementMode? = nil,
         priorityWindowIDs: Set<WindowID> = [],
-        generation: UInt64 = PlacementGeneration.shared.current
+        generation: UInt64 = PlacementGeneration.shared.current,
+        allDisplays: [DisplaySnapshot]? = nil
     ) -> ApplyPlan {
         let plan = layoutPlan(
             from: snapshot,
             scope: scope,
             orderedWindowIDs: orderedWindowIDs,
             mode: mode,
-            priorityWindowIDs: priorityWindowIDs
+            priorityWindowIDs: priorityWindowIDs,
+            allDisplays: allDisplays
         )
         guard let stage = snapshot.state.stage(scope: scope) else { return ApplyPlan(commands: []) }
         if (mode ?? stage.mode).usesTreeEngine {
@@ -2029,7 +2036,8 @@ public extension SnapshotService {
         scope: StageScope,
         orderedWindowIDs: [WindowID],
         mode: WindowManagementMode? = nil,
-        priorityWindowIDs: Set<WindowID> = []
+        priorityWindowIDs: Set<WindowID> = [],
+        allDisplays: [DisplaySnapshot]? = nil
     ) -> LayoutPlan {
         guard let stage = snapshot.state.stage(scope: scope),
               let display = snapshot.displays.first(where: { $0.id == scope.displayID })
@@ -2065,6 +2073,11 @@ public extension SnapshotService {
         let newWindowIDs = Set(snapshot.windows.compactMap { entry in
             entry.isNewlyScoped ? entry.window.id : nil
         })
+        let topologyDisplays = resolvedTopologyDisplays(from: snapshot, allDisplays: allDisplays)
+        let clipEdges = Self.scrollingClipEdges(for: display, among: topologyDisplays)
+        let slotTabGroups: [LayoutTabGroup] = effectiveMode.supportsSlotTabGroups
+            ? Self.layoutTabGroups(from: stage.groups)
+            : []
         return LayoutPlanner.plan(LayoutRequest(
             scope: scope,
             mode: effectiveMode,
@@ -2079,8 +2092,55 @@ public extension SnapshotService {
             masterRatio: config.tiling.masterRatio,
             focusedWindowID: stage.focusedWindowID ?? snapshot.focusedWindowID,
             tabbedBarHeight: config.tiling.tabbedBarHeight,
-            scrollingColumnWidth: config.tiling.scrollingColumnWidth
+            scrollingColumnWidth: config.tiling.scrollingColumnWidth,
+            scrollingClipsLeft: clipEdges.clipsLeft,
+            scrollingClipsRight: clipEdges.clipsRight,
+            tabGroups: slotTabGroups
         ))
+    }
+
+    static func layoutTabGroups(from groups: [WindowGroup]) -> [LayoutTabGroup] {
+        groups.compactMap { group in
+            guard group.presentation == "tabbed", group.windowIDs.count >= 2 else { return nil }
+            return LayoutTabGroup(windowIDs: group.windowIDs, activeWindowID: group.activeWindowID)
+        }
+    }
+
+    /// Topologie complète des écrans physiques (préserve les moniteurs voisins même quand
+    /// `LayoutMaintainer.plannedCommands` filtre `planning.displays` sur les seuls scopes actifs).
+    private func resolvedTopologyDisplays(
+        from snapshot: DaemonSnapshot,
+        allDisplays: [DisplaySnapshot]? = nil
+    ) -> [DisplaySnapshot] {
+        if let allDisplays, !allDisplays.isEmpty {
+            return allDisplays
+        }
+        if let cached = cachedGestureSnapshot()?.displays, cached.count > snapshot.displays.count {
+            return cached
+        }
+        return snapshot.displays
+    }
+
+    /// Détermine les bords horizontaux d'un écran jouxtant un autre moniteur (chevauchement vertical)
+    /// afin d'empêcher les colonnes `.scrolling` de déborder ou de se faire aspirer sur l'écran voisin.
+    static func scrollingClipEdges(
+        for display: DisplaySnapshot,
+        among displays: [DisplaySnapshot]
+    ) -> (clipsLeft: Bool, clipsRight: Bool) {
+        let frame = display.frame.cgRect
+        var clipsLeft = false
+        var clipsRight = false
+        for other in displays where other.id != display.id {
+            let otherFrame = other.frame.cgRect
+            guard otherFrame.maxY > frame.minY && otherFrame.minY < frame.maxY else { continue }
+            if otherFrame.minX < frame.minX {
+                clipsLeft = true
+            }
+            if otherFrame.maxX > frame.maxX {
+                clipsRight = true
+            }
+        }
+        return (clipsLeft, clipsRight)
     }
 
     /// Marges extérieures effectives pour un écran et un nombre de fenêtres, partagées avec `StageTabBarController`.
@@ -3223,6 +3283,10 @@ extension SnapshotService {
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         let live = ordered.filter { windowsByID[$0] != nil }
         let currentFrames = Dictionary(uniqueKeysWithValues: live.compactMap { id in windowsByID[id].map { (id, $0.frame.cgRect) } })
+        let clipEdges = Self.scrollingClipEdges(for: display, among: resolvedTopologyDisplays(from: snapshot))
+        let slotTabGroups: [LayoutTabGroup] = stage.mode.supportsSlotTabGroups
+            ? Self.layoutTabGroups(from: stage.groups)
+            : []
         return LayoutPlanner.plan(LayoutRequest(
             scope: scope,
             mode: stage.mode,
@@ -3237,7 +3301,10 @@ extension SnapshotService {
             minimumSizes: knownMinimums,
             focusedWindowID: incoming,
             tabbedBarHeight: config.tiling.tabbedBarHeight,
-            scrollingColumnWidth: config.tiling.scrollingColumnWidth
+            scrollingColumnWidth: config.tiling.scrollingColumnWidth,
+            scrollingClipsLeft: clipEdges.clipsLeft,
+            scrollingClipsRight: clipEdges.clipsRight,
+            tabGroups: slotTabGroups
         )).placements
     }
 }

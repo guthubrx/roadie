@@ -425,13 +425,20 @@ public final class TitlebarContextMenuController {
         to menu: NSMenu
     ) {
         guard let sourceScope,
-              snapshot.state.stage(scope: sourceScope)?.mode.usesTreeEngine == true else { return }
-        let tree = snapshotService.effectiveStageStore.state().bspTree(for: sourceScope) ?? .empty
-        let inTabGroup = tree.tabGroup(containing: windowID) != nil
+              let stage = snapshot.state.stage(scope: sourceScope),
+              stage.mode.supportsTileTabGroups else { return }
+        let persistedState = snapshotService.effectiveStageStore.state()
+        let inTabGroup: Bool
+        if stage.mode.usesTreeEngine {
+            let tree = persistedState.bspTree(for: sourceScope) ?? .empty
+            inTabGroup = tree.tabGroup(containing: windowID) != nil
+        } else {
+            inTabGroup = persistedState.tabbedGroup(containing: windowID, in: sourceScope) != nil
+        }
         let stackDirs = WindowCommandService(service: snapshotService).availableTabStackDirections(for: windowID, in: snapshot)
         guard inTabGroup || !stackDirs.isEmpty else { return }
 
-        let parent = NSMenuItem(title: tr("Onglets (tuile BSP)", "Tabs (BSP tile)"), action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: tr("Onglets (tuile)", "Tabs (tile)"), action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: parent.title)
         let dirLabels: [Direction: (fr: String, en: String)] = [
             .left: ("Empiler dans la tuile de gauche", "Stack into left tile"),

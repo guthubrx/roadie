@@ -7,6 +7,10 @@ import RoadieCore
 /// distinct des coordonnées `HiddenWindowPlacement`.
 public struct ScrollingLayoutStrategy: LayoutStrategy {
     public var columnWidthRatio: CGFloat
+    /// Si `true`, un autre moniteur jouxte le bord gauche : aucune fenêtre ne descend sous `rect.minX`.
+    public var clipsLeft: Bool
+    /// Si `true`, un autre moniteur jouxte le bord droit : aucune fenêtre ne dépasse `rect.maxX`.
+    public var clipsRight: Bool
 
     /// Largeur minimale visible en bord d'écran pour une colonne unique hors fenêtre.
     public static let minimumEdgePeek: CGFloat = 24
@@ -20,9 +24,15 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
     /// Pas idéal entre colonnes lointaines échelonnées en éventail au bord de l'écran.
     private static let overflowCascadeStep: CGFloat = 16
 
-    public init(columnWidthRatio: CGFloat = 0.65) {
+    public init(
+        columnWidthRatio: CGFloat = 0.65,
+        clipsLeft: Bool = false,
+        clipsRight: Bool = false
+    ) {
         let finiteRatio = columnWidthRatio.isFinite ? columnWidthRatio : 0.65
         self.columnWidthRatio = finiteRatio.clamped(to: 0.25...1.0)
+        self.clipsLeft = clipsLeft
+        self.clipsRight = clipsRight
     }
 
     private static func isFinite(_ rect: CGRect) -> Bool {
@@ -95,24 +105,27 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
         }
 
         var resolvedXs = rawXs
+        let minClippedX = ceil(rect.minX)
+        let maxClippedX = max(minClippedX, floor(rect.maxX - colWidth))
         if totalWidth > rect.width {
             let singlePeek = floor(min(Self.minimumEdgePeek, max(Self.safeHiddenClearance, rect.width / 4)))
-            let minAllowedX = ceil(rect.minX - colWidth) + singlePeek
-            let maxAllowedX = floor(rect.maxX) - singlePeek
+            let minAllowedX = clipsLeft ? minClippedX : (ceil(rect.minX - colWidth) + singlePeek)
+            let maxAllowedX = clipsRight ? maxClippedX : (floor(rect.maxX) - singlePeek)
 
             let leftOverflow = windows.indices.filter { rawXs[$0] < minAllowedX }
             let inRange = windows.indices.filter { rawXs[$0] >= minAllowedX && rawXs[$0] <= maxAllowedX }
             let rightOverflow = windows.indices.filter { rawXs[$0] > maxAllowedX }
 
             // Colonnes hors-écran à gauche : échelonnées de façon strictement croissante d'au moins 1 pt
-            // tant que la bande disponible le permet (et repli borné sur `bandStart` si le nombre de
-            // colonnes dépasse le nombre de pixels disponibles), toujours >= `safeHiddenClearance` du bord.
+            // tant que la bande disponible le permet ; si `clipsLeft`, strictement bornées >= `rect.minX`
+            // (derrière la fenêtre focalisée) pour ne jamais déborder sur le moniteur voisin de gauche.
             if leftOverflow.count == 1, let idx = leftOverflow.first {
                 resolvedXs[idx] = minAllowedX
             } else if leftOverflow.count > 1 {
-                let bandStart = ceil(rect.minX - colWidth) + Self.safeHiddenClearance
-                let nextVisibleX = inRange.first.map { rawXs[$0] } ?? floor(rect.maxX - colWidth)
-                let maxStrictEnd = max(bandStart, nextVisibleX - 1)
+                let bandStart = clipsLeft ? minClippedX : (ceil(rect.minX - colWidth) + Self.safeHiddenClearance)
+                let nextVisibleX = inRange.first.map { rawXs[$0] } ?? maxClippedX
+                let maxUpperBound = clipsRight ? maxClippedX : nextVisibleX - 1
+                let maxStrictEnd = max(bandStart, min(maxUpperBound, nextVisibleX - 1))
                 let requiredMinSpan = CGFloat(leftOverflow.count - 1)
                 let preferredEnd = nextVisibleX - Self.safeHiddenClearance
                 let comfortableEnd = min(maxStrictEnd, max(preferredEnd, bandStart + requiredMinSpan))
@@ -128,14 +141,15 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
             }
 
             // Colonnes hors-écran à droite : échelonnées de façon strictement croissante d'au moins 1 pt
-            // tant que la bande disponible le permet, toujours <= `rect.maxX - safeHiddenClearance`
-            // (écart >= 15 pt avec le marqueur `HiddenWindowPlacement` à `maxX - 1`, tolérance 8 pt).
+            // tant que la bande disponible le permet ; si `clipsRight`, strictement bornées <= `rect.maxX - colWidth`
+            // (derrière la fenêtre focalisée) pour ne jamais déborder sur le moniteur voisin de droite.
             if rightOverflow.count == 1, let idx = rightOverflow.first {
                 resolvedXs[idx] = maxAllowedX
             } else if rightOverflow.count > 1 {
-                let bandEnd = floor(rect.maxX) - Self.safeHiddenClearance
-                let prevVisibleX = inRange.last.map { rawXs[$0] } ?? floor(rect.minX)
-                let minStrictStart = min(bandEnd, prevVisibleX + 1)
+                let bandEnd = clipsRight ? maxClippedX : (floor(rect.maxX) - Self.safeHiddenClearance)
+                let prevVisibleX = inRange.last.map { rawXs[$0] } ?? minClippedX
+                let minLowerBound = clipsLeft ? minClippedX : prevVisibleX + 1
+                let minStrictStart = min(bandEnd, max(minLowerBound, prevVisibleX + 1))
                 let requiredMinSpan = CGFloat(rightOverflow.count - 1)
                 let preferredStart = prevVisibleX + Self.safeHiddenClearance
                 let comfortableStart = max(minStrictStart, min(preferredStart, bandEnd - requiredMinSpan))
@@ -153,9 +167,13 @@ public struct ScrollingLayoutStrategy: LayoutStrategy {
 
         var placements: [WindowID: CGRect] = [:]
         placements.reserveCapacity(windows.count)
-        let maxSafeX = floor(rect.maxX) - Self.safeHiddenClearance
+        let minSafeX: CGFloat = clipsLeft ? minClippedX : -.infinity
+        let maxSafeX: CGFloat = clipsRight ? maxClippedX : (floor(rect.maxX) - Self.safeHiddenClearance)
         for (index, id) in windows.enumerated() {
-            let finalX = totalWidth <= rect.width ? resolvedXs[index] : min(resolvedXs[index], maxSafeX)
+            var finalX = resolvedXs[index]
+            if totalWidth > rect.width || clipsLeft || clipsRight {
+                finalX = min(max(finalX, minSafeX), maxSafeX)
+            }
             placements[id] = CGRect(
                 x: finalX,
                 y: rect.minY,
