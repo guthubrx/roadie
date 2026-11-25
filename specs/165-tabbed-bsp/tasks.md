@@ -18,6 +18,6 @@
 - [x] T009 Mettre à jour la documentation FR & EN (`README.md`, `README.fr.md`, `docs/{fr,en}/{cli,features,use-cases}.md`) sans élision.
 
 ## Vérification, Revue & Livraison
-- [ ] T010 Exécuter la suite complète (`./scripts/test --no-parallel`, tests Python, `git diff --check`).
-- [ ] T011 Lancer la revue indépendante Bridget, corriger tous les constats jusqu'à `Approuvé`, puis accuser réception (`bridget_task_ack`).
-- [ ] T012 Fusionner `--ff-only` dans `main`, mettre à jour `.specify/memory/sessions/journal.md`, pousser `origin/main`, installer signé (`make install`), redémarrer, vérifier santé 5/5 `ok`, et effectuer le nettoyage obligatoire (worktree, branche, `.build`).
+- [x] T010 Exécuter la suite complète (`./scripts/test --no-parallel`, tests Python, `git diff --check`).
+- [x] T011 Lancer la revue indépendante Bridget, corriger tous les constats jusqu'à `Approuvé`, puis accuser réception (`bridget_task_ack`).
+- [x] T012 Fusionner `--ff-only` dans `main`, mettre à jour `.specify/memory/sessions/journal.md`, pousser `origin/main`, installer signé (`make install`), redémarrer, vérifier santé 5/5 `ok`, et effectuer le nettoyage obligatoire (worktree, branche, `.build`).
