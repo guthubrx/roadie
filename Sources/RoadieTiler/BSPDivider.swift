@@ -36,6 +36,7 @@ extension BSPTree {
         to point: CGPoint,
         in container: CGRect,
         innerGap: CGFloat = 0,
+        tabBarHeight: CGFloat = 0,
         excluding absent: Set<WindowID> = [],
         knownMinimums: [WindowID: CGSize] = [:]
     ) -> BSPTree? {
@@ -60,9 +61,9 @@ extension BSPTree {
         }
         let requested = replacingDividerRatio(at: path[...], with: ratio)
         guard !knownMinimums.isEmpty else { return requested }
-        let before = projected(excluding: absent).place(in: container, innerGap: gap)
+        let before = projected(excluding: absent).place(in: container, innerGap: gap, tabBarHeight: tabBarHeight)
         func fits(_ candidate: BSPTree) -> Bool {
-            let after = candidate.projected(excluding: absent).place(in: container, innerGap: gap)
+            let after = candidate.projected(excluding: absent).place(in: container, innerGap: gap, tabBarHeight: tabBarHeight)
             return knownMinimums.allSatisfy { id, minimum in
                 guard let original = before[id], let actual = after[id] else { return true }
                 // Même règle que adjustingFence : ne pas aggraver un minimum déjà impossible.

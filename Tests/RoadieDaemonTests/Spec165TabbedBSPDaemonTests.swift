@@ -318,4 +318,83 @@ struct Spec165TabbedBSPDaemonTests {
         let unstackRes = router.run(["tab", "unstack"])
         #expect(unstackRes.exitCode == 0)
     }
+
+    /// Constats Bridget R1 #1 et #4 :
+    /// - #1 : Les minimums connus sont partagés entre placement, `StageTabBarController.computeTargets` et `CommandTreeGeometry`.
+    /// - #4 : `SnapshotService.reconciledTree` conserve l'onglet adjacent lorsqu'un onglet actif est retiré au milieu d'un groupe.
+    @Test @MainActor func constrainedMinimumAlignsTabBarAndReconciledTreeSelectsAdjacentTab() throws {
+        let dir = try tempDir("constrained")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let stageStore = StageStore(path: dir.appendingPathComponent("stages.json").path)
+        let eventLog = EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+        let w1 = window(501, app: "Notes", title: "WideMin")
+        let w2 = window(502, app: "Terminal", title: "TabA")
+        let w3 = window(503, app: "Safari", title: "TabB")
+        let w4 = window(504, app: "Mail", title: "TabC")
+        let disp = display("d-min", width: 1200, height: 800)
+        let provider = MutableProvider(displays: [disp], windows: [w1, w2, w3], focused: w2.id)
+        let config = RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 10, tabbedBarHeight: 28))
+        let service = SnapshotService(provider: provider, frameWriter: provider, config: config, stageStore: stageStore, events: eventLog)
+
+        let snap = service.snapshot()
+        _ = try #require(snap.windows.first?.scope)
+        let tree: BSPTree = .split(
+            orientation: .vertical,
+            ratio: 0.5,
+            first: .leaf(w1.id),
+            second: .tabGroup(windowIDs: [w2.id, w3.id], active: w2.id)
+        )
+        let mins: [WindowID: CGSize] = [w1.id: CGSize(width: 800, height: 200)]
+
+        // #1 : Le placement réel place la tuile droite à x=810 ; `computeTargets` et `CommandTreeGeometry` doivent s'aligner sur 810.
+        let placed = tree.place(in: disp.visibleFrame.cgRect, innerGap: 10, tabBarHeight: 28, minimumSizes: mins)
+        #expect(placed[w2.id]?.minX == 810)
+
+        let targets = StageTabBarController.computeTargets(
+            snapshot: snap,
+            config: config,
+            outerGapsProvider: { _, _ in .zero },
+            treeProvider: { _ in tree },
+            minimumSizesProvider: { _ in mins },
+            frameTransform: { $0 }
+        )
+        #expect(targets.count == 1)
+        #expect(targets[0].frame.minX == 810)
+        #expect(targets[0].frame.width == placed[w2.id]?.width)
+
+        let geom = CommandTreeGeometry(
+            container: disp.visibleFrame.cgRect,
+            innerGap: 10,
+            absent: [],
+            tabBarHeight: 28,
+            minimumSizes: mins
+        )
+        #expect(geom.frames(of: tree)[w2.id]?.minX == 810)
+        #expect(geom.tabBarFrames(of: tree).first?.barFrame.minX == 810)
+
+        // #4 : `reconciledTree` retire l'onglet actif au milieu ([w1, w2, w3, w4], actif w3) sans focus système -> actif w4
+        let initialFour: BSPTree = .tabGroup(windowIDs: [w1.id, w2.id, w3.id, w4.id], active: w3.id)
+        let stage = PersistentStage(
+            id: StageID(rawValue: "1"),
+            name: "Work",
+            mode: .spatialBsp,
+            focusedWindowID: nil,
+            members: [w1, w2, w4].map {
+                PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
+            },
+            bspTree: initialFour
+        )
+        let reconciled = SnapshotService.reconciledTree(
+            initialFour,
+            stage: stage,
+            kept: [w1.id, w2.id, w4.id],
+            live: [w1.id, w2.id, w4.id],
+            globalFocus: nil,
+            side: .right,
+            container: disp.visibleFrame.cgRect,
+            innerGap: 10,
+            tabBarHeight: 28
+        )
+        #expect(reconciled == .tabGroup(windowIDs: [w1.id, w2.id, w4.id], active: w4.id))
+    }
 }

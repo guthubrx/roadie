@@ -658,7 +658,17 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             return absent.contains(id) ? .empty : self
         case .tabGroup(let ids, let active):
             let kept = ids.filter { !absent.contains($0) }
-            return Self.normalizedTabGroup(kept, active: active)
+            let resolvedActive: WindowID?
+            if kept.contains(active) {
+                resolvedActive = active
+            } else if let oldIndex = ids.firstIndex(of: active) {
+                // Préférer l'onglet survivant adjacent à droite puis à gauche (cohérent avec `removing`).
+                resolvedActive = ids[(oldIndex + 1)...].first(where: { !absent.contains($0) })
+                    ?? ids[..<oldIndex].last(where: { !absent.contains($0) })
+            } else {
+                resolvedActive = kept.first
+            }
+            return Self.normalizedTabGroup(kept, active: resolvedActive)
         case .split(let orientation, let ratio, let first, let second):
             let newFirst = first.projected(excluding: absent)
             let newSecond = second.projected(excluding: absent)
@@ -783,6 +793,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         to frame: CGRect,
         in container: CGRect,
         innerGap: CGFloat = 0,
+        tabBarHeight: CGFloat = 0,
         excluding absent: Set<WindowID> = [],
         knownMinimums: [WindowID: CGSize] = [:]
     ) -> BSPTree {
@@ -797,19 +808,29 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             guard usable > 0 else { return tree }
             let gap = Self.gap(for: orientation, in: split.rect, innerGap: innerGap)
             let origin = orientation == .vertical ? split.rect.minX : split.rect.minY
+            // Pour un bord supérieur d'une tuile `.tabGroup` avec barre visible, convertir le bord du
+            // contenu en bord de tuile avant de calculer la position de la frontière.
+            let topBarOffset: CGFloat
+            if edge == .up, tabBarHeight > 0,
+               let bar = tree.tabBarFrames(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
+                .first(where: { $0.windowIDs.contains(window) }) {
+                topBarOffset = bar.barFrame.height + Self.tabBarGap
+            } else {
+                topBarOffset = 0
+            }
             // Étendue du côté `first` = position de la frontière depuis l'origine du split.
             let firstExtent: CGFloat = switch edge {
             case .right: frame.maxX - origin
             case .down: frame.maxY - origin
             case .left: frame.minX - gap - origin
-            case .up: frame.minY - gap - origin
+            case .up: (frame.minY - topBarOffset) - gap - origin
             }
             let ratio = min(max(Double(firstExtent / usable), Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound)
             let requested = tree.updatingSplit(at: split.path[...]) { orientation, _ in (orientation, ratio) }
             guard !knownMinimums.isEmpty else { return requested }
-            let before = tree.place(in: container, innerGap: innerGap)
+            let before = tree.place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
             func fits(_ candidate: BSPTree) -> Bool {
-                let frames = candidate.place(in: container, innerGap: innerGap)
+                let frames = candidate.place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
                 return knownMinimums.allSatisfy { id, minimum in
                     guard let original = before[id], let actual = frames[id] else { return true }
                     // Une contrainte déjà infaisable ne doit pas empêcher tout geste,
@@ -848,6 +869,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         minimum: CGSize,
         in container: CGRect,
         innerGap: CGFloat = 0,
+        tabBarHeight: CGFloat = 0,
         excluding absent: Set<WindowID> = [],
         knownMinimums: [WindowID: CGSize] = [:]
     ) -> BSPTree? {
@@ -856,7 +878,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             for axis in [BSPOrientation.vertical, .horizontal] {
                 let extent = { (rect: CGRect) in axis == .vertical ? rect.width : rect.height }
                 let need = ceil(axis == .vertical ? minimum.width : minimum.height)
-                let before = tree.place(in: container, innerGap: innerGap)
+                let before = tree.place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
                 guard let current = before[window] else { return nil }
                 guard extent(current) < need else { continue }
                 let chain = tree.ancestors(of: window, in: container, innerGap: innerGap)
@@ -910,7 +932,10 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                             let memberNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
                             groupNeed = max(groupNeed, memberNeed)
                         }
-                        required = minimumExtent(in: rect) { extent($0.integral) >= groupNeed }
+                        required = minimumExtent(in: rect) { candidateRect in
+                            let (_, content) = Self.splitTabBar(in: candidateRect, tabBarHeight: tabBarHeight, count: ids.count)
+                            return extent(content) >= groupNeed
+                        }
                     case .split(let orientation, let ratio, let first, let second):
                         let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
                         guard let a = requiredExtent(of: first, in: rects.first, path: path + [true]),
@@ -968,7 +993,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                 }
 
                 guard let corrected = correcting(tree, in: container, path: []) else { return nil }
-                let after = corrected.place(in: container, innerGap: innerGap)
+                let after = corrected.place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
                 guard let reached = after[window], extent(reached) >= need,
                       knownMinimums.allSatisfy({ id, known in
                           guard let old = before[id], let new = after[id], extent(new) < extent(old) else { return true }

@@ -239,4 +239,70 @@ final class Spec165TabbedBSPTreeTests: XCTestCase {
         XCTAssertEqual(plan.placements[w2], plan.placements[w3])
         XCTAssertEqual(plan.placements[w2]?.minY, 32 + BSPTree.tabBarGap)
     }
+
+    /// Constats Bridget R1 #2, #3 et #4 :
+    /// - #2 : resize natif et `adjustingFence` par le bord supérieur `.up` d'un `.tabGroup` sous split horizontal
+    ///        (avec et sans barre visible) sans dérive de `barHeight + tabBarGap`.
+    /// - #3 : `correctingForMinimumSize` tient compte de la hauteur de barre sur le rectangle de contenu réel.
+    /// - #4 : `projected(excluding:)` sélectionne le même onglet adjacent que `removing`.
+    func testNativeResizeUpEdgeMinimumCorrectionAndProjectedAdjacentSelection() {
+        let bottomTabbed: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 0.5,
+            first: .leaf(w1),
+            second: .tabGroup(windowIDs: [w2, w3], active: w2)
+        )
+        let box = CGRect(x: 0, y: 0, width: 1000, height: 800)
+
+        // #2a : Avec barre visible (28 + 4 = 32 pt), tirer le bord haut de w2 vers le haut de 20 pt
+        let initial = bottomTabbed.place(in: box, innerGap: 10, tabBarHeight: 28)
+        let startContent = initial[w2]!
+        let native = BSPNativeResize(tree: bottomTabbed, windowID: w2, in: box, innerGap: 10, tabBarHeight: 28)
+        XCTAssertEqual(native?.movableEdges, [.up])
+        let pulledUp = CGRect(
+            x: startContent.minX,
+            y: startContent.minY - 20,
+            width: startContent.width,
+            height: startContent.height + 20
+        )
+        let resized = native?.layout(observedFrame: pulledUp)
+        XCTAssertNotNil(resized)
+        XCTAssertEqual(resized!.frames[w2]!.minY, pulledUp.minY, accuracy: 1)
+        XCTAssertEqual(resized!.frames[w3]!.minY, pulledUp.minY, accuracy: 1)
+
+        // #2b : Sans barre visible (tuile trop petite ou tabBarHeight == 0)
+        let initialNoBar = bottomTabbed.place(in: box, innerGap: 10, tabBarHeight: 0)
+        let startNoBar = initialNoBar[w2]!
+        let nativeNoBar = BSPNativeResize(tree: bottomTabbed, windowID: w2, in: box, innerGap: 10, tabBarHeight: 0)
+        let pulledNoBar = CGRect(x: startNoBar.minX, y: startNoBar.minY - 20, width: startNoBar.width, height: startNoBar.height + 20)
+        let resizedNoBar = nativeNoBar?.layout(observedFrame: pulledNoBar)
+        XCTAssertEqual(resizedNoBar?.frames[w2]?.minY ?? -1, pulledNoBar.minY, accuracy: 1)
+
+        // #2c : `adjustingFence` sur `.up` avec `tabBarHeight = 28` suit aussi le bord de contenu
+        let adjusted = bottomTabbed.adjustingFence(of: w2, edge: .up, to: pulledUp, in: box, innerGap: 10, tabBarHeight: 28)
+        let adjustedFrames = adjusted.place(in: box, innerGap: 10, tabBarHeight: 28)
+        XCTAssertEqual(adjustedFrames[w2]!.minY, pulledUp.minY, accuracy: 1)
+
+        // #3 : `correctingForMinimumSize` voit le contenu réel (395 - 32 = 363 < 380) et agrandit la tuile
+        let corrected = bottomTabbed.correctingForMinimumSize(
+            of: w2,
+            minimum: CGSize(width: 200, height: 380),
+            in: box,
+            innerGap: 10,
+            tabBarHeight: 28
+        )
+        XCTAssertNotNil(corrected)
+        XCTAssertNotEqual(corrected, bottomTabbed)
+        let correctedFrames = corrected!.place(in: box, innerGap: 10, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(correctedFrames[w2]!.height, 380)
+
+        // #4 : `projected(excluding:)` sélectionne l'onglet adjacent à droite (D) comme `removing(C)`
+        let fourTabs: BSPTree = .tabGroup(windowIDs: [w1, w2, w3, w4], active: w3)
+        XCTAssertEqual(fourTabs.projected(excluding: [w3]), fourTabs.removing(w3))
+        XCTAssertEqual(fourTabs.projected(excluding: [w3]), .tabGroup(windowIDs: [w1, w2, w4], active: w4))
+        // Retrait du dernier onglet actif -> adjacent à gauche (w3)
+        let lastActive: BSPTree = .tabGroup(windowIDs: [w1, w2, w3, w4], active: w4)
+        XCTAssertEqual(lastActive.projected(excluding: [w4]), lastActive.removing(w4))
+        XCTAssertEqual(lastActive.projected(excluding: [w4]), .tabGroup(windowIDs: [w1, w2, w3], active: w3))
+    }
 }

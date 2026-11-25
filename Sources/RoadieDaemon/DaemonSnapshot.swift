@@ -941,6 +941,7 @@ public struct SnapshotService: Sendable {
                     side: side,
                     container: container,
                     innerGap: innerGap,
+                    tabBarHeight: CGFloat(input.config.tiling.tabbedBarHeight),
                     confirmedMinimums: confirmedMinimums
                 )
                 let next: BSPTree? = tree.isEmpty && stage.bspTree == nil ? nil : tree
@@ -967,6 +968,7 @@ public struct SnapshotService: Sendable {
         side: BSPInsertionSide,
         container: CGRect,
         innerGap: CGFloat,
+        tabBarHeight: CGFloat = 0,
         confirmedMinimums: [WindowID: CGSize] = [:]
     ) -> BSPTree {
         var leaves = Set(initial.windowIDs)
@@ -991,7 +993,7 @@ public struct SnapshotService: Sendable {
                 others.removeValue(forKey: windowID)
                 if let adjusted = tree.correctingForMinimumSize(
                     of: windowID, minimum: minimum, in: container, innerGap: innerGap,
-                    excluding: absent, knownMinimums: others
+                    tabBarHeight: tabBarHeight, excluding: absent, knownMinimums: others
                 ) {
                     tree = adjusted
                 }
@@ -2084,6 +2086,12 @@ public extension SnapshotService {
     /// Marges extérieures effectives pour un écran et un nombre de fenêtres, partagées avec `StageTabBarController`.
     func effectiveOuterGaps(windowCount: Int, display: DisplaySnapshot) -> Insets {
         outerGaps(windowCount: windowCount, display: display)
+    }
+
+    /// Tailles minimales confirmées pour les fenêtres d'un scope, partagées entre placement,
+    /// barres d'onglets (`StageTabBarController`) et géométrie des commandes (`CommandTreeGeometry`).
+    func confirmedMinimumSizes(for scope: StageScope, in snapshot: DaemonSnapshot) -> [WindowID: CGSize] {
+        processState.confirmedMinimumSizes(for: snapshot.windows.map(\.window), in: scope)
     }
 
     /// FR-005 : point d'ancrage BSP d'une nouvelle fenêtre = premier candidat déjà feuille vivante

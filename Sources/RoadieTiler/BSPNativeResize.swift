@@ -26,6 +26,7 @@ public struct BSPNativeResize: Sendable {
     private let container: CGRect
     private let gap: CGFloat
     private let tabBarHeight: CGFloat
+    private let sourceTopBarOffset: CGFloat
     private let controls: [Int: BSPEdge]
 
     /// Bords pilotables par une séparation interne ; les limites du bureau restent fixes.
@@ -35,11 +36,19 @@ public struct BSPNativeResize: Sendable {
     public init?(tree: BSPTree, windowID: WindowID, in container: CGRect,
                  innerGap: CGFloat = 0, tabBarHeight: CGFloat = 0, excluding absent: Set<WindowID> = [],
                  knownMinimums: [WindowID: CGSize] = [:], startFrame: CGRect? = nil) {
-        let frames = tree.projected(excluding: absent).place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
+        let projected = tree.projected(excluding: absent)
+        let frames = projected.place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
         guard let placed = frames[windowID], Self.valid(container), Self.valid(startFrame ?? placed) else { return nil }
         self.startFrame = startFrame ?? placed
         self.container = container
         self.tabBarHeight = tabBarHeight
+        if tabBarHeight > 0,
+           let bar = projected.tabBarFrames(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
+            .first(where: { $0.windowIDs.contains(windowID) }) {
+            self.sourceTopBarOffset = bar.barFrame.height + BSPTree.tabBarGap
+        } else {
+            self.sourceTopBarOffset = 0
+        }
         gap = max(0, innerGap)
         var nextID = 0
         var nearest: [BSPEdge: Int] = [:]
@@ -160,7 +169,7 @@ public struct BSPNativeResize: Sendable {
                     case .right: frame.maxX - rect.minX
                     case .left: frame.minX - seam - rect.minX
                     case .down: frame.maxY - rect.minY
-                    case .up: frame.minY - seam - rect.minY
+                    case .up: (frame.minY - sourceTopBarOffset) - seam - rect.minY
                     }
                     let first = cachedMinimum(a), second = cachedMinimum(b)
                     let firstMin = orientation == .vertical ? first.width : first.height

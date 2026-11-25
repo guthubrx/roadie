@@ -194,9 +194,9 @@ public struct WindowCommandService {
             case .down: frame.offsetBy(dx: 0, dy: resizeStep)
             }
             mutation = { tree in
-                let pushed = tree.adjustingFence(of: id, edge: edge, to: target, in: geometry.container, innerGap: geometry.innerGap, excluding: geometry.absent)
+                let pushed = tree.adjustingFence(of: id, edge: edge, to: target, in: geometry.container, innerGap: geometry.innerGap, tabBarHeight: geometry.tabBarHeight, excluding: geometry.absent)
                 guard pushed == tree else { return pushed }
-                return tree.adjustingFence(of: id, edge: edge.opposite, to: target, in: geometry.container, innerGap: geometry.innerGap, excluding: geometry.absent)
+                return tree.adjustingFence(of: id, edge: edge.opposite, to: target, in: geometry.container, innerGap: geometry.innerGap, tabBarHeight: geometry.tabBarHeight, excluding: geometry.absent)
             }
         case .move, .warp:
             guard let geometry,
@@ -1959,22 +1959,33 @@ private extension BSPEdge {
     }
 }
 
-/// Géométrie de l'arbre d'un scope pour les commandes (SPEC-017 R12, A9) : conteneur, marge
-/// intérieure, hauteur de barre d'onglets et feuilles absentes du snapshot.
+/// Géométrie de l'arbre d'un scope pour les commandes (SPEC-017 R12, A9, Spec 165) : conteneur,
+/// marge intérieure, hauteur de barre d'onglets, minimums confirmés et feuilles absentes du snapshot.
 struct CommandTreeGeometry {
     var container: CGRect
     var innerGap: CGFloat
     var absent: Set<WindowID>
     var tabBarHeight: CGFloat = 0
+    var minimumSizes: [WindowID: CGSize] = [:]
 
     /// Frames de `tree` projeté sans les feuilles absentes. O(n).
     func frames(of tree: BSPTree) -> [WindowID: CGRect] {
-        tree.projected(excluding: absent).place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
+        tree.projected(excluding: absent).place(
+            in: container,
+            innerGap: innerGap,
+            tabBarHeight: tabBarHeight,
+            minimumSizes: minimumSizes
+        )
     }
 
     /// Emplacements des barres d'onglets des tuiles `.tabGroup` projetées. O(n).
     func tabBarFrames(of tree: BSPTree) -> [BSPTabBarPlacement] {
-        tree.projected(excluding: absent).tabBarFrames(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
+        tree.projected(excluding: absent).tabBarFrames(
+            in: container,
+            innerGap: innerGap,
+            tabBarHeight: tabBarHeight,
+            minimumSizes: minimumSizes
+        )
     }
 }
 
@@ -1992,7 +2003,8 @@ extension SnapshotService {
             container: container,
             innerGap: CGFloat(innerGap()),
             absent: Set(tree.windowIDs).subtracting(live),
-            tabBarHeight: CGFloat(effectiveConfig.tiling.tabbedBarHeight)
+            tabBarHeight: CGFloat(effectiveConfig.tiling.tabbedBarHeight),
+            minimumSizes: confirmedMinimumSizes(for: scope, in: snapshot)
         )
     }
 }

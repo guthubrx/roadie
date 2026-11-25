@@ -138,6 +138,7 @@ public final class StageTabBarController {
         config: RoadieConfig,
         outerGapsProvider: (Int, DisplaySnapshot) -> Insets,
         treeProvider: (StageScope) -> BSPTree? = { _ in nil },
+        minimumSizesProvider: (StageScope) -> [WindowID: CGSize] = { _ in [:] },
         frameTransform: ((CGRect) -> CGRect)? = nil
     ) -> [StageTabBarTarget] {
         let transform: (CGRect) -> CGRect = frameTransform ?? { BorderController.axToNS($0) }
@@ -203,7 +204,8 @@ public final class StageTabBarController {
                 let placements = projected.tabBarFrames(
                     in: container,
                     innerGap: CGFloat(config.tiling.gapsInner),
-                    tabBarHeight: CGFloat(config.tiling.tabbedBarHeight)
+                    tabBarHeight: CGFloat(config.tiling.tabbedBarHeight),
+                    minimumSizes: minimumSizesProvider(activeScope)
                 )
                 for placement in placements {
                     let groupWindows = placement.windowIDs.compactMap { liveByID[$0] }
@@ -307,6 +309,9 @@ public final class StageTabBarController {
             },
             treeProvider: { scope in
                 stageState.bspTree(for: scope)
+            },
+            minimumSizesProvider: { scope in
+                self.snapshotService.confirmedMinimumSizes(for: scope, in: snapshot)
             }
         )
         if targets.isEmpty {

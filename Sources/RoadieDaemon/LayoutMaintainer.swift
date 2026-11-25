@@ -1699,10 +1699,11 @@ public final class LayoutMaintainer {
             (.up, current.minY - start.minY), (.down, current.maxY - start.maxY)
         ].compactMap { abs($0.1) > tolerance ? $0.0 : nil }
         let knownMinimums = treeMinimums.mapValues(\.size)
+        let tabBarHeight = CGFloat(service.effectiveConfig.tiling.tabbedBarHeight)
         let adjusted = edges.reduce(tree) { tree, edge in
             tree.adjustingFence(
                 of: entry.window.id, edge: edge, to: current, in: geometry.container,
-                innerGap: geometry.innerGap, excluding: geometry.absent, knownMinimums: knownMinimums
+                innerGap: geometry.innerGap, tabBarHeight: tabBarHeight, excluding: geometry.absent, knownMinimums: knownMinimums
             )
         }
         guard adjusted != tree else { return true }
@@ -1811,6 +1812,7 @@ public final class LayoutMaintainer {
                 }
                 let corrected = tree.correctingForMinimumSize(
                     of: windowID, minimum: minimum, in: geometry.container, innerGap: geometry.innerGap,
+                    tabBarHeight: CGFloat(service.effectiveConfig.tiling.tabbedBarHeight),
                     excluding: geometry.absent, knownMinimums: knownMinimums
                 )
                 if let corrected, corrected != tree {
