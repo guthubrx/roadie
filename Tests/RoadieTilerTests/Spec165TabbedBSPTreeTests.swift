@@ -418,5 +418,38 @@ final class Spec165TabbedBSPTreeTests: XCTestCase {
         let mixedAltFrames = mixedAltSolved!.place(in: mixedAltBox, innerGap: 10, tabBarHeight: 28)
         XCTAssertGreaterThanOrEqual(mixedAltFrames[w1]!.height, 140)
         XCTAssertGreaterThanOrEqual(mixedAltFrames[w3]!.height, 140)
+
+        // Constat Bridget R6 : sous-arbre voisin imbriqué avec deux tabGroups (conteneur 800x440, gap 10, barre 28 :
+        // A=100 min 140, sous-arbre horizontal [B, C] ratio 0.5 où B=160(contenu 128) min 128, C=160(contenu 128) min 128
+        // -> A=140, sous-arbre=290 => B=140 et C=140 sans barre).
+        let w5 = WindowID(rawValue: 5)
+        let nestedBox = CGRect(x: 0, y: 0, width: 800, height: 440)
+        let nestedTree: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 100.5 / 430.0,
+            first: .leaf(w1),
+            second: .split(
+                orientation: .horizontal,
+                ratio: 0.5,
+                first: .tabGroup(windowIDs: [w2, w3], active: w2),
+                second: .tabGroup(windowIDs: [w4, w5], active: w4)
+            )
+        )
+        let nestedSolved = nestedTree.correctingForMinimumSize(
+            of: w1,
+            minimum: CGSize(width: 100, height: 140),
+            in: nestedBox,
+            innerGap: 10,
+            tabBarHeight: 28,
+            knownMinimums: [
+                w2: CGSize(width: 100, height: 128),
+                w4: CGSize(width: 100, height: 128),
+            ]
+        )
+        XCTAssertNotNil(nestedSolved)
+        let nestedFrames = nestedSolved!.place(in: nestedBox, innerGap: 10, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(nestedFrames[w1]!.height, 140)
+        XCTAssertGreaterThanOrEqual(nestedFrames[w2]!.height, 128)
+        XCTAssertGreaterThanOrEqual(nestedFrames[w4]!.height, 128)
     }
 }

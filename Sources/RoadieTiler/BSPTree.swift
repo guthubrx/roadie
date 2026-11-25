@@ -906,6 +906,21 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                     return CGFloat(low) + fraction
                 }
 
+                // Plus grande étendue entière dans [0, container] vérifiant un prédicat décroissant
+                // (utilisé pour propager les bornes supérieures du régime sans barre).
+                func maximumExtent(in rect: CGRect, fits: (CGRect) -> Bool) -> CGFloat? {
+                    let fraction = extent(rect) - floor(extent(rect))
+                    var low = 0
+                    var high = Int(max(0, floor(extent(container) - fraction)))
+                    guard fits(withExtent(CGFloat(low) + fraction, in: rect)) else { return nil }
+                    while low < high {
+                        let middle = low + (high - low + 1) / 2
+                        if fits(withExtent(CGFloat(middle) + fraction, in: rect)) { low = middle }
+                        else { high = middle - 1 }
+                    }
+                    return CGFloat(low) + fraction
+                }
+
                 // Intervalle des étendues entières first compatibles avec les deux besoins,
                 // d'éventuelles bornes supérieures (régime sans barre) et les bornes du ratio.
                 // second reçoit exactement usable - first, comme place.
@@ -1022,21 +1037,43 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                                     upperBounds[path] = only
                                 }
                             } else if node.contains(window) {
-                                required = minimumExtent(in: rect) {
-                                    firstExtentRange(usable: Self.usableExtent(of: $0, orientation: axis, innerGap: innerGap),
-                                                     first: a, second: b, firstMax: aMax, secondMax: bMax) != nil
+                                // Deux recherches monotones : borne inférieure (croissante) et, en présence
+                                // d'un plafond sans barre, borne supérieure (décroissante).
+                                guard let minH = minimumExtent(in: rect, fits: { candidate in
+                                    let usable = Self.usableExtent(of: candidate, orientation: axis, innerGap: innerGap)
+                                    return firstExtentRange(usable: usable, first: a, second: b) != nil
+                                }) else { return nil }
+                                if aMax != nil || bMax != nil {
+                                    guard let maxH = maximumExtent(in: rect, fits: { candidate in
+                                        let usable = Self.usableExtent(of: candidate, orientation: axis, innerGap: innerGap)
+                                        let lowerRatio = floor(usable * Self.ratioBounds.lowerBound)
+                                        let upperRatio = floor(usable * Self.ratioBounds.upperBound)
+                                        let firstCapOK = aMax.map { lowerRatio <= floor($0) } ?? true
+                                        let secondCapOK = bMax.map { ceil(usable - $0) <= upperRatio } ?? true
+                                        let sumCapOK = (aMax != nil && bMax != nil) ? usable <= floor(aMax!) + floor(bMax!) : true
+                                        return firstCapOK && secondCapOK && sumCapOK
+                                    }), minH <= maxH else { return nil }
+                                    upperBounds[path] = maxH
                                 }
-                                if let aMax, let bMax {
-                                    upperBounds[path] = aMax + bMax + Self.gap(for: axis, innerGap: innerGap)
-                                }
+                                required = minH
                             } else {
                                 // Les sous-arbres voisins gardent leurs ratios, donc aussi leurs coupes internes.
-                                required = minimumExtent(in: rect) {
-                                    let children = Self.childRects(of: $0, orientation: orientation, ratio: ratio, innerGap: innerGap)
-                                    let firstOK = extent(children.first) >= a && (aMax.map { extent(children.first) <= $0 } ?? true)
-                                    let secondOK = extent(children.second) >= b && (bMax.map { extent(children.second) <= $0 } ?? true)
-                                    return firstOK && secondOK
+                                // Borne inférieure (croissante) et, si un enfant porte un plafond sans barre,
+                                // borne supérieure (décroissante), pour propager l'intervalle faisable exact.
+                                guard let minH = minimumExtent(in: rect, fits: { candidate in
+                                    let children = Self.childRects(of: candidate, orientation: orientation, ratio: ratio, innerGap: innerGap)
+                                    return extent(children.first) >= a && extent(children.second) >= b
+                                }) else { return nil }
+                                if aMax != nil || bMax != nil {
+                                    guard let maxH = maximumExtent(in: rect, fits: { candidate in
+                                        let children = Self.childRects(of: candidate, orientation: orientation, ratio: ratio, innerGap: innerGap)
+                                        let firstOK = aMax.map { extent(children.first) <= $0 } ?? true
+                                        let secondOK = bMax.map { extent(children.second) <= $0 } ?? true
+                                        return firstOK && secondOK
+                                    }), minH <= maxH else { return nil }
+                                    upperBounds[path] = maxH
                                 }
+                                required = minH
                             }
                         }
                         if let required { requirements[path] = required }
@@ -1044,8 +1081,10 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                     }
 
                     guard requiredExtent(of: tree, in: container, path: []) != nil,
-                          let anchor = chain.reversed().first(where: {
-                              $0.orientation == axis && extent($0.rect) >= (requirements[$0.path] ?? .infinity)
+                          let anchor = chain.reversed().first(where: { ancestor in
+                              ancestor.orientation == axis
+                                  && extent(ancestor.rect) >= (requirements[ancestor.path] ?? .infinity)
+                                  && (upperBounds[ancestor.path].map { extent(ancestor.rect) <= $0 } ?? true)
                           })
                     else { return nil }
 
