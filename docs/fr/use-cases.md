@@ -206,14 +206,14 @@ roadie mode scrolling    # colonnes horizontales centrées (largeur 65 % par dé
 roadie focus right       # faire défiler vers la colonne suivante
 roadie layout width next # ajuster la largeur de colonne
 
-# Ou empiler des onglets dans n'importe quelle tuile sans quitter spatialBsp :
-roadie tab stack right   # empiler la fenêtre active dans la tuile BSP de droite
-roadie tab next          # passer à l'onglet suivant dans la tuile
+# Ou empiler des onglets dans n'importe quelle tuile ou colonne (`spatialBsp`, `scrolling`, `masterStack`, `bsp`) :
+roadie tab stack right   # empiler la fenêtre active dans la tuile / colonne de droite
+roadie tab next          # passer à l'onglet suivant dans la tuile / colonne
 roadie tab move left     # déplacer l'onglet actif vers la gauche
-roadie tab unstack       # détacher l'onglet actif en tuile BSP indépendante
+roadie tab unstack       # détacher l'onglet actif en tuile / colonne indépendante
 ```
 
-Le mode de disposition est aussi sélectionnable par clic droit sur une carte de stage dans le NavRail ou depuis la barre de recherche. Dans tous les modes tuilés à slots (`spatialBsp`, `scrolling`, `masterStack` et `bsp`), maintiens `⌥ Option` lors d'un dépôt au centre d'une tuile ou d'une colonne (ou dépose directement sur une barre d'onglets) pour empiler en onglets, et glisse un onglet hors de sa barre pour le détacher.
+Le mode de disposition est aussi sélectionnable par clic droit sur une carte de stage dans le NavRail ou depuis la barre de recherche. Dans tous les modes tuilés à slots (`spatialBsp`, `scrolling`, `masterStack` et `bsp`), maintiens `⌥ Option` n'importe où sur une tuile ou colonne cible (même partiellement hors écran en `scrolling`) — ou dépose directement sur une barre d'onglets existante — pour afficher l'aperçu turquoise « Empiler en onglet » (y compris avec `drop_preview = "real"`), et glisse un onglet hors de sa barre (ou utilise le clic droit barre de titre → *Onglets (tuile)*) pour le détacher.
 
 ## 13. Scratchpad flottant, Dim Inactive et scènes de projet
 

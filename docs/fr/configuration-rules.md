@@ -77,7 +77,7 @@ master_ratio = 0.6
 smart_gaps_solo = true
 ```
 
-`default_strategy` accepte `bsp`, `spatialBsp`, `masterStack` ou `float`.
+`default_strategy` accepte `bsp`, `spatialBsp`, `masterStack`, `tabbed`, `scrolling` ou `float`.
 `mutableBsp` et `yabai` restent des alias de `spatialBsp`.
 Le menu de découpage propose `largest_dim`, `dwindle` et `balanced`.
 Ce dernier choix reste disponible pour les configurations anciennes.

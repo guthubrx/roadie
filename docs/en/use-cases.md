@@ -205,14 +205,14 @@ roadie mode scrolling    # centered horizontal columns (65% width by default)
 roadie focus right       # scroll to the next column
 roadie layout width next # adjust column width
 
-# Or stack tabs inside individual tiles while staying in spatialBsp:
-roadie tab stack right   # stack active window into the right BSP tile
-roadie tab next          # switch to the next tab inside the tile
+# Or stack tabs inside any tile or column (`spatialBsp`, `scrolling`, `masterStack`, `bsp`):
+roadie tab stack right   # stack active window into the right tile / column
+roadie tab next          # switch to the next tab inside the tile / column
 roadie tab move left     # reorder active tab left
-roadie tab unstack       # detach active tab back into its own BSP tile
+roadie tab unstack       # detach active tab back into its own tile / column
 ```
 
-Layout modes are also available from the NavRail stage context menu and from the launcher. Across all slotted tiled modes (`spatialBsp`, `scrolling`, `masterStack`, and `bsp`), you can hold `⌥ Option` while dropping on a tile or column center (or drop directly onto an existing tab bar) to stack into tabs, and drag any tab out of its bar to detach it.
+Layout modes are also available from the NavRail stage context menu and from the launcher. Across all slotted tiled modes (`spatialBsp`, `scrolling`, `masterStack`, and `bsp`), hold `⌥ Option` anywhere over a target tile or column (even on a partially off-screen `scrolling` column) — or drop directly onto an existing tab bar — to see the teal “Stack as tab” preview (including with `drop_preview = "real"`), and drag any tab out of its bar (or right-click the titlebar → *Tabs (tile)*) to detach it.
 
 ## 13. Floating Scratchpad, Dim Inactive, And Workspace Scenes
 

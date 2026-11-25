@@ -188,9 +188,10 @@ Roadie arranges windows and adjusts their space as you open or close them.
 Choose from six layouts per stage: persistent tree (`spatialBsp`), balanced
 tiling (`bsp`), master + stack (`masterStack`), **tabbed (`tabbed`)** with a
 clickable floating tab bar, **scrolling ribbon (`scrolling`)** inspired by Niri
-with centered columns and clickable neighbor edges, or free placement (`float`).
+with centered columns, clickable neighbor edges, and strict multi-display seam
+containment (columns never bleed onto an adjacent monitor), or free placement (`float`).
 
-Rearrange windows by dragging: drop in the center to swap positions, hold `⌥ Option` over the center (or drop directly onto an existing tile's tab bar) to **stack windows as tabs inside any `spatialBsp` tile**, drag tabs horizontally to reorder or drag a tab out of its bar to detach it into a new BSP tile, or drop on an edge to insert on that side. You can also adjust proportions from the keyboard, navigate tabs (`roadie tab next|prev|stack|unstack|move`),
+Rearrange windows by dragging: drop in the center to swap positions, hold `⌥ Option` anywhere over a target tile or column (or drop directly onto an existing tab bar) to **stack windows as tabs inside any slotted tiled layout (`spatialBsp`, `scrolling`, `masterStack`, and `bsp`)** with an explicit teal tab-bar preview even when `drop_preview = "real"` is enabled, drag tabs horizontally to reorder or drag a tab out of its bar to detach it, or drop on an edge to insert on that side. You can also adjust proportions from the keyboard, navigate tabs (`roadie tab next|prev|stack|unstack|move`),
 rotate or mirror the tree (`layout rotate`, `layout mirror`), gather an app's
 windows (`window gather-app`), toggle a centered **floating scratchpad** on
 demand (`roadie scratchpad`), enable **Dim Inactive** (`fx.dim_inactive`), or

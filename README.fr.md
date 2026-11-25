@@ -188,15 +188,21 @@ d'une stage à l'autre. Nous ne connaissons pas d'autre outil pour macOS qui le 
 </p>
 
 Roadie répartit les fenêtres et ajuste leur place quand tu en ouvres ou en fermes
-une. Choisis parmi six dispositions par stage : arbre persistant (`spatialBsp`) avec
-**tuiles à onglets intégrées** (empile n'importe quelles fenêtres dans une même tuile en maintenant `⌥ Option` au centre ou en déposant sur une barre d'onglets, réordonne horizontalement, ou glisse un onglet hors de sa barre pour le détacher en tuile),
+une. Choisis parmi six dispositions par stage : arbre persistant (`spatialBsp`),
 tuilage équilibré (`bsp`), fenêtre principale + pile (`masterStack`), **onglets
 (`tabbed`)** avec barre d'onglets flottante cliquable, **ruban défilant
-(`scrolling`)** façon Niri avec colonnes centrées et bords voisins cliquables, ou
-placement libre (`float`).
+(`scrolling`)** façon Niri avec colonnes centrées, bords voisins cliquables et
+étanchéité stricte aux jointures multi-écrans (aucun débordement sur l'écran voisin), ou
+placement libre (`float`). Tous les modes tuilés à emplacements (`spatialBsp`, `scrolling`,
+`masterStack` et `bsp`) supportent les **onglets intégrés par tuile ou colonne** : maintiens
+`⌥ Option` n'importe où sur une cible (ou dépose directement sur une barre d'onglets) pour
+empiler des fenêtres avec un aperçu turquoise dédié — même en mode `drop_preview = "real"` —,
+réordonne horizontalement dans la barre, ou glisse un onglet hors de sa barre pour le détacher.
 
 Réorganise les fenêtres par glisser-déposer : un dépôt au centre échange les
-positions, un dépôt sur un bord insère la fenêtre de ce côté. Tu peux aussi
+positions, un dépôt sur un bord insère la fenêtre de ce côté (et en `scrolling`,
+le découpage suit la portion visible horizontale de la colonne). Tu peux aussi
+naviguer et empiler les onglets au clavier (`roadie tab next|prev|stack|unstack|move`),
 modifier les proportions au clavier, pivoter/inverser l'arbre (`layout rotate`,
 `layout mirror`), réunir les fenêtres d'une application (`window gather-app`),
 détacher un **scratchpad flottant** centré à la demande (`roadie scratchpad`),

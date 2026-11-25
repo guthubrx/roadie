@@ -74,7 +74,7 @@ master_ratio = 0.6
 smart_gaps_solo = true
 ```
 
-`default_strategy` accepts `bsp`, `spatialBsp`, `masterStack`, or `float`.
+`default_strategy` accepts `bsp`, `spatialBsp`, `masterStack`, `tabbed`, `scrolling`, or `float`.
 `mutableBsp` and `yabai` remain aliases of `spatialBsp`.
 The split menu offers `largest_dim`, `dwindle` and `balanced`.
 The latter remains available for existing configurations.

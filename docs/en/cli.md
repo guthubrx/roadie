@@ -128,7 +128,8 @@ Use cases:
 - edit the stored tree with `warp`, `resize`, or `layout split`;
 - flip the local orientation of two neighboring windows in `spatialBsp` with `toggle-split`;
 - manually adjust the active window width with `layout width`;
-- balance the existing tree with `flatten` in `spatialBsp`.
+- balance the existing tree with `flatten` in `spatialBsp`;
+- stack, cycle, reorder, and detach per-tile / per-column tabs with `roadie tab ...` across `spatialBsp`, `scrolling`, `masterStack`, and `bsp`.
 
 In `spatialBsp`, `layout insert` and `layout join-with` are rejected; use `warp`. `layout width` is rejected; use `resize`. `layout flatten` balances the existing tree. In other modes, legacy commands remain available where supported.
 

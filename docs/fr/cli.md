@@ -128,7 +128,8 @@ Cas d'usage :
 - modifier l’arbre enregistré avec `warp`, `resize` ou `layout split`;
 - inverser l'orientation locale de deux voisines en `spatialBsp` avec `toggle-split`;
 - ajuster manuellement la largeur de la fenetre active avec `layout width`;
-- équilibrer l’arbre existant avec `flatten` en `spatialBsp`.
+- équilibrer l’arbre existant avec `flatten` en `spatialBsp`;
+- empiler, parcourir, réordonner et détacher des onglets par tuile ou colonne avec `roadie tab ...` dans `spatialBsp`, `scrolling`, `masterStack` et `bsp`.
 
 Dans `spatialBsp`, `layout insert` et `layout join-with` sont refusés : utilise `warp`. `layout width` est refusé : utilise `resize`. `layout flatten` équilibre l’arbre existant. Les anciennes commandes restent disponibles dans les autres modes compatibles.
 
