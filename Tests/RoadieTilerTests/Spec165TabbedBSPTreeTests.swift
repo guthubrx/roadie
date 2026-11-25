@@ -353,5 +353,26 @@ final class Spec165TabbedBSPTreeTests: XCTestCase {
         XCTAssertNotNil(moved)
         let movedFrames = moved!.place(in: tallBox, innerGap: 10, tabBarHeight: 28)
         XCTAssertGreaterThanOrEqual(movedFrames[w2]!.height, 350)
+
+        // Constat Bridget R3 : régime de barre choisi PAR GROUPE (groupe A garde sa barre à 232/200, groupe B la masque à 140/140)
+        let twoGroupBox = CGRect(x: 0, y: 0, width: 800, height: 382)
+        let twoGroupTree: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 242.5 / 372.0,
+            first: .tabGroup(windowIDs: [w1, w2], active: w1),
+            second: .tabGroup(windowIDs: [w3, w4], active: w3)
+        )
+        let mixedSolved = twoGroupTree.correctingForMinimumSize(
+            of: w3,
+            minimum: CGSize(width: 100, height: 140),
+            in: twoGroupBox,
+            innerGap: 10,
+            tabBarHeight: 28,
+            knownMinimums: [w1: CGSize(width: 100, height: 200)]
+        )
+        XCTAssertNotNil(mixedSolved)
+        let mixedFrames = mixedSolved!.place(in: twoGroupBox, innerGap: 10, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(mixedFrames[w1]!.height, 200)
+        XCTAssertGreaterThanOrEqual(mixedFrames[w3]!.height, 140)
     }
 }

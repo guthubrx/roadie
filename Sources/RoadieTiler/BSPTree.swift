@@ -948,20 +948,16 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                                 let fraction = extent(rect) - floor(extent(rect))
                                 let maxExtent = Int(max(0, floor(extent(container) - fraction)))
                                 let threshold = Int(ceil(tabBarHeight + Self.tabBarGap + Self.minimumContentHeightForTabBar))
-                                if allowNoBarTabGroup {
-                                    let noBarUpper = min(maxExtent, max(0, threshold - 1))
-                                    if fitsContent(withExtent(CGFloat(noBarUpper) + fraction, in: rect)) {
-                                        var low = 0
-                                        var high = noBarUpper
-                                        while low < high {
-                                            let middle = low + (high - low) / 2
-                                            if fitsContent(withExtent(CGFloat(middle) + fraction, in: rect)) { high = middle }
-                                            else { low = middle + 1 }
-                                        }
-                                        required = CGFloat(low) + fraction
-                                    } else {
-                                        required = nil
+                                let noBarUpper = min(maxExtent, max(0, threshold - 1))
+                                if allowNoBarTabGroup, fitsContent(withExtent(CGFloat(noBarUpper) + fraction, in: rect)) {
+                                    var low = 0
+                                    var high = noBarUpper
+                                    while low < high {
+                                        let middle = low + (high - low) / 2
+                                        if fitsContent(withExtent(CGFloat(middle) + fraction, in: rect)) { high = middle }
+                                        else { low = middle + 1 }
                                     }
+                                    required = CGFloat(low) + fraction
                                 } else {
                                     let barLower = min(maxExtent, threshold)
                                     if fitsContent(withExtent(CGFloat(maxExtent) + fraction, in: rect)) {
