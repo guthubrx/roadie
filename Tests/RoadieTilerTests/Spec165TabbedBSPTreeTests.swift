@@ -396,5 +396,27 @@ final class Spec165TabbedBSPTreeTests: XCTestCase {
         let upperBoundFrames = upperBoundSolved!.place(in: upperBoundBox, innerGap: 10, tabBarHeight: 28)
         XCTAssertGreaterThanOrEqual(upperBoundFrames[w1]!.height, 200)
         XCTAssertGreaterThanOrEqual(upperBoundFrames[w3]!.height, 140)
+
+        // Constat Bridget R5 : deux groupes pouvant tous deux tenir sans barre, mais dont la solution
+        // optimale garde une barre sur A (179 -> contenu 147 >= 140) et la masque sur B (151 -> contenu 151 >= 140).
+        let mixedAltBox = CGRect(x: 0, y: 0, width: 800, height: 340)
+        let mixedAltTree: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 168.5 / 330.0,
+            first: .tabGroup(windowIDs: [w1, w2], active: w1),
+            second: .tabGroup(windowIDs: [w3, w4], active: w3)
+        )
+        let mixedAltSolved = mixedAltTree.correctingForMinimumSize(
+            of: w3,
+            minimum: CGSize(width: 100, height: 140),
+            in: mixedAltBox,
+            innerGap: 10,
+            tabBarHeight: 28,
+            knownMinimums: [w1: CGSize(width: 100, height: 140)]
+        )
+        XCTAssertNotNil(mixedAltSolved)
+        let mixedAltFrames = mixedAltSolved!.place(in: mixedAltBox, innerGap: 10, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(mixedAltFrames[w1]!.height, 140)
+        XCTAssertGreaterThanOrEqual(mixedAltFrames[w3]!.height, 140)
     }
 }

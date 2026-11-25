@@ -925,7 +925,24 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
 
                 let hasTabBarDiscontinuity = axis == .horizontal && tabBarHeight > 0 && tabBarHeight.isFinite && !tree.tabGroups.isEmpty
 
-                func attemptAxis(allowNoBarTabGroup: Bool) -> BSPTree? {
+                // Recense les chemins des `.tabGroup` (≥ 2 onglets) dont le besoin pourrait tenir
+                // sous le seuil de barre (régime alternatif sans barre).
+                var tabGroupPaths: [[Bool]] = []
+                if hasTabBarDiscontinuity {
+                    func collectTabGroupPaths(_ node: BSPTree, path: [Bool]) {
+                        switch node {
+                        case .empty, .leaf: break
+                        case .tabGroup(let ids, _):
+                            if ids.count >= 2 { tabGroupPaths.append(path) }
+                        case .split(_, _, let first, let second):
+                            collectTabGroupPaths(first, path: path + [true])
+                            collectTabGroupPaths(second, path: path + [false])
+                        }
+                    }
+                    collectTabGroupPaths(tree, path: [])
+                }
+
+                func attemptAxis(noBarPaths: Set<[Bool]>) -> BSPTree? {
                     var requirements: [[Bool]: CGFloat] = [:]
                     var upperBounds: [[Bool]: CGFloat] = [:]
 
@@ -953,14 +970,14 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                             if axis == .horizontal, ids.count >= 2, tabBarHeight > 0, tabBarHeight.isFinite {
                                 // La hauteur de contenu présente une discontinuité au seuil d'apparition de la barre
                                 // (T = tabBarHeight + tabBarGap + minimumContentHeightForTabBar).
-                                // Pass 1 : cherche dans l'intervalle avec barre [T, max] ;
-                                // Pass 2 (repli si infaisable) : chaque groupe choisit [0, T - 1] (avec borne
-                                // supérieure conservée pour ne pas faire réapparaître la barre) ou [T, max].
+                                // Chaque groupe teste selon `noBarPaths` le régime sans barre [0, T - 1]
+                                // (avec borne supérieure conservée) ou le régime avec barre [T, max].
                                 let fraction = extent(rect) - floor(extent(rect))
                                 let maxExtent = Int(max(0, floor(extent(container) - fraction)))
                                 let threshold = Int(ceil(tabBarHeight + Self.tabBarGap + Self.minimumContentHeightForTabBar))
                                 let noBarUpper = min(maxExtent, max(0, threshold - 1))
-                                if allowNoBarTabGroup, fitsContent(withExtent(CGFloat(noBarUpper) + fraction, in: rect)) {
+                                if noBarPaths.contains(path) {
+                                    guard fitsContent(withExtent(CGFloat(noBarUpper) + fraction, in: rect)) else { return nil }
                                     var low = 0
                                     var high = noBarUpper
                                     while low < high {
@@ -1077,9 +1094,40 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                     return corrected
                 }
 
-                guard let corrected = attemptAxis(allowNoBarTabGroup: false)
-                    ?? (hasTabBarDiscontinuity ? attemptAxis(allowNoBarTabGroup: true) : nil)
-                else { return nil }
+                // Essayer d'abord toutes les barres visibles, puis les combinaisons de groupes sans barre
+                // triées par nombre croissant de barres masquées (borné à 6 groupes => ≤ 64 essais).
+                var candidates: [Set<[Bool]>] = [[]]
+                if !tabGroupPaths.isEmpty {
+                    let count = tabGroupPaths.count
+                    if count <= 6 {
+                        for k in 1...count {
+                            func combine(_ start: Int, _ current: Set<[Bool]>) {
+                                if current.count == k {
+                                    candidates.append(current)
+                                    return
+                                }
+                                guard start < count else { return }
+                                for i in start..<count {
+                                    var next = current
+                                    next.insert(tabGroupPaths[i])
+                                    combine(i + 1, next)
+                                }
+                            }
+                            combine(0, [])
+                        }
+                    } else {
+                        for path in tabGroupPaths { candidates.append([path]) }
+                        candidates.append(Set(tabGroupPaths))
+                    }
+                }
+                var solvedAxis: BSPTree?
+                for noBarSet in candidates {
+                    if let found = attemptAxis(noBarPaths: noBarSet) {
+                        solvedAxis = found
+                        break
+                    }
+                }
+                guard let corrected = solvedAxis else { return nil }
                 tree = corrected
             }
             return tree
