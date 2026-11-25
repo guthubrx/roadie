@@ -375,4 +375,28 @@ struct Spec166FluidityShortcutsTests {
         #expect(decoded.tiling.scratchpadRebootPolicy == "reattach")
         #expect(decoded.overview.trackpadGesture == false)
     }
+
+    @Test
+    func switcherCommandTabRoutesThroughEventTapMatching() {
+        let plan = WindowSwitcherHotkeyPlan(
+            requests: [
+                WindowSwitcherHotkeyRequest(profileID: "all", hotkey: "command+tab"),
+                WindowSwitcherHotkeyRequest(profileID: "zones", hotkey: "alt+tab"),
+            ],
+            layout: TargetSearchHotkey.standardFallbackLayout
+        )
+        #expect(plan.issues.isEmpty)
+        let cmdEntries = plan.entries.filter { WindowSwitcherHotkeyRegistry.requiresEventTap($0.hotkey) }
+        #expect(cmdEntries.count == 2) // command+tab + command+shift+tab
+
+        let forward = WindowSwitcherHotkeyRegistry.matchTapEntry(keyCode: 48, flags: .maskCommand, in: cmdEntries)
+        #expect(forward?.profileID == "all" && forward?.backwards == false)
+
+        let reverse = WindowSwitcherHotkeyRegistry.matchTapEntry(keyCode: 48, flags: [.maskCommand, .maskShift], in: cmdEntries)
+        #expect(reverse?.profileID == "all" && reverse?.backwards == true)
+
+        // Autres touches ou modificateurs ne sont jamais consommés.
+        #expect(WindowSwitcherHotkeyRegistry.matchTapEntry(keyCode: 48, flags: .maskAlternate, in: cmdEntries) == nil)
+        #expect(WindowSwitcherHotkeyRegistry.matchTapEntry(keyCode: 12, flags: .maskCommand, in: cmdEntries) == nil)
+    }
 }

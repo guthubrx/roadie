@@ -104,11 +104,28 @@ struct WindowSwitcherHotkeyPlan: Equatable, Sendable {
     }
 }
 
-/// Enregistre les raccourcis Carbon du sélecteur. Ne désactive jamais un autre outil.
+/// Enregistre les raccourcis Carbon du sélecteur, avec bascule automatique sur un `CGEventTap`
+/// (nécessaire pour les combinaisons réservées par macOS comme `⌘Tab` / `⌘⇧Tab`).
+/// Ne désactive jamais un autre outil.
 @MainActor
 final class WindowSwitcherHotkeyRegistry {
     static let escapeID: UInt32 = 1000
     private static let signature = OSType(0x5244_5357) // 'RDSW'
+
+    /// `⌘Tab` / `⌘⇧Tab` est réservé par WindowServer/Dock : Carbon seul ne peut pas le consommer.
+    nonisolated static func requiresEventTap(_ hotkey: WindowSwitcherHotkey) -> Bool {
+        hotkey.keyCode == 48 && hotkey.modifiers.contains(.command)
+    }
+
+    /// Résolution pure d'un `keyDown` dans les entrées confiées au `CGEventTap`. O(e).
+    nonisolated static func matchTapEntry(
+        keyCode: UInt32,
+        flags: CGEventFlags,
+        in entries: [WindowSwitcherHotkeyPlan.Entry]
+    ) -> WindowSwitcherHotkeyPlan.Entry? {
+        let held = WindowSwitcherHotkey.held(in: flags)
+        return entries.first { $0.hotkey.keyCode == keyCode && $0.hotkey.modifiers == held }
+    }
 
     private let onPress: @MainActor (_ profileID: String, _ backwards: Bool) -> Void
     private let onEscape: @MainActor () -> Void
@@ -117,6 +134,10 @@ final class WindowSwitcherHotkeyRegistry {
     private var escapeRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private var entries: [WindowSwitcherHotkeyPlan.Entry] = []
+    private var tapEntries: [WindowSwitcherHotkeyPlan.Entry] = []
+    private var eventTap: CFMachPort?
+    private var eventTapSource: CFRunLoopSource?
+    private var eventTapToken: UnsafeMutableRawPointer?
     private var applied: WindowSwitcherHotkeyPlan?
     static var activeProfileIDs: Set<String> = []
     static var activeFingerprints: [String: String] = [:]
@@ -161,6 +182,10 @@ final class WindowSwitcherHotkeyRegistry {
             events.append(RoadieEvent(type: "switcher.hotkey", details: ["state": "issue", "detail": issue]))
         }
         for (index, entry) in plan.entries.enumerated() {
+            if Self.requiresEventTap(entry.hotkey) {
+                tapEntries.append(entry)
+                continue
+            }
             var ref: EventHotKeyRef?
             let id = EventHotKeyID(signature: Self.signature, id: UInt32(index + 1))
             let status = RegisterEventHotKey(
@@ -175,6 +200,23 @@ final class WindowSwitcherHotkeyRegistry {
                     type: "switcher.hotkey",
                     details: ["state": "failed", "profile": entry.profileID, "status": "\(status)"]
                 ))
+            }
+        }
+        if !tapEntries.isEmpty {
+            if installEventTap() {
+                for entry in tapEntries {
+                    successes[entry.profileID, default: 0] += 1
+                }
+                events.append(RoadieEvent(
+                    type: "switcher.hotkey",
+                    details: ["state": "tap_registered", "count": "\(tapEntries.count)"]
+                ))
+            } else {
+                events.append(RoadieEvent(
+                    type: "switcher.hotkey",
+                    details: ["state": "tap_failed", "count": "\(tapEntries.count)"]
+                ))
+                tapEntries = []
             }
         }
         Self.activeProfileIDs = Set(successes.keys.filter { id in successes[id] == plan.entries.filter { $0.profileID == id }.count })
@@ -209,8 +251,76 @@ final class WindowSwitcherHotkeyRegistry {
         Self.activeFingerprints = [:]
         refs.forEach { UnregisterEventHotKey($0) }
         refs = []
+        removeEventTap()
+        tapEntries = []
         holdEscape(false)
         entries = []
+    }
+
+    private func installEventTap() -> Bool {
+        guard eventTap == nil else { return true }
+        guard !TestEnvironment.isRunningTests else { return true }
+        let token = KeyEventTapOwners.shared.register(self)
+        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        let callback: CGEventTapCallBack = { _, type, event, refcon in
+            guard let owner = KeyEventTapOwners.shared.owner(for: refcon) as? WindowSwitcherHotkeyRegistry else {
+                return Unmanaged.passUnretained(event)
+            }
+            let consumed = MainActor.assumeIsolated { owner.handleTapEvent(type, event: event) }
+            return consumed ? nil : Unmanaged.passUnretained(event)
+        }
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: callback,
+            userInfo: token
+        ) else {
+            KeyEventTapOwners.shared.remove(token)
+            return false
+        }
+        eventTap = tap
+        eventTapToken = token
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        eventTapSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        return true
+    }
+
+    private func removeEventTap() {
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
+        }
+        if let source = eventTapSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        if let token = eventTapToken {
+            KeyEventTapOwners.shared.remove(token)
+        }
+        eventTap = nil
+        eventTapSource = nil
+        eventTapToken = nil
+    }
+
+    private func handleTapEvent(_ type: CGEventType, event: CGEvent) -> Bool {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
+            return false
+        }
+        guard type == .keyDown else { return false }
+        let keyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
+        guard let match = Self.matchTapEntry(keyCode: keyCode, flags: event.flags, in: tapEntries) else {
+            return false
+        }
+        let profileID = match.profileID
+        let backwards = match.backwards
+        Task { @MainActor [weak self] in
+            self?.onPress(profileID, backwards)
+        }
+        return true
     }
 
     private func installHandler() {
