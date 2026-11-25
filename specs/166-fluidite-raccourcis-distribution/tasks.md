@@ -11,4 +11,4 @@
 - [x] **T009** Créer `scripts/generate-cask`, `Casks/roadie.rb`, `scripts/install-release.sh`, `.github/workflows/release.yml` et mettre à jour `scripts/package-dmg` et `Makefile`.
 - [x] **T010** Écrire les suites de tests `Tests/RoadieDaemonTests/Spec166FluidityShortcutsTests.swift` et `scripts/tests/test_distribution.py`.
 - [x] **T011** Mettre à jour la documentation FR/EN (`README*.md`, `docs/{fr,en}/{features,cli,use-cases}.md`, `CHANGELOG.md`, `journal.md`).
-- [ ] **T012** Exécuter les suites complètes Swift & Python, lancer la revue indépendante Bridget, fusionner sur `main`, installer (`roadied-cert`), redémarrer, vérifier `roadie daemon health --json` et nettoyer.
+- [x] **T012** Exécuter les suites complètes Swift & Python, lancer la revue indépendante Bridget, fusionner sur `main`, installer (`roadied-cert`), redémarrer, vérifier `roadie daemon health --json` et nettoyer.
