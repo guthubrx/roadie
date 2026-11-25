@@ -178,6 +178,9 @@ public final class LayoutMaintainer {
     private var commandGeneration: UInt64?
     private var lastTreeWindowIDs: Set<UInt32> = []
     private var unreadyPlacementWindows: Set<WindowID> = []
+    /// Fenêtres dont une transition animée a échoué avant toute écriture AX réelle
+    /// (`writtenFrames.entry == nil`), pour purger `failedFrames` même si AX répond dès la passe suivante.
+    private var preAXFailedTransitionWindows: Set<WindowID> = []
     /// Reprise rapide bornée lorsqu'une nouvelle fenêtre CG précède sa disponibilité AX :
     /// évite d'attendre 2 à 4 s le filet `safety`, puis laisse le filet prendre le relais au plafond.
     private static let unreadyPlacementRetryDelays: [TimeInterval] = [0.15, 0.25, 0.4, 0.6, 1.0, 1.0]
@@ -1456,7 +1459,9 @@ public final class LayoutMaintainer {
                 }
             } else {
                 placementResolvedPIDs[id] = entry.window.pid
-                guard unreadyPlacementWindows.contains(id) else { continue }
+                let wasUnready = unreadyPlacementWindows.contains(id)
+                let hadPreAXFailure = preAXFailedTransitionWindows.remove(id) != nil
+                guard wasUnready || hadPreAXFailure else { continue }
                 // Aucun appel de placement AX enregistré : un ancien échec pré-AX
                 // (ex. transition animée pendant la quarantaine ou avant disponibilité AX)
                 // ne doit ni épuiser le budget ni bloquer le premier placement réel.
@@ -1464,9 +1469,11 @@ public final class LayoutMaintainer {
                 failedFrames[id.rawValue] = nil
                 expiredFailures[id.rawValue] = nil
                 failedRestorations[id] = nil
-                events.append(RoadieEvent(type: "layout_window_ax_ready", scope: scope, details: [
-                    "windowID": String(id.rawValue)
-                ]))
+                if wasUnready {
+                    events.append(RoadieEvent(type: "layout_window_ax_ready", scope: scope, details: [
+                        "windowID": String(id.rawValue)
+                    ]))
+                }
             }
         }
         if unavailable.isEmpty {
@@ -2295,6 +2302,7 @@ public final class LayoutMaintainer {
         }
         expiredFailures = expiredFailures.filter { liveWindowIDs.contains($0.key) && failedFrames[$0.key] == nil }
         failedRestorations = failedRestorations.filter { liveWindowIDs.contains($0.key.rawValue) }
+        preAXFailedTransitionWindows = preAXFailedTransitionWindows.filter { liveWindowIDs.contains($0.rawValue) }
         revertedAppliedFrames = revertedAppliedFrames.filter { liveWindowIDs.contains($0.key) }
         writeCounts = writeCounts.filter { liveWindowIDs.contains($0.key) }
         externalReverts = externalReverts.filter { liveWindowIDs.contains($0.key) }
@@ -3327,10 +3335,15 @@ public final class LayoutMaintainer {
     /// seulement tant que le résultat appartient encore à la génération active.
     public func recordTransition(_ result: ApplyResult, from plan: ApplyPlan, generation: UInt64) {
         guard generation == generations.current else { return }
-        for item in result.items where item.status == .failed && writtenFrames.entry(for: item.windowID.rawValue) == nil {
-            // La résolution AX a échoué avant toute écriture réelle : réinitialiser le marqueur
-            // pour qu'unreadyPlacementScopes réessaie puis purge l'échec transitoire dès disponibilité.
-            placementResolvedPIDs[item.windowID] = nil
+        for item in result.items {
+            if item.status == .failed && writtenFrames.entry(for: item.windowID.rawValue) == nil {
+                // La résolution AX a échoué avant toute écriture réelle : réinitialiser le marqueur
+                // et mémoriser l'échec pré-AX pour purger failedFrames dès que la fenêtre est lisible.
+                placementResolvedPIDs[item.windowID] = nil
+                preAXFailedTransitionWindows.insert(item.windowID)
+            } else if item.status == .applied || item.status == .clamped {
+                preAXFailedTransitionWindows.remove(item.windowID)
+            }
         }
         record(result, from: plan)
         appendItemEvents(result, generation: generation)

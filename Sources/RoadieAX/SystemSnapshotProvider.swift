@@ -333,6 +333,9 @@ public final class AXUnresponsiveApps: Sendable {
         var resumeAt: [pid_t: Date] = [:]
         var startupGraceUntil: [pid_t: Date] = [:]
         var responsivePIDs: Set<pid_t> = []
+        /// Compteur monotone incrémenté par `forget(_:)` pour invalider toute sonde `launchDateProvider`
+        /// exécutée hors verrou avant la fermeture du processus.
+        var forgetGeneration: UInt64 = 0
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -390,6 +393,7 @@ public final class AXUnresponsiveApps: Sendable {
             s.resumeAt[pid] = nil
             s.startupGraceUntil[pid] = nil
             s.responsivePIDs.remove(pid)
+            s.forgetGeneration &+= 1
         }
     }
 
@@ -401,43 +405,48 @@ public final class AXUnresponsiveApps: Sendable {
     func noteResult(_ error: AXError, pid: pid_t, elapsed: TimeInterval? = nil) -> Bool {
         guard error == .cannotComplete else { return false }
         let current = now()
-        let isFastStartupFailure: Bool
-        if let elapsed, elapsed < Self.slowCallThreshold {
-            enum StartupProbe { case inGrace, notInGrace, checkLaunchDate }
-            let probe = state.withLock { s -> StartupProbe in
-                if let graceUntil = s.startupGraceUntil[pid] {
-                    if current < graceUntil { return .inGrace }
-                    s.startupGraceUntil[pid] = nil
-                    return .notInGrace
+        guard let elapsed, elapsed < Self.slowCallThreshold else {
+            markUnresponsive(pid, duration: Self.quarantineDuration)
+            return true
+        }
+        enum FastProbe { case recorded, checkLaunchDate(UInt64) }
+        let probe = state.withLock { s -> FastProbe in
+            if let graceUntil = s.startupGraceUntil[pid] {
+                if current < graceUntil {
+                    s.resumeAt[pid] = current.addingTimeInterval(Self.startupBackoffDuration)
+                    return .recorded
                 }
-                return s.responsivePIDs.contains(pid) ? .notInGrace : .checkLaunchDate
+                s.startupGraceUntil[pid] = nil
+                s.resumeAt[pid] = current.addingTimeInterval(Self.quarantineDuration)
+                return .recorded
             }
-            switch probe {
-            case .inGrace:
-                isFastStartupFailure = true
-            case .notInGrace:
-                isFastStartupFailure = false
-            case .checkLaunchDate:
-                if let launchDate = launchDateProvider(pid) {
+            if s.responsivePIDs.contains(pid) {
+                s.resumeAt[pid] = current.addingTimeInterval(Self.quarantineDuration)
+                return .recorded
+            }
+            return .checkLaunchDate(s.forgetGeneration)
+        }
+        if case .checkLaunchDate(let capturedGeneration) = probe {
+            let launchDate = launchDateProvider(pid)
+            state.withLock { s in
+                // Si `forget(_:)` a tourné pendant la sonde hors verrou, ne pas recréer d'état obsolète.
+                guard s.forgetGeneration == capturedGeneration else { return }
+                let isFastStartupFailure: Bool
+                if !s.responsivePIDs.contains(pid), let launchDate {
                     let age = current.timeIntervalSince(launchDate)
                     if age >= -0.5, age < Self.startupGraceDuration {
-                        let until = launchDate.addingTimeInterval(Self.startupGraceDuration)
-                        isFastStartupFailure = state.withLock { s in
-                            guard !s.responsivePIDs.contains(pid) else { return false }
-                            s.startupGraceUntil[pid] = until
-                            return true
-                        }
+                        s.startupGraceUntil[pid] = launchDate.addingTimeInterval(Self.startupGraceDuration)
+                        isFastStartupFailure = true
                     } else {
                         isFastStartupFailure = false
                     }
                 } else {
                     isFastStartupFailure = false
                 }
+                let duration = isFastStartupFailure ? Self.startupBackoffDuration : Self.quarantineDuration
+                s.resumeAt[pid] = current.addingTimeInterval(duration)
             }
-        } else {
-            isFastStartupFailure = false
         }
-        markUnresponsive(pid, duration: isFastStartupFailure ? Self.startupBackoffDuration : Self.quarantineDuration)
         return true
     }
 

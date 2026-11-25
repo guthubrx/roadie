@@ -114,6 +114,41 @@ struct AXUnresponsiveAppsTests {
         #expect(!registry.isQuarantined(105))
     }
 
+    @Test
+    func concurrentForgetDuringLaunchDateProbeDoesNotRecreateQuarantineOrGraceState() {
+        let clock = ManualClock()
+        let launchedAt = clock.now.addingTimeInterval(-0.2)
+        let probeEntered = DispatchSemaphore(value: 0)
+        let releaseProbe = DispatchSemaphore(value: 0)
+        let registry = AXUnresponsiveApps(
+            now: { clock.now },
+            launchDateProvider: { pid in
+                guard pid == 106 else { return nil }
+                probeEntered.signal()
+                _ = releaseProbe.wait(timeout: .now() + 5)
+                return launchedAt
+            }
+        )
+
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            _ = registry.noteResult(.cannotComplete, pid: 106, elapsed: 0.002)
+            finished.signal()
+        }
+
+        // La sonde launchDateProvider est en vol hors verrou : un autre thread ferme l'app.
+        #expect(probeEntered.wait(timeout: .now() + 5) == .success)
+        registry.forget(106)
+        releaseProbe.signal()
+        #expect(finished.wait(timeout: .now() + 5) == .success)
+
+        // Aucune quarantaine ni grâce résiduelle ne doit avoir été recréée après forget(106).
+        #expect(!registry.isQuarantined(106))
+        // Un appel ultérieur sans durée mesurée (`elapsed: nil`) confirme l'absence d'état corrompu.
+        #expect(registry.noteResult(.cannotComplete, pid: 106))
+        #expect(registry.isQuarantined(106))
+    }
+
     @Test @MainActor
     func startupCatchupPersistsAcrossInterruptedRetryUntilEnumerationSucceeds() {
         let observer = AXWindowEventObserver(onWindowEvent: { _ in })

@@ -149,8 +149,8 @@ struct Spec037PlacementReadinessTests {
         #expect(!log.contains("write_budget_exhausted"))
     }
 
-    @Test
-    func animatedPreAXFailureDoesNotBlockPlacementOnceWindowBecomesAXReady() throws {
+    @Test(arguments: [true, false])
+    func animatedPreAXFailureDoesNotBlockPlacementOnceWindowBecomesAXReady(hasIntermediateUnavailableTick: Bool) throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("placement037-anim-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -194,21 +194,25 @@ struct Spec037PlacementReadinessTests {
         ])
         maintainer.recordTransition(failedResult, from: failedPlan, generation: generations.current)
 
-        // Passe d'attente AX : la fenêtre est indisponible, `ax_ready_retry` est armé.
-        _ = maintainer.tick(cause: "ax:AXWindowMoved")
-        #expect(maintainer.nextDeadline(now: clock.now) != nil)
-        #expect(provider.snapshots.first { $0.id == terminal.id }?.frame == terminal.frame)
+        if hasIntermediateUnavailableTick {
+            // Passe d'attente AX : la fenêtre est indisponible, `ax_ready_retry` est armé.
+            _ = maintainer.tick(cause: "ax:AXWindowMoved")
+            #expect(maintainer.nextDeadline(now: clock.now) != nil)
+            #expect(provider.snapshots.first { $0.id == terminal.id }?.frame == terminal.frame)
+        }
 
-        // 0.2 s plus tard (bien avant les 30 s de failedFrames), AX devient prêt :
-        // la fenêtre doit être immédiatement placée dans le canevas.
+        // 0.2 s plus tard (bien avant les 30 s de failedFrames), AX répond — soit après
+        // une passe indisponible intermédiaire, soit dès la toute première passe après l'échec.
         writer.unavailable.remove(terminal.id)
         clock.now += 0.2
-        _ = maintainer.tick(cause: "deadline:ax_ready_retry")
+        _ = maintainer.tick(cause: hasIntermediateUnavailableTick ? "deadline:ax_ready_retry" : "ax:AXWindowMoved")
 
         #expect(provider.snapshots.first { $0.id == terminal.id }?.frame == targetFrame)
         let log = try String(contentsOfFile: path("events.jsonl"), encoding: .utf8)
-        #expect(log.contains("\"type\":\"layout_window_waiting_for_ax\""))
-        #expect(log.contains("\"type\":\"layout_window_ax_ready\""))
+        if hasIntermediateUnavailableTick {
+            #expect(log.contains("\"type\":\"layout_window_waiting_for_ax\""))
+            #expect(log.contains("\"type\":\"layout_window_ax_ready\""))
+        }
     }
 
     @Test
