@@ -305,4 +305,53 @@ final class Spec165TabbedBSPTreeTests: XCTestCase {
         XCTAssertEqual(lastActive.projected(excluding: [w4]), lastActive.removing(w4))
         XCTAssertEqual(lastActive.projected(excluding: [w4]), .tabGroup(windowIDs: [w1, w2, w3], active: w3))
     }
+
+    /// Constats Bridget R2 #1 et #2 :
+    /// - #1 : `movingDivider` avec `tabBarHeight` bloque avant que le contenu d'un `.tabGroup` ne passe sous son minimum.
+    /// - #2 : `correctingForMinimumSize` traite séparément les intervalles avec et sans barre à la discontinuité
+    ///        (cas exact : conteneur 350, gap 10, voisine 210 min 200, groupe 130 min 140, barre 28 -> trouve 200/140).
+    func testCorrectingMinimumHandlesTabBarDiscontinuityAndDividerRespectsContentMinimum() {
+        // #2 : Discontinuité au seuil de barre (151 -> 120) : conteneur 350, gap 10, A=210 (min 200), [B,C]=130 (min 140)
+        let smallContainer = CGRect(x: 0, y: 0, width: 800, height: 350)
+        let tightTree: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 210.5 / 340.0,
+            first: .leaf(w1),
+            second: .tabGroup(windowIDs: [w2, w3], active: w2)
+        )
+        let solved = tightTree.correctingForMinimumSize(
+            of: w2,
+            minimum: CGSize(width: 100, height: 140),
+            in: smallContainer,
+            innerGap: 10,
+            tabBarHeight: 28,
+            knownMinimums: [w1: CGSize(width: 100, height: 200)]
+        )
+        XCTAssertNotNil(solved)
+        let solvedFrames = solved!.place(in: smallContainer, innerGap: 10, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(solvedFrames[w1]!.height, 200)
+        XCTAssertGreaterThanOrEqual(solvedFrames[w2]!.height, 140)
+
+        // #1 : `movingDivider` avec `tabBarHeight = 28` empêche le contenu de la tuile basse de descendre sous 350
+        let tallBox = CGRect(x: 0, y: 0, width: 800, height: 800)
+        let tallTree: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 0.4,
+            first: .leaf(w1),
+            second: .tabGroup(windowIDs: [w2, w3], active: w2)
+        )
+        let div = tallTree.dividers(in: tallBox, innerGap: 10)[0]
+        // Demander y = 435 laisserait ~360 pt de tuile (soit seulement 328 pt de contenu < 350)
+        let moved = tallTree.movingDivider(
+            at: div.path,
+            to: CGPoint(x: 400, y: 435),
+            in: tallBox,
+            innerGap: 10,
+            tabBarHeight: 28,
+            knownMinimums: [w2: CGSize(width: 100, height: 350)]
+        )
+        XCTAssertNotNil(moved)
+        let movedFrames = moved!.place(in: tallBox, innerGap: 10, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(movedFrames[w2]!.height, 350)
+    }
 }

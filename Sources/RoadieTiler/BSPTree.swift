@@ -882,7 +882,6 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                 guard let current = before[window] else { return nil }
                 guard extent(current) < need else { continue }
                 let chain = tree.ancestors(of: window, in: container, innerGap: innerGap)
-                var requirements: [[Bool]: CGFloat] = [:]
 
                 func withExtent(_ value: CGFloat, in rect: CGRect) -> CGRect {
                     var result = rect
@@ -915,90 +914,141 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                     return lower <= upper ? lower...upper : nil
                 }
 
-                func requiredExtent(of node: BSPTree, in rect: CGRect, path: [Bool]) -> CGFloat? {
-                    let required: CGFloat?
-                    switch node {
-                    case .empty:
-                        required = 0
-                    case .leaf(let id):
-                        let known = knownMinimums[id].map { ceil(axis == .vertical ? $0.width : $0.height) } ?? 0
-                        // Une voisine déjà sous son minimum peut rester identique, mais pas rétrécir.
-                        let leafNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
-                        required = minimumExtent(in: rect) { extent($0.integral) >= leafNeed }
-                    case .tabGroup(let ids, _):
-                        var groupNeed: CGFloat = 0
-                        for id in ids {
+                let hasTabBarDiscontinuity = axis == .horizontal && tabBarHeight > 0 && tabBarHeight.isFinite && !tree.tabGroups.isEmpty
+
+                func attemptAxis(allowNoBarTabGroup: Bool) -> BSPTree? {
+                    var requirements: [[Bool]: CGFloat] = [:]
+
+                    func requiredExtent(of node: BSPTree, in rect: CGRect, path: [Bool]) -> CGFloat? {
+                        let required: CGFloat?
+                        switch node {
+                        case .empty:
+                            required = 0
+                        case .leaf(let id):
                             let known = knownMinimums[id].map { ceil(axis == .vertical ? $0.width : $0.height) } ?? 0
-                            let memberNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
-                            groupNeed = max(groupNeed, memberNeed)
-                        }
-                        required = minimumExtent(in: rect) { candidateRect in
-                            let (_, content) = Self.splitTabBar(in: candidateRect, tabBarHeight: tabBarHeight, count: ids.count)
-                            return extent(content) >= groupNeed
-                        }
-                    case .split(let orientation, let ratio, let first, let second):
-                        let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
-                        guard let a = requiredExtent(of: first, in: rects.first, path: path + [true]),
-                              let b = requiredExtent(of: second, in: rects.second, path: path + [false])
-                        else { return nil }
-                        if orientation != axis {
-                            required = max(a, b)
-                        } else if node.contains(window) {
-                            required = minimumExtent(in: rect) {
-                                firstExtentRange(usable: Self.usableExtent(of: $0, orientation: axis, innerGap: innerGap),
-                                                 first: a, second: b) != nil
+                            // Une voisine déjà sous son minimum peut rester identique, mais pas rétrécir.
+                            let leafNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
+                            required = minimumExtent(in: rect) { extent($0.integral) >= leafNeed }
+                        case .tabGroup(let ids, _):
+                            var groupNeed: CGFloat = 0
+                            for id in ids {
+                                let known = knownMinimums[id].map { ceil(axis == .vertical ? $0.width : $0.height) } ?? 0
+                                let memberNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
+                                groupNeed = max(groupNeed, memberNeed)
                             }
-                        } else {
-                            // Les sous-arbres voisins gardent leurs ratios, donc aussi leurs coupes internes.
-                            required = minimumExtent(in: rect) {
-                                let children = Self.childRects(of: $0, orientation: orientation, ratio: ratio, innerGap: innerGap)
-                                return extent(children.first) >= a && extent(children.second) >= b
+                            let fitsContent: (CGRect) -> Bool = { candidateRect in
+                                let (_, content) = Self.splitTabBar(in: candidateRect, tabBarHeight: tabBarHeight, count: ids.count)
+                                return extent(content) >= groupNeed
+                            }
+                            if axis == .horizontal, ids.count >= 2, tabBarHeight > 0, tabBarHeight.isFinite {
+                                // La hauteur de contenu présente une discontinuité au seuil d'apparition de la barre
+                                // (T = tabBarHeight + tabBarGap + minimumContentHeightForTabBar).
+                                // Pass 1 : cherche dans l'intervalle avec barre [T, max] ;
+                                // Pass 2 (repli si infaisable) : cherche dans l'intervalle sans barre [0, T - 1].
+                                let fraction = extent(rect) - floor(extent(rect))
+                                let maxExtent = Int(max(0, floor(extent(container) - fraction)))
+                                let threshold = Int(ceil(tabBarHeight + Self.tabBarGap + Self.minimumContentHeightForTabBar))
+                                if allowNoBarTabGroup {
+                                    let noBarUpper = min(maxExtent, max(0, threshold - 1))
+                                    if fitsContent(withExtent(CGFloat(noBarUpper) + fraction, in: rect)) {
+                                        var low = 0
+                                        var high = noBarUpper
+                                        while low < high {
+                                            let middle = low + (high - low) / 2
+                                            if fitsContent(withExtent(CGFloat(middle) + fraction, in: rect)) { high = middle }
+                                            else { low = middle + 1 }
+                                        }
+                                        required = CGFloat(low) + fraction
+                                    } else {
+                                        required = nil
+                                    }
+                                } else {
+                                    let barLower = min(maxExtent, threshold)
+                                    if fitsContent(withExtent(CGFloat(maxExtent) + fraction, in: rect)) {
+                                        var low = barLower
+                                        var high = maxExtent
+                                        while low < high {
+                                            let middle = low + (high - low) / 2
+                                            if fitsContent(withExtent(CGFloat(middle) + fraction, in: rect)) { high = middle }
+                                            else { low = middle + 1 }
+                                        }
+                                        required = CGFloat(low) + fraction
+                                    } else {
+                                        required = nil
+                                    }
+                                }
+                            } else {
+                                required = minimumExtent(in: rect, fits: fitsContent)
+                            }
+                        case .split(let orientation, let ratio, let first, let second):
+                            let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
+                            guard let a = requiredExtent(of: first, in: rects.first, path: path + [true]),
+                                  let b = requiredExtent(of: second, in: rects.second, path: path + [false])
+                            else { return nil }
+                            if orientation != axis {
+                                required = max(a, b)
+                            } else if node.contains(window) {
+                                required = minimumExtent(in: rect) {
+                                    firstExtentRange(usable: Self.usableExtent(of: $0, orientation: axis, innerGap: innerGap),
+                                                     first: a, second: b) != nil
+                                }
+                            } else {
+                                // Les sous-arbres voisins gardent leurs ratios, donc aussi leurs coupes internes.
+                                required = minimumExtent(in: rect) {
+                                    let children = Self.childRects(of: $0, orientation: orientation, ratio: ratio, innerGap: innerGap)
+                                    return extent(children.first) >= a && extent(children.second) >= b
+                                }
                             }
                         }
+                        if let required { requirements[path] = required }
+                        return required
                     }
-                    if let required { requirements[path] = required }
-                    return required
+
+                    guard requiredExtent(of: tree, in: container, path: []) != nil,
+                          let anchor = chain.reversed().first(where: {
+                              $0.orientation == axis && extent($0.rect) >= (requirements[$0.path] ?? .infinity)
+                          })
+                    else { return nil }
+
+                    func correcting(_ node: BSPTree, in rect: CGRect, path: [Bool]) -> BSPTree? {
+                        guard case .split(let orientation, let ratio, let first, let second) = node else { return node }
+                        let inFirst = first.contains(window)
+                        var newRatio = ratio
+                        if orientation == axis, path.count >= anchor.path.count {
+                            let usable = Self.usableExtent(of: rect, orientation: axis, innerGap: innerGap)
+                            guard usable > 0,
+                                  let a = requirements[path + [true]], let b = requirements[path + [false]],
+                                  let allowed = firstExtentRange(usable: usable, first: a, second: b)
+                            else { return nil }
+                            let oldExtent = floor(usable * min(max(ratio, Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound))
+                            let newExtent = min(max(oldExtent, allowed.lowerBound), allowed.upperBound)
+                            if newExtent != oldExtent {
+                                // Le milieu de l'intervalle qui produit cet entier évite les erreurs d'arrondi.
+                                newRatio = min(max(Double((newExtent + 0.5) / usable), Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound)
+                            }
+                        }
+                        let rects = Self.childRects(of: rect, orientation: orientation, ratio: newRatio, innerGap: innerGap)
+                        if inFirst {
+                            guard let child = correcting(first, in: rects.first, path: path + [true]) else { return nil }
+                            return .split(orientation: orientation, ratio: newRatio, first: child, second: second)
+                        }
+                        guard let child = correcting(second, in: rects.second, path: path + [false]) else { return nil }
+                        return .split(orientation: orientation, ratio: newRatio, first: first, second: child)
+                    }
+
+                    guard let corrected = correcting(tree, in: container, path: []) else { return nil }
+                    let after = corrected.place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
+                    guard let reached = after[window], extent(reached) >= need,
+                          knownMinimums.allSatisfy({ id, known in
+                              guard let old = before[id], let new = after[id], extent(new) < extent(old) else { return true }
+                              return extent(new) >= ceil(axis == .vertical ? known.width : known.height)
+                          })
+                    else { return nil }
+                    return corrected
                 }
 
-                guard requiredExtent(of: tree, in: container, path: []) != nil,
-                      let anchor = chain.reversed().first(where: {
-                          $0.orientation == axis && extent($0.rect) >= (requirements[$0.path] ?? .infinity)
-                      })
-                else { return nil }
-
-                func correcting(_ node: BSPTree, in rect: CGRect, path: [Bool]) -> BSPTree? {
-                    guard case .split(let orientation, let ratio, let first, let second) = node else { return node }
-                    let inFirst = first.contains(window)
-                    var newRatio = ratio
-                    if orientation == axis, path.count >= anchor.path.count {
-                        let usable = Self.usableExtent(of: rect, orientation: axis, innerGap: innerGap)
-                        guard usable > 0,
-                              let a = requirements[path + [true]], let b = requirements[path + [false]],
-                              let allowed = firstExtentRange(usable: usable, first: a, second: b)
-                        else { return nil }
-                        let oldExtent = floor(usable * min(max(ratio, Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound))
-                        let newExtent = min(max(oldExtent, allowed.lowerBound), allowed.upperBound)
-                        if newExtent != oldExtent {
-                            // Le milieu de l'intervalle qui produit cet entier évite les erreurs d'arrondi.
-                            newRatio = min(max(Double((newExtent + 0.5) / usable), Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound)
-                        }
-                    }
-                    let rects = Self.childRects(of: rect, orientation: orientation, ratio: newRatio, innerGap: innerGap)
-                    if inFirst {
-                        guard let child = correcting(first, in: rects.first, path: path + [true]) else { return nil }
-                        return .split(orientation: orientation, ratio: newRatio, first: child, second: second)
-                    }
-                    guard let child = correcting(second, in: rects.second, path: path + [false]) else { return nil }
-                    return .split(orientation: orientation, ratio: newRatio, first: first, second: child)
-                }
-
-                guard let corrected = correcting(tree, in: container, path: []) else { return nil }
-                let after = corrected.place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
-                guard let reached = after[window], extent(reached) >= need,
-                      knownMinimums.allSatisfy({ id, known in
-                          guard let old = before[id], let new = after[id], extent(new) < extent(old) else { return true }
-                          return extent(new) >= ceil(axis == .vertical ? known.width : known.height)
-                      })
+                guard let corrected = attemptAxis(allowNoBarTabGroup: false)
+                    ?? (hasTabBarDiscontinuity ? attemptAxis(allowNoBarTabGroup: true) : nil)
                 else { return nil }
                 tree = corrected
             }

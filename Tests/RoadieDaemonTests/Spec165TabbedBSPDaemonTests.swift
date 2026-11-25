@@ -397,4 +397,58 @@ struct Spec165TabbedBSPDaemonTests {
         )
         #expect(reconciled == .tabGroup(windowIDs: [w1.id, w2.id, w4.id], active: w4.id))
     }
+
+    /// Constat Bridget R2 #1 : `DividerResizeCoordinator.flush()` transmet `tabBarHeight` à `movingDivider`
+    /// afin qu'un glisser de séparation ne réduise jamais le contenu d'un `.tabGroup` sous son minimum.
+    @Test @MainActor func dividerResizeCoordinatorRespectsTabBarHeightWithKnownMinimum() throws {
+        let dir = try tempDir("divider-tabbar")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let stageStore = StageStore(path: dir.appendingPathComponent("stages.json").path)
+        let eventLog = EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+        let disp = display("d-div", width: 800, height: 800)
+        let w1Init = window(601, app: "Notes", title: "Top")
+        let w2Init = window(602, app: "Terminal", title: "Tab1")
+        let w3Init = window(603, app: "Safari", title: "Tab2")
+        let tree: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 0.4,
+            first: .leaf(w1Init.id),
+            second: .tabGroup(windowIDs: [w2Init.id, w3Init.id], active: w2Init.id)
+        )
+        let placed = tree.place(in: disp.visibleFrame.cgRect, innerGap: 10, tabBarHeight: 28)
+        let w1 = window(601, app: "Notes", title: "Top", frame: Rect(placed[w1Init.id]!))
+        let w2 = window(602, app: "Terminal", title: "Tab1", frame: Rect(placed[w2Init.id]!))
+        let w3 = window(603, app: "Safari", title: "Tab2", frame: Rect(placed[w3Init.id]!))
+        let provider = MutableProvider(displays: [disp], windows: [w1, w2, w3], focused: w2.id)
+        let config = RoadieConfig(tiling: TilingConfig(
+            defaultStrategy: .spatialBsp,
+            resizeHandles: true,
+            gapsOuter: 0,
+            gapsInner: 10,
+            tabbedBarHeight: 28
+        ))
+        let service = SnapshotService(provider: provider, frameWriter: provider, config: config, stageStore: stageStore, events: eventLog)
+
+        let initialSnap = service.snapshot()
+        let scope = try #require(initialSnap.windows.first?.scope)
+        try stageStore.mutateChecked { $0.setBSPTree(tree, for: scope) }
+        let snap = service.snapshot()
+
+        let coordinator = DividerResizeCoordinator(
+            service: service,
+            configLoader: { config },
+            events: eventLog,
+            minimums: { _, _ in [w2.id: CGSize(width: 100, height: 350)] }
+        )
+        let handles = coordinator.update(snapshot: snap)
+        let handle = try #require(handles.first)
+        #expect(coordinator.begin(handle, at: handle.divider.position))
+        // Demander y=435 laisserait ~360 pt de tuile (soit 328 pt de contenu < 350 si tabBarHeight était ignoré)
+        coordinator.queue(handle, at: CGPoint(x: 400, y: 435))
+        coordinator.flush()
+
+        let savedTree = try #require(stageStore.state().bspTree(for: scope))
+        let savedFrames = savedTree.place(in: disp.visibleFrame.cgRect, innerGap: 10, tabBarHeight: 28)
+        #expect(try #require(savedFrames[w2.id]).height >= 350)
+    }
 }

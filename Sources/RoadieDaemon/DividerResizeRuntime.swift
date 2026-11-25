@@ -229,8 +229,8 @@ final class DividerResizeCoordinator {
         let context = current.context
         guard let changed = context.tree.movingDivider(
             at: current.handle.divider.path, to: point, in: context.geometry.container,
-            innerGap: context.geometry.innerGap, excluding: context.geometry.absent,
-            knownMinimums: current.minimums
+            innerGap: context.geometry.innerGap, tabBarHeight: context.geometry.tabBarHeight,
+            excluding: context.geometry.absent, knownMinimums: current.minimums
         ), changed != context.tree,
            context.geometry.frames(of: changed) != context.geometry.frames(of: context.tree)
         else { session = current; return }
