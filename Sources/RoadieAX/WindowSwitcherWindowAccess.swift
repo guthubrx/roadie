@@ -70,14 +70,16 @@ public enum WindowSwitcherWindowAccess {
         let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return nil }
         var raw: CFArray?
+        let start = CFAbsoluteTimeGetCurrent()
         let error = AXCallTimings.shared.measure(pid) {
             AXUIElementCopyMultipleAttributeValues(
                 element, stateAttributeNames as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
             )
         }
-        if registry.noteResult(error, pid: pid) { return nil }
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        if registry.noteResult(error, pid: pid, elapsed: elapsed) { return nil }
         let values = error == .success ? (raw as? [AnyObject]) ?? [] : []
-        if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry) { return nil }
+        if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry, elapsed: elapsed) { return nil }
         return values
     }
 
@@ -112,8 +114,9 @@ public enum WindowSwitcherWindowAccess {
             }
             let button = raw as! AXUIElement
             guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return .refused(AXError.cannotComplete.rawValue) }
+            let start = CFAbsoluteTimeGetCurrent()
             let error = AXUIElementPerformAction(button, kAXPressAction as CFString)
-            AXUnresponsiveApps.shared.noteResult(error, pid: pid)
+            AXUnresponsiveApps.shared.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
             return error == .success ? .performed : .refused(error.rawValue)
         }
     }
@@ -124,9 +127,10 @@ public enum WindowSwitcherWindowAccess {
                 return .refused(AXError.noValue.rawValue)
             }
             guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return .refused(AXError.cannotComplete.rawValue) }
+            let start = CFAbsoluteTimeGetCurrent()
             let error = AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString,
                                                     minimized ? kCFBooleanFalse : kCFBooleanTrue)
-            AXUnresponsiveApps.shared.noteResult(error, pid: pid)
+            AXUnresponsiveApps.shared.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
             return error == .success ? .performed : .refused(error.rawValue)
         }
     }
@@ -171,8 +175,9 @@ public enum WindowSwitcherWindowAccess {
         let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return nil }
         var raw: CFTypeRef?
+        let start = CFAbsoluteTimeGetCurrent()
         let error = AXUIElementCopyAttributeValue(element, name as CFString, &raw)
-        registry.noteResult(error, pid: pid)
+        registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
         return error == .success ? raw : nil
     }
 }

@@ -246,8 +246,9 @@ public final class AXWindowEventObserver {
     private static func windowID(of element: AXUIElement, pid: pid_t) -> CGWindowID? {
         guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return nil }
         var id = CGWindowID()
+        let start = CFAbsoluteTimeGetCurrent()
         let error = AXUIElementGetWindowID(element, &id)
-        AXUnresponsiveApps.shared.noteResult(error, pid: pid)
+        AXUnresponsiveApps.shared.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
         return error == .success && id > 0 ? id : nil
     }
 
@@ -365,8 +366,9 @@ public final class AXWindowEventObserver {
     private func watchDestruction(of window: AXUIElement, id: CGWindowID?, observer: AXObserver, pid: pid_t) -> Bool {
         if let id { watchedWindowIDs[pid, default: [:]][window] = id }
         let context = Unmanaged.passUnretained(self).toOpaque()
+        let start = CFAbsoluteTimeGetCurrent()
         let error = AXObserverAddNotification(observer, window, kAXUIElementDestroyedNotification as CFString, context)
-        return AXUnresponsiveApps.shared.noteResult(error, pid: pid)
+        return AXUnresponsiveApps.shared.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
     }
 
     /// Fin de l'application ou arret : ses fenetres sortent du registre et des caches.
@@ -377,7 +379,7 @@ public final class AXWindowEventObserver {
             cancelFrameRead(id)
             writtenFrames.forget(windowID: id)
         }
-        AXUnresponsiveApps.shared.markResponsive(pid)
+        AXUnresponsiveApps.shared.forget(pid)
         AXAttributeCache.shared.invalidate(pid: pid)
         AXWindowIndexCache.shared.invalidate(pid: pid)
         guard let observer = observers.removeValue(forKey: pid) else { return }

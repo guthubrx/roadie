@@ -84,6 +84,36 @@ struct AXUnresponsiveAppsTests {
         #expect(registry.isQuarantined(100))
     }
 
+    @Test
+    func launchDateFallbackAppliesShortStartupBackoffBeforeNotificationAndRespectsMarkResponsive() {
+        let clock = ManualClock()
+        let launchedAt = clock.now.addingTimeInterval(-0.2)
+        let registry = AXUnresponsiveApps(
+            now: { clock.now },
+            launchDateProvider: { pid in pid == 105 ? launchedAt : nil }
+        )
+
+        // Même avant noteApplicationLaunch (course didActivate vs didLaunch), un PID lancé < 4 s
+        // qui renvoie `.cannotComplete` rapidement (< 0.25 s) reçoit le backoff court 0.2 s.
+        #expect(registry.noteResult(.cannotComplete, pid: 105, elapsed: 0.002))
+        #expect(registry.isQuarantined(105))
+        clock.advance(0.25)
+        #expect(!registry.isQuarantined(105))
+
+        // Une fois l'app confirmée vivante via markResponsive, le fallback launchDate ne s'applique plus.
+        registry.markResponsive(105)
+        #expect(registry.noteResult(.cannotComplete, pid: 105, elapsed: 0.002))
+        clock.advance(1.0)
+        #expect(registry.isQuarantined(105))
+
+        // Après forget(pid) (fermeture d'app et réutilisation potentielle du PID), la grâce redevient évaluée.
+        registry.forget(105)
+        #expect(!registry.isQuarantined(105))
+        #expect(registry.noteResult(.cannotComplete, pid: 105, elapsed: 0.002))
+        clock.advance(0.25)
+        #expect(!registry.isQuarantined(105))
+    }
+
     @Test @MainActor
     func startupCatchupPersistsAcrossInterruptedRetryUntilEnumerationSucceeds() {
         let observer = AXWindowEventObserver(onWindowEvent: { _ in })

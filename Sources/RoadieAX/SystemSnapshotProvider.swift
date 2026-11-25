@@ -332,20 +332,29 @@ public final class AXUnresponsiveApps: Sendable {
     private struct State: Sendable {
         var resumeAt: [pid_t: Date] = [:]
         var startupGraceUntil: [pid_t: Date] = [:]
+        var responsivePIDs: Set<pid_t> = []
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
     private let now: @Sendable () -> Date
+    private let launchDateProvider: @Sendable (pid_t) -> Date?
 
-    init(now: @escaping @Sendable () -> Date = { Date() }) {
+    init(
+        now: @escaping @Sendable () -> Date = { Date() },
+        launchDateProvider: @escaping @Sendable (pid_t) -> Date? = { NSRunningApplication(processIdentifier: $0)?.launchDate }
+    ) {
         self.now = now
+        self.launchDateProvider = launchDateProvider
     }
 
     /// Signale le lancement récent d'une application afin qu'un `.cannotComplete` immédiat
     /// pendant l'initialisation de son port AX n'entraîne pas une quarantaine complète de 5 s. O(1).
     public func noteApplicationLaunch(_ pid: pid_t) {
         let until = now().addingTimeInterval(Self.startupGraceDuration)
-        state.withLock { $0.startupGraceUntil[pid] = until }
+        state.withLock { s in
+            s.startupGraceUntil[pid] = until
+            s.responsivePIDs.remove(pid)
+        }
     }
 
     /// Vrai si l'application est mise de côté. O(1).
@@ -370,6 +379,17 @@ public final class AXUnresponsiveApps: Sendable {
         state.withLock { s in
             s.resumeAt[pid] = nil
             s.startupGraceUntil[pid] = nil
+            if s.responsivePIDs.count >= 512 { s.responsivePIDs.removeAll(keepingCapacity: true) }
+            s.responsivePIDs.insert(pid)
+        }
+    }
+
+    /// Oublie tout état de quarantaine/grâce à la fermeture d'une application. O(1).
+    public func forget(_ pid: pid_t) {
+        state.withLock { s in
+            s.resumeAt[pid] = nil
+            s.startupGraceUntil[pid] = nil
+            s.responsivePIDs.remove(pid)
         }
     }
 
@@ -381,14 +401,41 @@ public final class AXUnresponsiveApps: Sendable {
     func noteResult(_ error: AXError, pid: pid_t, elapsed: TimeInterval? = nil) -> Bool {
         guard error == .cannotComplete else { return false }
         let current = now()
-        let isFastStartupFailure = state.withLock { s -> Bool in
-            guard let graceUntil = s.startupGraceUntil[pid] else { return false }
-            if current >= graceUntil {
-                s.startupGraceUntil[pid] = nil
-                return false
+        let isFastStartupFailure: Bool
+        if let elapsed, elapsed < Self.slowCallThreshold {
+            enum StartupProbe { case inGrace, notInGrace, checkLaunchDate }
+            let probe = state.withLock { s -> StartupProbe in
+                if let graceUntil = s.startupGraceUntil[pid] {
+                    if current < graceUntil { return .inGrace }
+                    s.startupGraceUntil[pid] = nil
+                    return .notInGrace
+                }
+                return s.responsivePIDs.contains(pid) ? .notInGrace : .checkLaunchDate
             }
-            guard let elapsed else { return false }
-            return elapsed < Self.slowCallThreshold
+            switch probe {
+            case .inGrace:
+                isFastStartupFailure = true
+            case .notInGrace:
+                isFastStartupFailure = false
+            case .checkLaunchDate:
+                if let launchDate = launchDateProvider(pid) {
+                    let age = current.timeIntervalSince(launchDate)
+                    if age >= -0.5, age < Self.startupGraceDuration {
+                        let until = launchDate.addingTimeInterval(Self.startupGraceDuration)
+                        isFastStartupFailure = state.withLock { s in
+                            guard !s.responsivePIDs.contains(pid) else { return false }
+                            s.startupGraceUntil[pid] = until
+                            return true
+                        }
+                    } else {
+                        isFastStartupFailure = false
+                    }
+                } else {
+                    isFastStartupFailure = false
+                }
+            }
+        } else {
+            isFastStartupFailure = false
         }
         markUnresponsive(pid, duration: isFastStartupFailure ? Self.startupBackoffDuration : Self.quarantineDuration)
         return true
@@ -397,8 +444,8 @@ public final class AXUnresponsiveApps: Sendable {
     /// Enregistre le résultat d'un appel AX et retourne vrai seulement s'il a réussi. Toute autre
     /// erreur (failure, invalidUIElement, actionUnsupported, délai) est un échec pour l'appelant ;
     /// seul le délai met l'application de côté (REL-010).
-    func noteSucceeded(_ error: AXError, pid: pid_t) -> Bool {
-        noteResult(error, pid: pid)
+    func noteSucceeded(_ error: AXError, pid: pid_t, elapsed: TimeInterval? = nil) -> Bool {
+        noteResult(error, pid: pid, elapsed: elapsed)
         return error == .success
     }
 }
@@ -503,11 +550,11 @@ enum AXReadValue {
     /// `.cannotComplete` intégré met l'application de côté comme un échec de l'appel entier.
     /// Retourne vrai si l'application est mise de côté. O(n), n = nombre de valeurs.
     static func noteEmbeddedErrors(
-        in values: [AnyObject], pid: pid_t, registry: AXUnresponsiveApps
+        in values: [AnyObject], pid: pid_t, registry: AXUnresponsiveApps, elapsed: TimeInterval? = nil
     ) -> Bool {
         var aside = false
         for raw in values {
-            if let error = embeddedError(raw), registry.noteResult(error, pid: pid) { aside = true }
+            if let error = embeddedError(raw), registry.noteResult(error, pid: pid, elapsed: elapsed) { aside = true }
         }
         return aside
     }
@@ -1217,14 +1264,16 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
     /// nil si l'application ne repond pas (elle vient d'etre mise de cote).
     private static func readVolatile(_ element: AXUIElement, pid: pid_t) -> AXVolatileReading? {
         var raw: CFArray?
+        let start = CFAbsoluteTimeGetCurrent()
         let error = AXCallTimings.shared.measure(pid) {
             AXUIElementCopyMultipleAttributeValues(
                 element, volatileAttributeNames as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
             )
         }
-        if AXUnresponsiveApps.shared.noteResult(error, pid: pid) { return nil }
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        if AXUnresponsiveApps.shared.noteResult(error, pid: pid, elapsed: elapsed) { return nil }
         let values = error == .success ? (raw as? [AnyObject]) ?? [] : []
-        if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: AXUnresponsiveApps.shared) { return nil }
+        if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: AXUnresponsiveApps.shared, elapsed: elapsed) { return nil }
         func flag(_ index: Int) -> Bool? {
             index < values.count ? AXReadValue.flag(values[index]) : nil
         }
@@ -1241,16 +1290,18 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
     private static func readStable(_ element: AXUIElement, pid: pid_t) -> AXStableWindowAttributes? {
         let registry = AXUnresponsiveApps.shared
         var raw: CFArray?
+        let start = CFAbsoluteTimeGetCurrent()
         let error = AXCallTimings.shared.measure(pid) {
             AXUIElementCopyMultipleAttributeValues(
                 element, stableAttributeNames as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
             )
         }
-        registry.noteResult(error, pid: pid)
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        registry.noteResult(error, pid: pid, elapsed: elapsed)
         guard error == .success, let values = raw as? [AnyObject], values.count == stableAttributeNames.count else {
             return nil
         }
-        if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry) { return nil }
+        if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry, elapsed: elapsed) { return nil }
         var unreadable = false
         func value(_ index: Int) -> AnyObject? {
             let raw = values[index]
@@ -1272,19 +1323,21 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         var fullscreenEnabled = false
         if isElement(fullscreenButton) {
             var rawEnabled: CFTypeRef?
+            let enabledStart = CFAbsoluteTimeGetCurrent()
             let enabledError = AXCallTimings.shared.measure(pid) {
                 AXUIElementCopyAttributeValue(
                     fullscreenButton as! AXUIElement, kAXEnabledAttribute as CFString, &rawEnabled // Safe : isElement
                 )
             }
-            if registry.noteResult(enabledError, pid: pid) { return nil }
+            if registry.noteResult(enabledError, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - enabledStart) { return nil }
             fullscreenEnabled = enabledError == .success && (rawEnabled as? Bool) == true
         }
         var settable = DarwinBoolean(false)
+        let settableStart = CFAbsoluteTimeGetCurrent()
         let settableError = AXCallTimings.shared.measure(pid) {
             AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &settable)
         }
-        if registry.noteResult(settableError, pid: pid) { return nil }
+        if registry.noteResult(settableError, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - settableStart) { return nil }
 
         return AXStableWindowAttributes(
             role: role,
@@ -1312,10 +1365,11 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return nil }
         var rawFocused: CFTypeRef?
+        let start = CFAbsoluteTimeGetCurrent()
         let error = AXCallTimings.shared.measure(pid) {
             AXUIElementCopyAttributeValue(AXMessaging.application(pid), kAXFocusedWindowAttribute as CFString, &rawFocused)
         }
-        registry.noteResult(error, pid: pid)
+        registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
         guard error == .success,
               let focused = rawFocused,
               CFGetTypeID(focused) == AXUIElementGetTypeID()
@@ -1324,8 +1378,9 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         let focusedElement = focused as! AXUIElement // Safe: CFTypeID verified above
         // Voie rapide : si AX donne directement le windowID, on retourne sans appel a windows().
         var id = CGWindowID()
+        let idStart = CFAbsoluteTimeGetCurrent()
         let idError = AXUIElementGetWindowID(focusedElement, &id)
-        if registry.noteResult(idError, pid: pid) { return nil }
+        if registry.noteResult(idError, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - idStart) { return nil }
         if idError == .success, id > 0 {
             return WindowID(rawValue: id)
         }
@@ -1522,8 +1577,9 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         var enhancedUI: (app: AXUIElement, restore: Bool)?
         defer {
             if let enhancedUI, enhancedUI.restore {
+                let start = CFAbsoluteTimeGetCurrent()
                 let error = io.setValue(kCFBooleanTrue, of: Self.enhancedUserInterface, on: enhancedUI.app)
-                registry.noteResult(error, pid: pid)
+                registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
             }
         }
         for update in group {
@@ -1535,9 +1591,10 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
                                      frame: update.window.frame, windows: &windows, reserved: reserved) {
                 // Le snapshot peut précéder l'entrée en plein écran natif. Un état vrai
                 // relu interdit toute écriture (y compris intermédiaire) et ne consomme pas le budget.
+                let nativeStart = CFAbsoluteTimeGetCurrent()
                 let (nativeError, nativeValue) = io.value(of: "AXFullScreen", on: element)
                 let nativeFullscreen = nativeError == .success ? nativeValue.flatMap(AXReadValue.flag) : nil
-                if !registry.noteResult(nativeError, pid: pid), nativeFullscreen != true, isCurrent() {
+                if !registry.noteResult(nativeError, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - nativeStart), nativeFullscreen != true, isCurrent() {
                     if enhancedUI == nil {
                         let app = AXMessaging.application(pid)
                         enhancedUI = (app, disableEnhancedUserInterface(app, pid: pid))
@@ -1712,8 +1769,9 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         guard let element = element(pid: pid, id: window.id, title: window.title, frame: window.frame, windows: &windows),
               let button = elementAttribute(element, buttonAttribute, pid: pid)
         else { return false }
+        let start = CFAbsoluteTimeGetCurrent()
         let error = AXUIElementPerformAction(button, kAXPressAction as CFString)
-        registry.noteResult(error, pid: pid)
+        registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
         return error == .success
     }
 
@@ -1724,14 +1782,16 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         guard !registry.isQuarantined(pid) else { return false }
         // AXRaise ne restaure pas systématiquement une fenêtre réduite dans le Dock.
         // Une application qui ne propose pas cet attribut conserve le chemin de focus habituel.
+        let minStart = CFAbsoluteTimeGetCurrent()
         let (minimizedError, minimized) = io.value(of: kAXMinimizedAttribute, on: element)
-        if registry.noteResult(minimizedError, pid: pid) { return false }
+        if registry.noteResult(minimizedError, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - minStart) { return false }
         // Une lecture facultative refusée ne doit pas supprimer un focus qui fonctionnait.
         // Un élément détruit, en revanche, ne peut plus être focalisé.
         guard minimizedError != .invalidUIElement else { return false }
         if minimizedError == .success, (minimized as? Bool) == true {
+            let unminStart = CFAbsoluteTimeGetCurrent()
             let error = io.setValue(kCFBooleanFalse, of: kAXMinimizedAttribute, on: element)
-            registry.noteResult(error, pid: pid)
+            registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - unminStart)
             guard error == .success else { return false }
         }
         let application = NSRunningApplication(processIdentifier: pid)
@@ -1739,16 +1799,19 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         let frontmost = setFrontmostError(pid: pid)
         guard !registry.isQuarantined(pid) else { return false }
         let app = AXMessaging.application(pid)
+        let focusStart = CFAbsoluteTimeGetCurrent()
         let focusedWindow = io.setValue(element, of: kAXFocusedWindowAttribute, on: app)
-        if registry.noteResult(focusedWindow, pid: pid) {
+        if registry.noteResult(focusedWindow, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - focusStart) {
             return false
         }
         if focusedWindow != .success {
+            let mainStart = CFAbsoluteTimeGetCurrent()
             let mainError = io.setValue(kCFBooleanTrue, of: kAXMainAttribute, on: element)
-            if registry.noteResult(mainError, pid: pid) { return false }
+            if registry.noteResult(mainError, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - mainStart) { return false }
         }
+        let raiseStart = CFAbsoluteTimeGetCurrent()
         let raise = io.performAction(kAXRaiseAction, on: element)
-        if registry.noteResult(raise, pid: pid) { return false }
+        if registry.noteResult(raise, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - raiseStart) { return false }
         // Fenêtre clé (session 098, ADR 020) : sans elle, une application déjà au premier plan
         // garde la frappe ailleurs. Sans effet sur la décision de réussite.
         WindowKeyFocus.makeKey(pid: pid, window: element)
@@ -1771,15 +1834,17 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
     private func setFrontmostError(pid: pid_t) -> AXError {
         guard !registry.isQuarantined(pid) else { return .cannotComplete }
+        let start = CFAbsoluteTimeGetCurrent()
         let error = io.setValue(kCFBooleanTrue, of: kAXFrontmostAttribute, on: AXMessaging.application(pid))
-        registry.noteResult(error, pid: pid)
+        registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
         return error
     }
 
     private func elementAttribute(_ element: AXUIElement, _ attribute: String, pid: pid_t) -> AXUIElement? {
         guard !registry.isQuarantined(pid) else { return nil }
+        let start = CFAbsoluteTimeGetCurrent()
         let (error, raw) = io.value(of: attribute, on: element)
-        registry.noteResult(error, pid: pid)
+        registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
         guard error == .success, let raw, CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
         return (raw as! AXUIElement)
     }
@@ -1873,8 +1938,9 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     }
 
     func title(of element: AXUIElement, pid: pid_t) -> String {
+        let start = CFAbsoluteTimeGetCurrent()
         let (error, rawTitle) = io.value(of: kAXTitleAttribute, on: element)
-        registry.noteResult(error, pid: pid)
+        registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
         guard error == .success, let title = rawTitle as? String else { return "" }
         return title
     }
@@ -1883,11 +1949,13 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     /// applications animent chaque changement de cadre (yabai, `AX_ENHANCED_UI_WORKAROUND`).
     /// Retourne vrai s'il faut le retablir.
     private func disableEnhancedUserInterface(_ app: AXUIElement, pid: pid_t) -> Bool {
+        let readStart = CFAbsoluteTimeGetCurrent()
         let (error, raw) = io.value(of: Self.enhancedUserInterface, on: app)
-        if registry.noteResult(error, pid: pid) { return false }
+        if registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - readStart) { return false }
         guard error == .success, (raw as? Bool) == true else { return false }
+        let setStart = CFAbsoluteTimeGetCurrent()
         let setError = io.setValue(kCFBooleanFalse, of: Self.enhancedUserInterface, on: app)
-        registry.noteResult(setError, pid: pid)
+        registry.noteResult(setError, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - setStart)
         return setError == .success
     }
 
@@ -1922,9 +1990,11 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         var wroteAny = false
         for (attribute, value) in phases {
             guard isCurrent() else { return nil }
+            let start = CFAbsoluteTimeGetCurrent()
             let error = io.setValue(value, of: attribute, on: element)
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
             guard isCurrent() else { return nil }
-            if registry.noteResult(error, pid: pid) { return nil }
+            if registry.noteResult(error, pid: pid, elapsed: elapsed) { return nil }
             if error == .invalidUIElement {
                 windowIndex.invalidate(pid: pid)
                 return nil
@@ -1975,10 +2045,12 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         }
         for (phase, attribute, value) in phases {
             guard isCurrent() else { return nil }
+            let start = CFAbsoluteTimeGetCurrent()
             let error = io.setValue(value, of: attribute, on: element)
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
             guard isCurrent() else { return nil }
             codes[phase] = error.rawValue
-            if registry.noteResult(error, pid: pid) {
+            if registry.noteResult(error, pid: pid, elapsed: elapsed) {
                 return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen, isCurrent: isCurrent)
             }
             if error == .invalidUIElement {
@@ -2013,11 +2085,13 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     /// Lit le cadre AX en un seul aller-retour. Avec un pid, un delai depasse met l'application
     /// de cote et arrete la lecture.
     func frame(of element: AXUIElement, pid: pid_t?, onResult: ((AXError) -> Void)? = nil) -> CGRect? {
+        let start = CFAbsoluteTimeGetCurrent()
         let (error, values) = io.values(of: Self.frameAttributeNames, on: element)
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
         onResult?(error)
         if let pid {
-            if registry.noteResult(error, pid: pid) { return nil }
-            if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry) { return nil }
+            if registry.noteResult(error, pid: pid, elapsed: elapsed) { return nil }
+            if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry, elapsed: elapsed) { return nil }
         }
         guard error == .success, values.count == 2,
               CFGetTypeID(values[0]) == AXValueGetTypeID(),

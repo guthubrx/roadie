@@ -600,7 +600,8 @@ public final class LayoutMaintainer {
             suppressKnownUnmovableFrames(in: restoration, snapshot: snapshot).commands.forEach { plan.add($0, .layout) }
         }
         let hiddenInactive = hideInactiveStageCommands(in: snapshot)
-        let hiddenSiblings = fullscreenSiblingHideCommands(in: snapshot, systemFocusedWindowID: systemFocusedWindowID)
+        let hiddenSiblingsResult = fullscreenSiblingHideCommands(in: snapshot, systemFocusedWindowID: systemFocusedWindowID)
+        let hiddenSiblings = hiddenSiblingsResult.commands
         let restoredPins = pinRestoreCommands(in: snapshot)
         let reanchoredZoomed = zoomReanchorCommands(in: snapshot)
         hiddenInactive.forEach { plan.add($0, .hide) }
@@ -638,7 +639,10 @@ public final class LayoutMaintainer {
         }
 
         let waitingPlacementScopes = unreadyPlacementScopes(
-            in: snapshot, scopes: treeScopes.subtracting(tickExcludedScopes), now: tickNow
+            in: snapshot,
+            scopes: treeScopes.subtracting(tickExcludedScopes),
+            additionalWaitingWindows: hiddenSiblingsResult.deferredNewcomers,
+            now: tickNow
         )
         tickExcludedScopes.formUnion(waitingPlacementScopes)
         let liveTreeScopes = treeScopes.subtracting(tickExcludedScopes)
@@ -1421,12 +1425,17 @@ public final class LayoutMaintainer {
     /// ses voisines tant qu'elle n'est pas lisible. Arme des reprises rapides bornées
     /// (`ax_ready_retry`), puis laisse la passe de sécurité prendre le relais.
     /// O(m + n · d), m membres, d écrans, plus une lecture AX par identité non résolue.
-    private func unreadyPlacementScopes(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, now: Date) -> Set<StageScope> {
+    private func unreadyPlacementScopes(
+        in snapshot: DaemonSnapshot,
+        scopes: Set<StageScope>,
+        additionalWaitingWindows: Set<WindowID> = [],
+        now: Date
+    ) -> Set<StageScope> {
         let displays = Dictionary(snapshot.displays.map { ($0.id, $0.frame.cgRect) }, uniquingKeysWith: { first, _ in first })
         let members = Set(store.state().scopes.flatMap { $0.stages.flatMap { $0.members.map(\.windowID) } })
         placementResolvedPIDs = placementResolvedPIDs.filter { members.contains($0.key) }
         var waiting: Set<StageScope> = []
-        var unavailable: Set<WindowID> = []
+        var unavailable = additionalWaitingWindows
         for entry in snapshot.windows {
             let id = entry.window.id
             guard entry.window.isTileCandidate, entry.pin == nil,
@@ -1448,9 +1457,13 @@ public final class LayoutMaintainer {
             } else {
                 placementResolvedPIDs[id] = entry.window.pid
                 guard unreadyPlacementWindows.contains(id) else { continue }
-                // Aucun appel de placement AX enregistré : un ancien échec de résolution
-                // ne doit pas épuiser le budget avant la première écriture réelle.
+                // Aucun appel de placement AX enregistré : un ancien échec pré-AX
+                // (ex. transition animée pendant la quarantaine ou avant disponibilité AX)
+                // ne doit ni épuiser le budget ni bloquer le premier placement réel.
                 writeCounts[id.rawValue] = nil
+                failedFrames[id.rawValue] = nil
+                expiredFailures[id.rawValue] = nil
+                failedRestorations[id] = nil
                 events.append(RoadieEvent(type: "layout_window_ax_ready", scope: scope, details: [
                     "windowID": String(id.rawValue)
                 ]))
@@ -2473,20 +2486,29 @@ public final class LayoutMaintainer {
     }
 
     /// Masquage des voisines d'une fenêtre en plein écran dans son scope actif. La fenêtre qui a le
-    /// focus du système n'est jamais cachée : l'utilisateur vient de la choisir (FR-002). O(n).
-    private func fullscreenSiblingHideCommands(in snapshot: DaemonSnapshot, systemFocusedWindowID: WindowID?) -> [ApplyCommand] {
+    /// focus du système n'est jamais cachée : l'utilisateur vient de la choisir (FR-002). Une nouvelle
+    /// fenêtre apparue pendant un zoom de commande alors que le focus système est temporairement illisible
+    /// (ex. application en cours d'initialisation AX) est différée plutôt que masquée hors écran. O(n).
+    private func fullscreenSiblingHideCommands(
+        in snapshot: DaemonSnapshot,
+        systemFocusedWindowID: WindowID?
+    ) -> (commands: [ApplyCommand], deferredNewcomers: Set<WindowID>) {
         let fullscreenItems = tickFullscreen.filter { item in
             guard let scope = item.entry.scope else { return false }
             return snapshot.state.activeScope(on: scope.displayID) == scope
         }
-        guard !fullscreenItems.isEmpty else { return [] }
+        guard !fullscreenItems.isEmpty else { return ([], []) }
         let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
         let fullscreenScopes = Set(fullscreenItems.compactMap(\.entry.scope))
+        let nativeFullscreenScopes = Set(fullscreenItems.compactMap {
+            $0.entry.window.furniture?.isNativeFullscreen == true ? $0.entry.scope : nil
+        })
         // Focus réel relevé une fois avant la sortie du zoom et partagé avec cette décision.
         let intents = Dictionary(uniqueKeysWithValues: fullscreenScopes.compactMap { scope in
             service.commandLayoutIntent(scope: scope).map { (scope, $0) }
         })
         var newlyRestorable: [StageScope: [WindowID: Rect]] = [:]
+        var deferredNewcomers: Set<WindowID> = []
         let commands = snapshot.windows.compactMap { entry -> ApplyCommand? in
             guard let scope = entry.scope,
                   fullscreenScopes.contains(scope),
@@ -2497,6 +2519,16 @@ public final class LayoutMaintainer {
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
                   !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
             else { return nil }
+            if systemFocusedWindowID == nil,
+               !nativeFullscreenScopes.contains(scope),
+               let intent = intents[scope],
+               intent.zoomedWindowID != nil,
+               !intent.windowIDs.contains(entry.window.id),
+               writtenFrames.entry(for: entry.window.id.rawValue) == nil,
+               placementResolvedPIDs[entry.window.id] != entry.window.pid {
+                deferredNewcomers.insert(entry.window.id)
+                return nil
+            }
             if let saved = intents[scope]?.restorePlacements, saved[entry.window.id] == nil {
                 newlyRestorable[scope, default: [:]][entry.window.id] = entry.window.frame
             }
@@ -2516,7 +2548,7 @@ public final class LayoutMaintainer {
                 }
             }
         }
-        return commands
+        return (commands, deferredNewcomers)
     }
 
     /// Recalage d'une fenêtre zoomée par commande dont l'origine a glissé (redémarrage, changement
@@ -3295,6 +3327,11 @@ public final class LayoutMaintainer {
     /// seulement tant que le résultat appartient encore à la génération active.
     public func recordTransition(_ result: ApplyResult, from plan: ApplyPlan, generation: UInt64) {
         guard generation == generations.current else { return }
+        for item in result.items where item.status == .failed && writtenFrames.entry(for: item.windowID.rawValue) == nil {
+            // La résolution AX a échoué avant toute écriture réelle : réinitialiser le marqueur
+            // pour qu'unreadyPlacementScopes réessaie puis purge l'échec transitoire dès disponibilité.
+            placementResolvedPIDs[item.windowID] = nil
+        }
         record(result, from: plan)
         appendItemEvents(result, generation: generation)
     }
