@@ -50,6 +50,9 @@ public final class AXWindowEventObserver {
     }
     private var pendingFrames: [UInt32: FrameRead] = [:]
     private var frameTasks: [UInt32: Task<Void, Never>] = [:]
+    /// PIDs ayant réussi l'abonnement `AXWindowCreated` lors d'un réessai différé mais dont
+    /// l'énumération initiale des fenêtres préexistantes reste à confirmer.
+    private var pendingStartupCatchup: Set<pid_t> = []
 
     /// Notifications AX surveillees au niveau application. Cf. yabai event_loop subscriptions.
     /// kAXTitleChangedNotification est volontairement omis : trop bruyant (browsers,
@@ -149,6 +152,7 @@ public final class AXWindowEventObserver {
         for task in frameTasks.values { task.cancel() }
         frameTasks.removeAll()
         pendingFrames.removeAll()
+        pendingStartupCatchup.removeAll()
         for pid in Array(observers.keys) {
             unsubscribe(pid: pid)
         }
@@ -290,18 +294,19 @@ public final class AXWindowEventObserver {
             if registry.noteResult(error, pid: pid, elapsed: elapsed) { break }
         }
         registered[pid] = done
+        noteStartupWindowCreatedSubscription(
+            pid: pid,
+            attempt: attempt,
+            hadWindowCreated: hadWindowCreated,
+            hasWindowCreatedNow: done.contains(kAXWindowCreatedNotification as String)
+        )
 
         if !registry.isQuarantined(pid), let windows = AXApplicationWindows(pid: pid) {
             for entry in windows.entries {
                 // Application mise de côté : inutile d'attendre un délai par fenêtre restante.
                 if watchDestruction(of: entry.element, id: entry.id, observer: observer, pid: pid) { break }
             }
-            // Si l'abonnement AXWindowCreated vient tout juste de réussir sur un réessai
-            // après démarrage, macOS ne renvoie pas rétroactivement les fenêtres déjà créées :
-            // on déclenche immédiatement une passe pour les placer sans attendre le filet safety.
-            if attempt > 0, !hadWindowCreated,
-               done.contains(kAXWindowCreatedNotification as String),
-               !windows.entries.isEmpty {
+            if consumeStartupCatchup(pid: pid, hasEnumeratedWindows: !windows.entries.isEmpty) {
                 AXAttributeCache.shared.invalidate(pid: pid)
                 AXWindowIndexCache.shared.invalidate(pid: pid)
                 callback(AXWindowEvent(
@@ -314,6 +319,26 @@ public final class AXWindowEventObserver {
         if needsRetry {
             scheduleRetry(pid: pid, attempt: attempt)
         }
+    }
+
+    /// Mémorise qu'un rattrapage `AXWindowCreated` reste dû jusqu'à une énumération réussie,
+    /// même si une notification suivante a mis le PID en pause pendant le même réessai.
+    func noteStartupWindowCreatedSubscription(
+        pid: pid_t,
+        attempt: Int,
+        hadWindowCreated: Bool,
+        hasWindowCreatedNow: Bool
+    ) {
+        if attempt > 0, !hadWindowCreated, hasWindowCreatedNow {
+            pendingStartupCatchup.insert(pid)
+        }
+    }
+
+    /// Consomme le rattrapage mémorisé après une énumération AX réussie. Retourne vrai si
+    /// l'application possède au moins une fenêtre préexistante à signaler immédiatement.
+    func consumeStartupCatchup(pid: pid_t, hasEnumeratedWindows: Bool) -> Bool {
+        guard pendingStartupCatchup.remove(pid) != nil else { return false }
+        return hasEnumeratedWindows
     }
 
     private func scheduleRetry(pid: pid_t, attempt: Int) {
@@ -338,6 +363,7 @@ public final class AXWindowEventObserver {
     /// Fin de l'application ou arret : ses fenetres sortent du registre et des caches.
     private func unsubscribe(pid: pid_t) {
         registered[pid] = nil
+        pendingStartupCatchup.remove(pid)
         for id in (watchedWindowIDs.removeValue(forKey: pid) ?? [:]).values {
             cancelFrameRead(id)
             writtenFrames.forget(windowID: id)

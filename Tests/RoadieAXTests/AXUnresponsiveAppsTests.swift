@@ -67,12 +67,33 @@ struct AXUnresponsiveAppsTests {
         clock.advance(4.1)
         #expect(!registry.isQuarantined(99))
 
+        // Un appel sans durée mesurée (`elapsed == nil`) même pendant la grâce -> quarantaine complète de 5 s
+        registry.noteApplicationLaunch(98)
+        #expect(registry.noteResult(.cannotComplete, pid: 98))
+        #expect(registry.isQuarantined(98))
+        clock.advance(1.0)
+        #expect(registry.isQuarantined(98))
+        clock.advance(4.1)
+        #expect(!registry.isQuarantined(98))
+
         // Une fois la grâce expirée (ou après markResponsive), `.cannotComplete` reprend 5 s
         registry.noteApplicationLaunch(100)
         registry.markResponsive(100)
         #expect(registry.noteResult(.cannotComplete, pid: 100, elapsed: 0.001))
         clock.advance(1.0)
         #expect(registry.isQuarantined(100))
+    }
+
+    @Test @MainActor
+    func startupCatchupPersistsAcrossInterruptedRetryUntilEnumerationSucceeds() {
+        let observer = AXWindowEventObserver(onWindowEvent: { _ in })
+        // Réessai 1 : AXWindowCreated s'abonne, mais une notif suivante met le PID en pause avant énumération
+        observer.noteStartupWindowCreatedSubscription(pid: 77, attempt: 1, hadWindowCreated: false, hasWindowCreatedNow: true)
+        // Réessai 2 : hadWindowCreated vaut désormais true, puis l'énumération réussit avec une fenêtre préexistante
+        observer.noteStartupWindowCreatedSubscription(pid: 77, attempt: 2, hadWindowCreated: true, hasWindowCreatedNow: true)
+        #expect(observer.consumeStartupCatchup(pid: 77, hasEnumeratedWindows: true))
+        // Une seconde consommation ne réémet jamais de doublon
+        #expect(!observer.consumeStartupCatchup(pid: 77, hasEnumeratedWindows: true))
     }
 
     @Test

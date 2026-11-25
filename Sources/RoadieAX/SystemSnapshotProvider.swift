@@ -387,7 +387,8 @@ public final class AXUnresponsiveApps: Sendable {
                 s.startupGraceUntil[pid] = nil
                 return false
             }
-            return (elapsed ?? 0) < Self.slowCallThreshold
+            guard let elapsed else { return false }
+            return elapsed < Self.slowCallThreshold
         }
         markUnresponsive(pid, duration: isFastStartupFailure ? Self.startupBackoffDuration : Self.quarantineDuration)
         return true
@@ -693,7 +694,6 @@ struct AXApplicationWindows: @unchecked Sendable {
         let callElapsed = CFAbsoluteTimeGetCurrent() - callStart
         registry.noteResult(error, pid: pid, elapsed: callElapsed)
         guard error == .success, let windows = raw as? [AXUIElement] else { return nil }
-        registry.markResponsive(pid)
 
         var entries: [(id: CGWindowID?, element: AXUIElement)] = []
         for element in windows {
@@ -705,14 +705,16 @@ struct AXApplicationWindows: @unchecked Sendable {
             entries.append((idError == .success && id > 0 ? id : nil, element))
         }
         guard discoverAttachedSheets else {
+            registry.markResponsive(pid)
             self.init(pid: pid, entries: entries)
             return
         }
         func value(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
             guard !registry.isQuarantined(pid) else { return nil }
             var raw: CFTypeRef?
+            let start = CFAbsoluteTimeGetCurrent()
             let error = AXCallTimings.shared.measure(pid) { AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) }
-            registry.noteResult(error, pid: pid)
+            registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
             return error == .success ? raw : nil
         }
         let attached = Self.attachedWindowEntries(roots: entries,
@@ -721,11 +723,13 @@ struct AXApplicationWindows: @unchecked Sendable {
                 guard !registry.isQuarantined(pid) else { return nil }
                 AXMessaging.configure(element)
                 var id = CGWindowID()
+                let start = CFAbsoluteTimeGetCurrent()
                 let error = AXUIElementGetWindowID(element, &id)
-                registry.noteResult(error, pid: pid)
+                registry.noteResult(error, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - start)
                 return error == .success && id > 0 ? id : nil
             }, isSheet: { value($0, kAXRoleAttribute) as? String == kAXSheetRole }, requiredWindowIDs: requiredWindowIDs)
         guard !registry.isQuarantined(pid) else { return nil }
+        registry.markResponsive(pid)
         self.init(pid: pid, entries: entries + attached)
     }
 
