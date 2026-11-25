@@ -284,6 +284,34 @@ struct Spec167UniversalTabsTests {
         #expect(cand.targetWindowID == w2.id)
         #expect(cand.groupMutation != nil)
         #expect(cand.isTreeMode)
+        // L'aperçu d'un empilement en onglet englobe la barre d'onglets au-dessus du contenu
+        let placedContent = try #require(cand.placements[w1.id])
+        #expect(cand.frame.minY < CGFloat(placedContent.y))
+
+        // Cas réel scrolling : cible partiellement hors écran à gauche (x = -352, width = 1068)
+        // 1. Avec Option n'importe où sur la bande visible (même près du bord droit/haut) -> .stackTab
+        let offscreenTarget = window(23, app: "Teams", title: "Chat", x: -352, y: 46, width: 1068, height: 840)
+        let draggedRight = window(24, app: "iTerm2", title: "zsh", x: 724, y: 46, width: 1068, height: 840)
+        let provider2 = MutableProvider(displays: [d], windows: [offscreenTarget, draggedRight], focused: draggedRight.id)
+        let stageStore2 = StageStore(path: dir.appendingPathComponent("stages-offscreen.json").path)
+        let service2 = SnapshotService(provider: provider2, config: config, stageStore: stageStore2, events: eventLog)
+        let snapshot2 = service2.snapshot()
+        let context2 = DropPreviewContext(snapshot: snapshot2, persistedStateBeforeSnapshot: stageStore2.state())
+        let engine2 = DropPreviewEngine(service: service2)
+
+        // Point à x = 550, y = 100 : proche du haut et à 84 % de la largeur brute (aurait donné insertRight/insertUp avant)
+        let edgePoint = CGPoint(x: 550, y: 100)
+        let optEdgeCand = try #require(engine2.candidate(sourceWindowID: draggedRight.id, atAXPoint: edgePoint, context: context2, optionHeld: true))
+        #expect(optEdgeCand.operation == .stackTab)
+        #expect(optEdgeCand.targetWindowID == offscreenTarget.id)
+
+        // 2. Sans Option au centre de la bande visible (x = 358, y = 100) : en scrolling 1D, le haut ne déclenche PAS insertUp ni split vertical
+        let visibleCenterNearTop = CGPoint(x: 358, y: 100)
+        let noOptCand = try #require(engine2.candidate(sourceWindowID: draggedRight.id, atAXPoint: visibleCenterNearTop, context: context2, optionHeld: false))
+        #expect(noOptCand.operation == .swap)
+        for rect in noOptCand.placements.values {
+            #expect(rect.height > 800)
+        }
     }
 
     // MARK: - 4. Premier placement pré-AX d'une app lente en mode `.scrolling` (anti-vol multi-écrans)

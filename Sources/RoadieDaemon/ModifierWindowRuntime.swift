@@ -157,7 +157,11 @@ public final class ModifierWindowRuntime {
                 if service.publishedConfig.tiling.liveDragPreview { frames = candidate.placements }
                 if current.effects.dropPreview == "real" && !pointerPreview.failed {
                     frames[current.source.window.id] = candidate.placements[current.source.window.id] ?? Rect(candidate.frame)
-                    overlay.hide()
+                    if candidate.operation == .stackTab {
+                        overlay.show(candidate)
+                    } else {
+                        overlay.hide()
+                    }
                 } else {
                     frames[current.source.window.id] = current.effects.dragPreview != "none" && !pointerPreview.failed
                         ? current.source.window.frame : Rect(frame)
@@ -270,10 +274,15 @@ public final class ModifierWindowRuntime {
                     state.setBSPTree(final.tree, for: scope); return true
                 }
             } else if current.geometry.operation == .move, let candidate = current.candidate {
-                return StageCommandService(service: service, store: service.effectiveStageStore, events: events).place(
+                let placed = StageCommandService(service: service, store: service.effectiveStageStore, events: events).place(
                     windowID: candidate.sourceWindowID, displayID: candidate.displayID,
-                    orderedWindowIDs: candidate.orderedWindowIDs, placements: candidate.placements, treeMutation: candidate.treeMutation,
+                    orderedWindowIDs: candidate.orderedWindowIDs, placements: candidate.placements,
+                    treeMutation: candidate.treeMutation, groupMutation: candidate.groupMutation,
                     deferGeometryUsing: current.context.snapshot, validating: { self.contextMatches(current, state: $0) }).outcome != .failed
+                if placed, candidate.operation == .stackTab {
+                    _ = WindowCommandService(service: service).focus(windowID: candidate.sourceWindowID)
+                }
+                return placed
             } else if current.source.pin != nil, let frame = current.windows[current.source.window.id]?.frame {
                 return try service.effectiveStageStore.mutateChecked { state -> Bool in
                     guard contextMatches(current, state: state), let index = state.windowPins.firstIndex(where: { $0.windowID == current.source.window.id }) else { return false }

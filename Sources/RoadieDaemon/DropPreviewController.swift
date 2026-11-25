@@ -58,7 +58,11 @@ final class DropPreviewController {
     func refreshLivePreview() {
         live.update(lastCandidate)
         if let lastCandidate {
-            if live.showsRealSource { overlay.hide() } else { overlay.show(lastCandidate) }
+            if live.showsRealSource && lastCandidate.operation != .stackTab {
+                overlay.hide()
+            } else {
+                overlay.show(lastCandidate)
+            }
         }
     }
 
@@ -90,7 +94,11 @@ final class DropPreviewController {
         }
         lastCandidate = candidate
         live.update(candidate)
-        if live.showsRealSource { overlay.hide() } else { overlay.show(candidate) }
+        if live.showsRealSource && candidate.operation != .stackTab {
+            overlay.hide()
+        } else {
+            overlay.show(candidate)
+        }
         return candidate
     }
 
@@ -233,7 +241,10 @@ struct DropPreviewEngine {
               snapshot.state.activeScope(on: sourceScope.displayID) == sourceScope,
               WindowDragReorderEligibility.accepts(source.window)
         else { return nil }
-        let optionPressed = optionHeld ?? NSEvent.modifierFlags.contains(.option)
+        let optionPressed = optionHeld ?? (
+            NSEvent.modifierFlags.contains(.option)
+            || CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate)
+        )
         if stage.mode.usesTreeEngine {
             return treeCandidate(
                 sourceWindowID: sourceWindowID,
@@ -298,6 +309,7 @@ struct DropPreviewEngine {
         }
 
         var placements: [WindowID: CGRect] = [:]
+        var stackedTileFrame: CGRect? = nil
         let operation: DropPreviewOperation
         var targetWindowID: WindowID? = nil
         if let target {
@@ -305,12 +317,15 @@ struct DropPreviewEngine {
             if tabBarTarget != nil {
                 operation = .stackTab
             } else {
+                let visibleTargetFrame = target.window.frame.cgRect.intersection(display.visibleFrame.cgRect)
+                let hitFrame = visibleTargetFrame.isEmpty ? target.window.frame.cgRect : visibleTargetFrame
                 let rawOp = dropOperation(
                     at: axPoint,
-                    in: target.window.frame.cgRect,
+                    in: hitFrame,
                     sourceIsActive: activeEntries.contains { $0.window.id == sourceWindowID },
                     optionHeld: optionPressed,
-                    allowsStackTab: allowsSlotTabs
+                    allowsStackTab: allowsSlotTabs,
+                    horizontalOnly: stage.mode == .scrolling
                 )
                 if allowsSlotTabs, ownGroupMembers.contains(target.window.id), (rawOp == .swap || rawOp == .stackTab) {
                     return nil
@@ -332,7 +347,7 @@ struct DropPreviewEngine {
                     previewGroups.append(LayoutTabGroup(windowIDs: [target.window.id, sourceWindowID], activeWindowID: sourceWindowID))
                 }
                 let clipEdges = SnapshotService.scrollingClipEdges(for: display, among: snapshot.displays)
-                let previewPlan = LayoutPlanner.plan(LayoutRequest(
+                let previewRequest = LayoutRequest(
                     scope: scope,
                     mode: stage.mode,
                     container: display.visibleFrame.cgRect,
@@ -347,17 +362,23 @@ struct DropPreviewEngine {
                     scrollingClipsLeft: clipEdges.clipsLeft,
                     scrollingClipsRight: clipEdges.clipsRight,
                     tabGroups: previewGroups
-                ))
+                )
+                let previewPlan = LayoutPlanner.plan(previewRequest)
                 placements = previewPlan.placements
+                stackedTileFrame = LayoutTabSlots.tabBarFrames(for: previewRequest)
+                    .first(where: { $0.windowIDs.contains(sourceWindowID) })?
+                    .tileFrame
             } else {
                 ordered = reordered(ordered, sourceID: sourceWindowID, targetID: target.window.id, operation: operation)
-                placements = structuralPlacements(
-                    sourceID: sourceWindowID,
-                    target: target.window,
-                    operation: operation,
-                    activeEntries: activeEntries,
-                    display: display
-                ) ?? [:]
+                if stage.mode != .scrolling && stage.mode != .tabbed {
+                    placements = structuralPlacements(
+                        sourceID: sourceWindowID,
+                        target: target.window,
+                        operation: operation,
+                        activeEntries: activeEntries,
+                        display: display
+                    ) ?? [:]
+                }
             }
         } else {
             operation = .append
@@ -368,14 +389,15 @@ struct DropPreviewEngine {
             let plan = service.layoutPlan(from: snapshot, scope: scope, orderedWindowIDs: ordered, priorityWindowIDs: [sourceWindowID])
             placements = plan.placements
         }
-        guard let frame = placements[sourceWindowID], !frame.isEmpty else { return nil }
+        guard let placedFrame = placements[sourceWindowID], !placedFrame.isEmpty else { return nil }
+        let previewFrame = stackedTileFrame ?? placedFrame
         return DropPreviewCandidate(
             sourceWindowID: sourceWindowID,
             displayID: display.id,
             scope: scope,
             orderedWindowIDs: ordered,
             placements: Dictionary(uniqueKeysWithValues: placements.map { ($0.key, Rect($0.value.integral)) }),
-            frame: frame.integral,
+            frame: previewFrame.integral,
             operation: operation,
             targetWindowID: targetWindowID,
             isTreeMode: allowsSlotTabs
@@ -509,16 +531,21 @@ struct DropPreviewEngine {
         in frame: CGRect,
         sourceIsActive: Bool,
         optionHeld: Bool = false,
-        allowsStackTab: Bool = false
+        allowsStackTab: Bool = false,
+        horizontalOnly: Bool = false
     ) -> DropPreviewOperation {
+        if allowsStackTab && optionHeld {
+            return .stackTab
+        }
         let unitX = (point.x - frame.minX) / max(1, frame.width)
         let unitY = (point.y - frame.minY) / max(1, frame.height)
         let edge: CGFloat = 0.28
         if unitX < edge { return .insertLeft }
         if unitX > 1 - edge { return .insertRight }
-        if unitY < edge { return .insertUp }
-        if unitY > 1 - edge { return .insertDown }
-        if allowsStackTab && optionHeld { return .stackTab }
+        if !horizontalOnly {
+            if unitY < edge { return .insertUp }
+            if unitY > 1 - edge { return .insertDown }
+        }
         return sourceIsActive ? .swap : .insertRight
     }
 
@@ -862,7 +889,7 @@ final class WindowDragReorderController {
             Task { @MainActor [weak self] in self?.cancelPendingDrag() }
             return true
         }
-        if type == .flagsChanged, owned, !draining {
+        if type == .flagsChanged, (owned || pending?.didDrag == true), !draining {
             let point = CGPoint(x: event.location.x, y: dragPrimaryHeight - event.location.y)
             let sequence = pointerSequence
             Task { @MainActor [weak self] in
