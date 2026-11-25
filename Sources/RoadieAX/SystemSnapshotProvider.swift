@@ -333,9 +333,10 @@ public final class AXUnresponsiveApps: Sendable {
         var resumeAt: [pid_t: Date] = [:]
         var startupGraceUntil: [pid_t: Date] = [:]
         var responsivePIDs: Set<pid_t> = []
-        /// Compteur monotone incrémenté par `forget(_:)` pour invalider toute sonde `launchDateProvider`
-        /// exécutée hors verrou avant la fermeture du processus.
-        var forgetGeneration: UInt64 = 0
+        /// Jetons des sondes `launchDateProvider` en cours par PID : `forget(pid)` n'invalide
+        /// que les sondes de ce PID sans affecter les autres applications.
+        var activeLaunchProbes: [pid_t: Set<UInt64>] = [:]
+        var nextProbeID: UInt64 = 0
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -393,7 +394,7 @@ public final class AXUnresponsiveApps: Sendable {
             s.resumeAt[pid] = nil
             s.startupGraceUntil[pid] = nil
             s.responsivePIDs.remove(pid)
-            s.forgetGeneration &+= 1
+            s.activeLaunchProbes[pid] = nil
         }
     }
 
@@ -424,13 +425,17 @@ public final class AXUnresponsiveApps: Sendable {
                 s.resumeAt[pid] = current.addingTimeInterval(Self.quarantineDuration)
                 return .recorded
             }
-            return .checkLaunchDate(s.forgetGeneration)
+            s.nextProbeID &+= 1
+            let probeID = s.nextProbeID
+            s.activeLaunchProbes[pid, default: []].insert(probeID)
+            return .checkLaunchDate(probeID)
         }
-        if case .checkLaunchDate(let capturedGeneration) = probe {
+        if case .checkLaunchDate(let probeID) = probe {
             let launchDate = launchDateProvider(pid)
             state.withLock { s in
-                // Si `forget(_:)` a tourné pendant la sonde hors verrou, ne pas recréer d'état obsolète.
-                guard s.forgetGeneration == capturedGeneration else { return }
+                // Si `forget(pid)` a tourné pendant la sonde hors verrou, ne pas recréer d'état obsolète.
+                guard s.activeLaunchProbes[pid]?.remove(probeID) != nil else { return }
+                if s.activeLaunchProbes[pid]?.isEmpty == true { s.activeLaunchProbes[pid] = nil }
                 let isFastStartupFailure: Bool
                 if !s.responsivePIDs.contains(pid), let launchDate {
                     let age = current.timeIntervalSince(launchDate)

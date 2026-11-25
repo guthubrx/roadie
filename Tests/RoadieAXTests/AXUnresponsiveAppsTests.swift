@@ -1,5 +1,6 @@
 import ApplicationServices
 import Foundation
+import os
 import Testing
 @testable import RoadieAX
 
@@ -115,38 +116,70 @@ struct AXUnresponsiveAppsTests {
     }
 
     @Test
-    func concurrentForgetDuringLaunchDateProbeDoesNotRecreateQuarantineOrGraceState() {
+    func concurrentForgetDuringLaunchDateProbeIsScopedPerPID() {
+        final class ProbeDates: @unchecked Sendable {
+            var dates: [pid_t: Date] = [:]
+        }
         let clock = ManualClock()
         let launchedAt = clock.now.addingTimeInterval(-0.2)
+        let probeDates = ProbeDates()
+        probeDates.dates[106] = launchedAt
+        probeDates.dates[107] = launchedAt
+
         let probeEntered = DispatchSemaphore(value: 0)
         let releaseProbe = DispatchSemaphore(value: 0)
+        let blockedPID = OSAllocatedUnfairLock(initialState: pid_t(106))
         let registry = AXUnresponsiveApps(
             now: { clock.now },
             launchDateProvider: { pid in
-                guard pid == 106 else { return nil }
-                probeEntered.signal()
-                _ = releaseProbe.wait(timeout: .now() + 5)
-                return launchedAt
+                let target = blockedPID.withLock { $0 }
+                if pid == target {
+                    probeEntered.signal()
+                    _ = releaseProbe.wait(timeout: .now() + 5)
+                }
+                return probeDates.dates[pid]
             }
         )
 
-        let finished = DispatchSemaphore(value: 0)
+        // Cas 1 : forget(106) pendant la sonde du même PID 106 -> aucune quarantaine ni grâce résiduelle.
+        let finishedSame = DispatchSemaphore(value: 0)
         DispatchQueue.global().async {
             _ = registry.noteResult(.cannotComplete, pid: 106, elapsed: 0.002)
-            finished.signal()
+            finishedSame.signal()
         }
-
-        // La sonde launchDateProvider est en vol hors verrou : un autre thread ferme l'app.
         #expect(probeEntered.wait(timeout: .now() + 5) == .success)
         registry.forget(106)
         releaseProbe.signal()
-        #expect(finished.wait(timeout: .now() + 5) == .success)
+        #expect(finishedSame.wait(timeout: .now() + 5) == .success)
 
-        // Aucune quarantaine ni grâce résiduelle ne doit avoir été recréée après forget(106).
         #expect(!registry.isQuarantined(106))
-        // Un appel ultérieur sans durée mesurée (`elapsed: nil`) confirme l'absence d'état corrompu.
-        #expect(registry.noteResult(.cannotComplete, pid: 106))
+        // Vérifie aussi l'absence de startupGraceUntil résiduelle : sans launchDate (app fermée),
+        // un appel rapide `.cannotComplete` applique désormais la quarantaine complète de 5 s.
+        probeDates.dates[106] = nil
+        blockedPID.withLock { $0 = 0 }
+        #expect(registry.noteResult(.cannotComplete, pid: 106, elapsed: 0.002))
+        clock.advance(1.0)
         #expect(registry.isQuarantined(106))
+
+        // Cas 2 : forget(207) sur un autre PID pendant la sonde de 107 -> 107 conserve sa mise de côté.
+        clock.now = Date(timeIntervalSince1970: 2_000)
+        probeDates.dates[107] = clock.now.addingTimeInterval(-0.2)
+        blockedPID.withLock { $0 = 107 }
+        let finishedOther = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            _ = registry.noteResult(.cannotComplete, pid: 107, elapsed: 0.002)
+            finishedOther.signal()
+        }
+        #expect(probeEntered.wait(timeout: .now() + 5) == .success)
+        registry.forget(207)
+        releaseProbe.signal()
+        #expect(finishedOther.wait(timeout: .now() + 5) == .success)
+
+        #expect(registry.isQuarantined(107))
+        clock.advance(0.15)
+        #expect(registry.isQuarantined(107))
+        clock.advance(0.10)
+        #expect(!registry.isQuarantined(107))
     }
 
     @Test @MainActor
