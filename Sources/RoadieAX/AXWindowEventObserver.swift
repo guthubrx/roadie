@@ -316,9 +316,15 @@ public final class AXWindowEventObserver {
                 ))
             }
         }
-        if needsRetry {
+        if shouldRetrySubscription(pid: pid, notificationRetryNeeded: needsRetry) {
             scheduleRetry(pid: pid, attempt: attempt)
         }
+    }
+
+    /// Programme un réessai borné si au moins une notification n'a pas encore pu être posée
+    /// ou si un rattrapage `AXWindowCreated` attend encore une énumération AX réussie.
+    func shouldRetrySubscription(pid: pid_t, notificationRetryNeeded: Bool) -> Bool {
+        notificationRetryNeeded || pendingStartupCatchup.contains(pid)
     }
 
     /// Mémorise qu'un rattrapage `AXWindowCreated` reste dû jusqu'à une énumération réussie,
@@ -342,7 +348,10 @@ public final class AXWindowEventObserver {
     }
 
     private func scheduleRetry(pid: pid_t, attempt: Int) {
-        guard attempt < Self.retryDelays.count else { return }
+        guard attempt < Self.retryDelays.count else {
+            pendingStartupCatchup.remove(pid)
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.retryDelays[attempt]) { [weak self] in
             guard let self, self.isStarted, NSRunningApplication(processIdentifier: pid) != nil else { return }
             self.subscribe(pid: pid, attempt: attempt + 1)

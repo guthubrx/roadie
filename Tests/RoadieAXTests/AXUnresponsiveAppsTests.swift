@@ -89,9 +89,13 @@ struct AXUnresponsiveAppsTests {
         let observer = AXWindowEventObserver(onWindowEvent: { _ in })
         // Réessai 1 : AXWindowCreated s'abonne, mais une notif suivante met le PID en pause avant énumération
         observer.noteStartupWindowCreatedSubscription(pid: 77, attempt: 1, hadWindowCreated: false, hasWindowCreatedNow: true)
+        // Même si toutes les notifications réussissent ensuite mais que l'énumération renvoie nil,
+        // un réessai reste programmé tant que le rattrapage n'est pas consommé.
+        #expect(observer.shouldRetrySubscription(pid: 77, notificationRetryNeeded: false))
         // Réessai 2 : hadWindowCreated vaut désormais true, puis l'énumération réussit avec une fenêtre préexistante
         observer.noteStartupWindowCreatedSubscription(pid: 77, attempt: 2, hadWindowCreated: true, hasWindowCreatedNow: true)
         #expect(observer.consumeStartupCatchup(pid: 77, hasEnumeratedWindows: true))
+        #expect(!observer.shouldRetrySubscription(pid: 77, notificationRetryNeeded: false))
         // Une seconde consommation ne réémet jamais de doublon
         #expect(!observer.consumeStartupCatchup(pid: 77, hasEnumeratedWindows: true))
     }
