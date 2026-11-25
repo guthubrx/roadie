@@ -374,5 +374,27 @@ final class Spec165TabbedBSPTreeTests: XCTestCase {
         let mixedFrames = mixedSolved!.place(in: twoGroupBox, innerGap: 10, tabBarHeight: 28)
         XCTAssertGreaterThanOrEqual(mixedFrames[w1]!.height, 200)
         XCTAssertGreaterThanOrEqual(mixedFrames[w3]!.height, 140)
+
+        // Constat Bridget R4 : borne supérieure du régime sans barre conservée (404 / gap 10 / barre 28 :
+        // A=232 min 200, B=162 contenu 130 min 140 -> pousse A à 243 et B à 151 sans barre, contenus 211 et 151)
+        let upperBoundBox = CGRect(x: 0, y: 0, width: 800, height: 404)
+        let upperBoundTree: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 232.5 / 394.0,
+            first: .tabGroup(windowIDs: [w1, w2], active: w1),
+            second: .tabGroup(windowIDs: [w3, w4], active: w3)
+        )
+        let upperBoundSolved = upperBoundTree.correctingForMinimumSize(
+            of: w3,
+            minimum: CGSize(width: 100, height: 140),
+            in: upperBoundBox,
+            innerGap: 10,
+            tabBarHeight: 28,
+            knownMinimums: [w1: CGSize(width: 100, height: 200)]
+        )
+        XCTAssertNotNil(upperBoundSolved)
+        let upperBoundFrames = upperBoundSolved!.place(in: upperBoundBox, innerGap: 10, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(upperBoundFrames[w1]!.height, 200)
+        XCTAssertGreaterThanOrEqual(upperBoundFrames[w3]!.height, 140)
     }
 }

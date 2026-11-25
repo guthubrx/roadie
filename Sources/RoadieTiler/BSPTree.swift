@@ -906,11 +906,20 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                     return CGFloat(low) + fraction
                 }
 
-                // Intervalle des étendues entières first compatibles avec les deux besoins
-                // et les bornes du ratio. second reçoit exactement usable - first, comme place.
-                func firstExtentRange(usable: CGFloat, first: CGFloat, second: CGFloat) -> ClosedRange<CGFloat>? {
-                    let lower = max(ceil(first), floor(usable * Self.ratioBounds.lowerBound))
-                    let upper = min(floor(usable - second), floor(usable * Self.ratioBounds.upperBound))
+                // Intervalle des étendues entières first compatibles avec les deux besoins,
+                // d'éventuelles bornes supérieures (régime sans barre) et les bornes du ratio.
+                // second reçoit exactement usable - first, comme place.
+                func firstExtentRange(
+                    usable: CGFloat,
+                    first: CGFloat,
+                    second: CGFloat,
+                    firstMax: CGFloat? = nil,
+                    secondMax: CGFloat? = nil
+                ) -> ClosedRange<CGFloat>? {
+                    let fromSecondMax = secondMax.map { ceil(usable - $0) } ?? 0
+                    let fromFirstMax = firstMax.map { floor($0) } ?? .infinity
+                    let lower = max(max(ceil(first), fromSecondMax), floor(usable * Self.ratioBounds.lowerBound))
+                    let upper = min(min(floor(usable - second), fromFirstMax), floor(usable * Self.ratioBounds.upperBound))
                     return lower <= upper ? lower...upper : nil
                 }
 
@@ -918,6 +927,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
 
                 func attemptAxis(allowNoBarTabGroup: Bool) -> BSPTree? {
                     var requirements: [[Bool]: CGFloat] = [:]
+                    var upperBounds: [[Bool]: CGFloat] = [:]
 
                     func requiredExtent(of node: BSPTree, in rect: CGRect, path: [Bool]) -> CGFloat? {
                         let required: CGFloat?
@@ -944,7 +954,8 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                                 // La hauteur de contenu présente une discontinuité au seuil d'apparition de la barre
                                 // (T = tabBarHeight + tabBarGap + minimumContentHeightForTabBar).
                                 // Pass 1 : cherche dans l'intervalle avec barre [T, max] ;
-                                // Pass 2 (repli si infaisable) : cherche dans l'intervalle sans barre [0, T - 1].
+                                // Pass 2 (repli si infaisable) : chaque groupe choisit [0, T - 1] (avec borne
+                                // supérieure conservée pour ne pas faire réapparaître la barre) ou [T, max].
                                 let fraction = extent(rect) - floor(extent(rect))
                                 let maxExtent = Int(max(0, floor(extent(container) - fraction)))
                                 let threshold = Int(ceil(tabBarHeight + Self.tabBarGap + Self.minimumContentHeightForTabBar))
@@ -958,6 +969,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                                         else { low = middle + 1 }
                                     }
                                     required = CGFloat(low) + fraction
+                                    upperBounds[path] = CGFloat(noBarUpper) + fraction
                                 } else {
                                     let barLower = min(maxExtent, threshold)
                                     if fitsContent(withExtent(CGFloat(maxExtent) + fraction, in: rect)) {
@@ -978,21 +990,35 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                             }
                         case .split(let orientation, let ratio, let first, let second):
                             let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
-                            guard let a = requiredExtent(of: first, in: rects.first, path: path + [true]),
-                                  let b = requiredExtent(of: second, in: rects.second, path: path + [false])
+                            let firstPath = path + [true]
+                            let secondPath = path + [false]
+                            guard let a = requiredExtent(of: first, in: rects.first, path: firstPath),
+                                  let b = requiredExtent(of: second, in: rects.second, path: secondPath)
                             else { return nil }
+                            let aMax = upperBounds[firstPath]
+                            let bMax = upperBounds[secondPath]
                             if orientation != axis {
                                 required = max(a, b)
+                                if let aMax, let bMax {
+                                    upperBounds[path] = min(aMax, bMax)
+                                } else if let only = aMax ?? bMax {
+                                    upperBounds[path] = only
+                                }
                             } else if node.contains(window) {
                                 required = minimumExtent(in: rect) {
                                     firstExtentRange(usable: Self.usableExtent(of: $0, orientation: axis, innerGap: innerGap),
-                                                     first: a, second: b) != nil
+                                                     first: a, second: b, firstMax: aMax, secondMax: bMax) != nil
+                                }
+                                if let aMax, let bMax {
+                                    upperBounds[path] = aMax + bMax + Self.gap(for: axis, innerGap: innerGap)
                                 }
                             } else {
                                 // Les sous-arbres voisins gardent leurs ratios, donc aussi leurs coupes internes.
                                 required = minimumExtent(in: rect) {
                                     let children = Self.childRects(of: $0, orientation: orientation, ratio: ratio, innerGap: innerGap)
-                                    return extent(children.first) >= a && extent(children.second) >= b
+                                    let firstOK = extent(children.first) >= a && (aMax.map { extent(children.first) <= $0 } ?? true)
+                                    let secondOK = extent(children.second) >= b && (bMax.map { extent(children.second) <= $0 } ?? true)
+                                    return firstOK && secondOK
                                 }
                             }
                         }
@@ -1012,9 +1038,17 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                         var newRatio = ratio
                         if orientation == axis, path.count >= anchor.path.count {
                             let usable = Self.usableExtent(of: rect, orientation: axis, innerGap: innerGap)
+                            let firstPath = path + [true]
+                            let secondPath = path + [false]
                             guard usable > 0,
-                                  let a = requirements[path + [true]], let b = requirements[path + [false]],
-                                  let allowed = firstExtentRange(usable: usable, first: a, second: b)
+                                  let a = requirements[firstPath], let b = requirements[secondPath],
+                                  let allowed = firstExtentRange(
+                                      usable: usable,
+                                      first: a,
+                                      second: b,
+                                      firstMax: upperBounds[firstPath],
+                                      secondMax: upperBounds[secondPath]
+                                  )
                             else { return nil }
                             let oldExtent = floor(usable * min(max(ratio, Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound))
                             let newExtent = min(max(oldExtent, allowed.lowerBound), allowed.upperBound)
