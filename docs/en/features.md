@@ -573,7 +573,7 @@ opening Alfred: `search` opens the bar, `run trigger` runs the trigger, `set con
 `remove configuration` keep the setting in `~/.roadies/workflows-settings/` (never in Alfred's folder),
 `reveal workflow` shows the folder, `version` returns the version. `roadie workflow list` lists these
 « ordres à Alfred » and the « non traduits » ones. Text, Image and PDF views and Alfred
-Remote buttons: see below. Never: snippets, Alfred's buffer, compiled AppleScript. A script run by a workflow gets Roadie's Accessibility permission
+Remote buttons: see below. Not imported from Alfred's proprietary format: Alfred snippets (Roadie includes its own local snippets `snip`), Alfred's clipboard buffer (Roadie includes its own secure clipboard history `cb`), compiled AppleScript. A script run by a workflow gets Roadie's Accessibility permission
 (measured). The log keeps neither input nor result.
 
 **Verbs and destinations**: Tab on the selected row opens its verbs. App: open or go

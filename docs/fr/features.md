@@ -598,7 +598,7 @@ Roadie fait lui-même ce qui est demandé, sans ouvrir Alfred : `search` ouvre l
 lance le déclencheur, `set configuration` / `remove configuration` gardent le réglage dans
 `~/.roadies/workflows-settings/` (jamais dans le dossier d'Alfred), `reveal workflow` montre le dossier,
 `version` rend la version. `roadie workflow list` liste ces « ordres à Alfred » et ceux « non traduits ».
-Vues Texte, Image et PDF et boutons d'Alfred Remote : voir plus bas. Jamais : snippets, tampon d'Alfred, scripts AppleScript compilés. Un script lancé par un workflow obtient
+Vues Texte, Image et PDF et boutons d'Alfred Remote : voir plus bas. Non importés du format propriétaire d'Alfred : snippets Alfred (Roadie fournit ses propres snippets locaux `snip`), historique du presse-papiers Alfred (Roadie fournit son propre historique sécurisé `cb`), scripts AppleScript compilés. Un script lancé par un workflow obtient
 l'autorisation Accessibilité de Roadie (mesuré). Le journal ne garde ni saisie ni résultat.
 
 **Verbes et destinations** : Tab sur la ligne choisie ouvre ses verbes. Application :

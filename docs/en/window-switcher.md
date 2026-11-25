@@ -14,7 +14,7 @@ configure **Cmd+Tab** in BetterTouchTool:
 - releasing Command activates the selected window; Escape cancels.
 
 Use the full installed CLI path in a shell action, for example
-`/Users/moi/.local/bin/roadie`. Adapt it for another installation.
+`$HOME/.local/bin/roadie` (or `/Users/<username>/.local/bin/roadie`).
 An internal shortcut is also available through the optional profile field.
 
 A profile can keep the switcher open after release. Search by application, title,
@@ -134,8 +134,24 @@ An icon taller than the text makes the title row taller. The Icons style always 
 its icon, at that size.
 
 Actions target the selected window: close, minimize or restore, hide or normally
-quit the application, maximize, and Roadie fullscreen. Applications can still ask
-to save documents before quitting.
+quit the application, summon to the active stage, maximize, and Roadie fullscreen.
+Applications can still ask to save documents before quitting.
+
+### Direct action keys and quick scope filters
+
+When `switcher.action_keys_enabled` is enabled (on by default, in **Settings >
+Switcher**) and the search field is not focused, seven single-key shortcuts act
+directly without opening the Actions menu:
+
+| Key | Action |
+|---|---|
+| `W` | Close the selected window |
+| `Q` | Gracefully quit the selected window's application |
+| `M` | Minimize or restore the window |
+| `H` | Hide the application |
+| `S` | Summon the window into the active stage and focus it |
+| `A` | Temporarily filter by the current application (press again to toggle off) |
+| `D` | Temporarily filter by the current display (press again to toggle off) |
 
 ## Commands and gestures
 

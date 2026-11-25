@@ -6,9 +6,9 @@
 # Every value below is the default unless a comment says otherwise.
 # Chaque valeur ci-dessous est la valeur par défaut, sauf indication contraire.
 
-# EN: Tiling engine. default_strategy: spatialBsp | bsp | masterStack | float.
+# EN: Tiling engine. default_strategy: spatialBsp | bsp | masterStack | tabbed | scrolling | float.
 #     spatialBsp = yabai-like persistent tree (aliases: mutableBsp, yabai).
-# FR: Moteur de tiling. default_strategy : spatialBsp | bsp | masterStack | float.
+# FR: Moteur de tiling. default_strategy : spatialBsp | bsp | masterStack | tabbed | scrolling | float.
 #     spatialBsp = arbre persistant façon yabai (alias : mutableBsp, yabai).
 [tiling]
 default_strategy = "spatialBsp"
@@ -20,6 +20,13 @@ live_drag_preview = true
 gaps_outer = 8
 gaps_inner = 4
 master_ratio = 0.6
+# EN: Tabbed mode bar height (20..44 pt) and scrolling ribbon column ratio (0.25..1.0).
+# FR: Hauteur de la barre d'onglets (20..44 pt) et largeur de colonne du ruban défilant (0.25..1.0).
+tabbed_bar_height = 28
+scrolling_column_width = 0.65
+# EN: Enable named floating scratchpads (roadie scratchpad).
+# FR: Activer les scratchpads flottants nommés (roadie scratchpad).
+scratchpad_enabled = true
 # EN: Remove the gaps when a stage holds a single window.
 # FR: Supprime les marges quand une stage ne contient qu'une fenêtre.
 smart_gaps_solo = false
@@ -79,6 +86,9 @@ thumbnail_width = 220
 font_size = 16
 font_family = "system"
 preview = true
+# EN: Direct single-key actions in the switcher (W/Q/M/H/S/A/D outside search).
+# FR: Touches d'action directe dans le sélecteur (W/Q/M/H/S/A/D hors recherche).
+action_keys_enabled = true
 excluded_bundles = []
 
 [[switcher.shortcuts]]
@@ -131,10 +141,32 @@ stages_position = "center"
 [fx.rail.stage_labels]
 enabled = true
 
+# EN: Soft click-through dimming veil over unfocused tiled windows in the active stage. Off by default.
+# FR: Voile doux traversant aux clics sur les fenêtres inactives de la stage active. Désactivé par défaut.
+[fx.dim_inactive]
+enabled = false
+opacity = 0.22
+
 # EN: Target mode (letters and search). label_font_size: label text size in points, 8 to 48.
 # FR: Mode cible (lettres et recherche). label_font_size : taille du texte des étiquettes en points, de 8 à 48.
 [launcher]
 label_font_size = 13
+calc_conversions = true
+emoji_picker = true
+timer_enabled = true
+
+# EN: Local clipboard history (0o600 permissions; sensitive types and password managers excluded).
+# FR: Historique presse-papiers local (droits 0o600 ; types sensibles et gestionnaires de mots de passe exclus).
+[clipboard]
+enabled = true
+max_items = 200
+retention_days = 7
+
+# EN: Local snippets (search with "snip" in launcher; optional global auto-expansion off by default).
+# FR: Snippets locaux (recherche « snip » dans le lanceur ; auto-expansion globale désactivée par défaut).
+[snippets]
+enabled = true
+auto_expand = false
 
 # EN: Recursive grid. label_font_size: label text size in points, 8 to 48.
 # FR: Grille récursive. label_font_size : taille du texte des étiquettes en points, de 8 à 48.

@@ -67,6 +67,8 @@ roadie warp left|right|up|down
 roadie resize left|right|up|down
 roadie window display 2
 roadie window desktop 2 --follow
+roadie window close [WINDOW_ID]
+roadie window gather-app
 roadie window reset
 roadie window explain [ID]   # pourquoi cette fenêtre est tuilée ou flottante
 roadie toggle maximize
@@ -94,6 +96,8 @@ Cas d'usage :
 roadie mode bsp
 roadie mode spatialBsp
 roadie mode masterStack
+roadie mode tabbed       # alias : tabs, onglets
+roadie mode scrolling    # alias : scroll, ribbon, niri, ruban
 roadie mode float
 roadie layout plan --json
 roadie layout apply --yes
@@ -102,6 +106,8 @@ roadie layout split vertical
 roadie layout join-with left|right|up|down
 roadie layout insert left|right|up|down
 roadie layout toggle-split [left|right|up|down]
+roadie layout rotate 90|180|270
+roadie layout mirror x|y
 roadie layout flatten
 roadie layout zoom-parent
 roadie layout width next
@@ -290,10 +296,29 @@ roadie targets search
 roadie targets actions
 roadie undo
 roadie launch --open-items --tabs
-roadie project save Perso
+roadie project save Perso [--url URL] [--app BUNDLE_ID] [--note TEXTE]
+roadie project info Perso [--json]
 roadie project open Perso
 roadie project list --json
 roadie project delete Perso
+roadie scratchpad assign [NOM] [--window ID]
+roadie scratchpad toggle [NOM]
+roadie scratchpad show [NOM]
+roadie scratchpad hide [NOM]
+roadie scratchpad release [NOM]
+roadie scratchpad list [--json]
+roadie clipboard list [--json]
+roadie clipboard search REQUETE
+roadie clipboard copy ID
+roadie clipboard pin ID
+roadie clipboard delete ID
+roadie clipboard clear [--all]
+roadie snippet list [--json]
+roadie snippet expand MOT_CLE [--copy]
+roadie timer start 15m [LIBELLE]
+roadie timer pomodoro [LIBELLE]
+roadie timer status [--json]
+roadie timer cancel [ID]
 roadie launch ~/Documents/rapport.pdf --stage Perso
 roadie launch /Applications/Firefox.app --new-stage
 roadie launch /System/Library/CoreServices/Finder.app --here --mouse

@@ -3,16 +3,17 @@
 
 # Roadie
 
-**A window manager and launcher for macOS: automatic tiling, named stages, virtual desktops, and a search bar that runs your Alfred workflows. Free.**
+**A window manager and launcher for macOS: automatic tiling (BSP, tabbed, scrolling ribbon), named stages, virtual desktops, secure clipboard, snippets, and a search bar that runs your Alfred workflows. Free.**
 
 English | [Français](README.fr.md)
 
 </div>
 
 Roadie organizes your windows around your activities and lets you drive everything from one bar.
-Group a project's apps in a stage, find them in the side rail and switch desktops on each display.
-Type a few letters to open an app, a window, a file or a web page, and choose where it opens. Your
-Alfred workflows run there too, without the Powerpack.
+Group a project's apps in a stage (with BSP tiling, tabs, or a scrolling ribbon), find them in the
+side rail and switch desktops on each display. Type a few letters to open an app, a window, a file,
+a clipboard entry or a snippet, and choose where it opens. Your Alfred workflows run there too,
+without the Powerpack.
 
 **[Download Roadie 0.14.0](https://github.com/guthubrx/roadie/releases/tag/v0.14.0)** ·
 [What's new](docs/releases/v0.14.0.en.md) · [Installation guide](#manual-installation)
@@ -25,8 +26,8 @@ Alfred workflows run there too, without the Powerpack.
 
 | | |
 |---|---|
-| **Window manager** | Automatic tiling, named stages, per-display virtual desktops, side rail, window switcher (Cmd+Tab), zone switcher (Option+Tab), overview |
-| **Launcher** | Apps, windows, open documents and tabs, files, browser bookmarks and history, settings, calculator, web, Alfred workflows |
+| **Window manager** | Automatic tiling (`spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float`), named stages, floating scratchpad, inactive window dimming (`dim_inactive`), per-display virtual desktops, side rail with clickable app icons, window switcher (`Cmd+Tab` + `W/Q/M/H/S/A/D` keys), zone switcher (`Option+Tab`), overview |
+| **Launcher** | Apps, windows, open documents and tabs, files, browser bookmarks and history, settings, calculator & converter (units, bases, time zones), color picker, native emojis, timer & Pomodoro, secure clipboard (`0o600`), local snippets, workspace scenes, web, Alfred workflows |
 
 They work together. The launcher knows where to put what it opens: in the Personal stage, on the other
 display, on the left. It finds a window hidden in an inactive stage or on another desktop. And the
@@ -77,13 +78,41 @@ without changing them, or the ones you install with `roadie workflow install`, n
 | | Alfred | Roadie |
 |---|---|---|
 | Launcher, files, calculator, web search | Free | Free |
+| Converter, color picker, emojis, timer & Pomodoro | Third-party workflows | Built into the core, offline |
+| Secure clipboard history & local snippets | Paid Powerpack | Free, 100% local (`0o600`) |
 | Workflows | Powerpack: £34, or £59 with lifetime upgrades | Free, same `.alfredworkflow` files |
-| Window management | Not included | Tiling, stages, desktops, switcher |
+| Window management | Not included | Tiling (`spatialBsp`, `tabbed`, `scrolling`), stages, scratchpad, desktops, switcher |
 
 Script Filters and their cache, the full object graph, per-row ⌘ ⌥ ⌃ modifiers, external triggers,
 hotkeys, grids, Text, Image and PDF views, Alfred Remote buttons: out of a corpus of 102 real
 workflows, 92 run completely. `roadie workflow list` tells you what is missing for each one. Not
-supported: snippets, Alfred's clipboard history, compiled AppleScript.
+imported from Alfred: Contacts, Alfred's proprietary snippet/clipboard format (Roadie includes its
+own native ones below), compiled AppleScript.
+
+### Built-in launcher tools: converter, timer, color picker and emojis
+
+<p align="center">
+  <img src="docs/assets/screenshots/launcher-tools.png" alt="Roadie built-in launcher tools: unit and base converter, Pomodoro timer, native color picker, and emoji catalog" width="95%">
+</p>
+
+Four everyday utilities run natively inside the launcher core, with no plugin and no network calls:
+
+- **Universal converter**: length, mass, temperature, data, speed, number bases (`0xff in dec`, `255 in bin`), and time zones (`14:00 NYC in Paris`), copied on Return.
+- **Timer & Pomodoro**: `timer 15m break`, `pomodoro`, `timer status`, `timer stop` (and `roadie timer` in CLI), with local macOS notifications.
+- **Native color picker (`NSColorSampler`)**: type `color picker`, sample any pixel on screen; Roadie copies `#RRGGBB` and displays HEX, RGB, and HSL.
+- **Built-in emojis & symbols**: `:rocket` or `emoji heart` opens a bilingual EN/FR grid without installing a workflow.
+
+### Secure local clipboard history and snippets
+
+<table>
+  <tr>
+    <td><img src="docs/assets/screenshots/launcher-clipboard.png" alt="Secure local clipboard history in Roadie's bar"></td>
+    <td><img src="docs/assets/screenshots/launcher-snippets.png" alt="Local snippets with dynamic variables in Roadie's bar"></td>
+  </tr>
+</table>
+
+- **Clipboard history (`cb` / `clipboard`)**: 100% local in `~/.roadies/clipboard.json` (strict `0o600` POSIX permissions, never logged to `events.jsonl`), deduplication, pinning, and configurable retention. Sensitive pasteboard types (`ConcealedType`, `TransientType`, `AutoGeneratedType`) and password managers (1Password, Bitwarden, KeePassXC, Keychain Access, LastPass, Dashlane) are automatically excluded.
+- **Local snippets (`snip` / `snippet`)**: defined in TOML (`[[snippets.items]]`) or **Settings > Search > Snippets**, with single-pass expansion of `{date}`, `{time}`, `{datetime}`, `{clipboard}`, and `{cursor}`, plus optional global keyboard auto-expansion (off by default, always skipped in macOS secure text input).
 
 ### Alfred's themes, too
 
@@ -138,25 +167,40 @@ tool that does this.
 
 | Your goal | Feature |
 |---|---|
-| Arrange windows | Automatic tiling, multiple layouts and divider handles in persistent tree layouts |
-| Switch projects | Named stages, previews and workspace switching from the rail |
-| Use multiple displays | Independent desktops, new windows on the active display by default, window and stage transfers |
-| Keep a window within reach | Pins, bookmarks and window groups |
-| Find and launch anything | Launcher, verbs and destinations, phrases, Alfred workflows |
-| Go back to a place you clicked | Zone switcher (Option+Tab), on-screen search with typo tolerance |
-| Work from the keyboard | Labels, grids and `/` commands in the bar |
+| Arrange windows | Automatic tiling (`spatialBsp`, `bsp`, `masterStack`), **Tabbed (`tabbed`)** and **Scrolling ribbon (`scrolling`)** modes, divider handles, `layout rotate`, and `layout mirror` |
+| Stay focused | **Named floating scratchpad**, **Dim Inactive** (subtle veil over unfocused tiled windows), rail-preserving maximization |
+| Switch projects | Named stages, enriched workspace scenes (`project save --url --app --note`), previews and clickable perspective app icons in the rail |
+| Use multiple displays | Independent desktops, new windows on the active display by default, window and stage transfers, `mouse_follows_focus` |
+| Keep a window within reach | Pins, bookmarks, scratchpads and window groups |
+| Find and launch anything | Launcher, verbs and destinations, phrases, converter, color picker, emojis, timer/Pomodoro, secure clipboard, snippets, Alfred workflows |
+| Go back to a place you clicked | Zone switcher (`Option+Tab`), on-screen search with typo tolerance, direct `W/Q/M/H/S/A/D` keys in the switcher |
+| Work from the keyboard | Labels, grids, `/` commands in the bar, and shell completions (`zsh`, `bash`, `fish`) |
 | Personalize the interface | Live settings, independent sizes and font choices |
 | Automate routine actions | Placement rules, short macros, commands and a JSON API |
 
 ### A layout that follows your work
 
+<p align="center">
+  <img src="docs/assets/screenshots/layouts-advanced.png" alt="Roadie advanced layouts: Tabbed mode with clickable tab bar and Scrolling ribbon mode with inactive window dimming" width="100%">
+</p>
+
 Roadie arranges windows and adjusts their space as you open or close them.
-Choose a balanced layout, a main window beside its neighbors, or free placement.
+Choose from six layouts per stage: persistent tree (`spatialBsp`), balanced
+tiling (`bsp`), master + stack (`masterStack`), **tabbed (`tabbed`)** with a
+clickable floating tab bar, **scrolling ribbon (`scrolling`)** inspired by Niri
+with centered columns and clickable neighbor edges, or free placement (`float`).
 
 Rearrange windows by dragging: drop in the center to swap positions, or on an
-edge to insert on that side. You can also adjust proportions from the keyboard
-or drag divider handles between window groups. Control their visibility in Tiling settings.
-Maximization keeps the rail within reach and lets you return to the previous layout.
+edge to insert on that side. You can also adjust proportions from the keyboard,
+rotate or mirror the tree (`layout rotate`, `layout mirror`), gather an app's
+windows (`window gather-app`), toggle a centered **floating scratchpad** on
+demand (`roadie scratchpad`), enable **Dim Inactive** (`fx.dim_inactive`), or
+drag divider handles between window groups. Maximization keeps the rail within
+reach and lets you return to the previous layout.
+
+Accessibility frame writes are parallelized per application (PID), and
+slow-starting apps (such as a terminal booting Conda) enter the canvas as soon
+as their window becomes ready, without a 5-second quarantine penalty.
 
 [Explore layouts and gestures](docs/en/features.md)
 
@@ -191,7 +235,10 @@ stage. In Réglages Roadie > Sélecteur, create profiles for a display, desktop,
 application. Record a shortcut directly, let BetterTouchTool manage it, or use an
 external CLI binding. Choose whether releasing the keys activates the selection,
 keeps the switcher open or starts search. Navigate with the four arrow keys or
-the mouse, and give each profile its own appearance. Organize windows into stage
+the mouse. Outside the search field, direct action keys control the selected window
+without leaving the switcher: `W` (close), `Q` (quit app), `M` (minimize/restore),
+`H` (hide app), `S` (summon to the active stage), `A` (filter by current app), and
+`D` (filter by current display). Give each profile its own appearance. Organize windows into stage
 columns, desktop tabs, a hierarchy, grouped sections or desktop overviews.
 The classic grid remains available.
 [Window switcher guide](docs/en/window-switcher.md).
@@ -504,6 +551,8 @@ Switch layout mode for the current stage:
 roadie mode spatialBsp   # alias: mutableBsp, yabai
 roadie mode bsp
 roadie mode masterStack
+roadie mode tabbed       # alias: tabs, onglets
+roadie mode scrolling    # alias: scroll, ribbon, niri, ruban
 roadie mode float
 ```
 
@@ -516,7 +565,21 @@ roadie focus back-and-forth
 roadie move left
 roadie warp right
 roadie resize left
+roadie window close
+roadie window gather-app
 roadie display focus right
+```
+
+Floating scratchpad, clipboard history, snippets, timer, and workspace scenes:
+
+```bash
+roadie scratchpad assign notes
+roadie scratchpad toggle notes
+roadie clipboard list
+roadie snippet expand !sig --copy
+roadie timer pomodoro
+roadie project save Dev --url https://example.org --app com.apple.Terminal --note "Current sprint"
+roadie project info Dev
 ```
 
 Move the focused window to another display:
@@ -603,6 +666,8 @@ display.
 roadie layout split horizontal
 roadie layout split vertical
 roadie layout toggle-split
+roadie layout rotate 90
+roadie layout mirror x
 roadie warp right
 roadie layout flatten
 roadie layout zoom-parent
@@ -674,7 +739,8 @@ Supported interactions:
 - Drag an application window by its title bar onto a stage to move it there.
 - Drag an application window by its title bar onto empty rail space to place it in an empty or newly created stage.
 - Drag a stage with the right mouse button to reorder stages. A translucent preview shows its destination, while neighboring cards show the new order. Release to apply it, or move outside the rail before releasing to cancel.
-- Right-click a stage without dragging to open its menu: rename the stage, send the stage to another display, send a window to another stage, or delete the stage once it has no window.
+- Right-click a stage without dragging to open its menu: rename the stage, switch its **layout mode** (`spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float`), send the stage to another display, send a window to another stage, or delete the stage once it has no window.
+- Click directly on the **perspective app icons** under each 3D card (with hover highlighting) to activate or summon a specific window from that stage.
 - Clicks in macOS-reserved areas such as the menu bar are ignored by rail empty-click handling.
 
 Adjust the strength in **Réglages Roadie > Rail > Aimantation du réordonnancement (%)**. At 0, snapping is disabled; higher values keep the preview at its destination through small pointer movements.

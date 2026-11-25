@@ -198,6 +198,66 @@ struct Spec124DocScreenshots {
         ], selected: 1)
     }
 
+    private func clipboardScene() -> TargetSearchBar {
+        bar("cb", [
+            header(tr("Presse-papiers local · 0o600 · mots de passe exclus", "Local clipboard · 0o600 · passwords excluded")),
+            row("📌 git switch -c feat/layouts-advanced", tr("Terminal · épinglé · Retour copie", "Terminal · pinned · Return copies"), .file(App.terminal)),
+            row("https://example.org/docs/roadmap", tr("Safari · il y a 2 min · 34 car.", "Safari · 2m ago · 34 chars"), .file(App.safari)),
+            row(tr("Réunion produit jeudi à 10 h 00 — salle Lisbonne", "Product meeting Thursday 10:00 AM — Lisbon room"),
+                tr("Notes · il y a 8 min · 48 car.", "Notes · 8m ago · 48 chars"), .file(App.notes)),
+            row("{\"mode\": \"scrolling\", \"column_width\": 0.65}", tr("Terminal · il y a 19 min · JSON", "Terminal · 19m ago · JSON"), .file(App.terminal)),
+            row(tr("Budget prévisionnel T2 : +12 %", "Q2 forecast budget: +12%"), tr("Mail · il y a 42 min · 30 car.", "Mail · 42m ago · 30 chars"), .file(App.mail)),
+        ], selected: 1, view: .list)
+    }
+
+    private func snippetsScene() -> TargetSearchBar {
+        bar("snip", [
+            header(tr("Snippets locaux · variables {date} {clipboard} {cursor}", "Local snippets · {date} {clipboard} {cursor} variables")),
+            row("!date · " + tr("Date du jour", "Today's date"), tr("2026-11-25 · Retour copie l'expansion", "2026-11-25 · Return copies expansion"), .symbol("calendar.badge.clock")),
+            row("!sig · " + tr("Signature courte", "Short signature"), tr("Cordialement,\nAlex — Équipe produit", "Best regards,\nAlex — Product team"), .symbol("signature")),
+            row("!cr · " + tr("Compte-rendu de réunion", "Meeting notes template"), tr("# Réunion {date} — {clipboard}", "# Meeting {date} — {clipboard}"), .symbol("doc.text")),
+            row("!mail · " + tr("Adresse exemple", "Example address"), "alex@example.org", .symbol("envelope")),
+        ], selected: 1, view: .list)
+    }
+
+    private func converterMiniScene() -> TargetSearchBar {
+        bar("100 km in mi", [
+            header(tr("Convertisseur intégré · unités, bases, fuseaux", "Built-in converter · units, bases, time zones")),
+            row(tr("62,14 mi", "62.14 mi"), tr("100 km → miles · Retour copie", "100 km → miles · Return copies"), .symbol("arrow.left.arrow.right.square")),
+            row("0xff → 255", tr("Hexadécimal · binaire · octal · fuseaux", "Hex · binary · octal · time zones"), .symbol("number.square")),
+        ], selected: 1)
+    }
+
+    private func timerMiniScene() -> TargetSearchBar {
+        bar("timer 25m focus", [
+            header(tr("Minuteur & Pomodoro", "Timer & Pomodoro")),
+            row(tr("Démarrer le minuteur : 25 min — focus", "Start timer: 25 min — focus"), tr("Notification locale macOS à la fin", "Local macOS notification when done"), .symbol("timer")),
+            row(tr("Pomodoro · 25 min de concentration", "Pomodoro · 25 min focus session"), "pomodoro · timer status · timer stop", .symbol("flame")),
+        ], selected: 1)
+    }
+
+    private func colorPickerMiniScene() -> TargetSearchBar {
+        bar(tr("pipette", "color picker"), [
+            header(tr("Pipette de couleur native", "Native color picker")),
+            row(tr("Ouvrir la pipette de couleur", "Open color picker"), "#3B82F6 · rgb(59, 130, 246) · hsl(217, 91%, 60%)", .symbol("eyedropper.halffull")),
+            row(tr("Copie #RRGGBB dans le presse-papiers", "Copies #RRGGBB to clipboard"), tr("Sans plugin externe · NSColorSampler", "Built-in · NSColorSampler"), .symbol("swatchpalette")),
+        ], selected: 1)
+    }
+
+    private func nativeEmojiMiniScene() -> TargetSearchBar {
+        let emojis: [(String, String, String)] = [
+            ("🚀", "Fusée", "Rocket"), ("✨", "Étincelles", "Sparkles"), ("🔥", "Feu", "Fire"),
+            ("⚡", "Éclair", "Lightning"), ("🎯", "Cible", "Target"), ("💡", "Idée", "Idea"),
+            ("🧩", "Puzzle", "Puzzle"),
+        ]
+        let copies = tr("Retour copie", "Return copies")
+        var state = bar(tr(":fusée", ":rocket"), emojis.map { row(tr($0.1, $0.2), "\(copies) \($0.0)", .image(emojiImage($0.0))) },
+                        selected: 0, view: .grid)
+        state.grid = SearchGrid(columns: 7, showTitles: false,
+                                footer: "\(tr("Fusée", "Rocket")) · \(copies) 🚀 · " + tr("Catalogue natif FR/EN", "Built-in FR/EN catalog"))
+        return state
+    }
+
     // MARK: Rendu
 
     private func theme(_ id: String) -> LauncherTheme { LauncherTheme.builtIn.first { $0.id == id } ?? .roadie }
@@ -292,10 +352,156 @@ struct Spec124DocScreenshots {
         try await eachLanguage {
             for (name, state) in [("launcher-search", searchScene()), ("launcher-verbs", verbsScene()), ("launcher-phrase", phraseScene()),
                                   ("launcher-workflow", workflowScene()), ("launcher-calc", calcScene()),
-                                  ("launcher-files-grid", filesGridScene()), ("launcher-emoji-grid", emojiGridScene())] {
+                                  ("launcher-files-grid", filesGridScene()), ("launcher-emoji-grid", emojiGridScene()),
+                                  ("launcher-clipboard", clipboardScene()), ("launcher-snippets", snippetsScene())] {
                 try save(try await renderBar(state, theme: main), name)
             }
         }
+    }
+
+    @Test func launcherToolsShowcase() async throws {
+        guard output != nil else { return }
+        try await eachLanguage { try await launcherToolsImage() }
+    }
+
+    private func launcherToolsImage() async throws {
+        let main = theme("alfred-modern-dark")
+        let scenes = [converterMiniScene(), timerMiniScene(), colorPickerMiniScene(), nativeEmojiMiniScene()]
+        var renders: [NSBitmapImageRep] = []
+        for scene in scenes {
+            renders.append(try await renderBar(scene, theme: main, backdrop: false))
+        }
+        let cell = renders.reduce(CGSize.zero) { CGSize(width: max($0.width, $1.size.width), height: max($0.height, $1.size.height)) }
+        let rep = try await bitmap(size: CGSize(width: cell.width * 2, height: cell.height * 2)) { bounds in
+            Self.drawBackdrop(bounds)
+            for (index, render) in renders.enumerated() {
+                let origin = CGPoint(x: CGFloat(index % 2) * cell.width + (cell.width - render.size.width) / 2,
+                                     y: CGFloat(1 - index / 2) * cell.height + (cell.height - render.size.height) / 2)
+                Self.over(render, in: CGRect(origin: origin, size: render.size))
+            }
+        }
+        try save(rep, "launcher-tools")
+    }
+
+    @Test func advancedLayoutsShowcase() async throws {
+        guard output != nil else { return }
+        try await eachLanguage { try await advancedLayoutsImage() }
+    }
+
+    private func advancedLayoutsImage() async throws {
+        let size = CGSize(width: 1560, height: 640)
+        let termIcon = NSWorkspace.shared.icon(forFile: App.terminal)
+        let safariIcon = NSWorkspace.shared.icon(forFile: App.safari)
+        let notesIcon = NSWorkspace.shared.icon(forFile: App.notes)
+        let termMock = Self.mock(.code)
+        let safariMock = Self.mock(.browser)
+        let notesMock = Self.mock(.notes)
+        let leftTitle = tr("Mode Onglets (tabbed)", "Tabbed mode (tabbed)")
+        let leftSub = tr("Barre d'onglets cliquable · 1 fenêtre active plein cadre · focus left/right",
+                         "Clickable tab bar · 1 active window full-frame · focus left/right")
+        let rightTitle = tr("Mode Ruban défilant (scrolling) + Dim Inactive", "Scrolling ribbon mode (scrolling) + Dim Inactive")
+        let rightSub = tr("Colonne active centrée (65 %) · bords voisins cliquables · atténuation douce",
+                          "Centered active column (65%) · clickable neighbor edges · subtle dimming")
+        let tabs: [(String, NSImage, Bool)] = [
+            (tr("Terminal — atelier", "Terminal — workshop"), termIcon, true),
+            (tr("Safari — Documentation", "Safari — Docs"), safariIcon, false),
+            (tr("Notes — Plan", "Notes — Plan"), notesIcon, false),
+        ]
+        let rep = try await bitmap(size: size) { bounds in
+            Self.drawBackdrop(bounds)
+            let pad: CGFloat = 36
+            let gap: CGFloat = 28
+            let cardW = (bounds.width - 2 * pad - gap) / 2
+            let cardH = bounds.height - 2 * pad
+
+            func drawText(_ s: String, at p: CGPoint, size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor = .white) {
+                (s as NSString).draw(at: p, withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: color])
+            }
+
+            func drawCardFrame(_ rect: CGRect, title: String, subtitle: String) -> CGRect {
+                NSColor(calibratedWhite: 0.08, alpha: 0.72).setFill()
+                let bg = NSBezierPath(roundedRect: rect, xRadius: 18, yRadius: 18)
+                bg.fill()
+                NSColor(calibratedWhite: 1, alpha: 0.16).setStroke()
+                bg.lineWidth = 1.2
+                bg.stroke()
+                drawText(title, at: CGPoint(x: rect.minX + 22, y: rect.maxY - 40), size: 19, weight: .bold)
+                drawText(subtitle, at: CGPoint(x: rect.minX + 22, y: rect.maxY - 62), size: 12.5, color: NSColor(calibratedWhite: 0.82, alpha: 1))
+                return CGRect(x: rect.minX + 20, y: rect.minY + 20, width: rect.width - 40, height: rect.height - 96)
+            }
+
+            // Panneau gauche : Mode Onglets (tabbed)
+            let leftCard = CGRect(x: pad, y: pad, width: cardW, height: cardH)
+            let leftCanvas = drawCardFrame(leftCard, title: leftTitle, subtitle: leftSub)
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(roundedRect: leftCanvas, xRadius: 12, yRadius: 12).addClip()
+            NSColor(calibratedWhite: 0.14, alpha: 0.85).setFill()
+            leftCanvas.fill()
+            let barH: CGFloat = 34
+            let barRect = CGRect(x: leftCanvas.minX + 8, y: leftCanvas.maxY - barH - 8, width: leftCanvas.width - 16, height: barH)
+            NSColor(calibratedWhite: 0.10, alpha: 0.92).setFill()
+            NSBezierPath(roundedRect: barRect, xRadius: 9, yRadius: 9).fill()
+            let tabGap: CGFloat = 6
+            let tabW = (barRect.width - CGFloat(tabs.count + 1) * tabGap) / CGFloat(tabs.count)
+            for (idx, tab) in tabs.enumerated() {
+                let r = CGRect(x: barRect.minX + tabGap + CGFloat(idx) * (tabW + tabGap),
+                               y: barRect.minY + 4, width: tabW, height: barH - 8)
+                (tab.2 ? NSColor.systemTeal.withAlphaComponent(0.85) : NSColor(calibratedWhite: 0.22, alpha: 0.85)).setFill()
+                NSBezierPath(roundedRect: r, xRadius: 7, yRadius: 7).fill()
+                tab.1.draw(in: CGRect(x: r.minX + 8, y: r.minY + 4, width: 18, height: 18))
+                drawText(tab.0, at: CGPoint(x: r.minX + 32, y: r.minY + 5), size: 12, weight: tab.2 ? .semibold : .regular,
+                         color: tab.2 ? .white : NSColor(calibratedWhite: 0.85, alpha: 1))
+            }
+            let winRect = CGRect(x: leftCanvas.minX + 8, y: leftCanvas.minY + 8,
+                                 width: leftCanvas.width - 16, height: leftCanvas.height - barH - 22)
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(roundedRect: winRect, xRadius: 10, yRadius: 10).addClip()
+            termMock.draw(in: winRect)
+            NSGraphicsContext.restoreGraphicsState()
+            NSColor.systemTeal.withAlphaComponent(0.9).setStroke()
+            let border = NSBezierPath(roundedRect: winRect, xRadius: 10, yRadius: 10)
+            border.lineWidth = 2
+            border.stroke()
+            NSGraphicsContext.restoreGraphicsState()
+
+            // Panneau droit : Mode Ruban défilant (scrolling) + Dim Inactive
+            let rightCard = CGRect(x: pad + cardW + gap, y: pad, width: cardW, height: cardH)
+            let rightCanvas = drawCardFrame(rightCard, title: rightTitle, subtitle: rightSub)
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(roundedRect: rightCanvas, xRadius: 12, yRadius: 12).addClip()
+            NSColor(calibratedWhite: 0.14, alpha: 0.85).setFill()
+            rightCanvas.fill()
+            let colW = floor(rightCanvas.width * 0.65)
+            let colGap: CGFloat = 10
+            let colY = rightCanvas.minY + 10
+            let colH = rightCanvas.height - 20
+            let centerX = floor(rightCanvas.midX - colW / 2)
+            let columns: [(CGRect, NSImage, Bool)] = [
+                (CGRect(x: centerX - colGap - colW, y: colY, width: colW, height: colH), termMock, false),
+                (CGRect(x: centerX, y: colY, width: colW, height: colH), safariMock, true),
+                (CGRect(x: centerX + colW + colGap, y: colY, width: colW, height: colH), notesMock, false),
+            ]
+            for (colRect, img, focused) in columns {
+                NSGraphicsContext.saveGraphicsState()
+                let path = NSBezierPath(roundedRect: colRect, xRadius: 10, yRadius: 10)
+                path.addClip()
+                img.draw(in: colRect)
+                if !focused {
+                    // Voile Dim Inactive (opacity ~0.30) sur les colonnes voisines
+                    NSColor(calibratedWhite: 0.02, alpha: 0.34).setFill()
+                    colRect.fill()
+                }
+                NSGraphicsContext.restoreGraphicsState()
+                if focused {
+                    NSColor.systemTeal.withAlphaComponent(0.95).setStroke()
+                    let focusRing = NSBezierPath(roundedRect: colRect, xRadius: 10, yRadius: 10)
+                    focusRing.lineWidth = 2.5
+                    focusRing.stroke()
+                }
+            }
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        try save(rep, "layouts-advanced")
     }
 
     @Test func launcherThemes() async throws {

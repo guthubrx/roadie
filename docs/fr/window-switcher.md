@@ -15,8 +15,8 @@ par défaut par Roadie. Exemple avec **⌘ Tab** dans BetterTouchTool :
 - ⌘ Maj Tab exécute `roadie switcher cycle --hold cmd --backwards` ;
 - relâcher ⌘ ouvre la fenêtre sélectionnée ; Échap annule.
 
-Dans une action shell, utilise le chemin complet du binaire installé :
-`/Users/moi/.local/bin/roadie`. Pour une autre installation, adapte ce chemin.
+Dans une action shell, utilise le chemin complet du binaire installé, par exemple
+`$HOME/.local/bin/roadie` (ou `/Users/<utilisateur>/.local/bin/roadie`).
 Un raccourci interne reste possible en remplissant le champ facultatif du profil.
 
 Le profil peut aussi garder le sélecteur ouvert après le relâchement. Dans ce
@@ -142,9 +142,25 @@ de texte à côté, sans dépasser un cinquième de la vignette. `app_icon_size`
 taille de 12 à 64 points ; 0 revient à l'automatique. Une icône plus haute que le texte
 agrandit la ligne du titre. Le style Icônes garde toujours son icône, à cette taille.
 Les commandes d'action ciblent la fenêtre sélectionnée : fermer, réduire ou
-restaurer, masquer ou quitter normalement l'application, maximiser, plein écran
-Roadie. Quitter une application reste soumis à ses éventuelles demandes de
-sauvegarde.
+restaurer, masquer ou quitter normalement l'application, rapatrier dans la stage active,
+maximiser, plein écran Roadie. Quitter une application reste soumis à ses éventuelles
+demandes de sauvegarde.
+
+### Touches d'action directe et filtres rapides
+
+Lorsque `switcher.action_keys_enabled` est activé (par défaut, dans **Réglages Roadie >
+Sélecteur**) et que le champ de recherche n'a pas le focus, sept touches agissent
+immédiatement sans ouvrir le menu Actions :
+
+| Touche | Action |
+|---|---|
+| `W` | Fermer la fenêtre sélectionnée |
+| `Q` | Quitter normalement l'application de la fenêtre sélectionnée |
+| `M` | Réduire ou restaurer la fenêtre |
+| `H` | Masquer l'application |
+| `S` | Rapatrier (`summon`) la fenêtre dans la stage active et lui donner le focus |
+| `A` | Filtrer temporairement sur l'application courante (nouvel appui pour revenir) |
+| `D` | Filtrer temporairement sur l'écran courant (nouvel appui pour revenir) |
 
 ## Commandes et gestes
 

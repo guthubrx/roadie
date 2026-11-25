@@ -3,16 +3,17 @@
 
 # Roadie
 
-**Un gestionnaire de fenêtres et un lanceur pour macOS : tuilage automatique, stages nommées, bureaux virtuels, et une barre qui fait tourner tes workflows d'Alfred. Gratuit.**
+**Un gestionnaire de fenêtres et un lanceur pour macOS : tuilage automatique (BSP, onglets, ruban défilant), stages nommées, bureaux virtuels, presse-papiers sécurisé, snippets et une barre qui fait tourner tes workflows d'Alfred. Gratuit.**
 
 [English](README.md) | Français
 
 </div>
 
 Roadie range tes fenêtres par activité et te laisse tout piloter depuis une seule barre. Regroupe
-les applications d'un projet dans une stage, retrouve-les dans le rail et passe d'un bureau à
-l'autre sur chaque écran. Tape quelques lettres pour ouvrir une application, une fenêtre, un fichier
-ou une page web, et choisis où elle s'ouvre. Tes workflows d'Alfred y tournent aussi, sans Powerpack.
+les applications d'un projet dans une stage (en tuilage BSP, en onglets ou en ruban défilant),
+retrouve-les dans le rail et passe d'un bureau à l'autre sur chaque écran. Tape quelques lettres pour
+ouvrir une application, une fenêtre, un fichier, un élément de ton presse-papiers ou un snippet, et
+choisis où ça s'ouvre. Tes workflows d'Alfred y tournent aussi, sans Powerpack.
 
 **[Télécharger Roadie 0.14.0](https://github.com/guthubrx/roadie/releases/tag/v0.14.0)** ·
 [Découvrir les nouveautés](docs/releases/v0.14.0.md) · [Guide d'installation](#installation-manuelle)
@@ -25,8 +26,8 @@ ou une page web, et choisis où elle s'ouvre. Tes workflows d'Alfred y tournent 
 
 | | |
 |---|---|
-| **Gestionnaire de fenêtres** | Tuilage automatique, stages nommées, bureaux virtuels par écran, rail latéral, sélecteur de fenêtres (Cmd+Tab), sélecteur de zones (Option+Tab), vue d'ensemble |
-| **Lanceur** | Applications, fenêtres, documents et onglets ouverts, fichiers, signets et historique des navigateurs, réglages, calcul, web, workflows d'Alfred |
+| **Gestionnaire de fenêtres** | Tuilage automatique (`spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float`), stages nommées, scratchpad flottant, atténuation des fenêtres inactives (`dim_inactive`), bureaux virtuels par écran, rail latéral avec icônes cliquables, sélecteur de fenêtres (`Cmd+Tab` + actions `W/Q/M/H/S/A/D`), sélecteur de zones (`Option+Tab`), vue d'ensemble |
+| **Lanceur** | Applications, fenêtres, documents et onglets ouverts, fichiers, signets et historique des navigateurs, réglages, calcul et convertisseur (unités, bases, fuseaux), pipette de couleur, émojis natifs, minuteur & Pomodoro, presse-papiers sécurisé (`0o600`), snippets locaux, scènes de projet, web, workflows d'Alfred |
 
 Les deux se parlent. Le lanceur sait où placer ce qu'il ouvre : dans la stage Perso, sur l'autre
 écran, à gauche. Il retrouve une fenêtre cachée dans une stage inactive ou sur un autre bureau. Et le
@@ -78,13 +79,41 @@ Alfred.
 | | Alfred | Roadie |
 |---|---|---|
 | Lanceur, fichiers, calcul, recherche web | Gratuit | Gratuit |
+| Convertisseur, pipette, émojis, minuteur & Pomodoro | Workflows tiers | Intégrés dans le cœur, hors ligne |
+| Presse-papiers sécurisé & snippets locaux | Powerpack payant | Gratuits, 100 % locaux (`0o600`) |
 | Workflows | Powerpack : 34 £, ou 59 £ avec les mises à jour à vie | Gratuit, mêmes fichiers `.alfredworkflow` |
-| Gestion des fenêtres | Non incluse | Tuilage, stages, bureaux, sélecteur |
+| Gestion des fenêtres | Non incluse | Tuilage (`spatialBsp`, `tabbed`, `scrolling`), stages, scratchpad, bureaux, sélecteur |
 
 Script Filters et leur cache, schéma complet des objets, touches ⌘ ⌥ ⌃ par ligne, déclencheurs
 externes, raccourcis, grilles, vues Texte, Image et PDF, boutons d'Alfred Remote : sur un corpus de
 102 workflows réels, 92 tournent entièrement. `roadie workflow list` dit pour chacun ce qui manque.
-Pas repris : snippets, historique du presse-papiers d'Alfred, AppleScript compilé.
+Non importés d'Alfred : Contacts, format propriétaire des snippets/presse-papiers d'Alfred (Roadie
+fournit les siens en natif ci-dessous), AppleScript compilé.
+
+### Outils intégrés du lanceur : convertisseur, minuteur, pipette et émojis
+
+<p align="center">
+  <img src="docs/assets/screenshots/fr/launcher-tools.png" alt="Outils natifs du lanceur Roadie : convertisseur d'unités et de bases, minuteur Pomodoro, pipette de couleur et catalogue d'émojis" width="95%">
+</p>
+
+Quatre utilitaires du quotidien tournent directement dans le cœur du lanceur, sans plugin ni accès réseau :
+
+- **Convertisseur universel** : longueurs, masses, températures, données, vitesses, bases (`0xff in dec`, `255 in bin`) et fuseaux horaires (`14:00 NYC in Paris`), copié d'un appui sur Retour.
+- **Minuteur & Pomodoro** : `timer 15m pause`, `pomodoro`, `timer status`, `timer stop` (aussi en CLI via `roadie timer`), avec notification macOS locale.
+- **Pipette de couleur native (`NSColorSampler`)** : tape `pipette` ou `color picker`, clique n'importe quel pixel ; Roadie copie `#RRGGBB` et affiche HEX, RGB et HSL.
+- **Émojis & symboles intégrés** : `:fusée` ou `emoji cœur` ouvre un catalogue bilingue FR/EN en grille sans installer de workflow.
+
+### Presse-papiers sécurisé et snippets locaux
+
+<table>
+  <tr>
+    <td><img src="docs/assets/screenshots/fr/launcher-clipboard.png" alt="Historique du presse-papiers sécurisé dans la barre Roadie"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-snippets.png" alt="Snippets locaux avec variables dynamiques dans la barre Roadie"></td>
+  </tr>
+</table>
+
+- **Historique du presse-papiers (`cb` / `clipboard`)** : 100 % local dans `~/.roadies/clipboard.json` (permissions POSIX strictes `0o600`, jamais écrit dans `events.jsonl`), déduplication, épinglage et rétention configurable. Les types sensibles (`ConcealedType`, `TransientType`, `AutoGeneratedType`) et les gestionnaires de mots de passe (1Password, Bitwarden, KeePassXC, Trousseau d'accès, LastPass, Dashlane) sont automatiquement ignorés.
+- **Snippets locaux (`snip` / `snippet`)** : définis en TOML (`[[snippets.items]]`) ou dans **Paramètres > Recherche > Snippets**, avec expansion mono-passe de `{date}`, `{time}`, `{datetime}`, `{clipboard}` et `{cursor}`, et auto-expansion clavier optionnelle (désactivée par défaut, toujours suspendue dans les champs de mot de passe macOS).
 
 ### Les thèmes d'Alfred aussi
 
@@ -141,27 +170,42 @@ d'une stage à l'autre. Nous ne connaissons pas d'autre outil pour macOS qui le 
 
 | Besoin | Fonction |
 |---|---|
-| Organiser les fenêtres | Tuilage automatique, plusieurs dispositions et poignées de séparation en arbre persistant |
-| Passer d'un projet à l'autre | Stages nommés, aperçus et changement d'espace depuis le rail |
-| Travailler sur plusieurs écrans | Bureaux indépendants, nouvelles fenêtres sur l'écran actif par défaut, transfert des fenêtres et des stages |
-| Garder une fenêtre accessible | Épinglages, signets et groupes de fenêtres |
-| Tout trouver et tout lancer | Lanceur, verbes et destinations, phrases, workflows d'Alfred |
-| Revenir à un endroit cliqué | Sélecteur de zones (Option+Tab), recherche à l'écran tolérante aux fautes |
-| Agir au clavier | Étiquettes, grilles et commandes `/` dans la barre |
+| Organiser les fenêtres | Tuilage automatique (`spatialBsp`, `bsp`, `masterStack`), modes **Onglets (`tabbed`)** et **Ruban défilant (`scrolling`)**, poignées de séparation, `layout rotate` et `layout mirror` |
+| Rester concentré | **Scratchpad flottant nommé**, **Dim Inactive** (voile doux sur les fenêtres inactives), maximisation gardant le rail accessible |
+| Passer d'un projet à l'autre | Stages nommées, scènes de projet enrichies (`project save --url --app --note`), aperçus et icônes cliquables en perspective dans le rail |
+| Travailler sur plusieurs écrans | Bureaux indépendants, nouvelles fenêtres sur l'écran actif par défaut, transfert des fenêtres et des stages, `mouse_follows_focus` |
+| Garder une fenêtre accessible | Épinglages, signets, scratchpads et groupes de fenêtres |
+| Tout trouver et tout lancer | Lanceur, verbes et destinations, phrases, convertisseur, pipette, émojis, minuteur/Pomodoro, presse-papiers sécurisé, snippets, workflows d'Alfred |
+| Revenir à un endroit cliqué | Sélecteur de zones (`Option+Tab`), recherche à l'écran tolérante aux fautes, actions directes `W/Q/M/H/S/A/D` dans le sélecteur |
+| Agir au clavier | Étiquettes, grilles, commandes `/` dans la barre et complétion shell (`zsh`, `bash`, `fish`) |
 | Adapter l'interface | Réglages immédiats, tailles indépendantes et choix de polices |
 | Automatiser les habitudes | Règles de placement, macros courtes, commandes et API JSON |
 
 ### Une disposition qui suit ton travail
 
+<p align="center">
+  <img src="docs/assets/screenshots/fr/layouts-advanced.png" alt="Modes avancés de Roadie : Onglets (tabbed) avec barre d'onglets cliquable et Ruban défilant (scrolling) avec atténuation des fenêtres inactives" width="100%">
+</p>
+
 Roadie répartit les fenêtres et ajuste leur place quand tu en ouvres ou en fermes
-une. Choisis une disposition équilibrée, une fenêtre principale avec ses voisines,
-ou un placement libre.
+une. Choisis parmi six dispositions par stage : arbre persistant (`spatialBsp`),
+tuilage équilibré (`bsp`), fenêtre principale + pile (`masterStack`), **onglets
+(`tabbed`)** avec barre d'onglets flottante cliquable, **ruban défilant
+(`scrolling`)** façon Niri avec colonnes centrées et bords voisins cliquables, ou
+placement libre (`float`).
 
 Réorganise les fenêtres par glisser-déposer : un dépôt au centre échange les
 positions, un dépôt sur un bord insère la fenêtre de ce côté. Tu peux aussi
-modifier les proportions au clavier ou tirer les poignées entre les groupes de
-fenêtres. Leur affichage se règle dans Tuilage. La maximisation laisse le rail
-accessible et permet de revenir à la disposition précédente.
+modifier les proportions au clavier, pivoter/inverser l'arbre (`layout rotate`,
+`layout mirror`), réunir les fenêtres d'une application (`window gather-app`),
+détacher un **scratchpad flottant** centré à la demande (`roadie scratchpad`),
+activer l'atténuation des fenêtres inactives (`fx.dim_inactive`), ou tirer les
+poignées entre les groupes de fenêtres. La maximisation laisse le rail accessible
+et permet de revenir à la disposition précédente.
+
+Les écritures Accessibilité sont parallélisées par application (PID) et les
+applications lentes à démarrer (ex. terminal avec Conda) rejoignent le canevas
+dès que leur fenêtre est prête, sans quarantaine inutile de 5 secondes.
 
 [Explorer les dispositions et les gestes](docs/fr/features.md)
 
@@ -198,7 +242,11 @@ stage Roadie. Dans Réglages Roadie > Sélecteur, crée des profils pour un écr
 bureau, une stage ou une application. Enregistre directement une combinaison,
 confie-la à BetterTouchTool ou utilise une commande externe. Au relâchement,
 choisis entre activer la fenêtre, garder le sélecteur ouvert et passer en recherche.
-Navigue avec les quatre flèches ou la souris. Chaque profil peut avoir sa propre
+Navigue avec les quatre flèches ou la souris. Hors champ de recherche, des touches
+d'action directe pilotent la fenêtre sélectionnée sans quitter le sélecteur : `W`
+(fermer), `Q` (quitter l'app), `M` (réduire/restaurer), `H` (masquer l'app), `S`
+(rapatrier dans la stage active), `A` (filtrer sur l'app courante) et `D` (filtrer
+sur l'écran courant). Chaque profil peut avoir sa propre
 apparence. Organise les fenêtres en colonnes par stage, onglets par bureau,
 arbre, sections ou vue d'ensemble des bureaux. La grille classique reste disponible.
 [Guide du sélecteur](docs/fr/window-switcher.md).
@@ -515,6 +563,8 @@ Changer le mode de layout de la stage courante :
 roadie mode spatialBsp   # alias : mutableBsp, yabai
 roadie mode bsp
 roadie mode masterStack
+roadie mode tabbed       # alias : tabs, onglets
+roadie mode scrolling    # alias : scroll, ribbon, niri, ruban
 roadie mode float
 ```
 
@@ -527,7 +577,21 @@ roadie focus back-and-forth
 roadie move left
 roadie warp right
 roadie resize left
+roadie window close
+roadie window gather-app
 roadie display focus right
+```
+
+Scratchpad flottant, presse-papiers, snippets, minuteur et scènes de projet :
+
+```bash
+roadie scratchpad assign notes
+roadie scratchpad toggle notes
+roadie clipboard list
+roadie snippet expand !sig --copy
+roadie timer pomodoro
+roadie project save Dev --url https://example.org --app com.apple.Terminal --note "Sprint en cours"
+roadie project info Dev
 ```
 
 Envoyer la fenêtre active vers un autre écran :
@@ -602,6 +666,8 @@ roadie desktop move 2 1
 roadie layout split horizontal
 roadie layout split vertical
 roadie layout toggle-split
+roadie layout rotate 90
+roadie layout mirror x
 roadie warp right
 roadie layout flatten
 roadie layout zoom-parent
@@ -673,7 +739,8 @@ Interactions supportées :
 - Glisser une fenêtre d’application par sa barre de titre vers une stage pour l’y déplacer.
 - Glisser une fenêtre d’application par sa barre de titre vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.
 - Glisser une stage avec le bouton droit de la souris pour réordonner les stages. Un aperçu translucide montre sa future place ; les cartes voisines montrent le nouvel ordre. Relâcher pour l’appliquer, ou sortir du rail avant de relâcher pour annuler.
-- Faire un clic droit sur une stage, sans glisser, pour ouvrir son menu : renommer la stage, l’envoyer vers un autre écran, envoyer une fenêtre vers une autre stage ou supprimer la stage si elle n’a plus de fenêtre.
+- Faire un clic droit sur une stage, sans glisser, pour ouvrir son menu : renommer la stage, choisir son **mode de disposition** (`spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float`), l’envoyer vers un autre écran, envoyer une fenêtre vers une autre stage ou supprimer la stage si elle n’a plus de fenêtre.
+- Cliquer directement sur les **icônes d'applications en perspective** sous chaque carte 3D (avec survol interactif) pour activer ou rappeler une fenêtre précise de cette stage.
 
 L’intensité de l’aimantation se règle dans **Réglages Roadie > Rail > Aimantation du réordonnancement (%)**. À 0, elle est désactivée ; une valeur plus élevée stabilise davantage la destination malgré les petits mouvements de souris.
 

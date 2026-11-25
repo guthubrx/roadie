@@ -419,3 +419,45 @@ bookmarks_enabled = true
 Les identifiants des commandes de réglage (`target_mode.…`) restent stables. Pour revenir
 à une ancienne version de Roadie, remettre les clés sous `experimental.target_mode` ou
 reprendre la sauvegarde de configuration. Aucune migration automatique au démarrage.
+
+## Layouts avancés, Scratchpad, Dim Inactive, Presse-papiers et Snippets
+
+Les fonctionnalités récentes se règlent directement dans **Paramètres** ou dans `~/.config/roadies/roadies.toml` :
+
+```toml
+[tiling]
+default_strategy = "spatialBsp" # spatialBsp | bsp | masterStack | tabbed | scrolling | float
+tabbed_bar_height = 28          # 20..44 pt (mode onglets)
+scrolling_column_width = 0.65   # 0.25..1.0 (mode ruban défilant)
+scratchpad_enabled = true
+
+[switcher]
+action_keys_enabled = true      # touches directes W/Q/M/H/S/A/D hors recherche
+
+[fx.rail]
+app_icons_row_size = 24         # taille des icônes d'application sous les cartes 3D
+
+[fx.dim_inactive]
+enabled = false                 # voile doux traversant aux clics sur les fenêtres inactives
+opacity = 0.22                  # 0.05..0.75
+
+[launcher]
+calc_conversions = true         # convertisseur unités, bases, fuseaux
+emoji_picker = true             # catalogue émojis/symboles FR/EN intégré
+timer_enabled = true            # minuteur & Pomodoro locaux
+
+[clipboard]
+enabled = true                  # stocké localement dans ~/.roadies/clipboard.json (0o600)
+max_items = 200
+retention_days = 7
+excluded_bundles = ["com.1password.1password", "com.bitwarden.desktop"]
+
+[snippets]
+enabled = true
+auto_expand = false             # expansion clavier globale optionnelle (ignore les mots de passe)
+
+[[snippets.items]]
+keyword = "!sig"
+title = "Signature courte"
+body = "Cordialement,\nAlex — {date}"
+```
