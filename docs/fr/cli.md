@@ -317,7 +317,7 @@ roadie snippet list [--json]
 roadie snippet expand MOT_CLE [--copy]
 roadie timer start 15m [LIBELLE]
 roadie timer pomodoro [LIBELLE]
-roadie timer status [--json]
+roadie timer status
 roadie timer cancel [ID]
 roadie launch ~/Documents/rapport.pdf --stage Perso
 roadie launch /Applications/Firefox.app --new-stage

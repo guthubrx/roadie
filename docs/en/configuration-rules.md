@@ -442,7 +442,7 @@ timer_enabled = true            # local timer & Pomodoro
 enabled = true                  # stored locally in ~/.roadies/clipboard.json (0o600)
 max_items = 200
 retention_days = 7
-excluded_bundles = ["com.1password.1password", "com.bitwarden.desktop"]
+# 7 password managers are excluded by default; setting excluded_bundles replaces the full list.
 
 [snippets]
 enabled = true

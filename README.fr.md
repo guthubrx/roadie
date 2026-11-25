@@ -243,7 +243,7 @@ bureau, une stage ou une application. Enregistre directement une combinaison,
 confie-la à BetterTouchTool ou utilise une commande externe. Au relâchement,
 choisis entre activer la fenêtre, garder le sélecteur ouvert et passer en recherche.
 Navigue avec les quatre flèches ou la souris. Hors champ de recherche, des touches
-d'action directe pilotent la fenêtre sélectionnée sans quitter le sélecteur : `W`
+d'action directe pilotent la fenêtre sélectionnée sans ouvrir le menu Actions : `W`
 (fermer), `Q` (quitter l'app), `M` (réduire/restaurer), `H` (masquer l'app), `S`
 (rapatrier dans la stage active), `A` (filtrer sur l'app courante) et `D` (filtrer
 sur l'écran courant). Chaque profil peut avoir sa propre

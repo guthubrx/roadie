@@ -236,7 +236,7 @@ application. Record a shortcut directly, let BetterTouchTool manage it, or use a
 external CLI binding. Choose whether releasing the keys activates the selection,
 keeps the switcher open or starts search. Navigate with the four arrow keys or
 the mouse. Outside the search field, direct action keys control the selected window
-without leaving the switcher: `W` (close), `Q` (quit app), `M` (minimize/restore),
+without opening the Actions menu: `W` (close), `Q` (quit app), `M` (minimize/restore),
 `H` (hide app), `S` (summon to the active stage), `A` (filter by current app), and
 `D` (filter by current display). Give each profile its own appearance. Organize windows into stage
 columns, desktop tabs, a hierarchy, grouped sections or desktop overviews.
