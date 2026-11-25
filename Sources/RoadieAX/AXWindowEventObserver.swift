@@ -81,9 +81,9 @@ public final class AXWindowEventObserver {
     ]
 
     /// Delais entre reessais d'abonnement (s). Une app qui demarre repond souvent
-    /// kAXErrorCannotComplete tant que son interface AX n'est pas prete. La somme depasse
-    /// la duree de mise de cote d'une app qui ne repond pas.
-    private static let retryDelays: [TimeInterval] = [0.5, 1, 2, 4, 8]
+    /// kAXErrorCannotComplete tant que son interface AX n'est pas prete. Les premiers
+    /// reessais sont courts pour capter rapidement l'ouverture de sa premiere fenetre.
+    private static let retryDelays: [TimeInterval] = [0.25, 0.5, 1, 2, 4]
 
     /// Ancienne callback (nom de notification seul), sans deplacement ni redimensionnement.
     public init(onWindowEvent: @escaping Callback) {
@@ -126,7 +126,10 @@ public final class AXWindowEventObserver {
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   app.activationPolicy == .regular
             else { return }
-            MainActor.assumeIsolated { self?.subscribe(pid: app.processIdentifier) }
+            MainActor.assumeIsolated {
+                AXUnresponsiveApps.shared.noteApplicationLaunch(app.processIdentifier)
+                self?.subscribe(pid: app.processIdentifier)
+            }
         }
         let didTerminate = center.addObserver(
             forName: NSWorkspace.didTerminateApplicationNotification,
@@ -271,9 +274,12 @@ public final class AXWindowEventObserver {
         let appElement = AXMessaging.application(pid)
         let context = Unmanaged.passUnretained(self).toOpaque()
         var done = registered[pid] ?? []
+        let hadWindowCreated = done.contains(kAXWindowCreatedNotification as String)
         var needsRetry = false
         for notification in notifications where !done.contains(notification) {
+            let start = CFAbsoluteTimeGetCurrent()
             let error = AXObserverAddNotification(observer, appElement, notification as CFString, context)
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
             switch error {
             case .success, .notificationAlreadyRegistered, .notificationUnsupported, .notImplemented:
                 // Refus definitif (notification non geree par l'app) : ne pas reessayer.
@@ -281,7 +287,7 @@ public final class AXWindowEventObserver {
             default:
                 needsRetry = true
             }
-            if registry.noteResult(error, pid: pid) { break }
+            if registry.noteResult(error, pid: pid, elapsed: elapsed) { break }
         }
         registered[pid] = done
 
@@ -289,6 +295,20 @@ public final class AXWindowEventObserver {
             for entry in windows.entries {
                 // Application mise de côté : inutile d'attendre un délai par fenêtre restante.
                 if watchDestruction(of: entry.element, id: entry.id, observer: observer, pid: pid) { break }
+            }
+            // Si l'abonnement AXWindowCreated vient tout juste de réussir sur un réessai
+            // après démarrage, macOS ne renvoie pas rétroactivement les fenêtres déjà créées :
+            // on déclenche immédiatement une passe pour les placer sans attendre le filet safety.
+            if attempt > 0, !hadWindowCreated,
+               done.contains(kAXWindowCreatedNotification as String),
+               !windows.entries.isEmpty {
+                AXAttributeCache.shared.invalidate(pid: pid)
+                AXWindowIndexCache.shared.invalidate(pid: pid)
+                callback(AXWindowEvent(
+                    name: kAXWindowCreatedNotification as String,
+                    pid: pid,
+                    windowID: windows.entries.first?.id
+                ))
             }
         }
         if needsRetry {
@@ -322,6 +342,7 @@ public final class AXWindowEventObserver {
             cancelFrameRead(id)
             writtenFrames.forget(windowID: id)
         }
+        AXUnresponsiveApps.shared.markResponsive(pid)
         AXAttributeCache.shared.invalidate(pid: pid)
         AXWindowIndexCache.shared.invalidate(pid: pid)
         guard let observer = observers.removeValue(forKey: pid) else { return }

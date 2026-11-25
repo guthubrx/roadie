@@ -148,4 +148,74 @@ struct Spec034PlacementReadinessTests {
         let log = try String(contentsOfFile: path("events.jsonl"), encoding: .utf8)
         #expect(!log.contains("write_budget_exhausted"))
     }
+
+    @Test
+    func unreadyWindowArmsBoundedFastDeadlinesAndResumesPromptlyWithoutWaitingForSafetyNet() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("placement034-fast-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        func path(_ name: String) -> String { directory.appendingPathComponent(name).path }
+
+        let disp = DisplaySnapshot(id: DisplayID(rawValue: "main-fast"), index: 1, name: "Main",
+            frame: Rect(x: 0, y: 0, width: 1600, height: 1000),
+            visibleFrame: Rect(x: 0, y: 0, width: 1600, height: 1000), isMain: true)
+        let editor = powerWindow(100, x: 0, y: 0, width: 1600, height: 1000, app: "T3")
+        let term = powerWindow(200, x: 900, y: 40, width: 570, height: 436, app: "iTerm2")
+        let scope = StageScope(displayID: disp.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(editor.id), second: .leaf(term.id))
+        let provider = PowerUserProvider(displays: [disp], windows: [editor, term])
+        let store = StageStore(path: path("stages.json"))
+        store.save(PersistentStageState(scopes: [PersistentStageScope(
+            displayID: disp.id, desktopID: scope.desktopID, activeStageID: scope.stageID,
+            stages: [PersistentStage(id: scope.stageID, mode: .spatialBsp, members: [editor, term].map {
+                PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
+            }, bspTree: tree)])],
+            desktopSelections: [PersistentDesktopSelection(displayID: disp.id, currentDesktopID: scope.desktopID)],
+            activeDisplayID: disp.id))
+        let config = RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 0))
+        let clock = Placement034Clock()
+        let registry = WrittenFrameRegistry()
+        let writer = Placement034Writer(provider: provider, registry: registry, clock: clock, unavailable: [term.id])
+        let events = EventLog(path: path("events.jsonl"))
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: config,
+            intentStore: LayoutIntentStore(path: path("intents.json")), stageStore: store, events: events,
+            clock: { clock.now }, frameRegistry: registry, treeScopeApplications: TreeScopeApplicationCenter())
+        let maintainer = LayoutMaintainer(service: service, events: events, store: store,
+            dragActivity: WindowDragActivity(path: path("drag")), commandActivity: LayoutCommandActivity(path: path("commands")),
+            mouseButtonsPressed: { false }, writtenFrames: registry, generations: PlacementGeneration(),
+            readFrame: { writer.readFrame(of: $0) }, configService: ConfigReloadService(activeConfig: config, eventLog: events),
+            now: { clock.now })
+
+        // 1. Fenêtre iTerm2 non encore prête en AX : une échéance courte (0.15 s) est immédiatement armée.
+        _ = maintainer.tick(cause: "ax:AXWindowCreated")
+        let firstDeadline = try #require(maintainer.nextDeadline(now: clock.now))
+        #expect(abs(firstDeadline.timeIntervalSince(clock.now) - 0.15) < 0.001)
+
+        // 2. Toujours indisponible au bout de 0.15 s : deuxième échéance courte (0.25 s).
+        clock.now = firstDeadline
+        _ = maintainer.tick(cause: "deadline")
+        let secondDeadline = try #require(maintainer.nextDeadline(now: clock.now))
+        #expect(abs(secondDeadline.timeIntervalSince(clock.now) - 0.25) < 0.001)
+
+        // 3. AX devient prêt : dès l'échéance suivante (0.40 s total, pas 2-6 s !), le terminal est placé.
+        writer.unavailable.remove(term.id)
+        clock.now = secondDeadline
+        _ = maintainer.tick(cause: "deadline")
+        #expect(provider.snapshots.first { $0.id == editor.id }?.frame == Rect(x: 0, y: 0, width: 800, height: 1000))
+        #expect(provider.snapshots.first { $0.id == term.id }?.frame == Rect(x: 800, y: 0, width: 800, height: 1000))
+
+        // 4. Vérifier que le plafond de reprises s'arrête proprement (pas de boucle infinie) si une fenêtre reste indisponible.
+        let stuck = powerWindow(300, x: 100, y: 100, width: 400, height: 300, app: "StuckApp")
+        provider.snapshots.append(stuck)
+        writer.unavailable.insert(stuck.id)
+        var ticks = 0
+        _ = maintainer.tick(cause: "ax:AXWindowCreated")
+        while let next = maintainer.nextDeadline(now: clock.now), ticks < 20 {
+            clock.now = next
+            _ = maintainer.tick(cause: "deadline")
+            ticks += 1
+        }
+        #expect(ticks > 0 && ticks <= 10)
+        #expect(maintainer.nextDeadline(now: clock.now) == nil)
+    }
 }

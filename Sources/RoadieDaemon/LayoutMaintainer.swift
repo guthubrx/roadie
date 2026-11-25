@@ -178,6 +178,11 @@ public final class LayoutMaintainer {
     private var commandGeneration: UInt64?
     private var lastTreeWindowIDs: Set<UInt32> = []
     private var unreadyPlacementWindows: Set<WindowID> = []
+    /// Reprise rapide bornée lorsqu'une nouvelle fenêtre CG précède sa disponibilité AX :
+    /// évite d'attendre 2 à 4 s le filet `safety`, puis laisse le filet prendre le relais au plafond.
+    private static let unreadyPlacementRetryDelays: [TimeInterval] = [0.15, 0.25, 0.4, 0.6, 1.0, 1.0]
+    private var unreadyPlacementRetryAt: Date?
+    private var unreadyPlacementRetryCount = 0
     /// Une lecture réussie distingue la disponibilité initiale des refus ultérieurs,
     /// même si la fenêtre était déjà à sa cible et n'a jamais nécessité d'écriture.
     private var placementResolvedPIDs: [WindowID: Int32] = [:]
@@ -633,7 +638,7 @@ public final class LayoutMaintainer {
         }
 
         let waitingPlacementScopes = unreadyPlacementScopes(
-            in: snapshot, scopes: treeScopes.subtracting(tickExcludedScopes)
+            in: snapshot, scopes: treeScopes.subtracting(tickExcludedScopes), now: tickNow
         )
         tickExcludedScopes.formUnion(waitingPlacementScopes)
         let liveTreeScopes = treeScopes.subtracting(tickExcludedScopes)
@@ -854,6 +859,9 @@ public final class LayoutMaintainer {
             due.append(("destroyed_window", retryAt, true))
         }
         if let pendingGesture { due.append(("gesture_pending", pendingGesture.pollAt, true)) }
+        if let retryAt = unreadyPlacementRetryAt, !unreadyPlacementWindows.isEmpty {
+            due.append(("ax_ready_retry", retryAt, true))
+        }
 
         for guardState in spaceGuards.values {
             due.append(("guard_cap", guardState.openedAt.addingTimeInterval(LayoutTolerance.spaceGuardCap), true))
@@ -1410,9 +1418,10 @@ public final class LayoutMaintainer {
     }
 
     /// Une fenêtre CG peut précéder sa fenêtre AX, même sur son écran cible. Ne pas réduire
-    /// ses voisines tant qu'elle n'est pas lisible. La passe de sécurité reprend l'attente.
+    /// ses voisines tant qu'elle n'est pas lisible. Arme des reprises rapides bornées
+    /// (`ax_ready_retry`), puis laisse la passe de sécurité prendre le relais.
     /// O(m + n · d), m membres, d écrans, plus une lecture AX par identité non résolue.
-    private func unreadyPlacementScopes(in snapshot: DaemonSnapshot, scopes: Set<StageScope>) -> Set<StageScope> {
+    private func unreadyPlacementScopes(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, now: Date) -> Set<StageScope> {
         let displays = Dictionary(snapshot.displays.map { ($0.id, $0.frame.cgRect) }, uniquingKeysWith: { first, _ in first })
         let members = Set(store.state().scopes.flatMap { $0.stages.flatMap { $0.members.map(\.windowID) } })
         placementResolvedPIDs = placementResolvedPIDs.filter { members.contains($0.key) }
@@ -1445,6 +1454,25 @@ public final class LayoutMaintainer {
                 events.append(RoadieEvent(type: "layout_window_ax_ready", scope: scope, details: [
                     "windowID": String(id.rawValue)
                 ]))
+            }
+        }
+        if unavailable.isEmpty {
+            unreadyPlacementRetryAt = nil
+            unreadyPlacementRetryCount = 0
+        } else {
+            let hasNewUnready = !unavailable.isSubset(of: unreadyPlacementWindows)
+            if hasNewUnready {
+                unreadyPlacementRetryCount = 0
+                unreadyPlacementRetryAt = nil
+            }
+            if unreadyPlacementRetryAt == nil || (unreadyPlacementRetryAt.map { $0 <= now } ?? false) {
+                if unreadyPlacementRetryCount < Self.unreadyPlacementRetryDelays.count {
+                    let delay = Self.unreadyPlacementRetryDelays[unreadyPlacementRetryCount]
+                    unreadyPlacementRetryCount += 1
+                    unreadyPlacementRetryAt = now.addingTimeInterval(delay)
+                } else {
+                    unreadyPlacementRetryAt = nil
+                }
             }
         }
         unreadyPlacementWindows = unavailable

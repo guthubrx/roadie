@@ -46,6 +46,36 @@ struct AXUnresponsiveAppsTests {
     }
 
     @Test
+    func startupGraceUsesShortBackoffForFastCannotCompleteAndFullQuarantineForSlowTimeout() {
+        let clock = ManualClock()
+        let registry = AXUnresponsiveApps(now: { clock.now })
+
+        // Application fraîchement lancée : `.cannotComplete` instantané (< 0.25 s) -> backoff court 0.2 s
+        registry.noteApplicationLaunch(99)
+        #expect(registry.noteResult(.cannotComplete, pid: 99, elapsed: 0.002))
+        #expect(registry.isQuarantined(99))
+        clock.advance(0.15)
+        #expect(registry.isQuarantined(99))
+        clock.advance(0.10)
+        #expect(!registry.isQuarantined(99))
+
+        // Un appel réellement lent (>= 0.25 s) même pendant la grâce -> quarantaine complète de 5 s
+        #expect(registry.noteResult(.cannotComplete, pid: 99, elapsed: 0.5))
+        #expect(registry.isQuarantined(99))
+        clock.advance(1.0)
+        #expect(registry.isQuarantined(99))
+        clock.advance(4.1)
+        #expect(!registry.isQuarantined(99))
+
+        // Une fois la grâce expirée (ou après markResponsive), `.cannotComplete` reprend 5 s
+        registry.noteApplicationLaunch(100)
+        registry.markResponsive(100)
+        #expect(registry.noteResult(.cannotComplete, pid: 100, elapsed: 0.001))
+        clock.advance(1.0)
+        #expect(registry.isQuarantined(100))
+    }
+
+    @Test
     func lotJWindowSwitcherParseStateDecodesBatchedAttributesAndEmbeddedErrors() {
         let ok = WindowSwitcherWindowAccess.parseState(
             values: [kCFBooleanTrue, "Terminal" as CFString, kCFBooleanFalse],

@@ -323,42 +323,73 @@ enum AXMessaging {
 public final class AXUnresponsiveApps: Sendable {
     public static let shared = AXUnresponsiveApps()
     public static let quarantineDuration: TimeInterval = 5
+    /// Grâce au lancement d'une app : un `.cannotComplete` rapide (< `slowCallThreshold`)
+    /// signifie que son serveur AX finit de s'initialiser, pas qu'elle est gelée.
+    public static let startupGraceDuration: TimeInterval = 4
+    public static let startupBackoffDuration: TimeInterval = 0.2
+    public static let slowCallThreshold: TimeInterval = 0.25
 
-    private let resumeAt = OSAllocatedUnfairLock(initialState: [pid_t: Date]())
+    private struct State: Sendable {
+        var resumeAt: [pid_t: Date] = [:]
+        var startupGraceUntil: [pid_t: Date] = [:]
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
     private let now: @Sendable () -> Date
 
     init(now: @escaping @Sendable () -> Date = { Date() }) {
         self.now = now
     }
 
+    /// Signale le lancement récent d'une application afin qu'un `.cannotComplete` immédiat
+    /// pendant l'initialisation de son port AX n'entraîne pas une quarantaine complète de 5 s. O(1).
+    public func noteApplicationLaunch(_ pid: pid_t) {
+        let until = now().addingTimeInterval(Self.startupGraceDuration)
+        state.withLock { $0.startupGraceUntil[pid] = until }
+    }
+
     /// Vrai si l'application est mise de côté. O(1).
     public func isQuarantined(_ pid: pid_t) -> Bool {
         let current = now()
-        return resumeAt.withLock { map in
-            guard let date = map[pid] else { return false }
+        return state.withLock { s in
+            guard let date = s.resumeAt[pid] else { return false }
             if current < date { return true }
-            map[pid] = nil
+            s.resumeAt[pid] = nil
             return false
         }
     }
 
-    func markUnresponsive(_ pid: pid_t) {
-        let until = now().addingTimeInterval(Self.quarantineDuration)
-        resumeAt.withLock { $0[pid] = until }
+    func markUnresponsive(_ pid: pid_t, duration: TimeInterval = AXUnresponsiveApps.quarantineDuration) {
+        let until = now().addingTimeInterval(duration)
+        state.withLock { $0.resumeAt[pid] = until }
     }
 
     /// Sort immédiatement une application de quarantaine lorsqu'elle émet de nouveau un événement
     /// AX vivant (Lot H) : évite jusqu'à 5 s d'échecs inutiles après reprise de réactivité. O(1).
     public func markResponsive(_ pid: pid_t) {
-        resumeAt.withLock { $0[pid] = nil }
+        state.withLock { s in
+            s.resumeAt[pid] = nil
+            s.startupGraceUntil[pid] = nil
+        }
     }
 
     /// Enregistre le résultat d'un appel AX. Retourne vrai si l'appel a échoué par délai ou
     /// absence de réponse : l'application est alors mise de côté et l'appelant doit abandonner.
+    /// Si l'app vient d'être lancée et a répondu immédiatement (`elapsed < slowCallThreshold`),
+    /// applique un backoff court (`0.2 s`) au lieu de la quarantaine complète de 5 s.
     @discardableResult
-    func noteResult(_ error: AXError, pid: pid_t) -> Bool {
+    func noteResult(_ error: AXError, pid: pid_t, elapsed: TimeInterval? = nil) -> Bool {
         guard error == .cannotComplete else { return false }
-        markUnresponsive(pid)
+        let current = now()
+        let isFastStartupFailure = state.withLock { s -> Bool in
+            guard let graceUntil = s.startupGraceUntil[pid] else { return false }
+            if current >= graceUntil {
+                s.startupGraceUntil[pid] = nil
+                return false
+            }
+            return (elapsed ?? 0) < Self.slowCallThreshold
+        }
+        markUnresponsive(pid, duration: isFastStartupFailure ? Self.startupBackoffDuration : Self.quarantineDuration)
         return true
     }
 
@@ -655,18 +686,22 @@ struct AXApplicationWindows: @unchecked Sendable {
         let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return nil }
         var raw: CFTypeRef?
+        let callStart = CFAbsoluteTimeGetCurrent()
         let error = AXCallTimings.shared.measure(pid) {
             AXUIElementCopyAttributeValue(AXMessaging.application(pid), kAXWindowsAttribute as CFString, &raw)
         }
-        registry.noteResult(error, pid: pid)
+        let callElapsed = CFAbsoluteTimeGetCurrent() - callStart
+        registry.noteResult(error, pid: pid, elapsed: callElapsed)
         guard error == .success, let windows = raw as? [AXUIElement] else { return nil }
+        registry.markResponsive(pid)
 
         var entries: [(id: CGWindowID?, element: AXUIElement)] = []
         for element in windows {
             AXMessaging.configure(element)
             var id = CGWindowID()
+            let idStart = CFAbsoluteTimeGetCurrent()
             let idError = AXUIElementGetWindowID(element, &id)
-            if registry.noteResult(idError, pid: pid) { return nil }
+            if registry.noteResult(idError, pid: pid, elapsed: CFAbsoluteTimeGetCurrent() - idStart) { return nil }
             entries.append((idError == .success && id > 0 ? id : nil, element))
         }
         guard discoverAttachedSheets else {
