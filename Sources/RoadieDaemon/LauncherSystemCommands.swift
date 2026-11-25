@@ -147,6 +147,16 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             .init(id: "roadie-tab-unstack", fr: "Détacher l'onglet en tuile", en: "Detach tab to tile",
                   keywords: ["tab", "unstack", "detach", "detacher", "onglet", "tuile", "separer"],
                   symbol: "rectangle.split.2x1", confirms: false),
+            // Session 187 (SPEC-166) : activation rapide des raccourcis clavier autonomes.
+            .init(id: "roadie-shortcuts-preset-standard", fr: "Raccourcis autonomes : Standard (flèches)", en: "Autonomous shortcuts: Standard (arrows)",
+                  keywords: ["shortcuts", "raccourcis", "preset", "standard", "fleches", "arrows", "clavier", "autonome"],
+                  symbol: "keyboard", confirms: false),
+            .init(id: "roadie-shortcuts-preset-vim", fr: "Raccourcis autonomes : Vim (HJKL)", en: "Autonomous shortcuts: Vim (HJKL)",
+                  keywords: ["shortcuts", "raccourcis", "preset", "vim", "hjkl", "aerospace", "clavier"],
+                  symbol: "keyboard", confirms: false),
+            .init(id: "roadie-shortcuts-preset-minimal", fr: "Raccourcis autonomes : Minimal", en: "Autonomous shortcuts: Minimal",
+                  keywords: ["shortcuts", "raccourcis", "preset", "minimal", "clavier"],
+                  symbol: "keyboard", confirms: false),
         ]
     }
 
@@ -257,6 +267,12 @@ struct LauncherSystemCommand: Equatable, Hashable, Sendable {
             Task.detached(priority: .userInitiated) { _ = WindowCommandService().tabStack(.down) }
         case "roadie-tab-unstack":
             Task.detached(priority: .userInitiated) { _ = WindowCommandService().tabUnstack(nil) }
+        case "roadie-shortcuts-preset-standard":
+            Task.detached(priority: .userInitiated) { _ = try? ShortcutConfigService().applyPreset(.standard, configPath: nil) }
+        case "roadie-shortcuts-preset-vim":
+            Task.detached(priority: .userInitiated) { _ = try? ShortcutConfigService().applyPreset(.vim, configPath: nil) }
+        case "roadie-shortcuts-preset-minimal":
+            Task.detached(priority: .userInitiated) { _ = try? ShortcutConfigService().applyPreset(.minimal, configPath: nil) }
         case "roadie-timer-cancel-all":
             let count = LauncherTimerService.shared.cancelAll()
             LauncherTimerService.postLocalNotification(

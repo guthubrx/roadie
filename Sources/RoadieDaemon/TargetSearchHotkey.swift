@@ -148,11 +148,20 @@ public final class TargetSearchHotkey {
         let named: [String: UInt32] = [
             "space": 49, "return": 36, "tab": 48, "escape": 53, "backspace": 51,
             "left": 123, "right": 124, "down": 125, "up": 126,
+            "1": 18, "2": 19, "3": 20, "4": 21, "5": 23,
+            "6": 22, "7": 26, "8": 28, "9": 25, "0": 29,
             "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97,
             "f7": 98, "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
         ]
         return named[key]
     }
+
+    /// Table ANSI de repli (lettres a–z) utilisée uniquement hors thread principal (ex. tests unitaires).
+    nonisolated public static let standardFallbackLayout: [UInt32: String] = [
+        0: "a", 1: "s", 2: "d", 3: "f", 4: "h", 5: "g", 6: "z", 7: "x", 8: "c", 9: "v",
+        11: "b", 12: "q", 13: "w", 14: "e", 15: "r", 16: "y", 17: "t", 31: "o", 32: "u",
+        34: "i", 35: "p", 37: "l", 38: "j", 40: "k", 45: "n", 46: "m"
+    ]
 
     /// Touche qui produit `character` sans modificateur dans la table `code → caractère` ; la plus
     /// petite si plusieurs (pavé numérique).

@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""Génère le Cask Homebrew `Casks/roadie.rb` pour la distribution 1-clic de Roadie (Spec 166).
+
+Usage :
+  ./scripts/generate-cask [--version X.Y.Z] [--sha256 HEX|:no_check] [--sha256-file PATH]
+                          [--repo OWNER/REPO] [--output PATH]
+"""
+
+from __future__ import annotations
+
+import argparse
+import pathlib
+import re
+import sys
+
+DEFAULT_REPO = "guthubrx/roadie"
+VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
+SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def read_source_version(repo_root: pathlib.Path) -> str:
+    health_path = repo_root / "Sources" / "RoadieDaemon" / "DaemonHealth.swift"
+    text = health_path.read_text(encoding="utf-8")
+    match = re.search(r'static let current = "([^"]+)"', text)
+    if not match:
+        raise ValueError(f"Version introuvable dans {health_path}")
+    return match.group(1)
+
+
+def read_sha256_file(path: pathlib.Path) -> str:
+    raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        raise ValueError(f"Fichier SHA-256 vide : {path}")
+    token = raw.split()[0]
+    if not SHA256_RE.match(token):
+        raise ValueError(f"SHA-256 invalide dans {path} : {token!r}")
+    return token.lower()
+
+
+def render_cask(version: str, sha256: str, repo: str = DEFAULT_REPO) -> str:
+    if not VERSION_RE.match(version):
+        raise ValueError(f"Version invalide : {version!r}")
+    if not REPO_RE.match(repo):
+        raise ValueError(f"Dépôt GitHub invalide : {repo!r}")
+    if sha256 == ":no_check":
+        sha_line = "  sha256 :no_check"
+    else:
+        if not SHA256_RE.match(sha256):
+            raise ValueError(f"SHA-256 invalide (64 caractères hex ou :no_check attendu) : {sha256!r}")
+        sha_line = f'  sha256 "{sha256.lower()}"'
+
+    return f'''cask "roadie" do
+  version "{version}"
+{sha_line}
+
+  url "https://github.com/{repo}/releases/download/v#{{version}}/Roadie.dmg"
+  name "Roadie"
+  desc "Tiling window manager (BSP, Tabbed BSP, Scrolling), stages, switcher and Alfred-compatible launcher for macOS"
+  homepage "https://github.com/{repo}"
+
+  depends_on macos: ">= :sonoma"
+
+  app "Roadie.app"
+  binary "#{{appdir}}/Roadie.app/Contents/Resources/roadie"
+
+  postflight do
+    # Roadie n'est pas encore notarisé par Apple : lever proprement la quarantaine locale.
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{{appdir}}/Roadie.app"],
+                   must_succeed: false
+  end
+
+  uninstall launchctl: "com.roadie.roadied",
+            quit:      "com.roadie.roadied"
+
+  zap trash: [
+    "~/Library/LaunchAgents/com.roadie.roadied.plist",
+    "~/.roadies",
+    "~/.config/roadie",
+  ]
+
+  caveats <<~EOS
+    Roadie is not Apple-notarized yet; Homebrew clears the local quarantine attribute on install.
+    Quick start (no BetterTouchTool required):
+      1. Initialize a default config with autonomous shortcuts (if not already present):
+           roadie config init --preset standard
+      2. Launch Roadie and grant Accessibility permission in System Settings > Privacy & Security > Accessibility:
+           open -a Roadie
+      3. Check health:
+           roadie daemon health
+  EOS
+end
+'''
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Génère le Cask Homebrew Casks/roadie.rb")
+    parser.add_argument("--version", help="Version Roadie (défaut : lue dans DaemonHealth.swift)")
+    parser.add_argument("--sha256", help="Empreinte SHA-256 (64 hex) ou :no_check")
+    parser.add_argument("--sha256-file", type=pathlib.Path, help="Fichier Roadie.dmg.sha256")
+    parser.add_argument("--repo", default=DEFAULT_REPO, help=f"Dépôt GitHub (défaut : {DEFAULT_REPO})")
+    parser.add_argument("--output", type=pathlib.Path, help="Chemin de sortie (défaut : Casks/roadie.rb)")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    version = args.version or read_source_version(repo_root)
+    if args.sha256_file is not None:
+        sha256 = read_sha256_file(args.sha256_file)
+    elif args.sha256 is not None:
+        sha256 = args.sha256
+    else:
+        sha256 = ":no_check"
+
+    rendered = render_cask(version=version, sha256=sha256, repo=args.repo)
+    output = args.output or (repo_root / "Casks" / "roadie.rb")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(rendered, encoding="utf-8")
+    print(str(output))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

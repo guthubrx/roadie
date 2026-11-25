@@ -227,6 +227,7 @@ struct SettingsCommandShortcutsView: View {
     @State private var filter = ""
     @State private var newCommand = ""
     @State private var newKeys = ""
+    @State private var selectedPreset: ShortcutPresetID = .standard
     @State private var message = ""
     @State private var busy = false
     private var fonts: InterfaceConfig { model.interfaceFonts }
@@ -279,6 +280,39 @@ struct SettingsCommandShortcutsView: View {
             TextField(tr("Filtrer les commandes (focus, stage, ⌘L…)", "Filter commands (focus, stage, ⌘L…)"), text: $filter).textFieldStyle(.roundedBorder)
             Text(tr("Chaque ligne lance « roadie » suivi de la commande. Roadie : il enregistre la combinaison lui-même et le raccourci BTT est désactivé.", "Each row runs “roadie” followed by the command. Roadie: it registers the key combination itself and the BTT shortcut is turned off."))
                 .font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(tr("Préréglages autonomes :", "Autonomous presets:")).fontWeight(.semibold)
+                    SettingsCollectionChoicePicker(
+                        fontSize: fonts.settingsTextFontSize,
+                        label: tr("Préréglage", "Preset"),
+                        options: ShortcutPresetID.allCases.map { ($0.rawValue, tr($0.titleFR, $0.titleEN)) },
+                        selection: Binding(
+                            get: { selectedPreset.rawValue },
+                            set: { selectedPreset = ShortcutPresetID(rawValue: $0) ?? .standard }
+                        )
+                    )
+                    Button(tr("Appliquer (sans écraser)", "Apply (keep existing)")) { applySelectedPreset() }
+                }
+                Text(tr(selectedPreset.summaryFR, selectedPreset.summaryEN))
+                    .font(.system(size: fonts.settingsHelpFontSize))
+                    .foregroundStyle(.secondary)
+                let bttActiveRows = visibleRows.filter { $0.manager == .btt && $0.trigger != nil && !$0.keys.isEmpty }
+                if catalog.state == .loaded, !bttActiveRows.isEmpty {
+                    HStack(spacing: 8) {
+                        Button(tr(
+                            "Tout reprendre de BetterTouchTool (\(bttActiveRows.count))",
+                            "Migrate all from BetterTouchTool (\(bttActiveRows.count))"
+                        )) { migrateAllFromBTT(bttActiveRows) }
+                        Text(tr("BetterTouchTool reste utilisable si vous préférez.", "BetterTouchTool remains supported if you prefer."))
+                            .font(.system(size: fonts.settingsHelpFontSize))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
             let rows = visibleRows
             let groups = Dictionary(grouping: rows, by: \.group)
             // Dossiers BTT dans leur ordre (« 1 - Fenêtres » d'abord), ajouts de Roadie à la fin.
@@ -396,5 +430,40 @@ struct SettingsCommandShortcutsView: View {
         newCommand = ""
         newKeys = ""
         message = tr("Raccourci ajouté. Roadie l'enregistre tout de suite.", "Shortcut added. Roadie registers it right away.")
+    }
+
+    private func applySelectedPreset() {
+        let existing = entries.map { CommandShortcut(keys: $0.keys, command: $0.command, enabled: $0.enabled, bttUUID: $0.bttUUID) }
+        let report = ShortcutPresets.merge(selectedPreset, into: existing, replaceExisting: false)
+        var addedCount = 0
+        for shortcut in report.added {
+            if editor.addRow(values: ["keys": shortcut.keys, "command": shortcut.command, "enabled": "true", "btt_uuid": ""]) != nil {
+                addedCount += 1
+            }
+        }
+        let skipped = report.skippedExistingCommands.count + report.skippedKeyCollisions.count
+        message = tr(
+            "Préréglage « \(selectedPreset.titleFR) » appliqué : \(addedCount) ajouté(s), \(skipped) déjà configuré(s) ou en conflit.",
+            "Preset “\(selectedPreset.titleEN)” applied: \(addedCount) added, \(skipped) already configured or conflicting."
+        )
+    }
+
+    private func migrateAllFromBTT(_ rows: [CommandShortcutRow]) {
+        run(tr(
+            "\(rows.count) raccourci(s) repris dans Roadie (et désactivés dans BetterTouchTool).",
+            "\(rows.count) shortcut(s) migrated to Roadie (and turned off in BetterTouchTool)."
+        )) {
+            for row in rows {
+                guard let trigger = row.trigger else { continue }
+                if let entry = row.entry {
+                    _ = editor.updateRow(entry.rowID, values: ["enabled": "true", "keys": row.keys])
+                } else {
+                    _ = editor.addRow(values: ["keys": row.keys, "command": row.command, "enabled": "true", "btt_uuid": trigger.id])
+                }
+                if trigger.enabled {
+                    try await catalog.write(trigger.id, BTTRoadieTriggers.enabledFields(false))
+                }
+            }
+        }
     }
 }

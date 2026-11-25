@@ -2347,16 +2347,18 @@ public extension SnapshotService {
                respectLastingRefusals: Bool = false, intermediate: Bool = false,
                animation: AnimationAction = .move,
                immediateWindowIDs: Set<WindowID> = [], transitionDirection: Direction? = nil,
-               animationDisplays: [DisplaySnapshot]? = nil, stageScene: StageSceneContext? = nil) -> ApplyResult {
+               animationDisplays: [DisplaySnapshot]? = nil, stageScene: StageSceneContext? = nil,
+               policyOverride: MotionPolicy? = nil) -> ApplyResult {
         // Les appels interactifs publish=false gardent leur contrat immédiat. Les commandes
         // hors MainActor restent immédiates ; aucun transfert synchrone vers le fil principal.
-        if publish, Thread.isMainThread, effectiveConfig.fx.animations.enabled {
+        if publish, Thread.isMainThread, (policyOverride?.enabled == true || effectiveConfig.fx.animations.enabled) {
             let deferred = MainActor.assumeIsolated {
                 let runtime = FrameTransitionRuntime.shared
                 guard runtime.acceptsCommands else { return nil as ApplyResult? }
                 let displays = animationDisplays ?? cachedGestureSnapshot()?.displays ?? provider.displays()
                 return runtime.schedule(plan, service: self, generation: generation, action: animation,
-                    immediateWindowIDs: immediateWindowIDs, transitionDirection: transitionDirection, displays: displays, stageScene: stageScene)
+                    immediateWindowIDs: immediateWindowIDs, transitionDirection: transitionDirection, displays: displays,
+                    stageScene: stageScene, policyOverride: policyOverride)
             }
             if let deferred { return deferred }
         }

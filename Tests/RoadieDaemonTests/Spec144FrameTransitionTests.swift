@@ -183,7 +183,10 @@ extension Spec144FrameTransitionTests {
     }
 
     @Test func lotETransitionRunsAt60HzAndNotifiesWhenLayoutHoldEnds() async throws {
-        #expect(abs(FrameTransitionRuntime.frameInterval - (1.0 / 60)) < 0.0001)
+        // Spec 166 : cadence adaptative écran (30–120 Hz, 120 Hz sur ProMotion, 60 Hz sur écran standard).
+        #expect(FrameTransitionRuntime.frameInterval == EffectAnimator.preferredFrameInterval())
+        #expect(FrameTransitionRuntime.frameInterval >= (1.0 / 120) - 0.0001)
+        #expect(FrameTransitionRuntime.frameInterval <= (1.0 / 30) + 0.0001)
         let f = try Drag143Fixture(); defer { f.clean() }
         let path = try #require(f.configService.state.activePath)
         try "[fx.animations]\nenabled=true\nduration_ms=80\n".write(toFile: path, atomically: true, encoding: .utf8)

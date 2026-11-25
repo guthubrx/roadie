@@ -111,6 +111,9 @@ public enum WindowContextActionKind: String, Equatable, Codable, Sendable {
     /// Tuiles à onglets intégrées dans `spatialBsp` (Spec 165).
     case tabStack = "tab_stack"
     case tabUnstack = "tab_unstack"
+    /// Scratchpad flottant depuis le menu barre de titre (Spec 166).
+    case scratchpadAssign = "scratchpad_assign"
+    case scratchpadRelease = "scratchpad_release"
 }
 
 public struct WindowContextAction: Equatable, Sendable {
@@ -340,7 +343,8 @@ public final class TitlebarContextMenuController {
         guard let entry = FocusFollowsMousePicker.frontWindow(at: point, in: snapshot) else {
             return TitlebarHitTest(screenPoint: point, windowID: nil, isEligible: false, reason: .noWindow)
         }
-        if settings.managedWindowsOnly, entry.scope == nil {
+        let isScratchpadWindow = ScratchpadStore.protectedWindows()[entry.window.id] == entry.window.bundleID
+        if settings.managedWindowsOnly, entry.scope == nil, !isScratchpadWindow {
             return TitlebarHitTest(
                 screenPoint: point,
                 windowID: entry.window.id,
@@ -508,6 +512,28 @@ public final class TitlebarContextMenuController {
             sourceScope: sourceScope,
             to: submenu
         )
+        if configLoader().tiling.scratchpadEnabled {
+            let scratchpads = ScratchpadCommandService(service: snapshotService)
+            if let existingScratchpad = scratchpads.scratchpadName(for: windowID, bundleID: window.bundleID) {
+                let item = NSMenuItem(
+                    title: tr("Retirer du scratchpad (\(existingScratchpad))", "Release from scratchpad (\(existingScratchpad))"),
+                    action: #selector(TitlebarMenuActionTarget.choose(_:)),
+                    keyEquivalent: ""
+                )
+                item.representedObject = existingScratchpad
+                item.target = actionTarget(windowID: windowID, kind: .scratchpadRelease, sourceScope: sourceScope)
+                submenu.addItem(item)
+            } else {
+                let item = NSMenuItem(
+                    title: tr("Transformer en scratchpad", "Turn into scratchpad"),
+                    action: #selector(TitlebarMenuActionTarget.choose(_:)),
+                    keyEquivalent: ""
+                )
+                item.representedObject = "default"
+                item.target = actionTarget(windowID: windowID, kind: .scratchpadAssign, sourceScope: sourceScope)
+                submenu.addItem(item)
+            }
+        }
         submenu.addItem(.separator())
         if let pin {
             let stateTitle: String

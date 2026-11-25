@@ -64,7 +64,7 @@ public struct WindowCommandService {
         }
         let ok = focusWindow(pair.neighbor.window)
         if ok, let scope = pair.active.scope {
-            recenterScrollingRibbonIfNeeded(scope: scope, snapshot: snapshot)
+            recenterScrollingRibbonIfNeeded(scope: scope, snapshot: snapshot, direction: direction)
         }
         let result = WindowCommandResult.changedOrFailed(ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
         appendWindowCommandEvent(
@@ -78,15 +78,21 @@ public struct WindowCommandService {
         return result
     }
 
-    private func recenterScrollingRibbonIfNeeded(scope: StageScope, snapshot: DaemonSnapshot) {
+    private func recenterScrollingRibbonIfNeeded(scope: StageScope, snapshot: DaemonSnapshot, direction: Direction? = nil) {
         guard snapshot.state.stage(scope: scope)?.mode == .scrolling else { return }
         let gen = PlacementGeneration.shared.next()
         let refreshed = service.snapshot(followFocus: false)
         let ordered = refreshed.state.stage(scope: scope)?.windowIDs ?? []
         guard !ordered.isEmpty else { return }
+        let smoothPolicy: MotionPolicy? = service.effectiveConfig.tiling.scrollingSmoothScroll
+            ? FrameTransitionRuntime.scrollingRibbonPolicy
+            : nil
         _ = service.apply(
             service.applyPlan(from: refreshed, scope: scope, orderedWindowIDs: ordered, generation: gen),
-            generation: gen
+            generation: gen,
+            animation: .move,
+            transitionDirection: direction,
+            policyOverride: smoothPolicy
         )
     }
 

@@ -247,7 +247,7 @@ private enum ConfigValidationRules {
             "fx.animations.overview": ["enabled", "curve", "duration_ms", "intensity", "stiffness", "damping"],
 
             "interface": ["settings_text_font_size", "settings_help_font_size", "settings_title_font_size", "language"],
-            "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "live_drag_preview", "drag_move_modifier", "drag_resize_modifier", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter", "float_picture_in_picture", "scratchpad_enabled", "tabbed_bar_height", "scrolling_column_width"]),
+            "tiling": gapKeys.union(["default_strategy", "split_policy", "resize_handles", "live_drag_preview", "drag_move_modifier", "drag_resize_modifier", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter", "float_picture_in_picture", "scratchpad_enabled", "scratchpad_reboot_policy", "tabbed_bar_height", "scrolling_column_width", "scrolling_smooth_scroll", "scrolling_trackpad_gestures", "scrolling_trackpad_fingers"]),
             "tiling.display_overrides": gapKeys.union(["display_id", "display_name"]),
             "desktops": ["enabled", "count", "back_and_forth", "mode"],
             "stage_manager": ["enabled", "hide_strategy", "default_stage", "workspaces"],
@@ -271,7 +271,7 @@ private enum ConfigValidationRules {
             "focus": ["stage_follows_focus", "assign_follows_focus", "stage_move_follows_focus", "focus_follows_mouse", "mouse_follows_focus"],
             "window_placement": ["new_apps_target", "new_window_side"],
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
-            "overview": ["enabled", "presentation", "loupe", "magnification", "hotkey", "background_blur", "selection_color", "selection_width"],
+            "overview": ["enabled", "presentation", "loupe", "magnification", "hotkey", "background_blur", "selection_color", "selection_width", "trackpad_gesture"],
             "switcher": ["enabled", "presentation", "style", "auto_size", "thumbnail_width", "font_size", "font_family", "preview", "app_icon", "app_icon_size", "zone_history_size", "zone_history_hours", "zone_clicks_per_window", "action_keys_enabled", "excluded_bundles", "zone_click_excluded_bundles", "zone_clicks_per_app", "shortcuts"],
             "switcher.zone_clicks_per_app": ["app", "count"],
             "experimental.target_mode.web_searches": ["keyword", "title", "url"],

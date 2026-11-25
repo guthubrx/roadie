@@ -234,7 +234,8 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "layout rotate 90|180|270"),
         CLICommandSpec(usage: "layout mirror x|y"),
         CLICommandSpec(usage: "layout width next|prev|nudge [DELTA]|ratio RATIO [--all]"),
-        CLICommandSpec(usage: "config show|validate|reload [--json] [--config PATH]"),
+        CLICommandSpec(usage: "config show|validate|reload|init [--preset standard|vim|minimal|none] [--force] [--json] [--config PATH]"),
+        CLICommandSpec(usage: "shortcuts list|presets|apply-preset PRESET|add KEYS COMMAND|remove KEYS|check [--replace] [--dry-run] [--json] [--config PATH]"),
         CLICommandSpec(usage: "rules validate|list|explain [--json] [--config PATH]"),
         CLICommandSpec(usage: "group create|add|remove|focus|dissolve|list ..."),
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
@@ -392,6 +393,9 @@ public final class CLICommandRouter {
         // `config reload` : l'instance partagée à recharger est celle du daemon (REL-014).
         case "config":
             return args.dropFirst().first == "reload"
+        // `shortcuts` : appliquer/ajouter/retirer recharge directement `RoadieCommandHotkeys` dans le daemon (Spec 166).
+        case "shortcuts":
+            return !args.contains("--config") && ["apply-preset", "add", "remove"].contains(args.dropFirst().first ?? "")
         default:
             return false
         }
@@ -680,10 +684,38 @@ public final class CLICommandRouter {
             }
         case "config":
             let verb = args.dropFirst().first
-            guard verb == "show" || verb == "validate" || verb == "reload" else {
+            guard verb == "show" || verb == "validate" || verb == "reload" || verb == "init" else {
                 return usageError()
             }
             let configPath = value(after: "--config", in: Array(args.dropFirst(2)))
+            if verb == "init" {
+                let rawPreset = value(after: "--preset", in: Array(args.dropFirst(2))) ?? "standard"
+                let preset: ShortcutPresetID?
+                if rawPreset == "none" {
+                    preset = nil
+                } else if let parsed = ShortcutPresetID(rawValue: rawPreset) {
+                    preset = parsed
+                } else {
+                    err("roadie: config init unknown preset \(rawPreset) (expected standard|vim|minimal|none)")
+                    return 64
+                }
+                do {
+                    let result = try ShortcutConfigService(configReload: configReload).initConfig(
+                        at: configPath,
+                        preset: preset,
+                        force: args.contains("--force")
+                    )
+                    if args.contains("--json") {
+                        try printCodableJSON(result)
+                    } else {
+                        out("initialized \(result.path) preset=\(result.preset) shortcuts=\(result.shortcutCount)")
+                    }
+                    return 0
+                } catch {
+                    err("roadie: config init failed: \(error.localizedDescription)")
+                    return 1
+                }
+            }
             if verb == "validate" {
                 let report = RoadieConfigLoader.validate(path: configPath)
                 if args.contains("--json") {
@@ -713,6 +745,8 @@ public final class CLICommandRouter {
                 err("roadie: config load failed: \(error)")
                 return 1
             }
+        case "shortcuts":
+            return try runShortcutsCommand(Array(args.dropFirst()))
         case "rules":
             return try runRulesCommand(Array(args.dropFirst()))
         case "group":
@@ -1039,6 +1073,144 @@ public final class CLICommandRouter {
             return 64
         }
         return 0
+    }
+
+    /// Gestion autonome des raccourcis globaux `[[shortcuts]]` et préréglages (Spec 166).
+    private func runShortcutsCommand(_ rest: [String]) throws -> Int32 {
+        guard let verb = rest.first else { return usageError() }
+        let tail = Array(rest.dropFirst())
+        let json = tail.contains("--json")
+        let configPath = value(after: "--config", in: tail)
+        let shortcutService = ShortcutConfigService(configReload: configReload)
+        switch verb {
+        case "presets":
+            if json {
+                try printCodableJSON(ShortcutPresets.all)
+            } else {
+                for preset in ShortcutPresets.all {
+                    let title = tr(preset.titleFR, preset.titleEN)
+                    let summary = tr(preset.summaryFR, preset.summaryEN)
+                    out("\(preset.id.rawValue)\t\(preset.shortcuts.count) raccourcis\t\(title) — \(summary)")
+                }
+            }
+            return 0
+        case "list":
+            do {
+                let items = try shortcutService.list(configPath: configPath)
+                if json {
+                    try printCodableJSON(items)
+                } else if items.isEmpty {
+                    out(tr("aucun raccourci autonome configuré (lancez `roadie shortcuts apply-preset standard`)", "no autonomous shortcuts configured (run `roadie shortcuts apply-preset standard`)"))
+                } else {
+                    for item in items {
+                        let status = item.enabled ? "on" : "off"
+                        out("\(status)\t\(item.keys)\troadie \(item.command)")
+                    }
+                }
+                return 0
+            } catch {
+                err("roadie: shortcuts list failed: \(error.localizedDescription)")
+                return 1
+            }
+        case "apply-preset":
+            guard let rawPreset = tail.first(where: { !$0.hasPrefix("--") }),
+                  let presetID = ShortcutPresetID(rawValue: rawPreset) else {
+                err("roadie: shortcuts apply-preset requires standard|vim|minimal")
+                return 64
+            }
+            do {
+                let report = try shortcutService.applyPreset(
+                    presetID,
+                    configPath: configPath,
+                    replaceExisting: tail.contains("--replace"),
+                    dryRun: tail.contains("--dry-run")
+                )
+                if json {
+                    try printCodableJSON(report)
+                } else {
+                    out("preset=\(report.preset.rawValue) added=\(report.added.count) skipped_commands=\(report.skippedExistingCommands.count) collisions=\(report.skippedKeyCollisions.count) total=\(report.resultingShortcuts.count)")
+                }
+                return 0
+            } catch {
+                err("roadie: shortcuts apply-preset failed: \(error.localizedDescription)")
+                return 1
+            }
+        case "add":
+            let positional = positionalArguments(in: tail, takingValues: ["--config"])
+            guard positional.count >= 2 else {
+                err("roadie: shortcuts add requires KEYS COMMAND")
+                return 64
+            }
+            let keys = positional[0]
+            let command = positional.dropFirst().joined(separator: " ")
+            do {
+                let added = try shortcutService.addShortcut(keys: keys, command: command, configPath: configPath)
+                if json {
+                    try printCodableJSON(added)
+                } else {
+                    out("added \(added.keys) -> roadie \(added.command)")
+                }
+                return 0
+            } catch {
+                err("roadie: shortcuts add failed: \(error.localizedDescription)")
+                return 1
+            }
+        case "remove":
+            let positional = positionalArguments(in: tail, takingValues: ["--config"])
+            guard let keys = positional.first else {
+                err("roadie: shortcuts remove requires KEYS")
+                return 64
+            }
+            do {
+                let removed = try shortcutService.removeShortcut(keys: keys, configPath: configPath)
+                if json {
+                    try printCodableJSON(["removed": removed])
+                } else {
+                    out("removed=\(removed)")
+                }
+                return 0
+            } catch {
+                err("roadie: shortcuts remove failed: \(error.localizedDescription)")
+                return 1
+            }
+        case "check":
+            do {
+                let layout: [UInt32: String] = Thread.isMainThread
+                    ? MainActor.assumeIsolated { TargetSearchHotkey.currentLayoutTable() }
+                    : TargetSearchHotkey.standardFallbackLayout
+                let report = try shortcutService.check(configPath: configPath, layout: layout)
+                if json {
+                    try printCodableJSON(report)
+                } else {
+                    out("total=\(report.total) active=\(report.active) issues=\(report.issues.count)")
+                    for issue in report.issues { out("issue: \(issue)") }
+                }
+                return report.valid ? 0 : 1
+            } catch {
+                err("roadie: shortcuts check failed: \(error.localizedDescription)")
+                return 1
+            }
+        default:
+            return usageError()
+        }
+    }
+
+    private func positionalArguments(in args: [String], takingValues optionsWithValues: Set<String>) -> [String] {
+        var result: [String] = []
+        var skipNext = false
+        for arg in args {
+            if skipNext {
+                skipNext = false
+                continue
+            }
+            if optionsWithValues.contains(arg) {
+                skipNext = true
+                continue
+            }
+            if arg.hasPrefix("--") { continue }
+            result.append(arg)
+        }
+        return result
     }
 
     /// Même encodage que `SnapshotEncoding.json` (indenté, clés triées, dates par défaut).

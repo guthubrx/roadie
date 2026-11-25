@@ -1,4 +1,4 @@
-.PHONY: test build install uninstall permissions displays windows snapshot state plan apply maintain dev-start stop restart status logs doctor self-test events config dmg package-dmg clean coverage
+.PHONY: test build install uninstall permissions displays windows snapshot state plan apply maintain dev-start stop restart status logs doctor self-test events config dmg package-dmg cask release-artifacts clean coverage
 
 test:
 	./scripts/test
@@ -40,6 +40,12 @@ package-dmg:
 	./scripts/package-dmg
 
 dmg: package-dmg
+
+cask:
+	./scripts/generate-cask
+
+release-artifacts: package-dmg
+	./scripts/generate-cask --sha256-file dist/Roadie.dmg.sha256 --output Casks/roadie.rb
 
 plan:
 	./scripts/roadie layout plan

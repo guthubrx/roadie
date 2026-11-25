@@ -12,10 +12,12 @@ public struct OverviewConfig: Equatable, Codable, Sendable {
     /// Contour de la fenêtre sélectionnée (au départ la fenêtre active) : couleur `#RRGGBB[AA]`, épaisseur 1–8 points.
     public var selectionColor: String
     public var selectionWidth: Double
+    /// Geste trackpad natif 4 doigts vers le haut/bas pour ouvrir/fermer la vue d'ensemble sans BetterTouchTool (Spec 166).
+    public var trackpadGesture: Bool
 
     public init(enabled: Bool = true, presentation: String = "archipelago", loupe: Bool = true,
                 magnification: Double = 150, hotkey: String = "", backgroundBlur: Double = 20,
-                selectionColor: String = "#66C2F7", selectionWidth: Double = 2) {
+                selectionColor: String = "#66C2F7", selectionWidth: Double = 2, trackpadGesture: Bool = true) {
         self.enabled = enabled
         self.presentation = ["archipelago", "bays"].contains(presentation) ? presentation : "archipelago"
         self.loupe = loupe
@@ -24,6 +26,7 @@ public struct OverviewConfig: Equatable, Codable, Sendable {
         self.backgroundBlur = backgroundBlur.isFinite ? min(100, max(0, backgroundBlur)) : 20
         self.selectionColor = selectionColor
         self.selectionWidth = selectionWidth.isFinite ? min(8, max(1, selectionWidth)) : 2
+        self.trackpadGesture = trackpadGesture
     }
 
     enum CodingKeys: String, CodingKey {
@@ -31,6 +34,7 @@ public struct OverviewConfig: Equatable, Codable, Sendable {
         case backgroundBlur = "background_blur"
         case selectionColor = "selection_color"
         case selectionWidth = "selection_width"
+        case trackpadGesture = "trackpad_gesture"
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -41,6 +45,7 @@ public struct OverviewConfig: Equatable, Codable, Sendable {
                   hotkey: try c.decodeIfPresent(String.self, forKey: .hotkey) ?? "",
                   backgroundBlur: try c.decodeFlexibleDouble(forKey: .backgroundBlur) ?? 20,
                   selectionColor: try c.decodeIfPresent(String.self, forKey: .selectionColor) ?? "#66C2F7",
-                  selectionWidth: try c.decodeFlexibleDouble(forKey: .selectionWidth) ?? 2)
+                  selectionWidth: try c.decodeFlexibleDouble(forKey: .selectionWidth) ?? 2,
+                  trackpadGesture: try c.decodeIfPresent(Bool.self, forKey: .trackpadGesture) ?? true)
     }
 }

@@ -324,6 +324,32 @@ make dev-start
 - `make restart` ne lance jamais `tmux`, et il refuse de s’exécuter tant qu’une session de développement existe. Lance d’abord `make stop` ;
 - pour revenir au service installé, lance `make stop`, puis `make restart`.
 
+## Installation 1-clic (Homebrew Cask ou script)
+
+Tu peux installer Roadie sans compiler les sources (macOS 14+ ; build actuellement non notarisé par Apple, la quarantaine locale est levée automatiquement à l'installation) :
+
+```bash
+# Option 1 : script 1-ligne (télécharge le DMG officiel, vérifie le SHA-256,
+# installe Roadie.app + roadie CLI + raccourcis clavier autonomes `standard`)
+curl -fsSL https://raw.githubusercontent.com/guthubrx/roadie/main/scripts/install-release.sh | bash
+
+# Option 2 : Homebrew Cask (depuis le dépôt ou une release publiée)
+brew install --cask Casks/roadie.rb
+roadie config init --preset standard
+```
+
+### Raccourcis clavier 100 % autonomes (sans BetterTouchTool ni Karabiner)
+
+Roadie gère nativement ses propres raccourcis globaux (AZERTY et QWERTY) dès l'installation, sans outil tiers :
+
+```bash
+roadie shortcuts presets                     # standard (flèches), vim (HJKL), minimal
+roadie shortcuts apply-preset standard       # fusionne sans écraser tes raccourcis existants
+roadie shortcuts check                       # vérifie les collisions et touches actives
+```
+
+Tu peux aussi appliquer un préréglage en un clic dans **Paramètres > Raccourcis** ou depuis le **Lanceur**.
+
 ## Installation Manuelle
 
 Pour une installation locale manuelle depuis les sources :

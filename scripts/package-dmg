@@ -38,7 +38,8 @@ bin_dir="$("$script_dir/with-xcode" swift build --show-bin-path --configuration 
 cp "$bin_dir/roadie" "$app_bundle/Contents/Resources/roadie"
 chmod +x "$app_bundle/Contents/Resources/roadie"
 
-codesign --force --deep --sign - "$app_bundle" >/dev/null
+sign_identity="${ROADIE_CODESIGN_IDENTITY:--}"
+codesign --force --deep --sign "$sign_identity" "$app_bundle" >/dev/null
 
 create-dmg \
   --volname "$app_name" \
@@ -56,5 +57,12 @@ create-dmg \
   cd "$dist_dir"
   shasum -a 256 "$app_name.dmg" > "$app_name.dmg.sha256"
 )
+
+if command -v python3 >/dev/null 2>&1; then
+  python3 "$script_dir/generate-cask" \
+    --version "$app_version" \
+    --sha256-file "$dist_dir/$app_name.dmg.sha256" \
+    --output "$dist_dir/roadie.rb" >/dev/null
+fi
 
 echo "$dmg_path"

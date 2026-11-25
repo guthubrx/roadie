@@ -1,0 +1,62 @@
+# Publication automatique de Roadie (DMG + SHA-256 + Homebrew Cask, sans notarisation Apple).
+# Déclenché sur push d'un tag `v*` ou manuellement depuis l'onglet Actions.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de release (ex. v0.15.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Installer create-dmg
+        run: brew install create-dmg
+
+      - name: Déterminer la version
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          version="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Vérifier les tests de packaging Python
+        run: python3 -I -B -m unittest discover -s scripts/tests
+
+      - name: Construire Roadie.dmg, SHA-256 et Cask Homebrew
+        env:
+          ROADIE_VERSION: ${{ steps.meta.outputs.version }}
+        run: ./scripts/package-dmg
+
+      - name: Vérifier les artefacts générés
+        run: |
+          ls -lh dist/Roadie.dmg dist/Roadie.dmg.sha256 dist/roadie.rb
+          (cd dist && shasum -a 256 -c Roadie.dmg.sha256)
+
+      - name: Publier la GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            dist/Roadie.dmg \
+            dist/Roadie.dmg.sha256 \
+            dist/roadie.rb \
+            --title "Roadie $RELEASE_TAG" \
+            --generate-notes

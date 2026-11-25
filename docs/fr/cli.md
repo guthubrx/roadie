@@ -428,7 +428,19 @@ roadie switcher cancel
 de mise en file. Le composant graphique exécute ensuite la commande. Voir le
 [guide du sélecteur](window-switcher.md) pour les profils et leurs filtres.
 
-Roadie intègre le raccourci de recherche `search_hotkey` (voir `[experimental.target_mode]`) et les profils du [sélecteur de fenêtres](window-switcher.md). Pour les autres commandes, utilise un outil qui lance une commande à l'appui d'une touche. Le dossier `examples/` contient des fichiers prêts à l'emploi :
+Roadie intègre le raccourci de recherche `search_hotkey` (voir `[experimental.target_mode]`), les profils du [sélecteur de fenêtres](window-switcher.md) **et ses propres raccourcis globaux autonomes** (`[[shortcuts]]`, sans BetterTouchTool ni Karabiner) :
+
+```sh
+roadie config init --preset standard          # crée config.toml avec raccourcis autonomes si absent
+roadie shortcuts presets                      # liste standard, vim, minimal
+roadie shortcuts apply-preset standard        # fusionne sans écraser l'existant (--replace pour remplacer)
+roadie shortcuts list [--json]                # liste les raccourcis configurés
+roadie shortcuts add "alt+g" "window gather-app"
+roadie shortcuts remove "alt+g"
+roadie shortcuts check [--json]               # vérifie validité et collisions
+```
+
+Si tu préfères un outil externe pour les autres commandes, le dossier `examples/` contient aussi des fichiers prêts à l'emploi :
 
 - `examples/skhd/skhdrc` : raccourcis pour [skhd](https://github.com/koekeishiya/skhd). Copie-le vers `~/.config/skhd/skhdrc`, puis lance `skhd --reload`.
 - `examples/karabiner/roadie.json` : règles pour Karabiner-Elements. Copie-le vers `~/.config/karabiner/assets/complex_modifications/`, puis active les règles dans Karabiner-Elements > Complex Modifications > Add predefined rule.

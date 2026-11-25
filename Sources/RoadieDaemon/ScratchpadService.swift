@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import os
@@ -128,17 +129,37 @@ public struct ScratchpadCommandService {
     private let stageStore: StageStore
     private let scratchpadStore: ScratchpadStore
     private let events: EventLog
+    private let appLauncher: @Sendable (String) -> Bool
 
     public init(
         service: SnapshotService = SnapshotService(),
         stageStore: StageStore? = nil,
         scratchpadStore: ScratchpadStore = ScratchpadStore(),
-        events: EventLog = EventLog()
+        events: EventLog = EventLog(),
+        appLauncher: (@Sendable (String) -> Bool)? = nil
     ) {
         self.service = service
         self.stageStore = stageStore ?? service.effectiveStageStore
         self.scratchpadStore = scratchpadStore
         self.events = events
+        self.appLauncher = appLauncher ?? Self.defaultAppLauncher
+    }
+
+    private static func defaultAppLauncher(bundleID: String) -> Bool {
+        guard !TestEnvironment.isRunningTests, !bundleID.isEmpty,
+              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return false
+        }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config)
+        return true
+    }
+
+    /// Nom du scratchpad contenant `windowID` (vérifié par `bundleID`), ou `nil` si la fenêtre n'est pas en scratchpad.
+    public func scratchpadName(for windowID: WindowID, bundleID: String) -> String? {
+        let book = scratchpadStore.load()
+        return book.entries.values.first { $0.windowID == windowID && $0.bundleID == bundleID }?.name
     }
 
     /// Calcule un cadre flottant centré dans `visibleFrame` (70 % × 75 % par défaut si aucun cadre sauvegardé).
@@ -249,6 +270,8 @@ public struct ScratchpadCommandService {
     }
 
     /// Bascule l'affichage du scratchpad `name` (visible sur l'écran actif ↔ masqué hors écran).
+    /// Après un redémarrage ou fermeture de fenêtre, applique `tiling.scratchpad_reboot_policy`
+    /// (`reattach_or_relaunch`, `reattach` ou `ephemeral`, Spec 166).
     public func toggle(name rawName: String? = nil) -> WindowCommandResult {
         guard service.effectiveConfig.tiling.scratchpadEnabled else {
             return .noChange("scratchpad toggle: disabled in configuration")
@@ -256,6 +279,9 @@ public struct ScratchpadCommandService {
         let name = ScratchpadStore.normalizedName(rawName)
         let snapshot = service.snapshot()
         guard let resolved = resolveWindow(for: name, in: snapshot) else {
+            if let relaunchResult = relaunchIfConfigured(name: name, verb: "toggle") {
+                return relaunchResult
+            }
             return WindowCommandResult(message: "scratchpad toggle \(name): no window assigned", changed: false, outcome: .noOp)
         }
         guard let display = activeDisplay(in: snapshot, fallbackWindow: resolved.window) else {
@@ -276,6 +302,9 @@ public struct ScratchpadCommandService {
         let name = ScratchpadStore.normalizedName(rawName)
         let snapshot = service.snapshot()
         guard let resolved = resolveWindow(for: name, in: snapshot) else {
+            if let relaunchResult = relaunchIfConfigured(name: name, verb: "show") {
+                return relaunchResult
+            }
             return WindowCommandResult(message: "scratchpad show \(name): no window assigned", changed: false, outcome: .noOp)
         }
         guard let display = activeDisplay(in: snapshot, fallbackWindow: resolved.window) else {
@@ -483,6 +512,21 @@ public struct ScratchpadCommandService {
         )
     }
 
+    private func relaunchIfConfigured(name: String, verb: String) -> WindowCommandResult? {
+        guard service.effectiveConfig.tiling.scratchpadRebootPolicy == "reattach_or_relaunch" else { return nil }
+        guard let entry = scratchpadStore.load().entries[name], !entry.bundleID.isEmpty else { return nil }
+        guard appLauncher(entry.bundleID) else { return nil }
+        events.append(RoadieEvent(type: "scratchpad_relaunch", details: [
+            "name": name,
+            "bundleID": entry.bundleID,
+        ]))
+        return WindowCommandResult(
+            message: "scratchpad \(verb) \(name): relaunching \(entry.bundleID)",
+            changed: true,
+            outcome: .changed
+        )
+    }
+
     private func resolveWindow(
         for name: String,
         in snapshot: DaemonSnapshot
@@ -493,6 +537,31 @@ public struct ScratchpadCommandService {
                $0.window.id == entry.windowID && $0.window.bundleID == entry.bundleID
            })?.window {
             return (entry, live, true)
+        }
+        // Politique au redémarrage / fermeture (Spec 166) : si l'app a rouvert avec un nouveau CGWindowID,
+        // rattacher sa fenêtre correspondante (priorité au titre exact, puis première fenêtre non prise).
+        let policy = service.effectiveConfig.tiling.scratchpadRebootPolicy
+        if policy != "ephemeral", let entry = book.entries[name], !entry.bundleID.isEmpty {
+            let otherScratchpadIDs = Set(book.entries.filter { $0.key != name }.values.map(\.windowID))
+            let candidates = snapshot.windows.map(\.window).filter {
+                $0.bundleID == entry.bundleID
+                    && !otherScratchpadIDs.contains($0.id)
+                    && $0.furniture?.isNativeFullscreen != true
+            }
+            let matched = candidates.first(where: { !entry.title.isEmpty && $0.title == entry.title })
+                ?? candidates.first(where: \.isTileCandidate)
+                ?? candidates.first
+            if let live = matched {
+                let reattached = PersistentScratchpadEntry(
+                    name: name,
+                    windowID: live.id,
+                    bundleID: live.bundleID,
+                    title: live.title,
+                    isVisible: false,
+                    floatingFrame: entry.floatingFrame
+                )
+                return (reattached, live, false)
+            }
         }
         // Repli sur les règles `action.scratchpad = "<name>"` si la fenêtre correspond à une règle configurée.
         let rules = service.effectiveConfig.rules

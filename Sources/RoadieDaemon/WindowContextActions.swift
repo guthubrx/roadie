@@ -65,9 +65,31 @@ public struct WindowContextActions {
 
     public func execute(_ action: WindowContextAction) -> WindowContextActionResult {
         let snapshot = snapshotService.snapshot()
-        guard let entry = snapshot.windows.first(where: { $0.window.id == action.windowID }),
-              let scope = entry.scope
-        else {
+        guard let entry = snapshot.windows.first(where: { $0.window.id == action.windowID }) else {
+            return WindowContextActionResult(message: "window disappeared", changed: false, outcome: .noOp)
+        }
+        if action.kind == .scratchpadAssign {
+            let name = action.targetID.isEmpty ? "default" : action.targetID
+            let result = ScratchpadCommandService(
+                service: snapshotService,
+                stageStore: stageStore,
+                events: eventLog
+            ).assign(name: name, windowID: action.windowID)
+            return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
+        }
+        if action.kind == .scratchpadRelease {
+            let service = ScratchpadCommandService(
+                service: snapshotService,
+                stageStore: stageStore,
+                events: eventLog
+            )
+            let name = action.targetID.isEmpty
+                ? (service.scratchpadName(for: action.windowID, bundleID: entry.window.bundleID) ?? "default")
+                : action.targetID
+            let result = service.release(name: name)
+            return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
+        }
+        guard let scope = entry.scope else {
             return WindowContextActionResult(message: "window disappeared", changed: false, outcome: .noOp)
         }
 
@@ -110,6 +132,8 @@ public struct WindowContextActions {
                 events: eventLog
             ).tabUnstack(nil, windowID: action.windowID)
             return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
+        case .scratchpadAssign, .scratchpadRelease:
+            return WindowContextActionResult(message: "scratchpad action handled", changed: false, outcome: .noOp)
         case .floatStage:
             return setPin(window: entry.window, sourceScope: scope, pinScope: .stage, snapshot: snapshot)
         case .pinDesktop:

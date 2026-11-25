@@ -21,8 +21,21 @@ final class EffectAnimator {
     private var timer: Timer?
     private let clock: () -> Double
     private let schedulesTimer: Bool
+    private let frameRateOverride: Int?
     var activeCount: Int { transitions.count }
     var hasTimer: Bool { timer != nil }
+
+    /// Fréquence de rafraîchissement maximale détectée sur les écrans connectés, bornée entre 30 et 120 Hz
+    /// (ProMotion 120 Hz natif, repli 60 Hz hors écran, Spec 166).
+    static func detectedMaximumFPS() -> Int {
+        let detected = NSScreen.screens.map(\.maximumFramesPerSecond).max() ?? 60
+        return min(120, max(30, detected > 0 ? detected : 60))
+    }
+
+    static func preferredFrameInterval(maxFPS: Int? = nil) -> TimeInterval {
+        let fps = min(120, max(30, maxFPS ?? detectedMaximumFPS()))
+        return 1.0 / Double(fps)
+    }
 
     func addTickObserver(id: ObjectIdentifier, _ observer: @escaping () -> Void) {
         tickObservers[id] = observer
@@ -32,8 +45,10 @@ final class EffectAnimator {
         tickObservers.removeValue(forKey: id)
     }
 
-    init(schedulesTimer: Bool = true, clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }) {
-        self.schedulesTimer = schedulesTimer; self.clock = clock
+    init(schedulesTimer: Bool = true, frameRate: Int? = nil, clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }) {
+        self.schedulesTimer = schedulesTimer
+        self.frameRateOverride = frameRate
+        self.clock = clock
     }
 
     func animate(id: String, from: [Double], to target: [Double], policy: MotionPolicy,
@@ -51,7 +66,8 @@ final class EffectAnimator {
                                      started: now, previous: now, policy: policy, update: update, completion: completion)
         update(states.map(\.value))
         if schedulesTimer, timer == nil {
-            let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            let interval = Self.preferredFrameInterval(maxFPS: frameRateOverride)
+            let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.tick() }
             }
             self.timer = timer

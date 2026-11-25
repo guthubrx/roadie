@@ -494,6 +494,19 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     if enableLiveEvents { modifierGestures.start() }
     ShutdownRegistry.register { modifierGestures.stop() }
 
+    let scrollingGestures = ScrollingTrackpadGestureController(
+        service: service,
+        onNavigate: { direction in
+            _ = WindowCommandService(service: service).focus(direction)
+        },
+        onOverviewGesture: { direction in
+            if direction == .up { overviewController?.toggle() }
+            else if direction == .down { overviewController?.hide() }
+        }
+    )
+    if enableLiveEvents { scrollingGestures.start() }
+    ShutdownRegistry.register { scrollingGestures.stop() }
+
     let settingsController = SettingsLiveApplyController(
         stageStore: service.effectiveStageStore,
         onLayoutChange: { invalidateIntents in

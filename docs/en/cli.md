@@ -425,7 +425,19 @@ Without a profile, `show` chooses the first configured profile. `--json` reports
 that the command was queued. The graphical component then executes it. See the
 [switcher guide](window-switcher.md) for profiles and filters.
 
-Roadie provides `search_hotkey` for search (see `[experimental.target_mode]`) and independent [window switcher profiles](window-switcher.md). For other commands, use a tool that runs a command on a key press. The folder `examples/` has ready-to-use files:
+Roadie provides `search_hotkey` for search (see `[experimental.target_mode]`), independent [window switcher profiles](window-switcher.md), **and built-in autonomous global shortcuts** (`[[shortcuts]]`, no BetterTouchTool or Karabiner required):
+
+```sh
+roadie config init --preset standard          # creates config.toml with autonomous shortcuts if missing
+roadie shortcuts presets                      # lists standard, vim, minimal
+roadie shortcuts apply-preset standard        # merges without overwriting existing bindings (--replace to overwrite)
+roadie shortcuts list [--json]                # lists configured shortcuts
+roadie shortcuts add "alt+g" "window gather-app"
+roadie shortcuts remove "alt+g"
+roadie shortcuts check [--json]               # checks validity and collisions
+```
+
+If you prefer an external tool for commands, the `examples/` folder also has ready-to-use files:
 
 - `examples/skhd/skhdrc`: shortcuts for [skhd](https://github.com/koekeishiya/skhd). Copy it to `~/.config/skhd/skhdrc`, then run `skhd --reload`.
 - `examples/karabiner/roadie.json`: rules for Karabiner-Elements. Copy it to `~/.config/karabiner/assets/complex_modifications/`, then enable the rules in Karabiner-Elements > Complex Modifications > Add predefined rule.

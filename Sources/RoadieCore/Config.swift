@@ -236,10 +236,19 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     public var floatPictureInPicture: Bool
     /// Quand true (defaut), active le scratchpad flottant nommé (`roadie scratchpad`, Spec 162).
     public var scratchpadEnabled: Bool
+    /// Comportement d'un scratchpad après redémarrage ou fermeture de sa fenêtre (Spec 166) :
+    /// `reattach_or_relaunch` (défaut, façon Pyprland), `reattach` ou `ephemeral` (façon i3/Sway).
+    public var scratchpadRebootPolicy: String
     /// Hauteur réservée en haut de la stage pour la barre d'onglets en mode `.tabbed` (`20...44`, Spec 164).
     public var tabbedBarHeight: Double
     /// Largeur d'une colonne en mode `.scrolling`, en proportion de la largeur utile (`0.25...1.0`, Spec 164).
     public var scrollingColumnWidth: Double
+    /// Active le glissement fluide à ressort lors de la navigation en mode `.scrolling` (Spec 166).
+    public var scrollingSmoothScroll: Bool
+    /// Active les gestes trackpad multi-doigts et `⌥ + molette` pour faire défiler le ruban `.scrolling` (Spec 166).
+    public var scrollingTrackpadGestures: Bool
+    /// Nombre de doigts pour le balayage horizontal au trackpad en mode `.scrolling` (`3` ou `4`, Spec 166).
+    public var scrollingTrackpadFingers: Int
 
     public init(
         defaultStrategy: WindowManagementMode = .bsp,
@@ -262,8 +271,12 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         popupFilter: Bool = true,
         floatPictureInPicture: Bool = true,
         scratchpadEnabled: Bool = true,
+        scratchpadRebootPolicy: String = "reattach_or_relaunch",
         tabbedBarHeight: Double = 28,
-        scrollingColumnWidth: Double = 0.65
+        scrollingColumnWidth: Double = 0.65,
+        scrollingSmoothScroll: Bool = true,
+        scrollingTrackpadGestures: Bool = true,
+        scrollingTrackpadFingers: Int = 3
     ) {
         self.defaultStrategy = defaultStrategy
         self.splitPolicy = splitPolicy
@@ -285,8 +298,13 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.popupFilter = popupFilter
         self.floatPictureInPicture = floatPictureInPicture
         self.scratchpadEnabled = scratchpadEnabled
+        let validRebootPolicies: Set<String> = ["reattach_or_relaunch", "reattach", "ephemeral"]
+        self.scratchpadRebootPolicy = validRebootPolicies.contains(scratchpadRebootPolicy) ? scratchpadRebootPolicy : "reattach_or_relaunch"
         self.tabbedBarHeight = tabbedBarHeight.isFinite ? min(44, max(20, tabbedBarHeight)) : 28
         self.scrollingColumnWidth = scrollingColumnWidth.isFinite ? min(1.0, max(0.25, scrollingColumnWidth)) : 0.65
+        self.scrollingSmoothScroll = scrollingSmoothScroll
+        self.scrollingTrackpadGestures = scrollingTrackpadGestures
+        self.scrollingTrackpadFingers = min(4, max(3, scrollingTrackpadFingers))
     }
 
     enum CodingKeys: String, CodingKey {
@@ -310,8 +328,12 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         case popupFilter = "popup_filter"
         case floatPictureInPicture = "float_picture_in_picture"
         case scratchpadEnabled = "scratchpad_enabled"
+        case scratchpadRebootPolicy = "scratchpad_reboot_policy"
         case tabbedBarHeight = "tabbed_bar_height"
         case scrollingColumnWidth = "scrolling_column_width"
+        case scrollingSmoothScroll = "scrolling_smooth_scroll"
+        case scrollingTrackpadGestures = "scrolling_trackpad_gestures"
+        case scrollingTrackpadFingers = "scrolling_trackpad_fingers"
     }
 
     public init(from decoder: Decoder) throws {
@@ -346,10 +368,17 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.popupFilter = try c.decodeIfPresent(Bool.self, forKey: .popupFilter) ?? true
         self.floatPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .floatPictureInPicture) ?? true
         self.scratchpadEnabled = try c.decodeIfPresent(Bool.self, forKey: .scratchpadEnabled) ?? true
+        let rawRebootPolicy = try c.decodeIfPresent(String.self, forKey: .scratchpadRebootPolicy) ?? "reattach_or_relaunch"
+        let validRebootPolicies: Set<String> = ["reattach_or_relaunch", "reattach", "ephemeral"]
+        self.scratchpadRebootPolicy = validRebootPolicies.contains(rawRebootPolicy) ? rawRebootPolicy : "reattach_or_relaunch"
         let rawTabHeight = try c.decodeFlexibleDouble(forKey: .tabbedBarHeight) ?? 28
         self.tabbedBarHeight = min(44, max(20, rawTabHeight))
         let rawColWidth = try c.decodeFlexibleDouble(forKey: .scrollingColumnWidth) ?? 0.65
         self.scrollingColumnWidth = min(1.0, max(0.25, rawColWidth))
+        self.scrollingSmoothScroll = try c.decodeIfPresent(Bool.self, forKey: .scrollingSmoothScroll) ?? true
+        self.scrollingTrackpadGestures = try c.decodeIfPresent(Bool.self, forKey: .scrollingTrackpadGestures) ?? true
+        let rawFingers = try c.decodeIfPresent(Int.self, forKey: .scrollingTrackpadFingers) ?? 3
+        self.scrollingTrackpadFingers = min(4, max(3, rawFingers))
     }
 }
 

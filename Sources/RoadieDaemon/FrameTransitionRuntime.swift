@@ -45,8 +45,12 @@ public final class FrameTransitionRuntime {
     /// Appelé dès que la session se termine et que `isHoldingLayout` redevient faux (Lot E : réarme
     /// immédiatement `TickScheduler` pour les échéances `refusal_confirm` et événements retenus).
     public var onTransitionEnded: (() -> Void)?
-    /// Cadence de publication vers le dispatcher AX (alignée sur `EffectAnimator` à 60 Hz, Lot E).
-    static let frameInterval: TimeInterval = 1.0 / 60
+    /// Cadence de publication vers le dispatcher AX (alignée sur `EffectAnimator`, jusqu'à 120 Hz ProMotion, Spec 166).
+    static var frameInterval: TimeInterval { EffectAnimator.preferredFrameInterval() }
+    /// Politique ressort dédiée au défilement fluide du ruban `.scrolling` (glissement position-seule sans rebond parasite, Spec 166).
+    nonisolated static let scrollingRibbonPolicy = MotionPolicy(
+        enabled: true, curve: .spring, duration: 0.24, intensity: 1.0, stiffness: 520, damping: 0.92
+    )
     /// Garde-fou léger hors transition de scène (les images sont poussées en phase par `EffectAnimator`, Lot F).
     static let watchdogInterval: TimeInterval = 0.1
     /// Budget adaptatif d'images intermédiaires (Lot G) : une application lente (> 40 ms par lot,
@@ -96,8 +100,9 @@ public final class FrameTransitionRuntime {
 
     func schedule(_ plan: ApplyPlan, service: SnapshotService, generation: UInt64, action: AnimationAction,
                   immediateWindowIDs: Set<WindowID> = [], transitionDirection: Direction? = nil,
-                  displays: [DisplaySnapshot]? = nil, stageScene: StageSceneContext? = nil) -> ApplyResult? {
-        let policy = service.effectiveConfig.fx.animations.policy(for: action)
+                  displays: [DisplaySnapshot]? = nil, stageScene: StageSceneContext? = nil,
+                  policyOverride: MotionPolicy? = nil) -> ApplyResult? {
+        let policy = policyOverride ?? service.effectiveConfig.fx.animations.policy(for: action)
         guard policy.enabled, !plan.commands.isEmpty, generation == generations.current,
               generation != PlacementGeneration.outsideBudget, !isMouseDown() else { return nil }
         events.append(RoadieEvent(type: "effects.frames_policy", details: [
@@ -318,7 +323,8 @@ public final class FrameTransitionRuntime {
                       !window.frame.cgRect.matchesFrame(frame.cgRect) || current.dispatcher.mayChange(window) else { return nil }
                 let estimated = current.dispatcher.lastWriteDuration(for: window.pid)
                 guard Self.shouldRunIntermediate(estimatedWriteDuration: estimated, remaining: remaining) else { return nil }
-                return ApplyCommand(window: window, frame: frame, preservesSize: final.preservesSize,
+                let sameSize = abs(window.frame.width - frame.width) <= 0.5 && abs(window.frame.height - frame.height) <= 0.5
+                return ApplyCommand(window: window, frame: frame, preservesSize: final.preservesSize || sameSize,
                                     positionsBeforeResizing: final.positionsBeforeResizing)
             }
             if !commands.isEmpty {
