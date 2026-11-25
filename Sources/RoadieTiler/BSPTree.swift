@@ -938,62 +938,96 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                     return lower <= upper ? lower...upper : nil
                 }
 
-                let hasTabBarDiscontinuity = axis == .horizontal && tabBarHeight > 0 && tabBarHeight.isFinite && !tree.tabGroups.isEmpty
-
-                // Recense les chemins des `.tabGroup` (≥ 2 onglets) dont le besoin pourrait tenir
-                // sous le seuil de barre (régime alternatif sans barre).
-                var tabGroupPaths: [[Bool]] = []
-                if hasTabBarDiscontinuity {
-                    func collectTabGroupPaths(_ node: BSPTree, path: [Bool]) {
-                        switch node {
-                        case .empty, .leaf: break
-                        case .tabGroup(let ids, _):
-                            if ids.count >= 2 { tabGroupPaths.append(path) }
-                        case .split(_, _, let first, let second):
-                            collectTabGroupPaths(first, path: path + [true])
-                            collectTabGroupPaths(second, path: path + [false])
-                        }
-                    }
-                    collectTabGroupPaths(tree, path: [])
+                struct ExtentOption {
+                    let min: CGFloat
+                    let max: CGFloat?
+                    let hiddenBars: Int
+                    let firstChoice: Int
+                    let secondChoice: Int
                 }
 
-                func attemptAxis(noBarPaths: Set<[Bool]>) -> BSPTree? {
-                    var requirements: [[Bool]: CGFloat] = [:]
-                    var upperBounds: [[Bool]: CGFloat] = [:]
+                // Élagage de Pareto : conserve uniquement les options non dominées, triées par
+                // nombre croissant de barres masquées puis étendue minimale croissante.
+                func prune(_ raw: [ExtentOption]) -> [ExtentOption] {
+                    guard raw.count > 1 else { return raw }
+                    let sorted = raw.sorted { lhs, rhs in
+                        if lhs.hiddenBars != rhs.hiddenBars { return lhs.hiddenBars < rhs.hiddenBars }
+                        if lhs.min != rhs.min { return lhs.min < rhs.min }
+                        return (lhs.max ?? .infinity) > (rhs.max ?? .infinity)
+                    }
+                    var kept: [ExtentOption] = []
+                    kept.reserveCapacity(sorted.count)
+                    for option in sorted {
+                        let dominated = kept.contains { existing in
+                            existing.hiddenBars <= option.hiddenBars
+                                && existing.min <= option.min
+                                && (existing.max == nil || (option.max != nil && existing.max! >= option.max!))
+                        }
+                        if !dominated { kept.append(option) }
+                    }
+                    return kept
+                }
 
-                    func requiredExtent(of node: BSPTree, in rect: CGRect, path: [Bool]) -> CGFloat? {
-                        let required: CGFloat?
-                        switch node {
-                        case .empty:
-                            required = 0
-                        case .leaf(let id):
+                var optionsByPath: [[Bool]: [ExtentOption]] = [:]
+
+                func computeOptions(of node: BSPTree, in rect: CGRect, path: [Bool]) -> [ExtentOption] {
+                    let computed: [ExtentOption]
+                    switch node {
+                    case .empty:
+                        computed = [ExtentOption(min: 0, max: nil, hiddenBars: 0, firstChoice: 0, secondChoice: 0)]
+                    case .leaf(let id):
+                        let known = knownMinimums[id].map { ceil(axis == .vertical ? $0.width : $0.height) } ?? 0
+                        // Une voisine déjà sous son minimum peut rester identique, mais pas rétrécir.
+                        let leafNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
+                        if let minH = minimumExtent(in: rect, fits: { extent($0.integral) >= leafNeed }) {
+                            computed = [ExtentOption(min: minH, max: nil, hiddenBars: 0, firstChoice: 0, secondChoice: 0)]
+                        } else {
+                            computed = []
+                        }
+                    case .tabGroup(let ids, _):
+                        var groupNeed: CGFloat = 0
+                        for id in ids {
                             let known = knownMinimums[id].map { ceil(axis == .vertical ? $0.width : $0.height) } ?? 0
-                            // Une voisine déjà sous son minimum peut rester identique, mais pas rétrécir.
-                            let leafNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
-                            required = minimumExtent(in: rect) { extent($0.integral) >= leafNeed }
-                        case .tabGroup(let ids, _):
-                            var groupNeed: CGFloat = 0
-                            for id in ids {
-                                let known = knownMinimums[id].map { ceil(axis == .vertical ? $0.width : $0.height) } ?? 0
-                                let memberNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
-                                groupNeed = max(groupNeed, memberNeed)
+                            let memberNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
+                            groupNeed = max(groupNeed, memberNeed)
+                        }
+                        let fitsContent: (CGRect) -> Bool = { candidateRect in
+                            let (_, content) = Self.splitTabBar(in: candidateRect, tabBarHeight: tabBarHeight, count: ids.count)
+                            return extent(content) >= groupNeed
+                        }
+                        if axis == .horizontal, ids.count >= 2, tabBarHeight > 0, tabBarHeight.isFinite {
+                            // Produit jusqu'à deux intervalles exacts via `splitTabBar` (arrondi `CGRect.integral`
+                            // inclus) : régime avec barre `[minWithBar, ∞)` (0 barre masquée) et régime sans barre
+                            // `[minNoBar, noBarCap]` (1 barre masquée).
+                            let fraction = extent(rect) - floor(extent(rect))
+                            let maxExtent = Int(max(0, floor(extent(container) - fraction)))
+                            var opts: [ExtentOption] = []
+                            if let barFloor = minimumExtent(in: rect, fits: {
+                                Self.splitTabBar(in: $0, tabBarHeight: tabBarHeight, count: ids.count).bar != nil
+                            }) {
+                                let barLower = Int(floor(barFloor - fraction))
+                                if barLower <= maxExtent, fitsContent(withExtent(CGFloat(maxExtent) + fraction, in: rect)) {
+                                    var low = barLower
+                                    var high = maxExtent
+                                    while low < high {
+                                        let middle = low + (high - low) / 2
+                                        if fitsContent(withExtent(CGFloat(middle) + fraction, in: rect)) { high = middle }
+                                        else { low = middle + 1 }
+                                    }
+                                    opts.append(ExtentOption(
+                                        min: CGFloat(low) + fraction,
+                                        max: nil,
+                                        hiddenBars: 0,
+                                        firstChoice: 0,
+                                        secondChoice: 0
+                                    ))
+                                }
                             }
-                            let fitsContent: (CGRect) -> Bool = { candidateRect in
-                                let (_, content) = Self.splitTabBar(in: candidateRect, tabBarHeight: tabBarHeight, count: ids.count)
-                                return extent(content) >= groupNeed
-                            }
-                            if axis == .horizontal, ids.count >= 2, tabBarHeight > 0, tabBarHeight.isFinite {
-                                // Détermine les bornes exactes des régimes sans barre / avec barre
-                                // directement via `splitTabBar` (incluant l'arrondi `CGRect.integral`
-                                // même avec un `innerGap` ou une origine fractionnaires).
-                                let fraction = extent(rect) - floor(extent(rect))
-                                let maxExtent = Int(max(0, floor(extent(container) - fraction)))
-                                if noBarPaths.contains(path) {
-                                    guard let noBarCap = maximumExtent(in: rect, fits: {
-                                        Self.splitTabBar(in: $0, tabBarHeight: tabBarHeight, count: ids.count).bar == nil
-                                    }) else { return nil }
-                                    let noBarUpper = Int(floor(noBarCap - fraction))
-                                    guard fitsContent(withExtent(CGFloat(noBarUpper) + fraction, in: rect)) else { return nil }
+                            if let noBarCap = maximumExtent(in: rect, fits: {
+                                Self.splitTabBar(in: $0, tabBarHeight: tabBarHeight, count: ids.count).bar == nil
+                            }) {
+                                let noBarUpper = Int(floor(noBarCap - fraction))
+                                if fitsContent(withExtent(CGFloat(noBarUpper) + fraction, in: rect)) {
                                     var low = 0
                                     var high = noBarUpper
                                     while low < high {
@@ -1001,115 +1035,138 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                                         if fitsContent(withExtent(CGFloat(middle) + fraction, in: rect)) { high = middle }
                                         else { low = middle + 1 }
                                     }
-                                    required = CGFloat(low) + fraction
-                                    upperBounds[path] = CGFloat(noBarUpper) + fraction
-                                } else {
-                                    guard let barFloor = minimumExtent(in: rect, fits: {
-                                        Self.splitTabBar(in: $0, tabBarHeight: tabBarHeight, count: ids.count).bar != nil
-                                    }) else { return nil }
-                                    let barLower = Int(floor(barFloor - fraction))
-                                    if barLower <= maxExtent, fitsContent(withExtent(CGFloat(maxExtent) + fraction, in: rect)) {
-                                        var low = barLower
-                                        var high = maxExtent
-                                        while low < high {
-                                            let middle = low + (high - low) / 2
-                                            if fitsContent(withExtent(CGFloat(middle) + fraction, in: rect)) { high = middle }
-                                            else { low = middle + 1 }
-                                        }
-                                        required = CGFloat(low) + fraction
-                                    } else {
-                                        required = nil
-                                    }
+                                    opts.append(ExtentOption(
+                                        min: CGFloat(low) + fraction,
+                                        max: CGFloat(noBarUpper) + fraction,
+                                        hiddenBars: 1,
+                                        firstChoice: 0,
+                                        secondChoice: 0
+                                    ))
                                 }
-                            } else {
-                                required = minimumExtent(in: rect, fits: fitsContent)
                             }
-                        case .split(let orientation, let ratio, let first, let second):
-                            let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
-                            let firstPath = path + [true]
-                            let secondPath = path + [false]
-                            guard let a = requiredExtent(of: first, in: rects.first, path: firstPath),
-                                  let b = requiredExtent(of: second, in: rects.second, path: secondPath)
-                            else { return nil }
-                            let aMax = upperBounds[firstPath]
-                            let bMax = upperBounds[secondPath]
-                            if orientation != axis {
-                                required = max(a, b)
-                                if let aMax, let bMax {
-                                    upperBounds[path] = min(aMax, bMax)
-                                } else if let only = aMax ?? bMax {
-                                    upperBounds[path] = only
-                                }
-                            } else if node.contains(window) {
-                                // Deux recherches monotones : borne inférieure (croissante) et, en présence
-                                // d'un plafond sans barre, borne supérieure (décroissante).
-                                guard let minH = minimumExtent(in: rect, fits: { candidate in
-                                    let usable = Self.usableExtent(of: candidate, orientation: axis, innerGap: innerGap)
-                                    return firstExtentRange(usable: usable, first: a, second: b) != nil
-                                }) else { return nil }
-                                if aMax != nil || bMax != nil {
-                                    guard let maxH = maximumExtent(in: rect, fits: { candidate in
+                            computed = prune(opts)
+                        } else if let minH = minimumExtent(in: rect, fits: fitsContent) {
+                            computed = [ExtentOption(min: minH, max: nil, hiddenBars: 0, firstChoice: 0, secondChoice: 0)]
+                        } else {
+                            computed = []
+                        }
+                    case .split(let orientation, let ratio, let first, let second):
+                        let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
+                        let firstOpts = computeOptions(of: first, in: rects.first, path: path + [true])
+                        let secondOpts = computeOptions(of: second, in: rects.second, path: path + [false])
+                        guard !firstOpts.isEmpty, !secondOpts.isEmpty else {
+                            computed = []
+                            break
+                        }
+                        var combined: [ExtentOption] = []
+                        let containsTarget = orientation == axis && node.contains(window)
+                        for (i, a) in firstOpts.enumerated() {
+                            for (j, b) in secondOpts.enumerated() {
+                                if orientation != axis {
+                                    let lo = max(a.min, b.min)
+                                    let hi: CGFloat? = switch (a.max, b.max) {
+                                    case let (x?, y?): Swift.min(x, y)
+                                    case let (x?, nil): x
+                                    case let (nil, y?): y
+                                    case (nil, nil): nil
+                                    }
+                                    if hi == nil || lo <= hi! {
+                                        combined.append(ExtentOption(
+                                            min: lo, max: hi,
+                                            hiddenBars: a.hiddenBars + b.hiddenBars,
+                                            firstChoice: i, secondChoice: j
+                                        ))
+                                    }
+                                } else if containsTarget {
+                                    guard let minH = minimumExtent(in: rect, fits: { candidate in
                                         let usable = Self.usableExtent(of: candidate, orientation: axis, innerGap: innerGap)
-                                        let lowerRatio = floor(usable * Self.ratioBounds.lowerBound)
-                                        let upperRatio = floor(usable * Self.ratioBounds.upperBound)
-                                        let firstCapOK = aMax.map { lowerRatio <= floor($0) } ?? true
-                                        let secondCapOK = bMax.map { ceil(usable - $0) <= upperRatio } ?? true
-                                        let sumCapOK = (aMax != nil && bMax != nil) ? usable <= floor(aMax!) + floor(bMax!) : true
-                                        return firstCapOK && secondCapOK && sumCapOK
-                                    }), minH <= maxH else { return nil }
-                                    upperBounds[path] = maxH
-                                }
-                                required = minH
-                            } else {
-                                // Les sous-arbres voisins gardent leurs ratios, donc aussi leurs coupes internes.
-                                // Borne inférieure (croissante) et, si un enfant porte un plafond sans barre,
-                                // borne supérieure (décroissante), pour propager l'intervalle faisable exact.
-                                guard let minH = minimumExtent(in: rect, fits: { candidate in
-                                    let children = Self.childRects(of: candidate, orientation: orientation, ratio: ratio, innerGap: innerGap)
-                                    return extent(children.first) >= a && extent(children.second) >= b
-                                }) else { return nil }
-                                if aMax != nil || bMax != nil {
-                                    guard let maxH = maximumExtent(in: rect, fits: { candidate in
+                                        return firstExtentRange(usable: usable, first: a.min, second: b.min) != nil
+                                    }) else { continue }
+                                    var maxH: CGFloat? = nil
+                                    if a.max != nil || b.max != nil {
+                                        guard let upper = maximumExtent(in: rect, fits: { candidate in
+                                            let usable = Self.usableExtent(of: candidate, orientation: axis, innerGap: innerGap)
+                                            let lowerRatio = floor(usable * Self.ratioBounds.lowerBound)
+                                            let upperRatio = floor(usable * Self.ratioBounds.upperBound)
+                                            let firstCapOK = a.max.map { lowerRatio <= floor($0) } ?? true
+                                            let secondCapOK = b.max.map { ceil(usable - $0) <= upperRatio } ?? true
+                                            let sumCapOK = (a.max != nil && b.max != nil) ? usable <= floor(a.max!) + floor(b.max!) : true
+                                            return firstCapOK && secondCapOK && sumCapOK
+                                        }), minH <= upper else { continue }
+                                        maxH = upper
+                                    }
+                                    combined.append(ExtentOption(
+                                        min: minH, max: maxH,
+                                        hiddenBars: a.hiddenBars + b.hiddenBars,
+                                        firstChoice: i, secondChoice: j
+                                    ))
+                                } else {
+                                    // Sous-arbre voisin : ses ratios restent fixes.
+                                    guard let minH = minimumExtent(in: rect, fits: { candidate in
                                         let children = Self.childRects(of: candidate, orientation: orientation, ratio: ratio, innerGap: innerGap)
-                                        let firstOK = aMax.map { extent(children.first) <= $0 } ?? true
-                                        let secondOK = bMax.map { extent(children.second) <= $0 } ?? true
-                                        return firstOK && secondOK
-                                    }), minH <= maxH else { return nil }
-                                    upperBounds[path] = maxH
+                                        return extent(children.first) >= a.min && extent(children.second) >= b.min
+                                    }) else { continue }
+                                    var maxH: CGFloat? = nil
+                                    if a.max != nil || b.max != nil {
+                                        guard let upper = maximumExtent(in: rect, fits: { candidate in
+                                            let children = Self.childRects(of: candidate, orientation: orientation, ratio: ratio, innerGap: innerGap)
+                                            let firstOK = a.max.map { extent(children.first) <= $0 } ?? true
+                                            let secondOK = b.max.map { extent(children.second) <= $0 } ?? true
+                                            return firstOK && secondOK
+                                        }), minH <= upper else { continue }
+                                        maxH = upper
+                                    }
+                                    combined.append(ExtentOption(
+                                        min: minH, max: maxH,
+                                        hiddenBars: a.hiddenBars + b.hiddenBars,
+                                        firstChoice: i, secondChoice: j
+                                    ))
                                 }
-                                required = minH
                             }
                         }
-                        if let required { requirements[path] = required }
-                        return required
+                        computed = prune(combined)
                     }
+                    optionsByPath[path] = computed
+                    return computed
+                }
 
-                    guard requiredExtent(of: tree, in: container, path: []) != nil,
-                          let anchor = chain.reversed().first(where: { ancestor in
-                              ancestor.orientation == axis
-                                  && extent(ancestor.rect) >= (requirements[ancestor.path] ?? .infinity)
-                                  && (upperBounds[ancestor.path].map { extent(ancestor.rect) <= $0 } ?? true)
-                          })
-                    else { return nil }
+                _ = computeOptions(of: tree, in: container, path: [])
 
-                    func correcting(_ node: BSPTree, in rect: CGRect, path: [Bool]) -> BSPTree? {
-                        guard case .split(let orientation, let ratio, let first, let second) = node else { return node }
-                        let inFirst = first.contains(window)
-                        var newRatio = ratio
-                        if orientation == axis, path.count >= anchor.path.count {
+                func correcting(
+                    _ node: BSPTree,
+                    in rect: CGRect,
+                    path: [Bool],
+                    anchorPath: [Bool],
+                    choiceIndex: Int?
+                ) -> BSPTree? {
+                    guard case .split(let orientation, let ratio, let first, let second) = node else { return node }
+                    let inFirst = first.contains(window)
+                    let firstPath = path + [true]
+                    let secondPath = path + [false]
+                    var newRatio = ratio
+                    var nextChoice: Int? = nil
+                    if path.count >= anchorPath.count,
+                       let activeChoice = choiceIndex,
+                       let opts = optionsByPath[path],
+                       activeChoice < opts.count {
+                        let opt = opts[activeChoice]
+                        nextChoice = inFirst ? opt.firstChoice : opt.secondChoice
+                        if orientation == axis {
                             let usable = Self.usableExtent(of: rect, orientation: axis, innerGap: innerGap)
-                            let firstPath = path + [true]
-                            let secondPath = path + [false]
                             guard usable > 0,
-                                  let a = requirements[firstPath], let b = requirements[secondPath],
-                                  let allowed = firstExtentRange(
-                                      usable: usable,
-                                      first: a,
-                                      second: b,
-                                      firstMax: upperBounds[firstPath],
-                                      secondMax: upperBounds[secondPath]
-                                  )
-                            else { return nil }
+                                  let firstOpts = optionsByPath[firstPath], opt.firstChoice < firstOpts.count,
+                                  let secondOpts = optionsByPath[secondPath], opt.secondChoice < secondOpts.count else {
+                                return nil
+                            }
+                            let a = firstOpts[opt.firstChoice]
+                            let b = secondOpts[opt.secondChoice]
+                            guard let allowed = firstExtentRange(
+                                usable: usable,
+                                first: a.min,
+                                second: b.min,
+                                firstMax: a.max,
+                                secondMax: b.max
+                            ) else { return nil }
                             let oldExtent = floor(usable * min(max(ratio, Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound))
                             let newExtent = min(max(oldExtent, allowed.lowerBound), allowed.upperBound)
                             if newExtent != oldExtent {
@@ -1117,57 +1174,44 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                                 newRatio = min(max(Double((newExtent + 0.5) / usable), Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound)
                             }
                         }
-                        let rects = Self.childRects(of: rect, orientation: orientation, ratio: newRatio, innerGap: innerGap)
-                        if inFirst {
-                            guard let child = correcting(first, in: rects.first, path: path + [true]) else { return nil }
-                            return .split(orientation: orientation, ratio: newRatio, first: child, second: second)
-                        }
-                        guard let child = correcting(second, in: rects.second, path: path + [false]) else { return nil }
-                        return .split(orientation: orientation, ratio: newRatio, first: first, second: child)
-                    }
-
-                    guard let corrected = correcting(tree, in: container, path: []) else { return nil }
-                    let after = corrected.place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
-                    guard let reached = after[window], extent(reached) >= need,
-                          knownMinimums.allSatisfy({ id, known in
-                              guard let old = before[id], let new = after[id], extent(new) < extent(old) else { return true }
-                              return extent(new) >= ceil(axis == .vertical ? known.width : known.height)
-                          })
-                    else { return nil }
-                    return corrected
-                }
-
-                // Essayer d'abord toutes les barres visibles, puis les combinaisons de groupes sans barre
-                // triées par nombre croissant de barres masquées (borné à 6 groupes => ≤ 64 essais).
-                var candidates: [Set<[Bool]>] = [[]]
-                if !tabGroupPaths.isEmpty {
-                    let count = tabGroupPaths.count
-                    if count <= 6 {
-                        for k in 1...count {
-                            func combine(_ start: Int, _ current: Set<[Bool]>) {
-                                if current.count == k {
-                                    candidates.append(current)
-                                    return
-                                }
-                                guard start < count else { return }
-                                for i in start..<count {
-                                    var next = current
-                                    next.insert(tabGroupPaths[i])
-                                    combine(i + 1, next)
-                                }
-                            }
-                            combine(0, [])
-                        }
+                    } else if path.count + 1 == anchorPath.count {
+                        nextChoice = choiceIndex
                     } else {
-                        for path in tabGroupPaths { candidates.append([path]) }
-                        candidates.append(Set(tabGroupPaths))
+                        nextChoice = choiceIndex
                     }
+                    let rects = Self.childRects(of: rect, orientation: orientation, ratio: newRatio, innerGap: innerGap)
+                    if inFirst {
+                        guard let child = correcting(first, in: rects.first, path: firstPath, anchorPath: anchorPath, choiceIndex: nextChoice) else { return nil }
+                        return .split(orientation: orientation, ratio: newRatio, first: child, second: second)
+                    }
+                    guard let child = correcting(second, in: rects.second, path: secondPath, anchorPath: anchorPath, choiceIndex: nextChoice) else { return nil }
+                    return .split(orientation: orientation, ratio: newRatio, first: first, second: child)
                 }
+
+                // Parcourir les ancêtres du plus proche vers la racine, en testant d'abord les options
+                // avec le moins de barres masquées (sans plafond arbitraire sur le nombre de groupes).
                 var solvedAxis: BSPTree?
-                for noBarSet in candidates {
-                    if let found = attemptAxis(noBarPaths: noBarSet) {
-                        solvedAxis = found
-                        break
+                outerAnchor: for anchor in chain.reversed() where anchor.orientation == axis {
+                    guard let opts = optionsByPath[anchor.path] else { continue }
+                    let anchorExtent = extent(anchor.rect)
+                    for (optIndex, opt) in opts.enumerated()
+                        where anchorExtent >= opt.min && (opt.max.map { anchorExtent <= $0 } ?? true) {
+                        guard let corrected = correcting(
+                            tree,
+                            in: container,
+                            path: [],
+                            anchorPath: anchor.path,
+                            choiceIndex: optIndex
+                        ) else { continue }
+                        let after = corrected.place(in: container, innerGap: innerGap, tabBarHeight: tabBarHeight)
+                        guard let reached = after[window], extent(reached) >= need,
+                              knownMinimums.allSatisfy({ id, known in
+                                  guard let old = before[id], let new = after[id], extent(new) < extent(old) else { return true }
+                                  return extent(new) >= ceil(axis == .vertical ? known.width : known.height)
+                              })
+                        else { continue }
+                        solvedAxis = corrected
+                        break outerAnchor
                     }
                 }
                 guard let corrected = solvedAxis else { return nil }

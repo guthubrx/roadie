@@ -473,5 +473,50 @@ final class Spec165TabbedBSPTreeTests: XCTestCase {
         let fracFrames = fracSolved!.place(in: fracBox, innerGap: 10.5, tabBarHeight: 28)
         XCTAssertGreaterThanOrEqual(fracFrames[w1]!.height, 200)
         XCTAssertGreaterThanOrEqual(fracFrames[w2]!.height, 140)
+
+        // Constat Bridget R8 : 7 groupes d'onglets (au-delà de 6) — 5 colonnes voisines gardant leur barre
+        // (min 200, contenu 318) + 1 colonne contenant A=210 (min 200) au-dessus de 2 groupes côte à côte
+        // [B1,B2] et [C1,C2] (130 -> demandent 140 sans barre). La programmation dynamique par intervalles
+        // Pareto-élagués résout sans plafond arbitraire sur le nombre de groupes.
+        let wideBox = CGRect(x: 0, y: 0, width: 2400, height: 350)
+        let id = { (raw: UInt32) in WindowID(rawValue: raw) }
+        let gB: BSPTree = .tabGroup(windowIDs: [id(10), id(11)], active: id(10))
+        let gC: BSPTree = .tabGroup(windowIDs: [id(12), id(13)], active: id(12))
+        let leftCol: BSPTree = .split(
+            orientation: .horizontal,
+            ratio: 210.5 / 340.0,
+            first: .leaf(id(1)),
+            second: .split(orientation: .vertical, ratio: 0.5, first: gB, second: gC)
+        )
+        var sevenGroupTree = leftCol
+        var sevenMins: [WindowID: CGSize] = [
+            id(1): CGSize(width: 100, height: 200),
+            id(12): CGSize(width: 100, height: 140),
+        ]
+        for col in 0..<5 {
+            let a = id(UInt32(20 + col * 2))
+            let b = id(UInt32(21 + col * 2))
+            sevenMins[a] = CGSize(width: 100, height: 200)
+            sevenGroupTree = .split(
+                orientation: .vertical,
+                ratio: 0.5,
+                first: sevenGroupTree,
+                second: .tabGroup(windowIDs: [a, b], active: a)
+            )
+        }
+        let sevenSolved = sevenGroupTree.correctingForMinimumSize(
+            of: id(10),
+            minimum: CGSize(width: 100, height: 140),
+            in: wideBox,
+            innerGap: 10,
+            tabBarHeight: 28,
+            knownMinimums: sevenMins
+        )
+        XCTAssertNotNil(sevenSolved)
+        let sevenFrames = sevenSolved!.place(in: wideBox, innerGap: 10, tabBarHeight: 28)
+        XCTAssertGreaterThanOrEqual(sevenFrames[id(1)]!.height, 200)
+        XCTAssertGreaterThanOrEqual(sevenFrames[id(10)]!.height, 140)
+        XCTAssertGreaterThanOrEqual(sevenFrames[id(12)]!.height, 140)
+        XCTAssertGreaterThanOrEqual(sevenFrames[id(20)]!.height, 300)
     }
 }
