@@ -175,6 +175,24 @@ Glassy Dark, Flat Dark et Glassy Light.
 
 ![La même recherche en grille : les fichiers seuls](../assets/screenshots/fr/launcher-files-grid.png)
 
+<a id="file-dialog-jump"></a>
+## Saut direct dans les dialogues « Ouvrir / Enregistrer sous »
+
+Quand un panneau macOS `NSOpenPanel` / `NSSavePanel` est ouvert (y compris les feuilles XPC sandboxées comme TextEdit ou Aperçu), ouvrir la barre Roadie place immédiatement en tête vos dossiers favoris (**Desktop / Bureau**, **Downloads / Téléchargements**, **Documents**, **Nextcloud**, dossier personnel), vos dossiers de projets et vos dossiers récents. Dès que tu tapes un nom (`desktop`, `bureau`, `39.roadie`…), les dossiers correspondants remontent en #1 et `Entrée` téléporte directement la boîte de dialogue via *Aller au dossier* (`⌘⇧G` + écriture Accessibilité directe dans le nouveau champ) — **sans perdre le nom du fichier en cours d’enregistrement ni toucher au presse-papiers**. Interrupteur : `launcher.file_dialog_jump` (activé par défaut, zéro polling).
+
+## Historique clavier (`↑` / `↓`)
+
+Quand la sélection est tout en haut de la liste (ou barre vide), la flèche Haut **`↑`** remonte dans les **20 dernières saisies** du lanceur et **`↓`** redescend jusqu’au brouillon en cours. Interrupteur : `launcher.history_arrow_navigation` (activé par défaut).
+
+<a id="vision-ocr"></a>
+## Recherche à l’écran & OCR local Apple Vision au mot exact
+
+La recherche à l’écran (`⌘⌃⌥F` par défaut, `roadie targets screen`) scanne les éléments visibles de toutes les fenêtres et les encadre à mesure que tu tapes. En activant **OCR local sur l’écran (Apple Vision)** dans **Paramètres > Général → Modules activables** (`experimental.app_targets.ocr_fallback = true`, **désactivé par défaut : `0 Mo` et `0` capture tant qu’éteint**), Roadie lit aussi le texte affiché à l’écran en 100 % local et encadre **le mot exact** recherché (avec `ocr_fallback_threshold = 0` par défaut, réglable `1–30` pour le limiter aux apps pauvres en Accessibilité) :
+
+- **`⇧ + lettre`** (`⇧A`, `⇧S`…) : clique directement sur l’étiquette correspondante.
+- **`↓` / `↑`** : déplace le surlignage entre les résultats.
+- **`Entrée`** (clic simple), **`Entrée` × 2** (double-clic), **`⇧ + Entrée`** (clic droit), **`⌘ + Entrée`** (⌘-clic).
+
 ## Rapidité
 
 La barre reste réactive quand le Mac est très chargé : les textes de recherche sont préparés une fois, les

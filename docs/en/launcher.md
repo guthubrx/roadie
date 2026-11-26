@@ -168,6 +168,24 @@ Dark, Flat Dark and Glassy Light.
 
 ![The same search as a grid: files only](../assets/screenshots/launcher-files-grid.png)
 
+<a id="file-dialog-jump"></a>
+## Direct jump in macOS Open / Save dialogs
+
+When a macOS `NSOpenPanel` / `NSSavePanel` is open (including sandboxed XPC sheets like TextEdit or Preview), opening Roadie's bar immediately places your favorite folders (**Desktop**, **Downloads**, **Documents**, **Nextcloud**, Home), project folders, and recent folders at the top. As soon as you type (`desktop`, `downloads`, `39.roadie`…), matching folders jump to #1 and pressing `Return` teleports the dialog straight there via *Go to Folder* (`⌘⇧G` + direct Accessibility write into the newly focused sheet field)—**without overwriting your filename or touching the user clipboard**. Toggle: `launcher.file_dialog_jump` (on by default, zero polling).
+
+## Keyboard query history (`↑` / `↓`)
+
+When the selection is at the top of the list (or the bar is empty), pressing Up arrow **`↑`** recalls your **last 20 launcher queries** and **`↓`** steps back down to your current draft. Toggle: `launcher.history_arrow_navigation` (on by default).
+
+<a id="vision-ocr"></a>
+## On-screen search & word-level local Apple Vision OCR
+
+On-screen search (`⌘⌃⌥F` by default, `roadie targets screen`) scans visible elements across all windows and highlights matches as you type. Enabling **Local screen OCR (Apple Vision)** in **Settings > General → Toggleable modules** (`experimental.app_targets.ocr_fallback = true`, **disabled by default: `0 MB` and zero captures while off**) also reads visible screen text 100% locally and draws a tight box around **the exact typed word** (`ocr_fallback_threshold = 0` by default, configurable `1–30` to restrict OCR to sparse-AX apps):
+
+- **`⇧ + letter`** (`⇧A`, `⇧S`…): immediately clicks that badge.
+- **`↓` / `↑`**: steps through highlighted matches without clicking.
+- **`Return`** (click), **`Return` × 2** (double-click), **`⇧ + Return`** (right-click), **`⌘ + Return`** (⌘-click).
+
 ## Speed
 
 The bar stays responsive when the Mac is under heavy load: search texts are prepared once, icons are scaled in the

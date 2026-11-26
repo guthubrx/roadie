@@ -438,6 +438,23 @@ roadie shortcuts remove "alt+g"
 roadie shortcuts check [--json]               # checks validity and collisions
 ```
 
+## Onboarding, display profiles and portable config export
+
+```bash
+# Readiness checklist (actual daemon TCC permissions, config, shortcuts)
+roadie onboarding [--json]
+
+# Display topology profiles (UUID-independent matching, 60s anti-overwrite grace)
+roadie profile list [--json]
+roadie profile save <name>
+roadie profile match [--json]
+roadie profile delete <name>
+
+# Portable JSON export / import (tilde-normalized TOML, projects, profiles; never secrets or clipboard)
+roadie config export [FILE]
+roadie config import <FILE> [--dry-run] [--force]
+```
+
 If you prefer an external tool for commands, the `examples/` folder also has ready-to-use files:
 
 - `examples/skhd/skhdrc`: shortcuts for [skhd](https://github.com/koekeishiya/skhd). Copy it to `~/.config/skhd/skhdrc`, then run `skhd --reload`.

@@ -434,6 +434,7 @@ scrolling_trackpad_gestures = true # balayage horizontal 3/4 doigts & Option+mol
 scrolling_trackpad_fingers = 3  # 3 ou 4 doigts pour le balayage du ruban
 scratchpad_enabled = true
 scratchpad_reboot_policy = "reattach_or_relaunch" # reattach_or_relaunch | reattach | ephemeral
+display_profiles_enabled = false # profils matériels d'écrans automatiques (désactivé par défaut)
 
 [overview]
 trackpad_gesture = true         # geste natif 4 doigts haut/bas (désactiver pour garder BTT)
@@ -464,6 +465,12 @@ opacity = 0.22                  # 0.05..0.75
 calc_conversions = true         # convertisseur unités, bases, fuseaux
 emoji_picker = true             # catalogue émojis/symboles FR/EN intégré
 timer_enabled = true            # minuteur & Pomodoro locaux
+file_dialog_jump = true         # saut direct dans les dialogues Ouvrir/Enregistrer sous (zéro polling)
+history_arrow_navigation = true # historique des 20 dernières saisies avec ↑ / ↓ depuis le haut de la barre
+
+[experimental.app_targets]
+ocr_fallback = false            # OCR local Apple Vision au mot exact (0 Mo & 0 capture quand désactivé)
+ocr_fallback_threshold = 0      # 0 = complète toujours l'AX sur chaque fenêtre visible ; 1..30 = apps pauvres en AX
 
 [clipboard]
 enabled = true                  # stocké localement dans ~/.roadies/clipboard.json (0o600)

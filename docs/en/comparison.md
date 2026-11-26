@@ -45,16 +45,19 @@ Most macOS power users stitch together **3 to 5 separate apps**: a tiling window
 | **Offline core utilities** | Calculator, converter (units/bases/time zones), color picker, EN/FR emojis, timer/Pomodoro | Rich calculator, converter, emojis, notes, quicklinks, AI (Pro) | Calculator; rest via workflows | No |
 | **Window switcher (`⌘ Tab`)** | Built-in (native `CGEventTap`, thumbnails, search, `W/Q/M/H/S/A/D` actions) | Basic window list inside launcher | No | **Dedicated specialist** *(lightweight, highly configurable)* |
 | **Clicked-zone switcher (`Option+Tab`)** | **Yes** *(returns to an exact tab/button/pane, even across stages)* | No | No | No |
-| **On-screen label search** | **Yes** *(Accessibility + typo tolerance + display/window grids)* | No | No | No |
-| **Tiling window management** | **Full** *(6 modes, per-tile tabs, stages, virtual desktops)* | Basic shortcut window snapping | No | No |
+| **On-screen search & local Vision OCR** | **Yes** *(Accessibility + opt-in local Apple Vision word-level OCR + typo tolerance + grids)* | No | No | No |
+| **Open/Save file dialog folder jump** | **Yes** *(built-in, zero polling, preserves filename & clipboard)* | No | No | No |
+| **Tiling window management** | **Full** *(6 modes, per-tile tabs, stages, virtual desktops, display profiles)* | Basic shortcut window snapping | No | No |
 
 ---
 
 ## 3. What makes Roadie distinct
 
-- **One cohesive engine**: the launcher understands your stages, virtual desktops, and displays (`safari personal left` opens Safari directly in the *Personal* stage on the left with a live preview).
+- **One cohesive engine**: the launcher understands your stages, virtual desktops, and displays (`safari personal left` opens Safari directly in the *Personal* stage on the left with a live preview), and recalls your last 20 queries with `↑`/`↓`.
 - **Universal per-tile / per-column tabs**: no need to choose between BSP, scrolling ribbon, and tabs—hold `⌥ Option` anywhere over a target tile or column to stack windows as tabs in `spatialBsp`, `scrolling`, `masterStack`, or `bsp`.
-- **Zone switcher (`Option+Tab`) and on-screen search**: jump straight back to a specific sub-tab, field, or button inside a window—even hidden on another stage—with a local snapshot of that area.
+- **Word-level local Apple Vision OCR & zone switcher (`Option+Tab`)**: type any visible word on screen (`⌘⌃⌥F`) to highlight and click it directly (`⇧A`/`⇧S`)—even inside dense chats, canvases, or PDFs—and jump back to recent clicked spots across stages.
+- **Direct Open/Save dialog teleportation**: jump macOS file dialogs straight to `Desktop`, `Downloads`, project or recent folders via `⌘⇧G` + Accessibility without losing the filename or touching your clipboard.
+- **Zero-cost toggleable modules & portable config**: every optional module has a single on/off switch in **Settings > General** (`0 MB` / zero captures while off), plus `roadie config export|import` for clean machine migration.
 - **Free `.alfredworkflow` compatibility**: reuse existing Alfred workflows (and Alfred themes) without a paid Powerpack license.
 
 ---

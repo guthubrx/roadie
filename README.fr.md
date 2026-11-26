@@ -1,997 +1,311 @@
 <div align="center">
-  <img src="docs/assets/roadie-logo.svg" alt="Logo Roadie" width="128" height="128">
+
+<img src="docs/assets/roadie-logo.svg" alt="Logo Roadie" width="112" height="112">
 
 # Roadie
 
-**Un gestionnaire de fenêtres et un lanceur pour macOS : tuilage automatique (BSP, onglets, ruban défilant), stages nommées, bureaux virtuels, presse-papiers sécurisé, snippets et une barre qui fait tourner tes workflows d'Alfred. Gratuit.**
+**Le moteur d’espace de travail macOS tout-en-un en Swift natif : tuilage automatique & ruban 120 Hz, lanceur compatible workflows Alfred gratuits, OCR local Apple Vision au mot exact et saut direct dans *Ouvrir / Enregistrer sous*.**
 
-[English](README.md) | Français
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/guthubrx/roadie/releases/tag/v0.14.0)
+[![Swift natif](https://img.shields.io/badge/Swift-AppKit%2FSwiftUI%20natif-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
+[![Licence Apache-2.0](https://img.shields.io/badge/Licence-Apache--2.0-2F80ED?style=flat-square)](LICENSE)
+[![100 % Local](https://img.shields.io/badge/Vie%20priv%C3%A9e-100%25%20local%20%C2%B7%200%20t%C3%A9l%C3%A9m%C3%A9trie-16A34A?style=flat-square)](#confidentialité)
+
+[English](README.md) · **Français**
+
+<p>
+  <a href="#les-6-super-pouvoirs-de-roadie">Super-pouvoirs</a> •
+  <a href="#démarrage-en-30-secondes">Installer</a> •
+  <a href="#comparatif-rapide">Comparatif</a> •
+  <a href="#permissions">Permissions &amp; Vie privée</a> •
+  <a href="#documentation">Documentation</a> •
+  <a href="https://github.com/guthubrx/roadie/releases/tag/v0.14.0">Télécharger v0.14.0</a>
+</p>
 
 </div>
-
-Roadie range tes fenêtres par activité et te laisse tout piloter depuis une seule barre. Regroupe
-les applications d'un projet dans une stage (en tuilage BSP, en onglets ou en ruban défilant),
-retrouve-les dans le rail et passe d'un bureau à l'autre sur chaque écran. Tape quelques lettres pour
-ouvrir une application, une fenêtre, un fichier, un élément de ton presse-papiers ou un snippet, et
-choisis où ça s'ouvre. Tes workflows d'Alfred y tournent aussi, sans Powerpack.
-
-**[Télécharger Roadie 0.14.0](https://github.com/guthubrx/roadie/releases/tag/v0.14.0)** ·
-[Découvrir les nouveautés](docs/releases/v0.14.0.md) · [Guide d'installation](#installation-manuelle)
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Espaces de travail Roadie sur plusieurs écrans" width="100%">
 </p>
 
-## Deux outils, un seul processus
+> [!TIP]
+> **Mesuré sur Apple Silicon :** **`0 Mo`** et zéro timer par module éteint · **`~11–35 ms`** à chaud pour l’OCR local Apple Vision au mot exact · **`120 Hz`** ProMotion en ruban défilant · **`92/102`** vrais workflows `.alfredworkflow` complets · **SIP toujours activé** · **0 télémétrie, sans compte, gratuit**.
 
-| | |
-|---|---|
-| **Gestionnaire de fenêtres** | Tuilage automatique (`spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float`), stages nommées, scratchpad flottant, atténuation des fenêtres inactives (`dim_inactive`), bureaux virtuels par écran, rail latéral avec icônes cliquables, sélecteur de fenêtres (`Cmd+Tab` + actions `W/Q/M/H/S/A/D`), sélecteur de zones (`Option+Tab`), vue d'ensemble |
-| **Lanceur** | Applications, fenêtres, documents et onglets ouverts, fichiers, signets et historique des navigateurs, réglages, calcul et convertisseur (unités, bases, fuseaux), pipette de couleur, émojis natifs, minuteur & Pomodoro, presse-papiers sécurisé (`0o600`), snippets locaux, scènes de projet, web, workflows d'Alfred |
+---
 
-Les deux se parlent. Le lanceur sait où placer ce qu'il ouvre : dans la stage Perso, sur l'autre
-écran, à gauche. Il retrouve une fenêtre cachée dans une stage inactive ou sur un autre bureau. Et le
-classement qu'il apprend tient compte de la stage où tu travailles.
+## Pourquoi Roadie ?
 
-## Un lanceur qui fait tourner tes workflows d'Alfred
+Sur macOS, les utilisateurs avancés finissent par entretenir **4 à 5 utilitaires séparés** qui se marchent sur les pieds : un gestionnaire de tuilage, un lanceur payant, un sélecteur `⌘ Tab`, un outil de raccourcis/gestes et un gestionnaire de presse-papiers/snippets.
 
-<p align="center">
-  <img src="docs/assets/screenshots/fr/launcher-search.png" alt="La barre de Roadie cherche « note » : application, fenêtre, document ouvert et fichiers" width="70%">
-</p>
+Roadie réunit tout dans **un seul démon Swift local** où chaque couche partage le même contexte : le lanceur connaît tes stages et tes écrans (`safari perso gauche` ouvre Safari dans la stage *Perso* à gauche avec aperçu en direct), chaque module optionnel a son propre **interrupteur on/off dans Paramètres > Général** (`0 Mo` quand éteint), et BetterTouchTool / Karabiner restent 100 % facultatifs.
 
-Une seule saisie cherche partout : applications installées, fenêtres de tous les bureaux, documents
-et onglets ouverts (Chrome, Brave, Edge, Safari), fichiers, signets et historique de Firefox, Safari
-et Chrome, réglages de Roadie et de macOS, commandes système. Les initiales suffisent (`vsc` pour
-Visual Studio Code) et Roadie apprend tes choix. Un calcul donne son résultat, `> commande` la lance
-dans ton terminal, `~/Doc` parcourt un dossier.
+---
 
-La barre reste rapide quand le Mac est chargé : les documents que tu as déjà ouverts s'affichent en
-50 ms environ, Spotlight complète ensuite sans bousculer la liste.
+## Les 6 super-pouvoirs de Roadie
 
-### Ouvrir, et choisir où
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🔍 OCR local Apple Vision au mot exact &amp; Recherche écran</h3>
+      <p>Appuie sur <code>⌘⌃⌥F</code> et tape <b>n’importe quel mot visible à l’écran</b> — dans une conversation, une app Electron, un canvas web, un PDF scanné ou un bureau distant. Une fois activé dans <b>Paramètres &gt; Général → Modules activables</b>, ScreenCaptureKit sans ombres portées + Apple Vision local encadrent <b>pile le mot exact</b> (<code>VNRecognizedText.boundingBox</code>) : <code>⇧A</code>/<code>⇧S</code> clique directement dessus, ou <code>↓</code>/<code>↑</code> + <code>Entrée</code>. <i>Éteint par défaut : 0 capture &amp; 0 Mo de RAM.</i></p>
+      <p><a href="docs/fr/launcher.md#vision-ocr">Guide OCR écran →</a></p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>📂 Saut direct dans <i>Ouvrir / Enregistrer sous</i></h3>
+      <p>Dès qu’un panneau macOS <code>NSOpenPanel</code> ou <code>NSSavePanel</code> est ouvert (y compris les feuilles XPC sandboxées comme TextEdit ou Aperçu), ouvrir la barre Roadie place en #1 <b>Desktop / Bureau</b>, <b>Downloads</b>, <b>Documents</b>, tes dossiers de projets et tes récents — filtrés dès la frappe. <code>Entrée</code> téléporte la boîte de dialogue via <code>⌘⇧G</code> + Accessibilité directe <b>sans écraser le nom du fichier ni toucher au presse-papiers</b>. <i>Zéro polling.</i></p>
+      <p><a href="docs/fr/launcher.md#file-dialog-jump">Guide saut dialogues →</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🪟 6 layouts, ruban Scrolling 120 Hz &amp; onglets universels ⌥</h3>
+      <p>Choisis par stage : arbre persistant (<code>spatialBsp</code>), <code>bsp</code> équilibré, <code>masterStack</code>, <code>tabbed</code>, <b>ruban défilant <code>scrolling</code></b> façon Niri (glissement 120 Hz, trackpad 3/4 doigts, <code>⌥ + molette</code>, étanchéité stricte aux jointures multi-écrans) ou <code>float</code>. Maintiens <code>⌥ Option</code> sur <b>n’importe quelle tuile ou colonne</b> pour empiler en onglets, ou appelle un <b>scratchpad flottant</b> &amp; le voile <b>Dim Inactive</b>.</p>
+      <img src="docs/assets/screenshots/fr/layouts-advanced.png" alt="Modes avancés Roadie : Onglets et ruban Scrolling 120 Hz avec Dim Inactive">
+      <p><a href="docs/fr/features.md">Guide layouts &amp; gestes →</a></p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>⚡ Lanceur universel, workflows Alfred gratuits &amp; historique ↑/↓</h3>
+      <p>Une seule barre (~50 ms en charge) pour apps, fenêtres, onglets ouverts, fichiers, signets, calcul &amp; convertisseur (unités, bases, fuseaux), pipette couleur native, émojis FR/EN, minuteur Pomodoro, commandes <code>/</code>, phrases (<code>safari perso gauche</code>) et <b>rappel <code>↑</code>/<code>↓</code> des 20 dernières saisies</b>. Exécute tes <b><code>.alfredworkflow</code> et thèmes Alfred gratuitement</b>, sans Powerpack.</p>
+      <img src="docs/assets/screenshots/fr/launcher-search.png" alt="Barre du lanceur Roadie cherchant applications, fenêtres, documents ouverts et fichiers">
+      <p><a href="docs/fr/launcher.md">Guide lanceur &amp; workflows Alfred →</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🎯 Sélecteur de zones (⌥ Tab), Sélecteur ⌘ Tab &amp; Vue d’ensemble</h3>
+      <p>Sélecteur <code>⌘ Tab</code> natif (<code>CGEventTap</code>) avec touches directes <code>W/Q/M/H/S/A/D</code>, <b>Vue d’ensemble</b> par geste 4 doigts, et l’unique <b>Sélecteur de zones (<code>⌥ Tab</code>)</b> : chaque endroit cliqué devient une carte illustrée pour revenir pile sur un onglet, une cellule ou un message, même dans une autre stage.</p>
+      <img src="docs/assets/screenshots/fr/zone-switcher.png" alt="Sélecteur de zones cliquées Roadie regroupées par bureau et stage">
+      <p><a href="docs/fr/window-switcher.md">Guide sélecteur →</a> · <a href="docs/fr/overview.md">Guide vue d’ensemble →</a></p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>🧩 Modules à coût zéro, Presse-papiers (0o600) &amp; Profils d’écrans</h3>
+      <p>Un tableau de bord central <b>Modules activables</b> dans <b>Paramètres &gt; Général</b> (15 interrupteurs on/off), presse-papiers local <code>0o600</code> (ignore mots de passe &amp; gestionnaires), snippets dynamiques (<code>{date}</code>, <code>{clipboard}</code>, <code>{cursor}</code>), <b>profils matériels d’écrans</b> automatiques (<code>roadie profile</code>) et export/import JSON portable <code>roadie config export|import</code>.</p>
+      <img src="docs/assets/screenshots/fr/launcher-tools.png" alt="Convertisseur, minuteur Pomodoro, pipette de couleur et catalogue d'émojis intégrés">
+      <p><a href="docs/fr/configuration-rules.md">Guide config &amp; modules →</a></p>
+    </td>
+  </tr>
+</table>
+
+<details>
+<summary><b>📸 Plus de captures (Verbes &amp; Phrases, Workflows &amp; Thèmes Alfred, Presse-papiers &amp; Snippets, Sélecteur &amp; Vue d’ensemble)</b></summary>
 
 <table>
   <tr>
     <td><img src="docs/assets/screenshots/fr/launcher-verbs.png" alt="Verbes de Safari après Tab"></td>
-    <td><img src="docs/assets/screenshots/fr/launcher-phrase.png" alt="Phrase « safari perso gauche »"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-phrase.png" alt="Phrase safari perso gauche"></td>
   </tr>
-</table>
-
-Tab sur une ligne ouvre ses verbes : ouvrir dans une stage, amener ici, envoyer vers un bureau ou un
-écran, réunir les fenêtres d'une application, faire flotter, quitter… Pendant le choix, les vraies
-fenêtres prennent leur future place ; Échap remet tout. Une phrase fait tout d'un coup :
-`safari perso gauche` ouvre Safari dans la stage Perso, à gauche, et ⌘S la garde en abréviation.
-
-### Les workflows d'Alfred, gratuitement
-
-<table>
   <tr>
-    <td><img src="docs/assets/screenshots/fr/launcher-workflow.png" alt="Résultats d'un workflow"></td>
-    <td><img src="docs/assets/screenshots/fr/launcher-emoji-grid.png" alt="Workflow d'émojis en grille"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-workflow.png" alt="Résultats d'un workflow Alfred"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-themes.png" alt="Quatre thèmes Alfred dans Roadie"></td>
   </tr>
-</table>
-
-Chez Alfred, les workflows demandent le [Powerpack](https://www.alfredapp.com/powerpack/), payant.
-Roadie lit les mêmes fichiers `.alfredworkflow` et les fait tourner gratuitement : ceux déjà installés
-dans Alfred, lus sans les modifier, ou ceux que tu installes avec `roadie workflow install`, sans
-Alfred.
-
-| | Alfred | Roadie |
-|---|---|---|
-| Lanceur, fichiers, calcul, recherche web | Gratuit | Gratuit |
-| Convertisseur, pipette, émojis, minuteur & Pomodoro | Workflows tiers | Intégrés dans le cœur, hors ligne |
-| Presse-papiers sécurisé & snippets locaux | Powerpack payant | Gratuits, 100 % locaux (`0o600`) |
-| Workflows | Powerpack : 34 £, ou 59 £ avec les mises à jour à vie | Gratuit, mêmes fichiers `.alfredworkflow` |
-| Gestion des fenêtres | Non incluse | Tuilage (`spatialBsp`, `tabbed`, `scrolling`), stages, scratchpad, bureaux, sélecteur |
-
-Script Filters et leur cache, schéma complet des objets, touches ⌘ ⌥ ⌃ par ligne, déclencheurs
-externes, raccourcis, grilles, vues Texte, Image et PDF, boutons d'Alfred Remote : sur un corpus de
-102 workflows réels, 92 tournent entièrement. `roadie workflow list` dit pour chacun ce qui manque.
-Non importés d'Alfred : Contacts, format propriétaire des snippets/presse-papiers d'Alfred (Roadie
-fournit les siens en natif ci-dessous), AppleScript compilé.
-
-### Outils intégrés du lanceur : convertisseur, minuteur, pipette et émojis
-
-<p align="center">
-  <img src="docs/assets/screenshots/fr/launcher-tools.png" alt="Outils natifs du lanceur Roadie : convertisseur d'unités et de bases, minuteur Pomodoro, pipette de couleur et catalogue d'émojis" width="95%">
-</p>
-
-Quatre utilitaires du quotidien tournent directement dans le cœur du lanceur, sans plugin ni accès réseau :
-
-- **Convertisseur universel** : longueurs, masses, températures, données, vitesses, bases (`0xff in dec`, `255 in bin`) et fuseaux horaires (`14:00 NYC in Paris`), copié d'un appui sur Retour.
-- **Minuteur & Pomodoro** : `timer 15m pause`, `pomodoro`, `timer status`, `timer stop` (aussi en CLI via `roadie timer`), avec notification macOS locale.
-- **Pipette de couleur native (`NSColorSampler`)** : tape `pipette` ou `color picker`, clique n'importe quel pixel ; Roadie copie `#RRGGBB` et affiche HEX, RGB et HSL.
-- **Émojis & symboles intégrés** : `:fusée` ou `emoji cœur` ouvre un catalogue bilingue FR/EN en grille sans installer de workflow.
-
-### Presse-papiers sécurisé et snippets locaux
-
-<table>
   <tr>
-    <td><img src="docs/assets/screenshots/fr/launcher-clipboard.png" alt="Historique du presse-papiers sécurisé dans la barre Roadie"></td>
-    <td><img src="docs/assets/screenshots/fr/launcher-snippets.png" alt="Snippets locaux avec variables dynamiques dans la barre Roadie"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-clipboard.png" alt="Historique du presse-papiers sécurisé"></td>
+    <td><img src="docs/assets/screenshots/fr/launcher-snippets.png" alt="Snippets locaux avec variables dynamiques"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/screenshots/fr/window-switcher.png" alt="Sélecteur de fenêtres Roadie"></td>
+    <td><img src="docs/assets/screenshots/fr/overview.png" alt="Vue d'ensemble des bureaux et stages"></td>
   </tr>
 </table>
 
-- **Historique du presse-papiers (`cb` / `clipboard`)** : 100 % local dans `~/.roadies/clipboard.json` (permissions POSIX strictes `0o600`, jamais écrit dans `events.jsonl`), déduplication, épinglage et rétention configurable. Les types sensibles (`ConcealedType`, `TransientType`, `AutoGeneratedType`) et les gestionnaires de mots de passe (1Password, Bitwarden, KeePassXC, Trousseau d'accès, LastPass, Dashlane) sont automatiquement ignorés.
-- **Snippets locaux (`snip` / `snippet`)** : définis en TOML (`[[snippets.items]]`) ou dans **Paramètres > Recherche > Snippets**, avec expansion mono-passe de `{date}`, `{time}`, `{datetime}`, `{clipboard}` et `{cursor}`, et auto-expansion clavier optionnelle (désactivée par défaut, toujours suspendue dans les champs de mot de passe macOS).
+<sub>L’interface suit la langue de macOS (français ou anglais) ou celle choisie dans Paramètres &gt; Général.</sub>
 
-### Les thèmes d'Alfred aussi
+</details>
 
-<p align="center">
-  <img src="docs/assets/screenshots/fr/launcher-themes.png" alt="La même barre avec quatre thèmes d'Alfred" width="85%">
-</p>
+---
 
-Les neuf thèmes d'Alfred sont fournis, et un thème exporté d'Alfred s'ajoute tel quel. La barre se
-place en bas, au centre ou en haut, et se déplace à la souris.
+## Démarrage en 30 secondes
 
-[Guide du lanceur et des workflows](docs/fr/launcher.md)
-
-## Sélecteur de fenêtres et vue d'ensemble
-
-<p align="center">
-  <img src="docs/assets/screenshots/fr/window-switcher.png" alt="Sélecteur de fenêtres de Roadie" width="100%">
-</p>
-
-<p align="center">
-  <img src="docs/assets/screenshots/fr/overview.png" alt="Vue d'ensemble des bureaux et des stages" width="100%">
-</p>
-
-<sub>Captures dessinées par le moteur de rendu de Roadie avec des fenêtres et des fichiers d'exemple.
-Toute l'interface suit la langue de macOS (en français sur un Mac réglé en français, en anglais sinon), ou celle choisie
-dans Paramètres > Général.</sub>
-
-## Revenir là où tu as cliqué : le sélecteur de zones
-
-<p align="center">
-  <img src="docs/assets/screenshots/fr/zone-switcher.png" alt="Sélecteur de zones de Roadie : endroits récents avec leur photo, regroupés par bureau et stage" width="100%">
-</p>
-
-Cmd+Tab ramène une fenêtre. Roadie ramène aussi **un endroit dans une fenêtre** : le bouton sur lequel tu as
-appuyé, la cellule du tableur que tu modifiais, le message que tu lisais. Chaque endroit cliqué devient une zone,
-avec une petite photo prise à ce moment. Garde Option enfoncée et appuie sur Tab : les zones récentes s'affichent
-en cartes, regroupées par bureau et par stage, exactement comme les fenêtres dans Cmd+Tab (flèches, souris,
-recherche, Échap). Relâche Option : Roadie ramène la fenêtre, en changeant de stage ou de bureau si besoin, et
-reclique la zone. Option+Tab, relâcher, Option+Tab fait l'aller-retour entre tes deux derniers endroits, même
-d'une stage à l'autre. Nous ne connaissons pas d'autre outil pour macOS qui le fasse.
-
-- **Les zones viennent de tes clics** (3 par fenêtre par défaut, un autre nombre possible pour chaque application) et de la **recherche à l'écran** (Capslock + F
-  chez l'auteur) : tape un mot visible à l'écran, son bouton reçoit une étiquette, Retour ou Maj + étiquette le
-  clique. Les fautes de frappe sont rattrapées quand rien ne correspond exactement.
-- **Les photos restent à jour** : une fenêtre que tu quittes voit ses zones reprises en photo, au plus toutes les
-  10 secondes.
-- **Une bordure jaune** montre la zone choisie dans la vraie application pendant le choix, puis où le clic est tombé.
-- **Maj seule recule d'une carte**, comme dans AltTab, dans Option+Tab comme dans Cmd+Tab.
-- **Sur chaque carte**, × retire la zone et le sens interdit empêche les clics d'une application de créer des zones.
-- **Gardées 24 heures, 20 zones**, réglable dans Paramètres > Sélecteur ; les photos ne quittent jamais ton Mac.
-
-[Guide du sélecteur et des zones](docs/fr/features.md)
-
-## Ce que tu peux faire avec Roadie
-
-| Besoin | Fonction |
-|---|---|
-| Organiser les fenêtres | Tuilage automatique (`spatialBsp`, `bsp`, `masterStack`), modes **Onglets (`tabbed`)** et **Ruban défilant (`scrolling`)**, poignées de séparation, `layout rotate` et `layout mirror` |
-| Rester concentré | **Scratchpad flottant nommé**, **Dim Inactive** (voile doux sur les fenêtres inactives), maximisation gardant le rail accessible |
-| Passer d'un projet à l'autre | Stages nommées, scènes de projet enrichies (`project save --url --app --note`), aperçus et icônes cliquables en perspective dans le rail |
-| Travailler sur plusieurs écrans | Bureaux indépendants, nouvelles fenêtres sur l'écran actif par défaut, transfert des fenêtres et des stages, `mouse_follows_focus` |
-| Garder une fenêtre accessible | Épinglages, signets, scratchpads et groupes de fenêtres |
-| Tout trouver et tout lancer | Lanceur, verbes et destinations, phrases, convertisseur, pipette, émojis, minuteur/Pomodoro, presse-papiers sécurisé, snippets, workflows d'Alfred |
-| Revenir à un endroit cliqué | Sélecteur de zones (`Option+Tab`), recherche à l'écran tolérante aux fautes, actions directes `W/Q/M/H/S/A/D` dans le sélecteur |
-| Agir au clavier | Étiquettes, grilles, commandes `/` dans la barre et complétion shell (`zsh`, `bash`, `fish`) |
-| Adapter l'interface | Réglages immédiats, tailles indépendantes et choix de polices |
-| Automatiser les habitudes | Règles de placement, macros courtes, commandes et API JSON |
-
-### Une disposition qui suit ton travail
-
-<p align="center">
-  <img src="docs/assets/screenshots/fr/layouts-advanced.png" alt="Modes avancés de Roadie : Onglets (tabbed) avec barre d'onglets cliquable et Ruban défilant (scrolling) avec atténuation des fenêtres inactives" width="100%">
-</p>
-
-Roadie répartit les fenêtres et ajuste leur place quand tu en ouvres ou en fermes
-une. Choisis parmi six dispositions par stage : arbre persistant (`spatialBsp`),
-tuilage équilibré (`bsp`), fenêtre principale + pile (`masterStack`), **onglets
-(`tabbed`)** avec barre d'onglets flottante cliquable, **ruban défilant
-(`scrolling`)** façon Niri avec colonnes centrées, bords voisins cliquables et
-étanchéité stricte aux jointures multi-écrans (aucun débordement sur l'écran voisin), ou
-placement libre (`float`). Tous les modes tuilés à emplacements (`spatialBsp`, `scrolling`,
-`masterStack` et `bsp`) supportent les **onglets intégrés par tuile ou colonne** : maintiens
-`⌥ Option` n'importe où sur une cible (ou dépose directement sur une barre d'onglets) pour
-empiler des fenêtres avec un aperçu turquoise dédié — même en mode `drop_preview = "real"` —,
-réordonne horizontalement dans la barre, ou glisse un onglet hors de sa barre pour le détacher.
-
-Réorganise les fenêtres par glisser-déposer : un dépôt au centre échange les
-positions, un dépôt sur un bord insère la fenêtre de ce côté (et en `scrolling`,
-le découpage suit la portion visible horizontale de la colonne). Tu peux aussi
-naviguer et empiler les onglets au clavier (`roadie tab next|prev|stack|unstack|move`),
-modifier les proportions au clavier, pivoter/inverser l'arbre (`layout rotate`,
-`layout mirror`), réunir les fenêtres d'une application (`window gather-app`),
-détacher un **scratchpad flottant** centré à la demande (`roadie scratchpad`),
-activer l'atténuation des fenêtres inactives (`fx.dim_inactive`), ou tirer les
-poignées entre les groupes de fenêtres. La maximisation laisse le rail accessible
-et permet de revenir à la disposition précédente.
-
-Les écritures Accessibilité sont parallélisées par application (PID) et les
-applications lentes à démarrer (ex. terminal avec Conda) rejoignent le canevas
-dès que leur fenêtre est prête, sans quarantaine inutile de 5 secondes.
-
-[Explorer les dispositions et les gestes](docs/fr/features.md)
-
-### Tes projets, à portée de vue
-
-Le rail affiche les stages de chaque écran avec leurs vignettes ou leurs icônes.
-Passe à un autre stage, ramène une fenêtre dans l'espace actif ou déplace un
-stage entier vers un autre écran. Conserve ton ordre et prévisualise la place des
-stages pendant leur réorganisation. [Organiser les stages et déposer les fenêtres](#nav-rail).
-
-Le mode flottant sort une fenêtre du tuilage dans sa stage. Les épinglages la
-gardent visible pendant les changements de stage.
-Les signets permettent de retrouver une fenêtre choisie. Tes stages et tes
-réglages sont conservés entre les sessions.
-
-Quand un écran est reconnecté, ses stages retrouvent leur place. Un stage déplacé
-explicitement vers un autre écran y reste. Les stages nommés restent accessibles
-même lorsqu'ils sont vides, avec un contour et leur nom ; les menus de destination
-suivent l'ordre du rail.
-
-### Les commandes de Roadie dans la barre
-
-La barre ouvre le lanceur (⌘⌃⌥F par défaut, ou le raccourci de ton choix). Un `/` initial donne
-accès aux commandes de Roadie ; Tab complète la saisie.
-
-Par exemple, `/stage dev` change d'activité et `/settings` ouvre les paramètres.
-Les suggestions et l'historique accompagnent la saisie. Le raccourci se règle
-dans la catégorie Recherche ; `roadie targets search` ouvre aussi la barre.
-
-### Une interface à ta mesure
-
-Le **sélecteur de fenêtres** ouvre la fenêtre choisie dans son bureau et sa
-stage Roadie. Dans Réglages Roadie > Sélecteur, crée des profils pour un écran, un
-bureau, une stage ou une application. Enregistre directement une combinaison — **y compris
-`⌘Tab` / `⌘⇧Tab` capturés nativement par Roadie** (sans BetterTouchTool ni AltTab) —,
-confie-la à BetterTouchTool ou utilise une commande externe. Au relâchement,
-choisis entre activer la fenêtre, garder le sélecteur ouvert et passer en recherche.
-Navigue avec les quatre flèches ou la souris. Hors champ de recherche, des touches
-d'action directe pilotent la fenêtre sélectionnée sans ouvrir le menu Actions : `W`
-(fermer), `Q` (quitter l'app), `M` (réduire/restaurer), `H` (masquer l'app), `S`
-(rapatrier dans la stage active), `A` (filtrer sur l'app courante) et `D` (filtrer
-sur l'écran courant). Chaque profil peut avoir sa propre
-apparence. Organise les fenêtres en colonnes par stage, onglets par bureau,
-arbre, sections ou vue d'ensemble des bureaux. La grille classique reste disponible.
-[Guide du sélecteur](docs/fr/window-switcher.md).
-
-La **vue d’ensemble** montre toutes les fenêtres sur une seule page, par écran
-et par bureau, en Archipel ou en Baies, sur ton fond d’écran flouté. La loupe
-agrandit le bureau survolé de 100 à 250 %. Ouvre-la par **balayage natif à quatre doigts
-vers le haut** (`overview.trackpad_gesture`, sans BetterTouchTool ; vers le bas pour fermer),
-avec `roadie overview show`, un geste BTT ou un raccourci facultatif.
-Glisse une puce pour réordonner les bureaux ou déplacer une stage, et une carte
-pour envoyer une fenêtre dans une autre stage, avec un aperçu en direct du résultat. [Guide de la vue d’ensemble](docs/fr/overview.md).
-
-
-Les paramètres sont regroupés par usage, avec des champs alignés et des aides
-défilables. Les règles se déplient une par une ; les onglets du sélecteur occupent
-toute la largeur. Ajuste les espacements, les noms de stages, les règles et les exceptions depuis
-la fenêtre de paramètres. Les valeurs valides s'appliquent pendant la saisie.
-Choisis séparément les tailles du rail, des étiquettes et des paramètres, ainsi
-que les polices du champ de recherche et de ses suggestions.
-
-Les étiquettes clavier permettent de sélectionner un élément en tapant ses lettres.
-Les grilles écran et fenêtre permettent de viser une zone précise. Les macros
-courtes enregistrent des actions de souris à répéter. Active les outils qui
-conviennent à ta façon de travailler.
-
-[Voir les fonctionnalités](docs/fr/features.md) ·
-[Exemples d'utilisation](docs/fr/use-cases.md)
-
-## Comparatif rapide
-
-*Comparatif factuel (novembre 2026). Voir [le comparatif complet](docs/fr/comparison.md) pour les lanceurs/sélecteurs (Raycast, Alfred, AltTab) et les cas où un autre outil est préférable.*
-
-| | **Roadie** | **AeroSpace** | **yabai** | **OmniWM** | **Rift** |
-|---|---|---|---|---|---|
-| **SIP reste activé** | Oui | Oui | Partiel *(pour la scripting addition)* | Oui | Oui |
-| **Dispositions (layouts)** | `spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float` | Arbre i3 (`tiles`, `accordion`), `float` | `bsp`, `stack`, `float` | `scrolling`, `dwindle` BSP, `float` | i3, `bsp`, `scrolling`, `masterStack`, `stack`, `float` |
-| **Onglets par tuile / colonne** | **Tous les modes tuilés** (`⌥ Option` + glisser, barre, CLI) | Accordion uniquement | Stack uniquement | Non | Barres sur piles |
-| **Ruban défilant + gestes** | 120 Hz, trackpad 3/4 doigts, `⌥ + molette`, confinement multi-écrans | Non | Non | Oui (macOS 26+ Apple Silicon) | Oui |
-| **Espaces / Rail visuel** | Stages nommées + bureaux par écran + **NavRail 3D** + Vue d’ensemble | Workspaces virtuels | Spaces natifs macOS | Workspaces virtuels + Vue d’ensemble | Spaces natifs + Vue d’ensemble |
-| **Scratchpad flottant** | Nommé, barre de titre, survie au reboot | Scriptable | Scriptable | Jusqu’à 10 + terminal Quake | Non |
-| **Lanceur, presse-papiers, sélecteur** | **Tout intégré** *(workflows Alfred, presse-papiers `0o600`, snippets, `⌘ Tab`, zones `Option+Tab`)* | Non | Non | Palette de commandes | Non |
-| **Réglages & automatisation** | GUI temps réel + TOML + CLI + API JSON | TOML + CLI | Shell + CLI *(nécessite `skhd`)* | GUI + CLI | GUI + TOML + CLI/IPC |
-| **Licence** | Apache-2.0 | MIT | MIT | GPL-2.0 | MIT (Rust) |
-
-Roadie s’adresse à ceux qui veulent une seule application cohérente, 100 % locale et gratuite au lieu d’entretenir 4 outils séparés (WM + Raycast/Alfred + AltTab + BTT). Si tu préfères piloter les Spaces natifs macOS sans SIP (**yabai**), un WM i3 ultra-minimaliste 100 % clavier (**AeroSpace**) ou un grand store d’extensions React/JS (**Raycast**), consulte [le comparatif détaillé et les compromis](docs/fr/comparison.md).
-
-## Documentation
-
-La documentation complète existe en français et en anglais :
-
-- [Documentation française](docs/fr/README.md)
-- [English documentation](docs/en/README.md)
-
-Guides principaux :
-
-- [Vue d'ensemble des fonctionnalités](docs/fr/features.md)
-- [Comparatif avec les autres outils macOS](docs/fr/comparison.md)
-- [Lanceur et workflows d'Alfred](docs/fr/launcher.md)
-- [Commandes CLI](docs/fr/cli.md)
-- [Configuration et rules](docs/fr/configuration-rules.md)
-- [Événements et API de requêtes](docs/fr/events-query.md)
-- [Cas d'usage](docs/fr/use-cases.md)
-
-## Prérequis
-
-- macOS 14 ou plus récent.
-- Xcode Command Line Tools. Xcode complet n’est pas nécessaire.
-- Permission Accessibilité pour `roadied`.
-- Permission Enregistrement d’écran pour `roadied`, seulement si tu veux les vraies thumbnails dans le rail.
-- Outils facultatifs : `tmux` pour le runtime modulaire, `create-dmg` pour construire le DMG.
-
-Installer Xcode Command Line Tools si besoin :
+**Prérequis : macOS 14+.** Installation en une commande (télécharge le DMG officiel, vérifie le SHA-256, installe `Roadie.app` + CLI `roadie` + raccourcis autonomes AZERTY/QWERTY ; build non notarisé Apple pour l’instant, la quarantaine locale est levée à l’installation) :
 
 ```bash
-xcode-select --install
-```
-
-Les scripts du projet utilisent `/Applications/Xcode.app` s’il existe. Sinon, ils utilisent les Command Line Tools indiquées par `xcode-select -p`. Ils nettoient aussi l’environnement shell des variables qui peuvent injecter des flags linker incompatibles. Si aucune toolchain Swift n’est trouvée, le script s’arrête et te demande d’installer les Command Line Tools.
-
-## Build Et Lancement De Développement
-
-Depuis la racine du dépôt :
-
-```bash
-make test
-make dev-start
-```
-
-`make dev-start` sert au développement. Il compile en mode debug, copie les binaires dans `./bin` seulement, décharge le LaunchAgent installé et lance le daemon dans une session `tmux`. Il ne touche pas aux binaires installés par `make install`. Dans ce mode, utilise `./bin/roadie` et donne l’Accessibilité à `bin/roadied` de ce dossier. Pour l’usage quotidien, installe Roadie avec `make install`.
-
-**Un seul lanceur à la fois.** `roadied run` et `roadied tiler` prennent un verrou d’instance (`~/.roadies/roadied.lock`). Une deuxième instance sort avec le code 1. Le LaunchAgent relance un processus qui échoue (`KeepAlive`) : il réessaierait en boucle si une session `tmux` fait déjà tourner le daemon. Pour cette raison :
-
-- `make dev-start` et `./scripts/start-modular` déchargent d’abord le LaunchAgent ;
-- `make restart` ne lance jamais `tmux`, et il refuse de s’exécuter tant qu’une session de développement existe. Lance d’abord `make stop` ;
-- pour revenir au service installé, lance `make stop`, puis `make restart`.
-
-## Installation 1-clic (Homebrew Cask ou script)
-
-Tu peux installer Roadie sans compiler les sources (macOS 14+ ; build actuellement non notarisé par Apple, la quarantaine locale est levée automatiquement à l'installation) :
-
-```bash
-# Option 1 : script 1-ligne (télécharge le DMG officiel, vérifie le SHA-256,
-# installe Roadie.app + roadie CLI + raccourcis clavier autonomes `standard`)
+# Option 1 — script 1-ligne
 curl -fsSL https://raw.githubusercontent.com/guthubrx/roadie/main/scripts/install-release.sh | bash
 
-# Option 2 : Homebrew Cask (depuis le dépôt ou une release publiée)
+# Option 2 — Homebrew Cask
 brew install --cask Casks/roadie.rb
 roadie config init --preset standard
 ```
 
-### Raccourcis clavier 100 % autonomes (sans BetterTouchTool ni Karabiner)
-
-Roadie gère nativement ses propres raccourcis globaux (AZERTY et QWERTY) dès l'installation, sans outil tiers :
+Puis contrôle les permissions, la configuration et les raccourcis en un coup d’œil :
 
 ```bash
-roadie shortcuts presets                     # standard (flèches), vim (HJKL), minimal
-roadie shortcuts apply-preset standard       # fusionne sans écraser tes raccourcis existants
-roadie shortcuts check                       # vérifie les collisions et touches actives
+roadie onboarding                    # vérifie Accessibilité, Enregistrement d'écran, config & raccourcis
+roadie shortcuts presets             # standard (flèches), vim (HJKL), minimal — sans BTT ni Karabiner
+roadie shortcuts apply-preset standard
 ```
 
-Tu peux aussi appliquer un préréglage en un clic dans **Paramètres > Raccourcis** ou depuis le **Lanceur**.
+---
 
-## Installation Manuelle
+## Comparatif rapide
 
-Pour une installation locale manuelle depuis les sources :
+*Comparatif factuel (novembre 2026). Voir [le comparatif complet](docs/fr/comparison.md) pour Raycast, Alfred, AltTab et les cas où un autre outil est préférable.*
 
+| | **Roadie** | **AeroSpace** | **yabai** | **OmniWM** | **Rift** |
+|---|---|---|---|---|---|
+| **SIP reste activé** | Oui | Oui | Partiel *(scripting addition)* | Oui | Oui |
+| **Dispositions (layouts)** | `spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float` | Arbre i3, `float` | `bsp`, `stack`, `float` | `scrolling`, `dwindle` BSP, `float` | i3, `bsp`, `scrolling`, `masterStack`, `stack`, `float` |
+| **Onglets par tuile / colonne** | **Tous les modes tuilés** (`⌥` + glisser, barre, CLI) | Accordion uniquement | Stack uniquement | Non | Barres sur piles |
+| **Ruban défilant + gestes** | 120 Hz, trackpad 3/4 doigts, `⌥ + molette`, confinement multi-écrans | Non | Non | Oui (macOS 26+ Apple Silicon) | Oui |
+| **Espaces / Rail visuel** | Stages nommées + bureaux par écran + **NavRail 3D** + Vue d’ensemble | Workspaces virtuels | Spaces natifs | Workspaces virtuels + Vue d’ensemble | Spaces natifs + Vue d’ensemble |
+| **Lanceur, OCR & Saut dialogues** | **Tout intégré** *(workflows Alfred, presse-papiers `0o600`, snippets, `⌘ Tab`, zones `⌥ Tab`, OCR Vision local, saut Ouvrir/Enregistrer)* | Non | Non | Palette de commandes | Non |
+| **Réglages & portabilité** | GUI temps réel + Modules + TOML + CLI + `config export` | TOML + CLI | Shell + CLI *(nécessite `skhd`)* | GUI + CLI | GUI + TOML + CLI/IPC |
+| **Licence** | Apache-2.0 | MIT | MIT | GPL-2.0 | MIT (Rust) |
+
+---
+
+## Permissions
+
+Roadie demande au plus deux permissions macOS — toutes deux portées par **`Roadie.app`** (`roadied`) :
+
+| Permission | Sert à | Obligatoire ? | Si désactivée / refusée |
+|---|---|---|---|
+| **Accessibilité** | Lire et déplacer les fenêtres, raccourcis globaux, saut dans les dialogues fichier | **Oui** | Indispensable au tuilage et aux raccourcis |
+| **Enregistrement d’écran** | Miniatures live dans le rail/vue d’ensemble & OCR local Apple Vision (optionnel) | **Facultative** | Le rail affiche les icônes d’apps ; l’OCR reste inactif (`0` capture, `0 Mo`) |
+
+### La commande `roadie` n’a besoin d’aucune permission
+
+Quand `roadied` tourne, `roadie` lui transmet tes demandes par un socket Unix local (`~/.roadies/roadied.sock`). Le démon exécute l’action avec ses propres permissions : BetterTouchTool, Karabiner, `skhd` ou un script shell n’ont donc besoin **d’aucune permission Accessibilité** et ne re-scannent pas les fenêtres à chaque touche. *(Si le démon est arrêté, `roadie` s’exécute localement ; `daemon`, `doctor`, `permissions` et `config validate` tournent toujours en local. L’état est publié dans `~/.roadies/daemon-status.json`.)*
+
+## Confidentialité
+
+- **100 % local, zéro télémétrie, sans compte** : aucun service d’analyse ni d’envoi distant n’existe dans le code source. Le seul appel réseau optionnel est la commande manuelle `roadie update check` (qui ne télécharge ni n’installe rien automatiquement).
+- **Cloisonnement strict** : l’historique du presse-papiers réside dans `~/.roadies/clipboard.json` avec permissions POSIX `0o600`, n’écrit jamais son contenu dans `events.jsonl` et exclut automatiquement `ConcealedType` / `TransientType` / `AutoGeneratedType` ainsi que les gestionnaires de mots de passe (1Password, Bitwarden, KeePassXC, Trousseau d’accès, LastPass, Dashlane). L’auto-expansion clavier des snippets est éteinte par défaut et toujours suspendue dans les champs de mot de passe macOS.
+- **Modules optionnels à coût zéro** : l’OCR (`ocr_fallback`), les profils d’écrans (`display_profiles_enabled`), Dim Inactive et l’auto-expansion de snippets valent `false` par défaut (zéro timer, zéro capture, `0 Mo` de RAM supplémentaire).
+- **Données locales privées** : l’état local, les journaux (`~/.roadies/`), les macros et captures peuvent contenir des titres ou positions de fenêtres — relis et anonymise avant de partager une issue.
+
+---
+
+## Documentation
+
+Guides complets en **français** ([index](docs/fr/README.md)) et en **anglais** ([index](docs/en/README.md)) :
+
+| Sujet | Français | English |
+|---|---|---|
+| Référence complète (layouts, NavRail, zones, modules) | [features.md](docs/fr/features.md) | [features.md](docs/en/features.md) |
+| Lanceur, workflows Alfred, OCR Vision & Saut dialogues | [launcher.md](docs/fr/launcher.md) | [launcher.md](docs/en/launcher.md) |
+| Sélecteur de fenêtres (`⌘ Tab`) & profils | [window-switcher.md](docs/fr/window-switcher.md) | [window-switcher.md](docs/en/window-switcher.md) |
+| Vue d’ensemble & gestes 4 doigts | [overview.md](docs/fr/overview.md) | [overview.md](docs/en/overview.md) |
+| Référence CLI complète (`stage`, `desktop`, `profile`, `config`…) | [cli.md](docs/fr/cli.md) | [cli.md](docs/en/cli.md) |
+| Configuration (`roadies.toml`), règles & effets | [configuration-rules.md](docs/fr/configuration-rules.md) | [configuration-rules.md](docs/en/configuration-rules.md) |
+| Événements & API JSON Query | [events-query.md](docs/fr/events-query.md) | [events-query.md](docs/en/events-query.md) |
+| Comparatif vs AeroSpace, yabai, OmniWM, Rift, Raycast, Alfred, AltTab | [comparison.md](docs/fr/comparison.md) | [comparison.md](docs/en/comparison.md) |
+| Cas d’usage quotidiens & notes de release | [use-cases.md](docs/fr/use-cases.md) · [v0.14.0](docs/releases/v0.14.0.md) | [use-cases.md](docs/en/use-cases.md) · [v0.14.0](docs/releases/v0.14.0.en.md) |
+
+---
+
+## Référence technique & développement
+
+<a id="installation-manuelle"></a>
+<details>
+<summary><b>🛠️ Compilation depuis les sources, installation manuelle, signature, DMG &amp; désinstallation</b></summary>
+
+### Prérequis
+- macOS 14+, Xcode Command Line Tools (`xcode-select --install` ; Xcode complet inutile).
+- Optionnels : `tmux` (dev/runtime modulaire), `create-dmg` (`brew install create-dmg` pour `make dmg`).
+
+### Installation manuelle (build Release + LaunchAgent)
 ```bash
-make install
+make install          # build release -> ~/Applications/Roadie.app, ~/.local/bin/roadie{,d}, LaunchAgent
+make restart          # recharge le LaunchAgent installé (ne lance jamais tmux)
+roadie query health
 ```
-
-Cette cible masque la mise en place macOS habituelle :
-
-- build `roadie` et `roadied` en mode release ;
-- installe le daemon comme application `~/Applications/Roadie.app`, avec son nom et son icône dans les réglages de confidentialité ;
-- installe la commande dans `~/.local/bin`, avec un lien `roadied` vers le daemon de l'application : le service reste indépendant du dossier source ;
-- signe l’application et la commande (voir plus bas) ;
-- crée `~/Library/LaunchAgents/com.roadie.roadied.plist`, qui lance le daemon depuis l'application ;
-- démarre le LaunchAgent s’il n’est pas déjà chargé.
-
-Ajoute `~/.local/bin` à ton `PATH` pour pouvoir taper `roadie` dans un terminal.
-
-Si Roadie tourne déjà, `make install` ne l’arrête pas. Lance ceci quand tu veux que le daemon recharge les nouveaux binaires installés :
-
-```bash
-make restart
-```
-
-`make restart` arrête Roadie, puis recharge le service installé avec launchd. Il arrête aussi une instance ouverte directement comme application. Le démarrage vérifie que launchd et le fichier PID désignent le même processus vivant. Il ne compile rien. Le rechargement applique aussi les changements du LaunchAgent.
-
-Après une mise à jour, lance `make install`, puis `make restart`, puis `roadie query health`. Si une session de développement tmux tourne, lance d’abord `make stop`.
+Ajoute `~/.local/bin` à ton `PATH`. Pour installer sans démarrer le LaunchAgent : `ROADIE_INSTALL_NO_START=1 make install`.
 
 ### Signature du code et permissions
-
-Donne l'accès à **Roadie** dans Réglages Système > Confidentialité et sécurité > Accessibilité.
-
-macOS lie la permission Accessibilité à la signature de Roadie. `make install` reprend le certificat exact de l’application installée quand son empreinte est disponible. Si ce certificat manque dans le trousseau, l’installation s’arrête avant de remplacer l’application. Un certificat du même nom ne suffit pas. Un choix explicite avec `ROADIE_CODESIGN_IDENTITY` reste prioritaire. À la première installation, il utilise `roadied-cert` si cette identité existe dans le trousseau. Sinon, il utilise une signature ad hoc et affiche un avertissement : macOS peut oublier la permission après une nouvelle compilation.
-
-Pour choisir une identité stable explicitement :
-
+macOS lie la permission Accessibilité à la signature de l’application. `make install` reprend l’empreinte exacte du certificat déjà installé (ou `roadied-cert` à la première installation, sinon signature ad hoc avec avertissement). Surcharge explicite :
 ```bash
 security find-identity -v -p codesigning
 ROADIE_CODESIGN_IDENTITY="Apple Development: Ton Nom (TEAMID)" make install
 ```
 
-Si tu veux seulement installer les fichiers sans démarrer le LaunchAgent :
-
+### Développement &amp; runtime modulaire
 ```bash
-ROADIE_INSTALL_NO_START=1 make install
+make test             # suite complète (utiliser ./scripts/test --no-parallel sous charge)
+make dev-start        # build debug dans ./bin, décharge le LaunchAgent, lance dans tmux
+./scripts/start-modular && roadie query components
 ```
+*Un seul démon à la fois (`~/.roadies/roadied.lock`) : lance `make stop` avant de basculer entre `dev-start` et `make restart`.*
 
-Commandes utiles :
-
+### Build DMG &amp; installation non notarisée Apple
 ```bash
-make test
-make coverage
-make build
-make install
-make uninstall
-make dev-start
-make stop
-make restart
-make status
-make logs
-make doctor
-make dmg
+make dmg              # génère dist/Roadie.dmg (signé ad-hoc, non notarisé Apple)
 ```
+Glisse `Roadie.app` dans `/Applications`. Si Gatekeeper bloque le premier lancement, ouvre **Réglages Système > Confidentialité et sécurité → Ouvrir quand même**, puis accorde Accessibilité (et Enregistrement d’écran en option). [Procédure Apple](https://support.apple.com/en-us/102445).
 
-Équivalents directs :
-
-```bash
-./scripts/test
-./scripts/start        # make dev-start
-./scripts/stop
-./scripts/status
-./scripts/logs
-./scripts/roadie query health
-```
-
-Les logs sont dans `~/.roadies/`. À chaque démarrage, le log précédent est conservé sous `roadied.stdout.log.1` et `roadied.stderr.log.1`. Un crash reste donc lisible après un redémarrage.
-
-## Désinstallation
-
+### Désinstallation
 ```bash
 make uninstall
 ```
+Réaffiche toutes les fenêtres (`roadie restore unhide-all`), arrête le démon, supprime le LaunchAgent, `~/Applications/Roadie.app` et `~/.local/bin/roadie*`. Ne supprime jamais `~/.config/roadies`.
 
-Le script fait ces étapes dans l’ordre :
+</details>
 
-1. lance `roadie restore unhide-all` pour qu’aucune fenêtre ne reste masquée ou hors écran ;
-2. arrête le LaunchAgent, les composants modulaires et les instances autonomes ; si un processus refuse de s’arrêter, il conserve les fichiers installés ;
-3. supprime le fichier LaunchAgent, `~/Applications/Roadie.app` et les binaires de `~/.local/bin` ;
-4. demande s’il faut garder l’état de Roadie (`~/.roadies`, `~/.local/state/roadies`). Sans terminal, il le garde.
+<details>
+<summary><b>⌨️ Mémo CLI quotidien &amp; bases de configuration</b></summary>
 
-Le script ne supprime jamais ta configuration dans `~/.config/roadies`. Supprime-la à la main si tu le souhaites. Pour finir, retire Roadie de Réglages Système > Confidentialité et sécurité > Accessibilité et Enregistrement d’écran.
-
-## Runtime Modulaire
-
-Le chemin classique (`make install`, ou `make dev-start` en développement) lance Roadie comme un daemon unique. Le chemin
-modulaire lance les mêmes capacités sous forme de processus séparés :
+La configuration vit dans `~/.config/roadies/roadies.toml` (modèle commenté : [`examples/roadies.toml`](examples/roadies.toml) ; exemples `skhd`/`Karabiner` dans `examples/`).
 
 ```bash
-./scripts/start-modular
-roadie query components
-roadie query health
-```
-
-Le lanceur modulaire standard démarre tous les composants, y compris le tuilage.
-Chaque composant dispose de ses journaux et de son état de santé. Ce mode permet
-d'observer les services séparément.
-
-## Build DMG Et Installation Non Signée Apple
-
-Roadie peut être packagé dans un DMG macOS classique :
-
-```bash
-make dmg
-```
-
-Le résultat est :
-
-```text
-dist/Roadie.dmg
-```
-
-Le DMG contient `Roadie.app` et un raccourci `/Applications`, donc l’installation se fait par drag-and-drop classique.
-
-Important : ce build est signé ad-hoc, pas signé avec un certificat Apple Developer ID, et pas notarized par Apple. macOS Gatekeeper ne le considérera donc pas comme une app publique entièrement approuvée.
-
-Pour le premier lancement :
-
-1. Glisser `Roadie.app` dans `/Applications`, puis essayer de l'ouvrir.
-2. Si macOS bloque le lancement, ouvrir **Réglages Système > Confidentialité et sécurité**,
-   cliquer sur **Ouvrir quand même**, puis confirmer l'ouverture de Roadie.
-3. Dans ce même panneau, accorder **Accessibilité** et, pour les aperçus de fenêtres,
-   **Enregistrement d'écran** à `/Applications/Roadie.app`.
-
-Roadie reste distribué sans compte développeur Apple et sans notarisation. Cet
-avertissement est attendu. [Procédure Apple](https://support.apple.com/en-us/102445).
-
-Le DMG demande `create-dmg` (`brew install create-dmg`). Le script vérifie ses outils d’abord et s’arrête avec un message clair s’il en manque un.
-
-L’app n’a ni icône dans la barre des menus, ni icône dans le Dock. Pour la quitter, quitte `roadied` dans le Moniteur d’activité. Pour la désinstaller, quitte `roadied`, puis glisse `Roadie.app` dans la corbeille.
-
-L’app packagée démarre aujourd’hui Roadie pour la session utilisateur courante. Un futur installateur signé pourra ajouter automatiquement un login item ou un LaunchAgent ; pour l’instant, le démarrage au login reste volontairement explicite.
-
-## Permissions
-
-Roadie demande deux permissions. Les deux vont au daemon `roadied`.
-
-| Permission | Sert à | Obligatoire |
-|---|---|---|
-| Accessibilité | Lire et déplacer les fenêtres | Oui |
-| Enregistrement d’écran | Thumbnails live des fenêtres dans le rail | Non. Sans elle, le rail affiche des icônes d’app. |
-
-Après `make install`, donne les permissions à **Roadie**, l’application installée dans `~/Applications/Roadie.app`. La commande `~/.local/bin/roadied` pointe vers son daemon. Dans le sélecteur de fichier, utilise Cmd+Maj+G pour ouvrir le dossier de l’application. Puis redémarre et contrôle le daemon :
-
-```bash
-make restart
-roadie query health
-```
-
-### La commande `roadie` n’a besoin d’aucune permission
-
-Quand le daemon tourne, la commande `roadie` lui envoie ta demande par un socket local (`~/.roadies/roadied.sock`). Le daemon fait le travail avec ses propres permissions. BetterTouchTool, Karabiner, skhd ou un script shell qui appelle `roadie` n’ont donc pas besoin de la permission Accessibilité. La commande ne scanne pas non plus toutes les fenêtres à chaque appui de touche, ce qui accélère les raccourcis.
-
-Si le daemon est arrêté, `roadie` exécute la commande lui-même. Dans ce cas, le programme qui l’a lancé (terminal, BetterTouchTool) a besoin de la permission Accessibilité. Certaines commandes tournent toujours en local : `daemon start|stop|restart|health`, `doctor`, `permissions` et `config validate`.
-
-Utilise `roadie query health` pour contrôler le daemon avec ses propres permissions. `roadie doctor` lit aussi son statut et vérifie la configuration. Les contrôles locaux de `doctor` et `daemon health` peuvent relever les fenêtres avec les permissions du terminal. Un relevé local vide ne signifie pas que le daemon ne voit aucune fenêtre. Le daemon publie cet état dans `~/.roadies/daemon-status.json` (identifiant du processus, version, permissions, validité de la configuration, heure de mise à jour), et `roadie doctor` lit ce fichier. Doctor considère le daemon arrêté quand son processus a disparu ou quand le fichier a plus de 90 secondes.
-
-## Configuration
-
-Le fichier de configuration utilisateur est :
-
-```text
-~/.config/roadies/roadies.toml
-```
-
-Un exemple commenté est dans [`examples/roadies.toml`](examples/roadies.toml). Copie-le comme point de départ :
-
-```bash
-mkdir -p ~/.config/roadies
-cp examples/roadies.toml ~/.config/roadies/roadies.toml
-```
-
-Valider la configuration :
-
-```bash
-roadie config validate
-```
-
-La validation signale chaque problème avec le nom complet de la clé :
-
-- `error  focus.stage_follows_focus  attendu booléen, reçu texte` : une valeur a le mauvais type ;
-- `warning  tiling.gaps_inr  clé inconnue, ignorée ; vouliez-vous dire « gaps_inner » ?` : une faute de frappe, avec la clé valide la plus proche ;
-- `warning  desktops.count  clé sans effet` : Roadie lit la clé dans le fichier mais ne l’utilise pas. C’est le cas de toute la table `[desktops]` et de `enabled` et `hide_strategy` dans `[stage_manager]`.
-
-Des exemples de raccourcis pour skhd et Karabiner-Elements sont dans `examples/skhd/skhdrc` et `examples/karabiner/roadie.json`. Voir [Raccourcis](docs/fr/cli.md#raccourcis).
-
-Afficher la configuration chargée :
-
-```bash
-roadie config show
-```
-
-Valider et inspecter les rules :
-
-```bash
-roadie rules validate --config ~/.config/roadies/roadies.toml
-roadie rules list --json
-roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev
-```
-
-## Usage Quotidien
-
-Démarrer ou redémarrer le daemon :
-
-```bash
-make restart
-```
-
-Vérifier l’état runtime :
-
-```bash
-roadie query health
-roadie state audit
-roadie metrics
-roadie tree dump
-```
-
-Lister les fenêtres et les écrans :
-
-```bash
-roadie windows list
-roadie display list
-```
-
-Changer le mode de layout de la stage courante :
-
-```bash
-roadie mode spatialBsp   # alias : mutableBsp, yabai
-roadie mode bsp
-roadie mode masterStack
-roadie mode tabbed       # alias : tabs, onglets
-roadie mode scrolling    # alias : scroll, ribbon, niri, ruban
-roadie mode float
-```
-
-Déplacer le focus ou les fenêtres :
-
-```bash
-roadie focus left
-roadie focus right
-roadie focus back-and-forth
-roadie move left
-roadie warp right
-roadie resize left
-roadie window close
-roadie window gather-app
-roadie display focus right
-```
-
-Scratchpad flottant, presse-papiers, snippets, minuteur et scènes de projet :
-
-```bash
-roadie scratchpad assign notes
-roadie scratchpad toggle notes
-roadie clipboard list
-roadie snippet expand !sig --copy
-roadie timer pomodoro
-roadie project save Dev --url https://example.org --app com.apple.Terminal --note "Sprint en cours"
-roadie project info Dev
-```
-
-Envoyer la fenêtre active vers un autre écran :
-
-```bash
-roadie window display 2
-```
-
-## Stages
-
-Les stages sont des groupes de fenêtres. Seule la stage active est visible ; les stages inactives sont masquées et représentées dans le nav rail.
-
-Commandes courantes :
-
-```bash
-roadie stage list
-roadie stage create 4
-roadie stage rename 4 Comms
-roadie stage switch 2
-roadie stage assign 2
-roadie stage switch-position 2
-roadie stage assign-position 2
-roadie stage switch-visible next
-roadie stage switch-visible prev
-roadie stage assign-empty
-roadie stage reorder 2 1
-roadie stage delete 4
-roadie stage prev
-roadie stage next
-```
-
-`stage switch` et `stage assign` ciblent les identifiants stables. `stage switch-position` et `stage assign-position` ciblent l’ordre visible du nav rail. `stage switch-visible prev|next` parcourt uniquement les stages non vides. `stage assign-empty` envoie la fenêtre active vers le prochain stage vide sans nom et le crée si nécessaire. Un nom de stage est unique dans tout Roadie : `stage rename` refuse un nom déjà porté par une autre stage, et `roadie state heal` corrige les doublons hérités. `stage delete` retire une stage inactive sans fenêtre, nommée ou non ; les fenêtres fermées qu’elle gardait en mémoire partent avec elle.
-
-Ramener dans la stage active une fenêtre d’une stage inactive :
-
-```bash
-roadie stage summon WINDOW_ID
-```
-
-Déplacer le stage actif vers un autre écran :
-
-```bash
-roadie stage move-to-display 2
-roadie stage move-to-display right
-roadie stage move-to-display right --no-follow
-```
-
-Sans option, Roadie suit `[focus].stage_move_follows_focus`. `--follow` et `--no-follow` remplacent ce réglage pour une commande. Le menu d’une carte du nav rail propose la même action.
-
-## Desktops Roadie
-
-Les desktops Roadie sont des desktops virtuels gérés par Roadie. Ils ne créent, ne switchent et ne contrôlent pas les Spaces macOS natifs.
-
-```bash
-roadie desktop list
-roadie desktop current
-roadie desktop focus 2
-roadie desktop focus next
-roadie desktop focus prev
-roadie desktop focus back
-roadie desktop back-and-forth
-roadie desktop summon 3
-roadie desktop label 2 DeepWork
-roadie desktop move 2 1
-```
-
-`desktop move` place un bureau à une autre place et renumérote les bureaux, comme Mission Control. La vue d’ensemble fait de même par glisser-déposer, y compris vers un autre écran.
-
-## Commandes Layout Power-User
-
-```bash
-roadie layout split horizontal
-roadie layout split vertical
-roadie layout toggle-split
-roadie layout rotate 90
-roadie layout mirror x
-roadie warp right
-roadie layout flatten
-roadie layout zoom-parent
-```
-
-Dans `spatialBsp`, ces commandes modifient l’arbre enregistré ou son état de zoom. Utilise `warp` pour une insertion et `resize` pour un changement de taille. Les anciennes commandes `layout insert`, `layout join-with` et `layout width` sont refusées dans ce mode. Elles restent disponibles dans les autres modes compatibles.
-
-## Groupes De Fenetres
-
-```bash
-roadie group create terminals 12345 67890
-roadie group add terminals 11111
-roadie group focus terminals 67890
-roadie group remove terminals 12345
-roadie group dissolve terminals
-roadie group list
-```
-
-Les groupes sont persistés dans l'état des stages Roadie et exposes via `roadie query groups`.
-
-## Automation
-
-Suivre les evenements live :
-
-```bash
+# Modes, navigation, onglets & scratchpad
+roadie mode spatialBsp|bsp|masterStack|tabbed|scrolling|float
+roadie focus left|right|back-and-forth && roadie move left && roadie warp right
+roadie tab next|prev|stack|unstack|move
+roadie scratchpad assign notes && roadie scratchpad toggle notes
+
+# Stages, bureaux virtuels & écrans
+roadie stage list|create|rename|switch|assign|move-to-display|prune-empty
+roadie desktop list|focus|label|move && roadie display swap right
+
+# Outils du lanceur, profils & export portable
+roadie clipboard list && roadie snippet expand !sig --copy && roadie timer pomodoro
+roadie project save Dev --url https://example.org --app com.apple.Terminal --note "Sprint"
+roadie profile save bureau && roadie config export ~/roadie-backup.json
+roadie config import ~/roadie-backup.json --dry-run
+
+# Automatisation, grilles & API Query
+roadie query state|windows|displays|desktops|stages|groups|rules|health|events
 roadie events subscribe --from-now --initial-state
+roadie targets search && roadie grid interactive --scope display
 ```
 
-Lire les projections JSON stables :
+Référence complète : [Commandes CLI](docs/fr/cli.md) · [Configuration & règles](docs/fr/configuration-rules.md).
+
+</details>
+
+<details>
+<summary><b>🩺 Dépannage &amp; organisation du dépôt</b></summary>
 
 ```bash
-roadie query state
-roadie query windows
-roadie query displays
-roadie query desktops
-roadie query stages
-roadie query groups
-roadie query rules
-roadie query health
-roadie query events
-```
-
-Envoyer la fenêtre active vers un autre desktop Roadie :
-
-```bash
-roadie window desktop 2
-roadie window desktop 2 --follow
-```
-
-## Nav Rail
-
-Le plein écran Roadie (`roadie toggle fullscreen`) remplit la zone utile et cache
-le rail, même au survol, sans passer au plein écran natif macOS. Répète la commande
-pour restaurer la disposition. La maximisation (`roadie toggle maximize`) garde
-le rail accessible. Hors plein écran, `auto_hide = true` dans `[fx.rail]` replie
-le rail comme le Dock : le survol du bord gauche le révèle.
-
-Le nav rail est un panneau latéral natif par écran.
-
-Il affiche les stages non vides, les thumbnails live quand elles sont disponibles, des icônes d’app fallback quand la capture n’est pas disponible, et un halo autour de la stage active.
-
-Interactions supportées :
-
-- Cliquer sur une pile de thumbnails pour changer de stage.
-- Un clic dans une zone vide du rail ne fait rien par défaut, pour qu’un clic raté ne masque pas la stage active. Mets `empty_click_hide_active = true` seulement si tu veux qu’une zone vide bascule vers une stage vide.
-- Drag une thumbnail vers une autre stage pour y déplacer la fenêtre.
-- Drag une thumbnail vers la scène active pour la ramener.
-- Drag une thumbnail vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.
-- Glisser une fenêtre d’application par sa barre de titre vers une stage pour l’y déplacer.
-- Glisser une fenêtre d’application par sa barre de titre vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.
-- Glisser une stage avec le bouton droit de la souris pour réordonner les stages. Un aperçu translucide montre sa future place ; les cartes voisines montrent le nouvel ordre. Relâcher pour l’appliquer, ou sortir du rail avant de relâcher pour annuler.
-- Faire un clic droit sur une stage, sans glisser, pour ouvrir son menu : renommer la stage, choisir son **mode de disposition** (`spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float`), l’envoyer vers un autre écran, envoyer une fenêtre vers une autre stage ou supprimer la stage si elle n’a plus de fenêtre.
-- Cliquer directement sur les **icônes d'applications en perspective** sous chaque carte 3D (avec survol interactif) pour activer ou rappeler une fenêtre précise de cette stage.
-
-L’intensité de l’aimantation se règle dans **Réglages Roadie > Rail > Aimantation du réordonnancement (%)**. À 0, elle est désactivée ; une valeur plus élevée stabilise davantage la destination malgré les petits mouvements de souris.
-
-Le rendu du rail se configure dans `~/.config/roadies/roadies.toml`.
-
-Le rail se masque en plein écran Roadie et devant une fenêtre en plein écran natif macOS. Pour le masquer aussi devant une fenêtre agrandie, mets `hide_on_maximized = true` dans `[fx.rail]`.
-
-## Mode Cibles, Grille Ecran Et Grille Fenetre
-
-Roadie expose un **Mode Cibles** : des labels courts pour les fenetres, stages,
-ecrans, desktops, bookmarks et, en option, les zones applicatives Accessibility.
-Ces cibles peuvent etre cherchees, inspectees, activees et exportees en JSON
-pour des scripts ou des agents.
-
-Le **mode recherche** (`Cmd+Ctrl+Option+F` par défaut, clé `search_hotkey`) ouvre une barre de
-saisie : tape quelques lettres d'un element de n'importe quelle fenetre visible,
-puis Retour pour le cliquer (Maj-Retour clic droit, Cmd-Retour Cmd-clic, deux
-Retour double-clic).
-
-`Tab` complète le titre du résultat sélectionné sans le cliquer. Les flèches et
-Ctrl-N/Ctrl-P changent de résultat. La barre garde sa position et sa largeur sur l'écran d'ouverture,
-avec un compteur dans une pastille à droite, une bordure fine et une police proportionnelle.
-
-### Boîte de commandes et fenêtre de réglages
-
-Un `/` en premier caractère passe la barre en **mode commande**. Les suggestions
-complètent les commandes, les directions, les stages, les signets et les réglages.
-`Tab` insère la suggestion sélectionnée ; les Tab suivants parcourent les alternatives.
-Les flèches haut et bas parcourent l'historique.
-`Retour` exécute la commande ; `Échap` ferme la barre. Les raccourcis système restent
-interceptés pendant la saisie de commande.
-
-| Action | Exemple |
-|---|---|
-| Déplacer la fenêtre | `/move gauche` |
-| Échanger deux fenêtres | `/swap droite` |
-| Changer de stage | `/stage 2` ou `/stage Travail` |
-| Changer d'écran | `/screen droite` |
-| Envoyer la fenêtre vers un écran | `/send 2` |
-| Ouvrir les réglages | `/settings` |
-| Lire ou écrire un réglage | `/set target_mode.label_font_size 20` |
-| Rétablir la valeur par défaut | `/set target_mode.label_font_size défaut` |
-| Contrôler ou recharger | `/doctor`, `/heal`, `/reload` |
-
-La fenêtre de réglages propose des catégories, une recherche et des changements
-appliqués dès la saisie d'une valeur valide. Les marges déclenchent une nouvelle
-disposition, même pour un changement d'un point. Les listes, les stages, les règles
-et les surcharges par écran ont leurs éditeurs intégrés. Un brouillon incomplet
-reste dans le champ sans remplacer la dernière valeur valide.
-La fenêtre des paramètres suit la langue de macOS. Les commentaires du fichier TOML sont conservés.
-Une sauvegarde précède la première modification de la session. Une écriture invalide
-est refusée. Les tailles de police sont indépendantes. Les curseurs, le pas à pas
-et la saisie d'une taille valide les appliquent immédiatement. Les sessions ouvertes
-gardent leur saisie lors du changement.
-
-| Zone | Identifiants des réglages |
-|---|---|
-| Paramètres : textes, aides, titres | `interface.settings_text_font_size`, `interface.settings_help_font_size`, `interface.settings_title_font_size` |
-| Étiquettes du mode lettres | `target_mode.label_font_size` |
-| Étiquettes de la grille | `target_grid.label_font_size` |
-| Recherche : étiquettes, saisie, suggestions | `target_mode.search_label_font_size`, `target_mode.search_text_font_size`, `target_mode.command_text_font_size` |
-| Rail : écran, bureau, textes de stage | `rail.header.display.font_size`, `rail.header.desktop.font_size`, `rail.stage_labels.font_size` |
-
-Par exemple, `/set interface.settings_text_font_size 20` modifie la fenêtre des paramètres.
-Ses textes, aides et titres ont des défauts de 16, 14 et 22 points. Les étiquettes des
-lettres, de la grille et de la recherche ont un défaut de 13 points. Les cartes du rail
-adaptent leur taille à la police. Les infobulles et messages de dialogue natifs de macOS
-gardent la police du système.
-
-Dans Recherche, les familles de police de la saisie et des suggestions sont
-indépendantes : `target_mode.search_font_family` et `target_mode.command_font_family`.
-Le changement apparaît dans la barre ouverte. `system` choisit la police macOS ;
-une famille absente utilise aussi cette police.
-Les rares fragments complexes ont un éditeur avancé intégré avec validation et
-enregistrement explicite. Les `signals.hooks` peuvent être enregistrés, mais Roadie
-ne les exécute pas actuellement. Un fichier invalide peut être réparé dans la fenêtre.
-Les actions de règle `layout` et `gap_override` sont enregistrées, mais ne modifient
-pas encore le tuilage. Les éditeurs signalent cette limite.
-
-La barre et les réglages exigent un daemon démarré et `overlay_enabled = true`.
-Dans la table existante du fichier de configuration, active au minimum :
-
-```toml
-[experimental.target_mode]
-overlay_enabled = true
-search_hotkey = "command+control+alt+f"
-```
-
-Pour découvrir et cliquer les éléments des applications, active aussi
-`[experimental.app_targets].enabled = true` et
-`[experimental.target_mode].app_mouse_actions_enabled = true`. Les commandes
-et les réglages fonctionnent sans activer les clics dans les applications.
-
-Voir [le catalogue et les limites du mode commande](docs/fr/features.md#mode-commande--et-fenêtre-de-réglages).
-
-### Grilles écran et fenêtre
-
-Roadie fournit aussi deux grilles recursives :
-
-- **Grille Ecran** pour cibler un ecran complet.
-- **Grille Fenetre** pour cibler la fenetre actuellement focussee.
-
-Les deux grilles utilisent le meme langage spatial : taper le label d'une
-cellule zoome dedans, `Espace` valide, les fleches deplacent la selection et
-`Esc` annule. Les macros courtes peuvent stocker le meilleur contexte de cible
-plus un fallback grille.
-
-```bash
-roadie targets interactive --source all --include-app-targets
-roadie targets search
-roadie grid interactive --scope display
-roadie grid interactive --scope focused_window
-roadie record start demo --duration 10
-```
-
-Ces outils peuvent être activés séparément dans
-`[experimental.target_mode]`, `[experimental.app_targets]`,
-`[experimental.target_grid]` et `[experimental.target_record]`.
-
-## Dépannage
-
-Lancer les vérifications rapides :
-
-```bash
-roadie query health
-roadie state audit
-roadie self-test
-```
-
-Réparer les problèmes d’état conservateurs :
-
-```bash
-roadie state heal
-roadie daemon heal
-```
-
-Inspecter logs et événements :
-
-```bash
-make logs
-roadie events tail 50
-```
-
-Obtenir un rapport complet sur le daemon, les deux permissions et la configuration :
-
-```bash
-roadie doctor
+roadie onboarding             # bilan permissions, config, raccourcis
+roadie doctor                 # diagnostic complet daemon, permissions & config
+roadie query health && roadie state audit && roadie self-test
+roadie state heal && roadie daemon heal
+roadie restore unhide-all     # ramène toute fenêtre masquée ou hors écran
+make logs && roadie events tail 50
 roadied --version
 ```
-
-`roadied --version` (et `roadie --version`) affiche la version, utile pour comparer le binaire installé avec le daemon en marche.
-
-Si des fenêtres restent masquées ou hors écran (par exemple après un crash), ramène-les toutes :
-
-```bash
-roadie restore unhide-all
-```
-
-Si les fenêtres ne bougent plus après une nouvelle installation, vérifie que Roadie est toujours activé dans Accessibilité (voir [Signature du code et permissions](#signature-du-code-et-permissions)), puis redémarre :
-
-```bash
-make restart
-```
-
-Le daemon remet les fenêtres masquées quand il reçoit un signal d’arrêt (SIGTERM, SIGINT, SIGHUP), et un petit processus de surveillance fait de même si le daemon plante. Pour lancer le daemon sans cette sécurité, démarre-le avec `roadied run --yes --no-restore-safety`.
-
-Les logs du lancement précédent sont dans `~/.roadies/roadied.stderr.log.1` et `~/.roadies/roadied.stdout.log.1`.
-
-## Confidentialité
-
-Roadie fonctionne localement. Les sources actuelles de l’application ne contiennent aucun service de télémétrie ou d’envoi distant. Les commandes CLI passent par un socket Unix local. Enregistrement d’écran reste facultatif et sert aux vignettes des fenêtres.
-
-L’état local et les diagnostics peuvent contenir des titres de fenêtres, des noms d’applications, des identifiants d’écrans, des positions et l’historique des événements. Les macros peuvent garder un contexte de cible. Considère la configuration, les sauvegardes, les logs, les exports, les macros et les captures du bureau comme privés. Relis et anonymise ces fichiers avant de les partager ou de les ajouter à Git.
-
-Le dépôt contient les sources et des données d’exemple ou de test. Les dossiers d’exécution locaux, les fichiers d’environnement, les clés de signature et les métadonnées SpecKit propres à la machine sont exclus de Git. Vérifie le contenu des captures avant publication. Ces contrôles ne retirent pas les données des anciens commits ni des copies déjà téléchargées.
-
-## Organisation Du Dépôt
+Les journaux précédents restent dans `~/.roadies/roadied.stdout.log.1` et `~/.roadies/roadied.stderr.log.1`. Si les fenêtres cessent de bouger après une recompilation, vérifie Accessibilité pour `~/Applications/Roadie.app` puis `make restart`. Un processus de surveillance réaffiche les fenêtres automatiquement en cas de crash (`roadied run --yes --no-restore-safety` pour le désactiver).
 
 ```text
 Sources/RoadieAX       Snapshots système et Accessibilité
 Sources/RoadieCore     Types partagés, géométrie, configuration
 Sources/RoadieTiler    Stratégies de layout pures
 Sources/RoadieStages   État persistant desktops et stages Roadie
-Sources/RoadieDaemon   Services daemon, rail, bordure, commandes
+Sources/RoadieDaemon   Services daemon, rail, lanceur, OCR, bordure, commandes
 Sources/roadie         CLI
 Sources/roadied        Point d’entrée daemon
 Tests                  Tests unitaires
-scripts                Helpers build et runtime
+scripts                Helpers build, test, release et runtime
 examples               Config d’exemple, raccourcis skhd et Karabiner
 ```
 
-## Statut
+</details>
 
-Le développement se poursuit sur `main`. Les [notes de release](https://github.com/guthubrx/roadie/releases) présentent les nouveautés et les consignes de mise à jour.
+---
 
 ## Licence
 
-Roadie est distribué sous [Apache-2.0](LICENSE). Les licences des dépendances sont dans [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+Distribué sous licence [Apache-2.0](LICENSE). Les notices des dépendances figurent dans [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES). Suis [CHANGELOG.md](CHANGELOG.md) et les [releases](https://github.com/guthubrx/roadie/releases) pour les évolutions sur `main`.
 
 Copyright 2026 guthubrx.

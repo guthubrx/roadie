@@ -45,16 +45,19 @@ La plupart des utilisateurs macOS avancés combinent **3 à 5 outils distincts**
 | **Outils cœur hors ligne** | Calculatrice, convertisseur (unités/bases/fuseaux), pipette couleur, émojis FR/EN, minuteur/Pomodoro | Calculatrice riche, convertisseur, émojis, notes, quicklinks, IA (Pro) | Calculatrice ; reste via workflows | Non |
 | **Sélecteur de fenêtres (`⌘ Tab`)** | Inclus (`CGEventTap` natif, miniatures, recherche, actions `W/Q/M/H/S/A/D`) | Sélecteur basique dans le lanceur | Non | **Spécialiste dédié** *(très léger, très configurable)* |
 | **Sélecteur de zones cliquées (`Option+Tab`)** | **Oui** *(revient à un onglet/bouton/panneau précis, même sur une autre stage)* | Non | Non | Non |
-| **Recherche à l’écran par étiquettes** | **Oui** *(Accessibilité + tolérance aux fautes + grilles écran/fenêtre)* | Non | Non | Non |
-| **Gestionnaire de fenêtres (tiling)** | **Complet** *(6 modes, onglets par tuile, stages, bureaux virtuels)* | Snapping basique par raccourcis | Non | Non |
+| **Recherche à l’écran & OCR local Vision** | **Oui** *(Accessibilité + OCR local Apple Vision au mot exact activable + tolérance aux fautes + grilles)* | Non | Non | Non |
+| **Saut direct dans *Ouvrir / Enregistrer sous*** | **Oui** *(intégré, zéro polling, préserve nom de fichier et presse-papiers)* | Non | Non | Non |
+| **Gestionnaire de fenêtres (tiling)** | **Complet** *(6 modes, onglets par tuile, stages, bureaux virtuels, profils d’écrans)* | Snapping basique par raccourcis | Non | Non |
 
 ---
 
 ## 3. Ce que Roadie apporte de singulier
 
-- **Un seul outil cohérent** : le lanceur connaît tes stages, tes bureaux virtuels et tes écrans (`safari perso gauche` ouvre Safari dans la stage *Perso* à gauche avec aperçu en direct).
+- **Un seul outil cohérent** : le lanceur connaît tes stages, tes bureaux virtuels et tes écrans (`safari perso gauche` ouvre Safari dans la stage *Perso* à gauche avec aperçu en direct), et rappelle tes 20 dernières saisies avec `↑`/`↓`.
 - **Onglets universels par tuile ou colonne** : tu n’as pas à choisir entre BSP, ruban défilant (`scrolling`) ou onglets — maintiens `⌥ Option` n’importe où sur une tuile ou colonne cible pour empiler des fenêtres en onglets dans `spatialBsp`, `scrolling`, `masterStack` ou `bsp`.
-- **Sélecteur de zones (`Option+Tab`) et recherche à l’écran** : revenir directement sur un sous-onglet, un champ ou un bouton précis dans une fenêtre, même cachée sur une autre stage, avec capture locale de la zone.
+- **OCR local Apple Vision au mot exact & sélecteur de zones (`Option+Tab`)** : tape n’importe quel mot visible à l’écran (`⌘⌃⌥F`) pour l’encadrer et cliquer pile dessus (`⇧A`/`⇧S`) — même dans une conversation, un canvas ou un PDF — et reviens aux zones récemment cliquées à travers tes stages.
+- **Téléportation dans *Ouvrir / Enregistrer sous*** : fais sauter les boîtes de dialogue macOS sur `Desktop`, `Downloads`, tes dossiers de projets ou récents via `⌘⇧G` + Accessibilité sans écraser le nom du fichier ni toucher au presse-papiers.
+- **Modules activables à coût zéro & config portable** : chaque module optionnel a son interrupteur dans **Paramètres > Général** (`0 Mo` / `0` capture quand éteint), plus `roadie config export|import` pour migrer proprement de Mac.
 - **Compatibilité `.alfredworkflow` gratuite** : réutilise tes workflows Alfred existants (et même les thèmes Alfred) sans licence Powerpack.
 
 ---

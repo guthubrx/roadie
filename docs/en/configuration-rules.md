@@ -426,6 +426,7 @@ scrolling_trackpad_gestures = true # native 3/4-finger horizontal swipe & Option
 scrolling_trackpad_fingers = 3  # 3 or 4 fingers for horizontal ribbon swipes
 scratchpad_enabled = true
 scratchpad_reboot_policy = "reattach_or_relaunch" # reattach_or_relaunch | reattach | ephemeral
+display_profiles_enabled = false # automatic monitor-topology profiles (off by default)
 
 [overview]
 trackpad_gesture = true         # native 4-finger swipe up/down (set false to keep BTT)
@@ -456,6 +457,12 @@ opacity = 0.22                  # 0.05..0.75
 calc_conversions = true         # unit, base, and time-zone converter
 emoji_picker = true             # built-in EN/FR emoji & symbol catalog
 timer_enabled = true            # local timer & Pomodoro
+file_dialog_jump = true         # direct jump in macOS Open/Save dialogs (zero polling)
+history_arrow_navigation = true # ↑ / ↓ query history navigation from the top of the bar
+
+[experimental.app_targets]
+ocr_fallback = false            # 100% local Apple Vision word-level OCR (0 MB & 0 capture when off)
+ocr_fallback_threshold = 0      # 0 = always complement AX on every visible window; 1..30 = sparse-AX only
 
 [clipboard]
 enabled = true                  # stored locally in ~/.roadies/clipboard.json (0o600)
