@@ -5,6 +5,7 @@ Guides français pour les sources actuelles de `main`. Le [README principal](../
 ## Guides
 
 - [Vue d’ensemble des fonctionnalités](features.md)
+- [Comparatif avec les autres outils macOS](comparison.md)
 - [Commandes CLI](cli.md)
 - [Vue d’ensemble des bureaux et stages](overview.md)
 - [Lanceur et workflows d'Alfred](launcher.md)

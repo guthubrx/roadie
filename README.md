@@ -267,6 +267,24 @@ Enable the tools that suit the way you work.
 
 [See the features](docs/en/features.md) · [Everyday examples](docs/en/use-cases.md)
 
+## How Roadie compares
+
+*Factual snapshot (November 2026). See [the full comparison](docs/en/comparison.md) for launchers/switchers (Raycast, Alfred, AltTab) and when to pick another tool instead.*
+
+| | **Roadie** | **AeroSpace** | **yabai** | **OmniWM** | **Rift** |
+|---|---|---|---|---|---|
+| **Keeps SIP enabled** | Yes | Yes | Partial *(for scripting addition)* | Yes | Yes |
+| **Layouts** | `spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float` | i3 tree (`tiles`, `accordion`), `float` | `bsp`, `stack`, `float` | `scrolling`, `dwindle` BSP, `float` | i3, `bsp`, `scrolling`, `masterStack`, `stack`, `float` |
+| **Per-tile / per-column tabs** | **All slotted tiled modes** (`⌥ Option` + drag, tab bar, CLI) | Accordion only | Stack only | No | Tab bars on stacks |
+| **Scrolling ribbon + gestures** | 120 Hz, trackpad 3/4-finger, `⌥ + scroll`, multi-display clipping | No | No | Yes (macOS 26+ Apple Silicon) | Yes |
+| **Workspaces / Visual rail** | Named stages + per-display desktops + **3D NavRail** + Overview | Virtual workspaces | Native macOS Spaces | Virtual workspaces + Overview | Native Spaces + Overview |
+| **Floating scratchpad** | Named, titlebar menu, reboot survival | Scriptable | Scriptable | Up to 10 + Quake terminal | No |
+| **Launcher, clipboard, switcher** | **All built-in** *(Alfred workflows, `0o600` clipboard, snippets, `⌘ Tab`, `Option+Tab` zones)* | No | No | Command palette | No |
+| **Settings & automation** | Live GUI + TOML + CLI + JSON API | TOML + CLI | Shell + CLI *(needs `skhd`)* | GUI + CLI | GUI + TOML + CLI/IPC |
+| **License** | Apache-2.0 | MIT | MIT | GPL-2.0 | MIT (Rust) |
+
+Roadie targets users who want one cohesive, 100% local, free app instead of maintaining a 4-app stack (WM + Raycast/Alfred + AltTab + BTT). If you prefer native macOS Spaces control with SIP disabled (**yabai**), a strictly minimalist keyboard-only i3 WM (**AeroSpace**), or a massive React/JS extension store (**Raycast**), see [the full comparison and trade-offs](docs/en/comparison.md).
+
 ## Documentation
 
 Full documentation is available in English and French:
@@ -277,6 +295,7 @@ Full documentation is available in English and French:
 Main guides:
 
 - [Feature overview](docs/en/features.md)
+- [Comparison with other macOS tools](docs/en/comparison.md)
 - [Launcher and Alfred workflows](docs/en/launcher.md)
 - [CLI commands](docs/en/cli.md)
 - [Configuration and rules](docs/en/configuration-rules.md)

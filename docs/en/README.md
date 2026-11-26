@@ -5,6 +5,7 @@ English guides for the current `main` sources. The [root README](../../README.md
 ## Guides
 
 - [Feature overview](features.md)
+- [Comparison with other macOS tools](comparison.md)
 - [CLI commands](cli.md)
 - [Desktop and stage overview](overview.md)
 - [Launcher and Alfred workflows](launcher.md)

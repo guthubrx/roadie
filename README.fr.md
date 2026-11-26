@@ -283,6 +283,24 @@ conviennent à ta façon de travailler.
 [Voir les fonctionnalités](docs/fr/features.md) ·
 [Exemples d'utilisation](docs/fr/use-cases.md)
 
+## Comparatif rapide
+
+*Comparatif factuel (novembre 2026). Voir [le comparatif complet](docs/fr/comparison.md) pour les lanceurs/sélecteurs (Raycast, Alfred, AltTab) et les cas où un autre outil est préférable.*
+
+| | **Roadie** | **AeroSpace** | **yabai** | **OmniWM** | **Rift** |
+|---|---|---|---|---|---|
+| **SIP reste activé** | Oui | Oui | Partiel *(pour la scripting addition)* | Oui | Oui |
+| **Dispositions (layouts)** | `spatialBsp`, `bsp`, `masterStack`, `tabbed`, `scrolling`, `float` | Arbre i3 (`tiles`, `accordion`), `float` | `bsp`, `stack`, `float` | `scrolling`, `dwindle` BSP, `float` | i3, `bsp`, `scrolling`, `masterStack`, `stack`, `float` |
+| **Onglets par tuile / colonne** | **Tous les modes tuilés** (`⌥ Option` + glisser, barre, CLI) | Accordion uniquement | Stack uniquement | Non | Barres sur piles |
+| **Ruban défilant + gestes** | 120 Hz, trackpad 3/4 doigts, `⌥ + molette`, confinement multi-écrans | Non | Non | Oui (macOS 26+ Apple Silicon) | Oui |
+| **Espaces / Rail visuel** | Stages nommées + bureaux par écran + **NavRail 3D** + Vue d’ensemble | Workspaces virtuels | Spaces natifs macOS | Workspaces virtuels + Vue d’ensemble | Spaces natifs + Vue d’ensemble |
+| **Scratchpad flottant** | Nommé, barre de titre, survie au reboot | Scriptable | Scriptable | Jusqu’à 10 + terminal Quake | Non |
+| **Lanceur, presse-papiers, sélecteur** | **Tout intégré** *(workflows Alfred, presse-papiers `0o600`, snippets, `⌘ Tab`, zones `Option+Tab`)* | Non | Non | Palette de commandes | Non |
+| **Réglages & automatisation** | GUI temps réel + TOML + CLI + API JSON | TOML + CLI | Shell + CLI *(nécessite `skhd`)* | GUI + CLI | GUI + TOML + CLI/IPC |
+| **Licence** | Apache-2.0 | MIT | MIT | GPL-2.0 | MIT (Rust) |
+
+Roadie s’adresse à ceux qui veulent une seule application cohérente, 100 % locale et gratuite au lieu d’entretenir 4 outils séparés (WM + Raycast/Alfred + AltTab + BTT). Si tu préfères piloter les Spaces natifs macOS sans SIP (**yabai**), un WM i3 ultra-minimaliste 100 % clavier (**AeroSpace**) ou un grand store d’extensions React/JS (**Raycast**), consulte [le comparatif détaillé et les compromis](docs/fr/comparison.md).
+
 ## Documentation
 
 La documentation complète existe en français et en anglais :
@@ -293,6 +311,7 @@ La documentation complète existe en français et en anglais :
 Guides principaux :
 
 - [Vue d'ensemble des fonctionnalités](docs/fr/features.md)
+- [Comparatif avec les autres outils macOS](docs/fr/comparison.md)
 - [Lanceur et workflows d'Alfred](docs/fr/launcher.md)
 - [Commandes CLI](docs/fr/cli.md)
 - [Configuration et rules](docs/fr/configuration-rules.md)
