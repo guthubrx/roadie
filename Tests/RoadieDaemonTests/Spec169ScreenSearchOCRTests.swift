@@ -156,4 +156,62 @@ struct Spec169ScreenSearchOCRTests {
         #expect(r1440.targets.count >= 3)
         print("[SPEC169_BENCH] 1080p_cold: \(r1080.metrics.elapsedMs)ms deltaRAM=\(r1080.metrics.footprintDeltaKB)KB obs=\(r1080.metrics.observationsCount) | 1440p_warm: \(r1440.metrics.elapsedMs)ms deltaRAM=\(r1440.metrics.footprintDeltaKB)KB obs=\(r1440.metrics.observationsCount)")
     }
+
+    @Test func visionOCRHighlightsExactWordInsideSentenceAndIgnoresGiantAXContainer() throws {
+        // Phrase complète avec le mot cible au milieu + grand conteneur AX qui l'englobe
+        let sentence = "Trouver du texte localement sur cet ecran"
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let width = 1400
+        let height = 400
+        let ctx = try #require(CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        ctx.setFillColor(red: 0.08, green: 0.09, blue: 0.11, alpha: 1.0)
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let nsCtx = NSGraphicsContext(cgContext: ctx, flipped: false)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = nsCtx
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 28, weight: .regular),
+            .foregroundColor: NSColor.white
+        ]
+        (sentence as NSString).draw(at: NSPoint(x: 100, y: 180), withAttributes: attrs)
+        NSGraphicsContext.restoreGraphicsState()
+        let img = try #require(ctx.makeImage())
+
+        let winFrame = Rect(x: 200, y: 100, width: 1400, height: 400)
+        let giantAX = RoadieTarget(
+            id: "app:4242/w1.0",
+            kind: .appElement,
+            title: "Conversation",
+            source: .app,
+            matchText: RoadieTarget.normalizedMatchText([sentence]),
+            scope: TargetScopeSnapshot(windowId: 777),
+            frame: winFrame,
+            actions: [.click]
+        )
+        let wordMap = ScreenSearchOCRWordMap()
+        let result = ScreenSearchOCRService.recognize(
+            image: img,
+            windowFrame: winFrame,
+            windowID: 777,
+            pid: 4242,
+            appName: "T3 Code",
+            existingTargets: [giantAX],
+            wordMap: wordMap
+        )
+        let lineTarget = try #require(result.targets.first(where: { $0.matchText.contains("localement") }))
+        let lineFrame = try #require(lineTarget.frame)
+        let wordFrame = try #require(wordMap.highlightFrame(for: lineTarget.id, query: "localement"))
+        // Le cadre du mot doit être nettement plus étroit que la ligne entière et contenu dedans
+        #expect(wordFrame.width < lineFrame.width * 0.45)
+        #expect(wordFrame.x > lineFrame.x + 80)
+        #expect(wordFrame.x + wordFrame.width < lineFrame.x + lineFrame.width - 80)
+
+        // Multi-mots : « texte localement » couvre l'union des deux mots
+        let pairFrame = try #require(wordMap.highlightFrame(for: lineTarget.id, query: "texte localement"))
+        #expect(pairFrame.width > wordFrame.width)
+        #expect(pairFrame.x < wordFrame.x)
+    }
 }

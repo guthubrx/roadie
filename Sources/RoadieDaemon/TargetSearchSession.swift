@@ -2241,13 +2241,23 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         show(badges: [], bar: bar, letterTargets: !model.query.isEmpty)
     }
 
+    /// Cadre affiché pour une cible : pour une ligne OCR (Spec 169), raffine au mot exact recherché
+    /// via `ScreenSearchOCRWordMap` afin de surligner et cliquer directement le mot au lieu de toute la ligne.
+    private func displayFrame(for target: RoadieTarget) -> CGRect? {
+        if target.id.contains("/ocr:"),
+           let wordRect = ScreenSearchOCRWordMap.shared.highlightFrame(for: target.id, query: model.query) {
+            return wordRect.cgRect
+        }
+        return target.frame?.cgRect
+    }
+
     /// Recherche à l'écran (session 133), rendu d'avant le lanceur : barre vide, aucune étiquette ; sinon chaque
     /// correspondance porte son étiquette, la cible choisie est encadrée, toutes le sont à une lettre. O(m).
     private func renderScreenSearch() {
         let highlightedID = model.highlighted?.id
         let framesAll = model.hasShortLabels
         let badges: [TargetOverlayBadge] = (model.query.isEmpty ? [] : model.matches).compactMap { target in
-            guard let frame = target.frame?.cgRect else { return nil }
+            guard let frame = displayFrame(for: target) else { return nil }
             return TargetOverlayBadge(label: target.label, title: target.title, kind: target.kind, isActive: target.isActive,
                                       frame: RoadieScreenCoordinate.axRectToNS(frame), isHighlighted: target.id == highlightedID,
                                       isFramed: framesAll || target.id == highlightedID, isSearchResult: true)
@@ -2422,7 +2432,7 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
             for (letter, index, target) in launcherList.letterRows(visible: visible, letters: letters) {
                 letterRows[letter] = index
                 bar.suggestions[index].letter = "⇧" + letter.uppercased()
-                guard let frame = target.frame?.cgRect, launcher.isOnScreen(target) else { continue }
+                guard let frame = displayFrame(for: target), launcher.isOnScreen(target) else { continue }
                 badges.append(TargetOverlayBadge(label: letter.uppercased(), title: target.title, kind: target.kind,
                                                  isActive: target.isActive, frame: RoadieScreenCoordinate.axRectToNS(frame),
                                                  isHighlighted: target.id == highlightedID, isFramed: true, isSearchResult: true))
@@ -2477,10 +2487,16 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         guard !finished else { return }
         finished = true
         let query = model.query
+        var effectiveTarget = target
+        if target.id.contains("/ocr:"),
+           let wordRect = ScreenSearchOCRWordMap.shared.highlightFrame(for: target.id, query: query) {
+            effectiveTarget.frame = wordRect
+            effectiveTarget.clickFrame = wordRect
+        }
         launcher.recordQuery(query)
         cleanup()
-        launcher.recordVisit(LauncherList.rankingKey(target), query)
-        onFinish?(activate(target, verb))
+        launcher.recordVisit(LauncherList.rankingKey(effectiveTarget), query)
+        onFinish?(activate(effectiveTarget, verb))
     }
 
     private func cleanup() {

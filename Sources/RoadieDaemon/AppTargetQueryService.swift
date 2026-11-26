@@ -449,6 +449,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             return AppTargetQueryReport(error: "no_focused_window")
         }
         let generation = AppTargetElementRegistry.shared.begin()
+        ScreenSearchOCRWordMap.shared.reset()
         let result = scanWindow(window, app: app, rootPath: "0", config: config, startedAt: Date())
         AppTargetElementRegistry.shared.add(result.pass.elements, generation: generation)
         let partial = result.pass.stopReason != "complete"
@@ -502,6 +503,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     ) -> (results: [VisibleWindowScan], skipped: [AppTargetScanStats]) {
         guard AXIsProcessTrusted() else { return ([], []) }
         let generation = AppTargetElementRegistry.shared.begin()
+        ScreenSearchOCRWordMap.shared.reset()
         let windows = Self.visibleWindows()
         var elementsByPID: [pid_t: [CGWindowID: AXUIElement]] = [:]
         var jobs: [(order: Int, id: CGWindowID, element: AXUIElement?, app: NSRunningApplication)] = []

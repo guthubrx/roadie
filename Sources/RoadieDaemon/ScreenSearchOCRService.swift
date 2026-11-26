@@ -32,6 +32,69 @@ public struct OCRScanMetrics: Codable, Equatable, Sendable {
     }
 }
 
+/// Boîte englobante exacte d'un mot reconnu par Vision dans une ligne OCR (Spec 169).
+public struct OCRWordBox: Equatable, Sendable {
+    public let normalized: String
+    public let frame: Rect
+
+    public init(normalized: String, frame: Rect) {
+        self.normalized = normalized
+        self.frame = frame
+    }
+}
+
+/// Table mémoire légère associant chaque cible OCR (`app:<pid>/ocr:<win>/<idx>`) aux boîtes exactes
+/// de ses mots (`VNRecognizedText.boundingBox(for:)`). Vidée au début de chaque nouveau scan.
+public final class ScreenSearchOCRWordMap: @unchecked Sendable {
+    public static let shared = ScreenSearchOCRWordMap()
+
+    private let lock = NSLock()
+    private var entries: [String: [OCRWordBox]] = [:]
+
+    public init() {}
+
+    public func reset() {
+        lock.withLock { entries.removeAll(keepingCapacity: true) }
+    }
+
+    public func register(targetID: String, words: [OCRWordBox]) {
+        guard !words.isEmpty else { return }
+        lock.withLock { entries[targetID] = words }
+    }
+
+    public func highlightFrame(for targetID: String, query: String) -> Rect? {
+        let words = lock.withLock { entries[targetID] }
+        guard let words, !words.isEmpty else { return nil }
+        return Self.matchingFrame(in: words, query: query)
+    }
+
+    /// Trouve la boîte exacte du mot (ou de la séquence contiguë minimale de mots) correspondant à `query`.
+    public static func matchingFrame(in words: [OCRWordBox], query: String) -> Rect? {
+        let needle = TargetSearchModel.compact(query)
+        guard !needle.isEmpty, needle != "*", needle != ";" else { return nil }
+        // 1. Correspondance directe sur un mot unique (cas le plus courant, ex. « localement »).
+        if let exact = words.first(where: { $0.normalized == needle }) {
+            return exact.frame
+        }
+        if let partial = words.first(where: { $0.normalized.contains(needle) }) {
+            return partial.frame
+        }
+        // 2. Requête multi-mots (ex. « texte localement ») : plus petite plage contiguë couvrant `needle`.
+        for start in words.indices {
+            var combined = ""
+            var union = words[start].frame.cgRect
+            for end in start..<min(words.count, start + 8) {
+                combined += words[end].normalized
+                union = union.union(words[end].frame.cgRect)
+                if combined.contains(needle) {
+                    return Rect(union)
+                }
+            }
+        }
+        return nil
+    }
+}
+
 /// Module isolé (Spec 169) : OCR 100 % local via Apple Vision (`VNRecognizeTextRequest`).
 /// Zéro timer, zéro mémoire et zéro capture tant que `experimental.app_targets.ocr_fallback == false`.
 /// Quand `ocr_fallback_threshold == 0` (défaut), complète toujours l'Accessibilité sur chaque fenêtre
@@ -78,32 +141,6 @@ public enum ScreenSearchOCRService {
         return false
     }
 
-    /// Retourne `true` si une cible AX recouvrant déjà cette boîte porte déjà le même texte recherchable.
-    private static func isRedundantWithExisting(
-        _ candidate: Rect,
-        normalizedText: String,
-        existingTargets: [(frame: Rect, matchText: String)]
-    ) -> Bool {
-        let candRect = candidate.cgRect
-        let candArea = candRect.width * candRect.height
-        guard candArea > 0 else { return true }
-        for existing in existingTargets {
-            let existingRect = existing.frame.cgRect
-            let existingArea = existingRect.width * existingRect.height
-            guard existingArea > 0 else { continue }
-            let inter = candRect.intersection(existingRect)
-            guard !inter.isNull, !inter.isEmpty else { continue }
-            let interArea = inter.width * inter.height
-            let candRatio = interArea / candArea
-            let existingRatio = interArea / existingArea
-            // Même bouton/libellé (tailles comparables) OU conteneur AX qui expose déjà exactement ce texte.
-            if candRatio >= 0.6 && (existingRatio >= 0.35 || (!normalizedText.isEmpty && existing.matchText.contains(normalizedText))) {
-                return true
-            }
-        }
-        return false
-    }
-
     /// Empreinte mémoire physique du processus courant (`phys_footprint`) en Ko, pour mesurer la charge OCR.
     public static func currentPhysFootprintKB() -> Int {
         var info = task_vm_info_data_t()
@@ -139,6 +176,8 @@ public enum ScreenSearchOCRService {
 
     /// Capture ponctuelle d'une fenêtre via ScreenCaptureKit, strictement conditionnée à
     /// `CGPreflightScreenCaptureAccess()` (zéro popup système si refusé, zéro warning deprecated).
+    /// Utilise `ignoreShadowsSingleWindow = true` et `scalesToFit = true` afin que l'image capturée
+    /// corresponde exactement 1:1 à `window.frame` (sans marge d'ombre ni bande vide sur écran 1x).
     /// Appelée uniquement depuis les fils de scan hors `@MainActor` ; bornée à 750 ms.
     public static func captureWindowImage(windowID: CGWindowID, preloadedWindow: SCWindow? = nil) -> CGImage? {
         guard CGPreflightScreenCaptureAccess() else { return nil }
@@ -160,18 +199,44 @@ public enum ScreenSearchOCRService {
                 targetWindow = content?.windows.first(where: { $0.windowID == windowID })
             }
             guard let window = targetWindow else { return }
-            let scale = min(2.0, max(1.0, 2560.0 / max(1.0, Double(window.frame.width))))
+            let filter = SCContentFilter(desktopIndependentWindow: window)
             let config = SCStreamConfiguration()
-            config.width = max(1, Int((Double(window.frame.width) * scale).rounded()))
-            config.height = max(1, Int((Double(window.frame.height) * scale).rounded()))
+            // Sans `ignoreShadowsSingleWindow`, macOS ajoute 50-100 px d'ombre autour de la fenêtre.
+            // Sans `scalesToFit`, une fenêtre 1x n'est pas agrandie et se retrouve décalée dans un coin.
+            config.ignoreShadowsSingleWindow = true
+            config.scalesToFit = true
+            config.preservesAspectRatio = false
             config.showsCursor = false
+            let pixelScale = max(1.0, Double(filter.pointPixelScale))
+            let rawW = Double(window.frame.width) * pixelScale
+            let rawH = Double(window.frame.height) * pixelScale
+            let downscale = min(1.0, 2560.0 / max(1.0, max(rawW, rawH)))
+            config.width = max(1, Int((rawW * downscale).rounded()))
+            config.height = max(1, Int((rawH * downscale).rounded()))
             box.image = try? await SCScreenshotManager.captureImage(
-                contentFilter: SCContentFilter(desktopIndependentWindow: window),
+                contentFilter: filter,
                 configuration: config
             )
         }
         _ = semaphore.wait(timeout: .now() + .milliseconds(750))
         return box.image
+    }
+
+    /// Extrait les boîtes englobantes exactes mot par mot d'une observation Vision (`boundingBox(for:)`).
+    private static func extractWordBoxes(from candidate: VNRecognizedText, in windowFrame: Rect) -> [OCRWordBox] {
+        let text = candidate.string
+        guard !text.isEmpty else { return [] }
+        var result: [OCRWordBox] = []
+        text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .byWords) { substring, range, _, _ in
+            guard let substring else { return }
+            let compact = TargetSearchModel.compact(substring)
+            guard !compact.isEmpty else { return }
+            guard let box = try? candidate.boundingBox(for: range) else { return }
+            let frame = normalizedBoxToAXRect(box.boundingBox, in: windowFrame)
+            guard frame.width >= 4, frame.height >= 4 else { return }
+            result.append(OCRWordBox(normalized: compact, frame: frame))
+        }
+        return result
     }
 
     /// Exécute une passe OCR locale Vision (`.fast`, sans correction linguistique coûteuse) sur `image`
@@ -183,7 +248,8 @@ public enum ScreenSearchOCRService {
         pid: pid_t,
         appName: String,
         existingTargets: [RoadieTarget] = [],
-        maxTargets: Int = 160
+        maxTargets: Int = 240,
+        wordMap: ScreenSearchOCRWordMap? = nil
     ) -> (targets: [RoadieTarget], metrics: OCRScanMetrics) {
         let startFootprint = currentPhysFootprintKB()
         let startedAt = CFAbsoluteTimeGetCurrent()
@@ -192,8 +258,8 @@ public enum ScreenSearchOCRService {
         request.recognitionLevel = .fast
         request.usesLanguageCorrection = false
         request.recognitionLanguages = ["fr-FR", "en-US"]
-        // 0.005 (~7 pt sur un écran 1440p) pour lire aussi le corps de texte 12–14 pt des apps et navigateurs.
-        request.minimumTextHeight = 0.005
+        // 0.004 (~5-6 pt sur un écran 1440p) pour lire aussi le corps de texte 11-14 pt des apps et navigateurs.
+        request.minimumTextHeight = 0.004
 
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
         do {
@@ -212,10 +278,7 @@ public enum ScreenSearchOCRService {
         }
 
         let observations = request.results ?? []
-        let existingEntries: [(frame: Rect, matchText: String)] = existingTargets.compactMap { target in
-            guard let frame = target.clickFrame ?? target.frame else { return nil }
-            return (frame, target.matchText)
-        }
+        let existingFrames = existingTargets.compactMap { $0.clickFrame ?? $0.frame }
         let subtitle = appName.isEmpty ? "OCR" : "OCR · \(appName)"
         var retained: [RoadieTarget] = []
         retained.reserveCapacity(min(observations.count, maxTargets))
@@ -227,10 +290,16 @@ public enum ScreenSearchOCRService {
             guard text.count >= 2 else { continue }
             let frame = normalizedBoxToAXRect(observation.boundingBox, in: windowFrame)
             guard frame.width >= 6, frame.height >= 6 else { continue }
-            let normalizedText = RoadieTarget.normalizedMatchText([text])
-            guard !isRedundantWithExisting(frame, normalizedText: normalizedText, existingTargets: existingEntries) else { continue }
+            // Ne déduplique que contre un contrôle AX de taille comparable (bouton/onglet),
+            // jamais contre un grand conteneur (bulle de discussion, panneau, carte) afin de
+            // conserver un surlignage précis au mot près.
+            guard !overlapsExisting(frame, existingFrames: existingFrames) else { continue }
 
             let id = "app:\(pid)/ocr:\(windowID)/\(index)"
+            if let wordMap {
+                let words = extractWordBoxes(from: top, in: windowFrame)
+                wordMap.register(targetID: id, words: words)
+            }
             retained.append(RoadieTarget(
                 id: id,
                 kind: .appElement,
@@ -272,7 +341,7 @@ public enum ScreenSearchOCRService {
         guard shouldRunOCR(config: config, existingAXCount: existingTargets.count) else { return ([], nil) }
         guard windowFrame.width >= 40, windowFrame.height >= 40 else { return ([], nil) }
         guard let image = captureWindowImage(windowID: windowID, preloadedWindow: preloadedWindow) else { return ([], nil) }
-        let ocrCap = min(160, max(80, config.maxTargets))
+        let ocrCap = min(240, max(120, config.maxTargets))
         let result = recognize(
             image: image,
             windowFrame: windowFrame,
@@ -280,7 +349,8 @@ public enum ScreenSearchOCRService {
             pid: pid,
             appName: appName,
             existingTargets: existingTargets,
-            maxTargets: ocrCap
+            maxTargets: ocrCap,
+            wordMap: .shared
         )
         return (result.targets, result.metrics)
     }
