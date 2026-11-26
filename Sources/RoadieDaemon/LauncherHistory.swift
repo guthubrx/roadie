@@ -54,3 +54,57 @@ struct LauncherHistoryStore: Sendable {
         }
     }
 }
+
+/// Machine à états pure pour remonter/redescendre dans l'historique des saisies du lanceur
+/// avec les flèches ↑ / ↓ depuis le haut de la liste.
+struct LauncherHistoryNavigator: Equatable, Sendable {
+    /// Entrées triées de la plus récente (`0`) à la plus ancienne.
+    let entries: [String]
+    private(set) var cursor: Int? = nil
+    private(set) var draft: String? = nil
+
+    init(entries: [String]) {
+        self.entries = entries
+    }
+
+    var isActive: Bool { cursor != nil }
+
+    mutating func reset() {
+        cursor = nil
+        draft = nil
+    }
+
+    /// Flèche ↑ : remonte vers une saisie plus ancienne. Retourne `nil` si vide ou déjà au bout.
+    mutating func stepOlder(currentQuery: String) -> String? {
+        guard !entries.isEmpty else { return nil }
+        if let current = cursor {
+            let next = min(current + 1, entries.count - 1)
+            guard next != current else { return nil }
+            cursor = next
+            return entries[next]
+        }
+        draft = currentQuery
+        let trimmed = currentQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let start = (entries.first == trimmed && entries.count > 1) ? 1 : 0
+        cursor = start
+        return entries[start]
+    }
+
+    /// Flèche ↓ (en mode historique) : redescend vers plus récent, puis restaure le brouillon initial.
+    mutating func stepNewer() -> String? {
+        guard let current = cursor else { return nil }
+        if current > 0 {
+            let next = current - 1
+            if next == 0, let draft, entries[0] == draft.trimmingCharacters(in: .whitespacesAndNewlines) {
+                let restored = draft
+                reset()
+                return restored
+            }
+            cursor = next
+            return entries[next]
+        }
+        let restored = draft ?? ""
+        reset()
+        return restored
+    }
+}

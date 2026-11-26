@@ -228,6 +228,10 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var calcConversions: Bool
     public var emojiPicker: Bool
     public var timerEnabled: Bool
+    /// Spec 168 : saut direct de dossier dans les boîtes de dialogue Ouvrir / Enregistrer sous (`AXSheet`).
+    public var fileDialogJump: Bool
+    /// Navigation par flèches ↑ / ↓ dans l'historique des saisies du lanceur depuis le haut de la liste.
+    public var historyArrowNavigation: Bool
     public var showScrollbar: Bool
     /// Touches de la barre (session 108), par action de `LauncherBarKeys.actions` ; forme normalisée,
     /// vide : touche désactivée. Clés TOML `<action>_key`.
@@ -312,6 +316,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         calcConversions: Bool = true,
         emojiPicker: Bool = true,
         timerEnabled: Bool = true,
+        fileDialogJump: Bool = true,
+        historyArrowNavigation: Bool = true,
         showScrollbar: Bool = false,
         barKeys: [String: String] = [:],
         bttPauseKeys: [String] = []
@@ -377,6 +383,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.calcConversions = calcConversions
         self.emojiPicker = emojiPicker
         self.timerEnabled = timerEnabled
+        self.fileDialogJump = fileDialogJump
+        self.historyArrowNavigation = historyArrowNavigation
         self.showScrollbar = showScrollbar
         self.barKeys = LauncherBarKeys.resolved(barKeys)
         self.bttPauseKeys = bttPauseKeys.map { TargetGridConfig.normalizedKey($0, fallback: "") }.filter { !$0.isEmpty }
@@ -455,6 +463,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case calcConversions = "calc_conversions"
         case emojiPicker = "emoji_picker"
         case timerEnabled = "timer_enabled"
+        case fileDialogJump = "file_dialog_jump"
+        case historyArrowNavigation = "history_arrow_navigation"
         case showScrollbar = "show_scrollbar"
         case bttPauseKeys = "btt_pause_keys"
     }
@@ -538,6 +548,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             calcConversions: try c.decodeIfPresent(Bool.self, forKey: .calcConversions) ?? defaults.calcConversions,
             emojiPicker: try c.decodeIfPresent(Bool.self, forKey: .emojiPicker) ?? defaults.emojiPicker,
             timerEnabled: try c.decodeIfPresent(Bool.self, forKey: .timerEnabled) ?? defaults.timerEnabled,
+            fileDialogJump: try c.decodeIfPresent(Bool.self, forKey: .fileDialogJump) ?? defaults.fileDialogJump,
+            historyArrowNavigation: try c.decodeIfPresent(Bool.self, forKey: .historyArrowNavigation) ?? defaults.historyArrowNavigation,
             showScrollbar: try c.decodeIfPresent(Bool.self, forKey: .showScrollbar) ?? defaults.showScrollbar,
             barKeys: defaults.barKeys.merging(barKeys) { _, new in new },
             bttPauseKeys: try c.decodeIfPresent([String].self, forKey: .bttPauseKeys) ?? defaults.bttPauseKeys
@@ -569,6 +581,10 @@ public struct AppTargetsConfig: Equatable, Codable, Sendable {
     public var axBoostEnabled: Bool
     public var maxDepth: Int
     public var additionalBoostBundleIDs: [String]
+    /// Spec 169 : repli OCR local macOS Vision (désactivé par défaut ; 0 capture et 0 CPU/RAM si faux).
+    public var ocrFallbackEnabled: Bool
+    /// Nombre maximal de cibles AX en dessous duquel le repli OCR se déclenche sur une fenêtre (0..30).
+    public var ocrFallbackThreshold: Int
 
     public init(
         enabled: Bool = false,
@@ -579,7 +595,9 @@ public struct AppTargetsConfig: Equatable, Codable, Sendable {
         includeRoles: [String] = ["AXButton", "AXLink", "AXTextField", "AXMenuItem", "AXRow", "AXCheckBox", "AXRadioButton", "AXPopUpButton"],
         axBoostEnabled: Bool = false,
         maxDepth: Int = 12,
-        additionalBoostBundleIDs: [String] = []
+        additionalBoostBundleIDs: [String] = [],
+        ocrFallbackEnabled: Bool = false,
+        ocrFallbackThreshold: Int = 3
     ) {
         self.enabled = enabled
         self.scope = scope
@@ -590,6 +608,8 @@ public struct AppTargetsConfig: Equatable, Codable, Sendable {
         self.axBoostEnabled = axBoostEnabled
         self.maxDepth = min(40, max(1, maxDepth))
         self.additionalBoostBundleIDs = additionalBoostBundleIDs
+        self.ocrFallbackEnabled = ocrFallbackEnabled
+        self.ocrFallbackThreshold = min(30, max(0, ocrFallbackThreshold))
     }
 
     enum CodingKeys: String, CodingKey {
@@ -602,6 +622,8 @@ public struct AppTargetsConfig: Equatable, Codable, Sendable {
         case axBoostEnabled = "ax_boost_enabled"
         case maxDepth = "max_depth"
         case additionalBoostBundleIDs = "additional_boost_bundle_ids"
+        case ocrFallbackEnabled = "ocr_fallback"
+        case ocrFallbackThreshold = "ocr_fallback_threshold"
     }
 
     public init(from decoder: Decoder) throws {
@@ -615,7 +637,9 @@ public struct AppTargetsConfig: Equatable, Codable, Sendable {
             includeRoles: try c.decodeIfPresent([String].self, forKey: .includeRoles) ?? ["AXButton", "AXLink", "AXTextField", "AXMenuItem", "AXRow", "AXCheckBox", "AXRadioButton", "AXPopUpButton"],
             axBoostEnabled: try c.decodeIfPresent(Bool.self, forKey: .axBoostEnabled) ?? false,
             maxDepth: try c.decodeIfPresent(Int.self, forKey: .maxDepth) ?? 12,
-            additionalBoostBundleIDs: try c.decodeIfPresent([String].self, forKey: .additionalBoostBundleIDs) ?? []
+            additionalBoostBundleIDs: try c.decodeIfPresent([String].self, forKey: .additionalBoostBundleIDs) ?? [],
+            ocrFallbackEnabled: try c.decodeIfPresent(Bool.self, forKey: .ocrFallbackEnabled) ?? false,
+            ocrFallbackThreshold: try c.decodeIfPresent(Int.self, forKey: .ocrFallbackThreshold) ?? 3
         )
     }
 }

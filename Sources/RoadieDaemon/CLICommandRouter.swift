@@ -390,6 +390,8 @@ public final class CLICommandRouter {
         // Le diagnostic utilise les permissions du daemon, pas celles du terminal appelant.
         case "daemon":
             return args.dropFirst().first == "health"
+        case "onboarding":
+            return true
         // `config reload` : l'instance partagée à recharger est celle du daemon (REL-014).
         case "config":
             return args.dropFirst().first == "reload"
@@ -403,6 +405,91 @@ public final class CLICommandRouter {
 
     private func dispatch(_ args: [String]) throws -> Int32 {
         switch args.first {
+        case "onboarding":
+            let perms = service.snapshot(followFocus: false).permissions
+            let path = RoadieConfigLoader.defaultConfigPath()
+            let checklist = OnboardingChecklist.evaluate(
+                permissions: perms,
+                config: service.effectiveConfig,
+                configFileExists: FileManager.default.fileExists(atPath: path)
+            )
+            if args.contains("--json") {
+                try printCodableJSON(checklist)
+            } else {
+                out(checklist.ready ? tr("Roadie est prêt.", "Roadie is ready.") : tr("Roadie nécessite encore quelques étapes :", "Roadie still needs a few steps:"))
+                for step in checklist.steps {
+                    out("[\(step.done ? "OK" : "  ")] \(step.title)")
+                    if !step.done { out("     -> \(step.actionHint)") }
+                }
+                out("")
+                for tip in checklist.quickActions {
+                    out("• \(tip)")
+                }
+            }
+            return 0
+        case "profile":
+            guard let verb = args.dropFirst().first else { return usageError() }
+            let profileService = DisplayProfileService()
+            switch verb {
+            case "list":
+                let list = profileService.list()
+                if args.contains("--json") {
+                    try printCodableJSON(list)
+                } else if list.isEmpty {
+                    out(tr("Aucun profil d'écran enregistré.", "No display profiles saved."))
+                } else {
+                    for p in list {
+                        out("\(p.name)\tdisplays=\(p.signature.displayCount) (\(p.signature.description))\tstrategy=\(p.defaultStrategy.rawValue)")
+                    }
+                }
+                return 0
+            case "save":
+                guard let name = args.dropFirst(2).first(where: { !$0.hasPrefix("--") }) else {
+                    err("roadie: profile save requires a name")
+                    return 64
+                }
+                let projectName = value(after: "--project", in: Array(args.dropFirst(2)))
+                let snap = service.snapshot(followFocus: false)
+                do {
+                    let saved = try profileService.saveCurrent(
+                        name: name,
+                        displays: snap.displays,
+                        tiling: service.effectiveConfig.tiling,
+                        projectName: projectName
+                    )
+                    if args.contains("--json") {
+                        try printCodableJSON(saved)
+                    } else {
+                        out("saved profile \(saved.name) signature=\(saved.signature.description) strategy=\(saved.defaultStrategy.rawValue)")
+                    }
+                    return 0
+                } catch {
+                    err("roadie: profile save failed: \(error.localizedDescription)")
+                    return 1
+                }
+            case "delete", "remove":
+                guard let name = args.dropFirst(2).first(where: { !$0.hasPrefix("--") }) else {
+                    err("roadie: profile delete requires a name")
+                    return 64
+                }
+                let removed = (try? profileService.delete(name: name)) ?? false
+                out(removed ? "deleted profile \(name)" : "profile not found: \(name)")
+                return removed ? 0 : 1
+            case "match":
+                let snap = service.snapshot(followFocus: false)
+                if let matched = profileService.match(displays: snap.displays) {
+                    if args.contains("--json") {
+                        try printCodableJSON(matched)
+                    } else {
+                        out("matched \(matched.name) strategy=\(matched.defaultStrategy.rawValue)")
+                    }
+                    return 0
+                }
+                out("no matching profile")
+                return 0
+            default:
+                return usageError()
+            }
         case "tab":
             guard let verb = args.dropFirst().first else {
                 return usageError()
@@ -684,10 +771,52 @@ public final class CLICommandRouter {
             }
         case "config":
             let verb = args.dropFirst().first
-            guard verb == "show" || verb == "validate" || verb == "reload" || verb == "init" else {
+            guard verb == "show" || verb == "validate" || verb == "reload" || verb == "init" || verb == "export" || verb == "import" else {
                 return usageError()
             }
             let configPath = value(after: "--config", in: Array(args.dropFirst(2)))
+            if verb == "export" {
+                let tail = Array(args.dropFirst(2))
+                let positional = tail.first(where: { !$0.hasPrefix("--") })
+                let destPath = positional ?? FileManager.default.homeDirectoryForCurrentUser
+                    .appendingPathComponent("roadie-config-export.json").path
+                do {
+                    let bundle = try PortableConfigService().exportBundle(
+                        to: URL(fileURLWithPath: (destPath as NSString).expandingTildeInPath),
+                        configPath: configPath ?? RoadieConfigLoader.defaultConfigPath()
+                    )
+                    if args.contains("--json") {
+                        try printCodableJSON(bundle)
+                    } else {
+                        out("exported \(destPath) projects=\(bundle.projects.count) profiles=\(bundle.displayProfiles.count)")
+                    }
+                    return 0
+                } catch {
+                    err("roadie: config export failed: \(error.localizedDescription)")
+                    return 1
+                }
+            }
+            if verb == "import" {
+                let tail = Array(args.dropFirst(2))
+                guard let sourcePath = tail.first(where: { !$0.hasPrefix("--") }) else {
+                    err("roadie: config import requires a bundle path")
+                    return 64
+                }
+                let report = PortableConfigService().importBundle(
+                    from: URL(fileURLWithPath: (sourcePath as NSString).expandingTildeInPath),
+                    configPath: configPath ?? RoadieConfigLoader.defaultConfigPath(),
+                    dryRun: args.contains("--dry-run"),
+                    force: args.contains("--force")
+                )
+                if args.contains("--json") {
+                    try printCodableJSON(report)
+                } else if report.valid {
+                    out("import \(report.dryRun ? "dry-run " : "")ok projects=\(report.projectsImported) profiles=\(report.profilesImported)" + (report.backupPath.map { " backup=\($0)" } ?? ""))
+                } else {
+                    err("roadie: config import failed: \(report.error ?? "unknown")")
+                }
+                return report.valid ? 0 : 1
+            }
             if verb == "init" {
                 let rawPreset = value(after: "--preset", in: Array(args.dropFirst(2))) ?? "standard"
                 let preset: ShortcutPresetID?

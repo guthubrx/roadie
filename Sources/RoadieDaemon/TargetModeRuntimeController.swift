@@ -345,6 +345,9 @@ public final class TargetModeRuntimeController: NSObject {
     private var escapeFocus: LauncherFocusSnapshot?
     /// Derniers documents et onglets ouverts lus pour la barre (session 123).
     private var lastOpenItems: (at: Date, items: [LauncherOpenItem])?
+    /// Spec 168 : dialogue fichier actif détecté à l'ouverture de la barre + navigateur injectable.
+    private var activeFileDialog: FileDialogContext?
+    var fileDialogNavigator: any FileDialogNavigating = FileDialogJumpService()
     private var styleReloadObserver: NSObjectProtocol?
     /// Aperçu actif du lanceur (SPEC-078) : cadres relevés avant, stage de départ si une bascule a eu lieu.
     private struct ActivePreview {
@@ -913,7 +916,22 @@ public final class TargetModeRuntimeController: NSObject {
         // Session 131 : menus de l'application au premier plan, relus à chaque ouverture.
         LauncherMenuSearch.shared.reset()
         if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != ProcessInfo.processInfo.processIdentifier {
-            context.frontApplication = (front.processIdentifier, front.localizedName ?? "")
+            let frontName = front.localizedName ?? ""
+            context.frontApplication = (front.processIdentifier, frontName)
+            let fileDialogEnabled = service.effectiveConfig.experimental.targetMode.fileDialogJump
+            context.fileDialogJumpEnabled = fileDialogEnabled
+            if fileDialogEnabled {
+                let detected = fileDialogNavigator.detect(pid: front.processIdentifier, appName: frontName)
+                context.activeFileDialog = detected
+                activeFileDialog = detected
+            } else {
+                context.activeFileDialog = nil
+                activeFileDialog = nil
+            }
+        } else {
+            context.fileDialogJumpEnabled = service.effectiveConfig.experimental.targetMode.fileDialogJump
+            context.activeFileDialog = nil
+            activeFileDialog = nil
         }
         context.pickModifier = LauncherPickModifier(config: service.effectiveConfig.experimental.targetMode.pickModifier)
         let modes = service.effectiveConfig.experimental.targetMode
@@ -945,6 +963,23 @@ public final class TargetModeRuntimeController: NSObject {
         })
         context.pendingRules = suggestions.count
         var idle: [LauncherList.Row] = []
+        if let dialog = context.activeFileDialog, context.fileDialogJumpEnabled {
+            let projectFolders = context.projects.flatMap(\.extraURLs).filter { !$0.contains("://") }
+            let folders = FileDialogJumpService.suggestedFolders(
+                stageFolders: projectFolders,
+                recentFolders: LauncherRecentFiles.shared.recentFolders(limit: 8),
+                limit: 6
+            )
+            if !folders.isEmpty {
+                idle.append(.header(dialog.label))
+                for folder in folders {
+                    let name = (folder as NSString).lastPathComponent
+                    let file = LauncherFile(path: folder, name: name.isEmpty ? folder : name, isFolder: true, lastUsed: nil)
+                    let action = LauncherAction(subject: .file(file), verb: .useInFileDialog, destination: nil)
+                    idle.append(.action("file-dialog:\(folder)", action, file.name, LauncherList.shortPath(folder)))
+                }
+            }
+        }
         if let first = suggestions.first {
             idle += [.header(tr("Règle proposée", "Suggested rule")), .rule(first, .create), .rule(first, .later), .rule(first, .never)]
         }
@@ -1003,6 +1038,8 @@ public final class TargetModeRuntimeController: NSObject {
         }
         let historyStore = LauncherHistoryStore()
         let history = preloaded?.history ?? historyStore.load()
+        context.queryHistory = history.recent(LauncherHistoryBook.maxEntries)
+        context.historyArrowNavigation = targetModeConfig.historyArrowNavigation
         let recent = targetModeConfig.idleRecentSearchesEnabled
             ? history.recent(targetModeConfig.idleRecentSearchesCount) : []
         if !recent.isEmpty { idle += [.header(tr("Recherches récentes", "Recent searches"))] + recent.map(LauncherList.Row.history) }
@@ -2383,6 +2420,31 @@ public final class TargetModeRuntimeController: NSObject {
     private func performFile(_ action: LauncherAction, file: LauncherFile, label: String) -> TargetActionResult {
         let url = URL(fileURLWithPath: file.path)
         switch action.verb {
+        case .useInFileDialog:
+            guard service.effectiveConfig.experimental.targetMode.fileDialogJump else {
+                return refused(label, "file_dialog_jump_disabled")
+            }
+            guard let dialog = activeFileDialog else {
+                return refused(label, "no_active_file_dialog")
+            }
+            let navigator = fileDialogNavigator
+            let targetPath = file.path
+            let events = events
+            DispatchQueue.global(qos: .userInitiated).async {
+                let jump = navigator.jump(to: targetPath, in: dialog)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        events.append(RoadieEvent(type: "launcher.file_dialog_jump", details: [
+                            "kind": dialog.kind.rawValue,
+                            "succeeded": String(jump.succeeded),
+                            "reason": jump.reason
+                        ]))
+                        if !jump.succeeded {
+                            self.notifyFailure(tr("Saut dans le dialogue impossible", "Could not jump in dialog") + " (\(jump.reason))")
+                        }
+                    }
+                }
+            }
         case .reveal:
             NSWorkspace.shared.activateFileViewerSelecting([url])
         case .quickLook:

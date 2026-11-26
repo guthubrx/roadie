@@ -451,7 +451,19 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         let result = scanWindow(window, app: app, rootPath: "0", config: config, startedAt: Date())
         AppTargetElementRegistry.shared.add(result.pass.elements, generation: generation)
         let partial = result.pass.stopReason != "complete"
-        let targets = AppTargetQueryService.targets(from: result.pass.candidates, config: config, windowID: windowID)
+        var targets = AppTargetQueryService.targets(from: result.pass.candidates, config: config, windowID: windowID)
+        if config.ocrFallbackEnabled, targets.count <= config.ocrFallbackThreshold,
+           let winFrame = Self.copyFrame(window) {
+            let ocr = ScreenSearchOCRService.fallbackTargetsIfNeeded(
+                config: config,
+                existingTargets: targets,
+                windowID: windowID,
+                windowFrame: winFrame,
+                pid: app.processIdentifier,
+                appName: app.localizedName ?? ""
+            )
+            targets.append(contentsOf: ocr.targets)
+        }
         return AppTargetQueryReport(
             targets: Self.labeled(targets, config: config),
             partial: partial,
@@ -517,8 +529,20 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             let job = batch.jobs[index]
             let scan = scanWindow(job.element, app: job.app, rootPath: "w\(job.id)", config: config, startedAt: startedAt)
             let inFront = Array(frames.prefix(job.order))
-            let targets = AppTargetQueryService.targets(from: scan.pass.candidates, config: config, windowID: job.id)
+            var targets = AppTargetQueryService.targets(from: scan.pass.candidates, config: config, windowID: job.id)
                 .filter { !AppTargetQueryService.isCovered($0, by: inFront) }
+            if config.ocrFallbackEnabled, targets.count <= config.ocrFallbackThreshold, job.order < frames.count {
+                let ocr = ScreenSearchOCRService.fallbackTargetsIfNeeded(
+                    config: config,
+                    existingTargets: targets,
+                    windowID: job.id,
+                    windowFrame: frames[job.order],
+                    pid: job.app.processIdentifier,
+                    appName: job.app.localizedName ?? ""
+                )
+                let visibleOCR = ocr.targets.filter { !AppTargetQueryService.isCovered($0, by: inFront) }
+                targets.append(contentsOf: visibleOCR)
+            }
             let result = VisibleWindowScan(order: job.order, targets: targets, stats: scan.stats,
                                            partial: scan.pass.stopReason != "complete")
             batch.results[index] = result
@@ -858,13 +882,23 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
                                       target: target, error: "focus_failed")
         }
         // REL-012 : l'overlay a pu rester ouvert, la fenêtre bouger ou la page défiler pendant l'attente.
-        // Le point de clic n'est sûr que si la zone cliquée occupe encore le cadre affiché (R2-02).
-        let current = currentFrame(target)
-        guard AppTargetQueryService.isStillInPlace(shown, current: current) else {
-            // Session 134 : élément illisible (remplacé) ou déplacé, avec ses deux cadres, pour le diagnostic.
-            let describe = { (frame: Rect) in "\(Int(frame.x)),\(Int(frame.y)) \(Int(frame.width))x\(Int(frame.height))" }
-            let reason = current.map { "moved \(describe(shown)) -> \(describe($0))" } ?? "unreadable"
-            return TargetActionResult(changed: false, message: "stale_target: \(reason) \(target.id)", target: target, error: "stale_target")
+        // Pour une cible AX, le point de clic n'est sûr que si l'élément occupe encore le cadre affiché (R2-02).
+        // Pour une cible OCR (Spec 169), la fenêtre vient d'être vérifiée au premier plan via `waitForFocus` ;
+        // on vérifie que le point visé tombe toujours dans les limites actuelles de cette fenêtre.
+        if target.id.contains("/ocr:") {
+            if let windowElement = axWindowElements(pid: pid)[windowID],
+               let currentWinFrame = Self.readFrame(windowElement, timeout: 0.3),
+               !currentWinFrame.cgRect.contains(CGPoint(x: frame.midX, y: frame.midY)) {
+                return TargetActionResult(changed: false, message: "stale_target: ocr_window_moved \(target.id)", target: target, error: "stale_target")
+            }
+        } else {
+            let current = currentFrame(target)
+            guard AppTargetQueryService.isStillInPlace(shown, current: current) else {
+                // Session 134 : élément illisible (remplacé) ou déplacé, avec ses deux cadres, pour le diagnostic.
+                let describe = { (frame: Rect) in "\(Int(frame.x)),\(Int(frame.y)) \(Int(frame.width))x\(Int(frame.height))" }
+                let reason = current.map { "moved \(describe(shown)) -> \(describe($0))" } ?? "unreadable"
+                return TargetActionResult(changed: false, message: "stale_target: \(reason) \(target.id)", target: target, error: "stale_target")
+            }
         }
         let point = CGPoint(x: frame.midX, y: frame.midY)
         switch action {

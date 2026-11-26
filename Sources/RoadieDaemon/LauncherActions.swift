@@ -93,8 +93,8 @@ enum LauncherVerb: String, CaseIterable, Sendable {
     case focus, sendTo, float, fullscreen, minimize, close
     // Fenêtre : tuilage de cette fenêtre ou de toute son application (SPEC-075).
     case tileWindow, floatAlways, tileAlways, clearTilingRule
-    // Fichier (SPEC-077).
-    case reveal, quickLook, copyPath
+    // Fichier (SPEC-077, Spec 168).
+    case useInFileDialog, reveal, quickLook, copyPath
     // Fichier, actions d'Alfred (session 131) : presse-papiers, copie et déplacement vers un dossier (en
     // remplaçant : l'homonyme part à la corbeille), ouvrir avec, e-mail, corbeille, alias, informations,
     // étiquette, parcourir dans la barre, terminal dans le dossier, contenu d'un paquet.
@@ -132,6 +132,7 @@ enum LauncherVerb: String, CaseIterable, Sendable {
         case .floatAlways: ("Toujours faire flotter l'application", "Always float the app")
         case .tileAlways: ("Toujours tuiler l'application", "Always tile the app")
         case .clearTilingRule: ("Retirer la règle de flottement", "Remove the floating rule")
+        case .useInFileDialog: ("Utiliser dans ce dialogue", "Jump here in dialog")
         case .reveal: ("Montrer dans le Finder", "Reveal in Finder")
         case .quickLook: ("Aperçu (Quick Look)", "Quick Look")
         case .copyPath: ("Copier le chemin", "Copy path")
@@ -241,14 +242,16 @@ enum LauncherVerb: String, CaseIterable, Sendable {
 
     /// Verbes proposés pour un objet, le verbe par défaut en premier. Fenêtre : ses verbes de flottement
     /// dépendent de `tiling` ; sans état connu, « Faire flotter » seul (bascule SPEC-047). O(1).
-    static func verbs(for subject: LauncherSubject, tiling: LauncherTilingState? = nil) -> [LauncherVerb] {
+    static func verbs(for subject: LauncherSubject, tiling: LauncherTilingState? = nil, fileDialogActive: Bool = false) -> [LauncherVerb] {
         switch subject {
         case .app: return [.open, .openIn, .bringHere, .newWindow, .recentDocuments, .gatherIn, .hide, .quit, .forceQuit, .relaunch, .quitOthers, .pinApp]
         case .file(let file):
             // Session 131 : actions d'Alfred sur un fichier ; un dossier se parcourt ou ouvre un terminal, un
-            // paquet (application, bibliothèque) montre son contenu.
-            var verbs: [LauncherVerb] = [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath, .copyFile, .copyTo, .moveFileTo,
-                                         .copyReplace, .moveReplace, .openWith, .email, .trash, .makeAlias, .info, .addTag]
+            // paquet (application, bibliothèque) montre son contenu. Spec 168 : si un dialogue fichier est actif,
+            // « Utiliser dans ce dialogue » passe en tête.
+            var verbs: [LauncherVerb] = fileDialogActive ? [.useInFileDialog] : []
+            verbs += [.open, .openIn, .bringHere, .reveal, .quickLook, .copyPath, .copyFile, .copyTo, .moveFileTo,
+                      .copyReplace, .moveReplace, .openWith, .email, .trash, .makeAlias, .info, .addTag]
             if file.isFolder { verbs += [.browse, .terminalHere] }
             if LauncherFileOperations.isPackage(file.path) { verbs.append(.packageContents) }
             return verbs
@@ -535,13 +538,19 @@ struct LauncherActionList: Equatable, Sendable {
     /// `ranking` : classement appris, qui ordonne les verbes (session 111) ; nil : ordre par défaut.
     static func verbs(for subject: LauncherSubject, query: String, destinations: [LauncherDestination],
                       newStageHome: (DisplayID, DesktopID), tiling: LauncherTilingState? = nil,
-                      ranking: LauncherRanking? = nil) -> LauncherActionList {
+                      ranking: LauncherRanking? = nil, fileDialogActive: Bool = false) -> LauncherActionList {
         var list = LauncherActionList()
         list.rows.append(.header("\(subject.title) ›"))
         let folded = LauncherMatch.fold(query)
-        let defaults = LauncherVerb.verbs(for: subject, tiling: tiling)
-        let verbs = (ranking.map { LauncherVerb.learnedOrder(defaults, for: subject, ranking: $0) } ?? defaults)
-            .filter { folded.isEmpty || $0.matches(query, app: subject.appName) }
+        let defaults = LauncherVerb.verbs(for: subject, tiling: tiling, fileDialogActive: fileDialogActive)
+        let verbs: [LauncherVerb]
+        if fileDialogActive, case .file = subject {
+            let learnedRest = ranking.map { LauncherVerb.learnedOrder(Array(defaults.dropFirst()), for: subject, ranking: $0) } ?? Array(defaults.dropFirst())
+            verbs = ([LauncherVerb.useInFileDialog] + learnedRest).filter { folded.isEmpty || $0.matches(query, app: subject.appName) }
+        } else {
+            verbs = (ranking.map { LauncherVerb.learnedOrder(defaults, for: subject, ranking: $0) } ?? defaults)
+                .filter { folded.isEmpty || $0.matches(query, app: subject.appName) }
+        }
         list.rows.append(contentsOf: verbs.map(Row.verb))
         if !folded.isEmpty, let primary = LauncherVerb.primaryDestinationVerb(for: subject) {
             let direct = matching(destinations, verb: primary, subject: subject, query: query, newStageHome: newStageHome)

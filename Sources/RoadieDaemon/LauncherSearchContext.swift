@@ -117,6 +117,12 @@ struct LauncherSearchContext {
     var calcConversions = true
     var emojiPicker = true
     var timerEnabled = true
+    /// Spec 168 : saut direct de dossier dans un dialogue macOS « Ouvrir / Enregistrer sous ».
+    var fileDialogJumpEnabled = true
+    var activeFileDialog: FileDialogContext?
+    /// Historique des saisies du lanceur parcourable avec ↑ / ↓ depuis le haut de la liste.
+    var historyArrowNavigation = true
+    var queryHistory: [String] = []
     /// Mots-clés de la recherche dans le contenu et par étiquette (session 113).
     var fileKeywords = LauncherFileKeywords()
     /// Les verbes les plus choisis passent en tête (session 111, `learn_verb_order`).

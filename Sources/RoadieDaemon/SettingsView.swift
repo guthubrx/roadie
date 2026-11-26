@@ -241,6 +241,7 @@ struct SettingsView: View {
     private var general: some View {
         VStack(alignment: .leading, spacing: 16) {
             grouped(SettingsCatalog.descriptors(in: .general))
+            SettingsModulesCard(model: model)
             VStack(alignment: .leading, spacing: 10) {
                 SettingsFormRow(tr("Fichier de configuration", "Configuration file"), fonts: fonts) {
                     Text(model.service.configPath)

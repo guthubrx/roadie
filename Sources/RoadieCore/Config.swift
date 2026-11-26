@@ -249,6 +249,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     public var scrollingTrackpadGestures: Bool
     /// Nombre de doigts pour le balayage horizontal au trackpad en mode `.scrolling` (`3` ou `4`, Spec 166).
     public var scrollingTrackpadFingers: Int
+    /// Active le rappel automatique des profils matériels selon la topologie d'écrans (Spec 170, désactivé par défaut).
+    public var displayProfilesEnabled: Bool
 
     public init(
         defaultStrategy: WindowManagementMode = .bsp,
@@ -276,7 +278,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         scrollingColumnWidth: Double = 0.65,
         scrollingSmoothScroll: Bool = true,
         scrollingTrackpadGestures: Bool = true,
-        scrollingTrackpadFingers: Int = 3
+        scrollingTrackpadFingers: Int = 3,
+        displayProfilesEnabled: Bool = false
     ) {
         self.defaultStrategy = defaultStrategy
         self.splitPolicy = splitPolicy
@@ -305,6 +308,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.scrollingSmoothScroll = scrollingSmoothScroll
         self.scrollingTrackpadGestures = scrollingTrackpadGestures
         self.scrollingTrackpadFingers = min(4, max(3, scrollingTrackpadFingers))
+        self.displayProfilesEnabled = displayProfilesEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -334,6 +338,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         case scrollingSmoothScroll = "scrolling_smooth_scroll"
         case scrollingTrackpadGestures = "scrolling_trackpad_gestures"
         case scrollingTrackpadFingers = "scrolling_trackpad_fingers"
+        case displayProfilesEnabled = "display_profiles_enabled"
     }
 
     public init(from decoder: Decoder) throws {
@@ -379,6 +384,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.scrollingTrackpadGestures = try c.decodeIfPresent(Bool.self, forKey: .scrollingTrackpadGestures) ?? true
         let rawFingers = try c.decodeIfPresent(Int.self, forKey: .scrollingTrackpadFingers) ?? 3
         self.scrollingTrackpadFingers = min(4, max(3, rawFingers))
+        self.displayProfilesEnabled = try c.decodeIfPresent(Bool.self, forKey: .displayProfilesEnabled) ?? false
     }
 }
 

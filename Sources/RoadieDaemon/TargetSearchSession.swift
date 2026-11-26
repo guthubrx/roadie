@@ -150,6 +150,8 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
     private var ghost: LauncherGhost?
     /// Étape « Garder » : la commande vient d'être copiée par ⌘C.
     private var savingCopied = false
+    /// Parcours de l'historique des saisies du lanceur avec ↑ / ↓ depuis le haut de la liste.
+    private var historyNavigator: LauncherHistoryNavigator
 
     init(
         targets: [RoadieTarget],
@@ -165,6 +167,7 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
     ) {
         self.screenOnly = screenOnly
         self.launcher = launcher
+        self.historyNavigator = LauncherHistoryNavigator(entries: (!screenOnly && launcher.historyArrowNavigation) ? launcher.queryHistory : [])
         let expectsScan = screenOnly || launcher.expectsOnScreenScan
         self.expectsOnScreenScan = expectsScan
         self.isLoading = expectsScan
@@ -415,6 +418,7 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
     private func replaceInput(_ text: String) {
         guard !finished else { return }
         lastInputAt = Date()
+        historyNavigator.reset()
         model.cancelPendingReturn()
         if step != .objects {
             stepQuery = text
@@ -525,6 +529,7 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         guard !model.isAwaitingSecondReturn else { return }
         switch input.kind {
         case .text(let value):
+            historyNavigator.reset()
             model.type(value)
             if model.isCommandMode, !Self.isPath(model.query) { enterCommandMode() }
         case .labelCharacter(let value):
@@ -544,6 +549,7 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
             activateSelection(immediate: true)
             return
         case .delete:
+            historyNavigator.reset()
             model.deleteBackward()
         case .next, .previous:
             navigate(input)
@@ -622,6 +628,27 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
 
     /// Flèches et Ctrl-N/P parcourent la liste du lanceur ; Tab complète la ligne choisie.
     private func navigate(_ input: SearchKeyInput) {
+        // Navigation par flèches ↑ / ↓ dans l'historique des saisies du lanceur quand on est tout en haut.
+        if !screenOnly, launcher.historyArrowNavigation, input.navigationSource != .tab, !historyNavigator.entries.isEmpty {
+            let firstSelectableID = launcherList.rows.compactMap(\.id).first
+            let atTop = launcherList.rows.isEmpty || launcherSelection == nil || launcherSelection == firstSelectableID
+            if case .previous = input.kind, (historyNavigator.isActive || atTop) {
+                if let recalled = historyNavigator.stepOlder(currentQuery: model.query) {
+                    model.replaceQuery(recalled)
+                    refreshLauncher()
+                    syncHighlight()
+                }
+                return
+            }
+            if case .next = input.kind, historyNavigator.isActive, atTop {
+                if let nextQuery = historyNavigator.stepNewer() {
+                    model.replaceQuery(nextQuery)
+                    refreshLauncher()
+                    syncHighlight()
+                }
+                return
+            }
+        }
         guard !launcherList.rows.isEmpty else { model.handleNavigation(input); return }
         // Grille (SPEC-092 FR-004) : ↑ ↓ changent de rangée ; Tab garde son rôle.
         if let columns = gridColumns, input.navigationSource != .tab {
@@ -1488,9 +1515,12 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         copiedRowID = launcherSelection
     }
 
-    /// Retour sur un fichier : l'ouvrir, ou le montrer dans le Finder après le mot-clé `find` (session 119).
+    /// Retour sur un fichier : saut dans le dialogue Ouvrir/Enregistrer s'il est actif (Spec 168),
+    /// sinon l'ouvrir, ou le montrer dans le Finder après le mot-clé `find` (session 119).
     private var fileVerb: LauncherVerb {
-        LauncherFileQuery.parse(model.query, keywords: launcher.fileKeywords).reveals ? .reveal : .open
+        if LauncherFileQuery.parse(model.query, keywords: launcher.fileKeywords).reveals { return .reveal }
+        if launcher.fileDialogJumpEnabled, launcher.activeFileDialog != nil { return .useInFileDialog }
+        return .open
     }
 
     private var selectedLauncherRow: Int? { launcherList.rows.firstIndex { $0.id == launcherSelection && $0.id != nil } }
@@ -1674,7 +1704,8 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         case .objects: return
         case .verbs(let subject):
             actionList = .verbs(for: subject, query: stepQuery, destinations: launcher.destinations, newStageHome: launcher.newStageHome,
-                                tiling: stepTiling, ranking: launcher.learnsVerbOrder ? launcher.ranking : nil)
+                                tiling: stepTiling, ranking: launcher.learnsVerbOrder ? launcher.ranking : nil,
+                                fileDialogActive: launcher.fileDialogJumpEnabled && launcher.activeFileDialog != nil)
             switch subject {
             case .file(let file):
                 actionList.appendWorkflows(launcher.workflowTriggers.filter { AlfredWorkflowIndex.accepts($0, path: file.path) }, query: stepQuery)

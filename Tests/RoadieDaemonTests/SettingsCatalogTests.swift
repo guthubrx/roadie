@@ -23,9 +23,9 @@ struct SettingsCatalogTests {
         // Session 099 : touche des présentations. Sessions 101 à 105 : onze réglages de la barre (thème, place,
         // terminal, signets, tri, apprentissage, confirmation). Session 108 : douze touches de la barre.
         // Session 110 : Calculette ouverte par un calcul. Session 111 : ordre appris des verbes. Session 113 : mots-clés in et tags. Session 114 : historique web. Session 115 : réglages dans la barre et touche ⌘,. Session 119 : cinq réglages simples de la barre. Session 121 : icône du sélecteur et sa taille. Session 127 : langue de l'interface. Session 131 : trois modificateurs de Retour et style des fenêtres de workflow. Session 132 : fenêtres flottantes hors du rail. Session 133 : raccourci de la recherche à l'écran. Session 134 : fautes de frappe rattrapées, éléments à l'écran dans le lanceur. Session 136 : trois réglages des zones (le raccourci de la 135 retiré).
-        #expect(simple.count == 335) // Session 187 (Spec 166) : scrolling_smooth_scroll, scrolling_trackpad_gestures, scrolling_trackpad_fingers, scratchpad_reboot_policy, overview.trackpad_gesture.
+        #expect(simple.count == 340) // Specs 168-171 : file_dialog_jump, history_arrow_navigation, ocr_fallback, ocr_fallback_threshold, display_profiles_enabled.
         #expect(railSimple.count == 82)
-        #expect(simple.count - railSimple.count == 253)
+        #expect(simple.count - railSimple.count == 258)
     }
 
     @Test
@@ -169,7 +169,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 335)
+        #expect(expected.count == 340)
     }
 
     // MARK: - Défauts
@@ -279,8 +279,8 @@ struct SettingsCatalogTests {
             }
             checked += 1
         }
-        // 81 réglages hors rail ont une plage (session 187 : tiling.scrolling_trackpad_fingers).
-        #expect(checked == 81)
+        // 82 réglages hors rail ont une plage (Spec 169 : app_targets.ocr_fallback_threshold).
+        #expect(checked == 82)
     }
 
     // MARK: - Recherche
