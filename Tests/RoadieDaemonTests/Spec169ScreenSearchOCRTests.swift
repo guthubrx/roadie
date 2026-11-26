@@ -58,7 +58,7 @@ struct Spec169ScreenSearchOCRTests {
     @Test func ocrFallbackIsDisabledByDefaultAndLoadsFromToml() throws {
         let defaults = RoadieConfig()
         #expect(!defaults.experimental.appTargets.ocrFallbackEnabled)
-        #expect(defaults.experimental.appTargets.ocrFallbackThreshold == 3)
+        #expect(defaults.experimental.appTargets.ocrFallbackThreshold == 0)
 
         let dir = try tempDir("config")
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -77,7 +77,7 @@ struct Spec169ScreenSearchOCRTests {
         let descToggle = try #require(SettingsCatalog.find(id: "app_targets.ocr_fallback"))
         #expect(descToggle.defaultValue == .bool(false))
         let descThreshold = try #require(SettingsCatalog.find(id: "app_targets.ocr_fallback_threshold"))
-        #expect(descThreshold.defaultValue == .int(3))
+        #expect(descThreshold.defaultValue == .int(0))
     }
 
     @Test func visionNormalizedBoxConvertsAccuratelyToAXMultiDisplayCoordinates() {
@@ -104,10 +104,18 @@ struct Spec169ScreenSearchOCRTests {
         #expect(resDisabled.targets.isEmpty)
         #expect(resDisabled.metrics == nil)
 
-        // Déduplication contre une cible AX existante au même endroit
+        // Seuil 0 = complète toujours l'AX même si la fenêtre expose 50 boutons ; seuil > 0 = borne haute
+        #expect(!ScreenSearchOCRService.shouldRunOCR(config: AppTargetsConfig(ocrFallbackEnabled: false, ocrFallbackThreshold: 0), existingAXCount: 0))
+        #expect(ScreenSearchOCRService.shouldRunOCR(config: AppTargetsConfig(ocrFallbackEnabled: true, ocrFallbackThreshold: 0), existingAXCount: 50))
+        #expect(ScreenSearchOCRService.shouldRunOCR(config: AppTargetsConfig(ocrFallbackEnabled: true, ocrFallbackThreshold: 3), existingAXCount: 3))
+        #expect(!ScreenSearchOCRService.shouldRunOCR(config: AppTargetsConfig(ocrFallbackEnabled: true, ocrFallbackThreshold: 3), existingAXCount: 4))
+
+        // Déduplication contre une cible AX de taille comparable au même endroit, mais PAS contre un grand conteneur
         let axFrame = Rect(x: 100, y: 200, width: 120, height: 30)
         #expect(ScreenSearchOCRService.overlapsExisting(Rect(x: 105, y: 202, width: 110, height: 26), existingFrames: [axFrame]))
         #expect(!ScreenSearchOCRService.overlapsExisting(Rect(x: 400, y: 200, width: 120, height: 30), existingFrames: [axFrame]))
+        let giantContainer = Rect(x: 0, y: 0, width: 1200, height: 900)
+        #expect(!ScreenSearchOCRService.overlapsExisting(Rect(x: 105, y: 202, width: 140, height: 18), existingFrames: [giantContainer]))
     }
 
     @Test func visionOCRRecognizesControlsAndMeasuresLatencyAndMemory() throws {

@@ -159,10 +159,14 @@ final class SettingsViewModel: ObservableObject {
     /// Lit les valeurs affichées absentes du cache, avec une seule lecture du fichier.
     /// O(v * L) - v réglages affichés non lus, L taille du fichier.
     private func loadVisibleValues() {
-        // Les polices restent accessibles dans toutes les catégories, y compris après une relecture externe.
+        // Les polices et les modules activables (affichés dans Général) restent accessibles
+        // dans toutes les catégories, y compris après une relecture externe ou un apply().
+        let moduleDescriptors = RoadieModuleCatalog.all.compactMap { SettingsCatalog.find(id: $0.settingID) }
         let displayed = SettingsCatalog.descriptors(in: .general)
+            + moduleDescriptors
             + sections.filter { $0.category != .general }.flatMap(\.descriptors)
-        let missing = displayed.filter { values[$0.id] == nil }
+        var seen = Set<String>()
+        let missing = displayed.filter { values[$0.id] == nil && seen.insert($0.id).inserted }
         guard !missing.isEmpty else { return }
         let text = service.configText()
         var read = values

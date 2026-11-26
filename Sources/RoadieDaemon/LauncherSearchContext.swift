@@ -120,6 +120,7 @@ struct LauncherSearchContext {
     /// Spec 168 : saut direct de dossier dans un dialogue macOS « Ouvrir / Enregistrer sous ».
     var fileDialogJumpEnabled = true
     var activeFileDialog: FileDialogContext?
+    var fileDialogFolders: [FileDialogFolderSuggestion] = []
     /// Historique des saisies du lanceur parcourable avec ↑ / ↓ depuis le haut de la liste.
     var historyArrowNavigation = true
     var queryHistory: [String] = []

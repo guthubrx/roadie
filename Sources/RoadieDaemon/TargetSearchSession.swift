@@ -870,6 +870,19 @@ final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession 
         if let (name, alias) = launcher.aliases.alias(for: model.query), let action = launcher.aliasAction(alias) {
             launcherList.prepend(.alias(name, action, LauncherPhrase.title(action)), header: tr("Abréviation", "Abbreviation"))
         }
+        // Spec 168 : quand un dialogue « Ouvrir / Enregistrer sous » est ouvert, faire remonter
+        // immédiatement en tête les dossiers correspondants (Desktop/Bureau, Downloads, projets, récents).
+        if phrase == nil, launcher.fileDialogJumpEnabled, let dialog = launcher.activeFileDialog {
+            let matched = FileDialogJumpService.matchingFolders(query: model.query, in: launcher.fileDialogFolders, limit: 5)
+            if !matched.isEmpty {
+                let rows: [LauncherList.Row] = matched.map { entry in
+                    let file = LauncherFile(path: entry.path, name: entry.title, isFolder: true, lastUsed: nil)
+                    let action = LauncherAction(subject: .file(file), verb: .useInFileDialog, destination: nil)
+                    return .action("file-dialog:\(entry.path)", action, entry.title, LauncherList.shortPath(entry.path))
+                }
+                launcherList.prependSection(dialog.label, rows)
+            }
+        }
         // Commandes système (session 105), après la première section.
         launcherList.insertSection(tr("Système", "System"), LauncherSystemCommand.matches(model.query, in: launcher.systemCommands).map(LauncherList.Row.system))
         // Réglages de Roadie et des Réglages Système (session 115), après les sections principales.

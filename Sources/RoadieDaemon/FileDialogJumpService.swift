@@ -34,6 +34,19 @@ public struct FileDialogContext: Equatable, Sendable {
     }
 }
 
+/// Dossier proposé pour le saut direct dans un dialogue fichier (Spec 168), avec ses alias FR/EN.
+public struct FileDialogFolderSuggestion: Equatable, Sendable {
+    public let path: String
+    public let title: String
+    public let aliases: [String]
+
+    public init(path: String, title: String, aliases: [String] = []) {
+        self.path = path
+        self.title = title
+        self.aliases = aliases
+    }
+}
+
 /// Résultat d'une tentative de téléportation dans une boîte de dialogue fichier.
 public struct FileDialogJumpResult: Equatable, Sendable {
     public let succeeded: Bool
@@ -61,6 +74,10 @@ public struct FileDialogJumpService: FileDialogNavigating, Sendable {
     private static let openKeywords = ["open", "ouvrir", "choose", "choisir", "attach", "joindre", "select", "sélectionner", "import", "importer"]
     private static let saveKeywords = ["save", "enregistrer", "export", "exporter", "download", "télécharger", "print", "imprimer"]
     private static let panelIdentifierHints = ["open-panel", "save-panel", "nsopenpanel", "nssavepanel", "filedialog", "open_panel", "save_panel"]
+    private static let saveButtonTitles: Set<String> = ["save", "save…", "save...", "enregistrer", "enregistrer…", "export", "exporter"]
+    private static let openButtonTitles: Set<String> = ["open", "ouvrir", "choose", "choisir", "select", "sélectionner", "import", "importer"]
+    private static let cancelButtonTitles: Set<String> = ["cancel", "annuler"]
+    private static let newFolderButtonTitles: Set<String> = ["new folder", "nouveau dossier"]
 
     public init() {}
 
@@ -71,7 +88,9 @@ public struct FileDialogJumpService: FileDialogNavigating, Sendable {
         identifier: String?,
         title: String?,
         hasFileBrowser: Bool,
-        hasSaveField: Bool
+        hasSaveField: Bool,
+        hasDialogButtons: Bool = false,
+        hasSaveButton: Bool = false
     ) -> FileDialogKind? {
         let normRole = (role ?? "").lowercased()
         let normSubrole = (subrole ?? "").lowercased()
@@ -88,14 +107,14 @@ public struct FileDialogJumpService: FileDialogNavigating, Sendable {
             return .save
         }
         if hasPanelID {
-            if normID.contains("save") || saveKeywords.contains(where: { normTitle.contains($0) }) {
+            if hasSaveButton || normID.contains("save") || saveKeywords.contains(where: { normTitle.contains($0) }) {
                 return .save
             }
             return .open
         }
         guard isSheetOrDialog else { return nil }
-        if hasFileBrowser {
-            if saveKeywords.contains(where: { normTitle.contains($0) }) {
+        if hasFileBrowser || hasDialogButtons {
+            if hasSaveButton || saveKeywords.contains(where: { normTitle.contains($0) }) {
                 return .save
             }
             return .open
@@ -142,6 +161,29 @@ public struct FileDialogJumpService: FileDialogNavigating, Sendable {
         return nil
     }
 
+    /// Dossiers favoris macOS standards (Desktop/Bureau, Downloads/Téléchargements, Documents, Nextcloud, Home)
+    /// toujours disponibles dans un dialogue « Ouvrir / Enregistrer sous », même s'ils ne sont pas récents.
+    public static func standardFavoriteFolders(
+        homeDirectory: String = NSHomeDirectory(),
+        fileManager: FileManager = .default
+    ) -> [FileDialogFolderSuggestion] {
+        let home = (homeDirectory as NSString).standardizingPath
+        let specs: [(rel: String?, title: String, aliases: [String])] = [
+            ("Desktop", "Desktop", ["desktop", "bureau"]),
+            ("Downloads", "Downloads", ["downloads", "telechargements", "téléchargements"]),
+            ("Documents", "Documents", ["documents", "docs"]),
+            ("Nextcloud", "Nextcloud", ["nextcloud"]),
+            (nil, tr("Dossier personnel", "Home"), ["home", "accueil", "maison", (home as NSString).lastPathComponent.lowercased()]),
+        ]
+        var result: [FileDialogFolderSuggestion] = []
+        for spec in specs {
+            let raw = spec.rel.map { (home as NSString).appendingPathComponent($0) } ?? home
+            guard let resolved = resolveTargetFolder(for: raw, isFolderHint: true, fileManager: fileManager) else { continue }
+            result.append(FileDialogFolderSuggestion(path: resolved, title: spec.title, aliases: spec.aliases))
+        }
+        return result
+    }
+
     /// Collecte une liste dédupliquée de dossiers pertinents (dossiers du projet actif + récents).
     public static func suggestedFolders(
         stageFolders: [String],
@@ -161,24 +203,137 @@ public struct FileDialogJumpService: FileDialogNavigating, Sendable {
         return result
     }
 
-    /// Sonde AX ponctuelle (timeout 120 ms) sur la fenêtre active ou feuille `AXSheet` du processus.
+    /// Collecte les suggestions complètes (favoris macOS + projets + récents), avec alias bilingues
+    /// afin que `Desktop` / `Bureau`, `Downloads` / `Téléchargements` et `Documents` soient toujours proposés.
+    public static func suggestedFolderEntries(
+        stageFolders: [String],
+        recentFolders: [String],
+        favoriteFolders: [FileDialogFolderSuggestion]? = nil,
+        limit: Int = 16,
+        fileManager: FileManager = .default
+    ) -> [FileDialogFolderSuggestion] {
+        let favorites = favoriteFolders ?? standardFavoriteFolders(fileManager: fileManager)
+        let favoritesByPath = Dictionary(uniqueKeysWithValues: favorites.map { ($0.path, $0) })
+        var seen = Set<String>()
+        var result: [FileDialogFolderSuggestion] = []
+
+        func appendEntry(_ entry: FileDialogFolderSuggestion) {
+            guard result.count < limit else { return }
+            guard seen.insert(entry.path).inserted else { return }
+            result.append(entry)
+        }
+
+        // 1. Dossiers favoris macOS essentiels (Desktop, Downloads, Documents...) immédiatement accessibles.
+        for fav in favorites.prefix(3) {
+            appendEntry(fav)
+        }
+        // 2. Dossiers des projets Roadie et dossiers récents.
+        for raw in stageFolders + recentFolders {
+            guard result.count < limit else { break }
+            guard let folder = resolveTargetFolder(for: raw, isFolderHint: true, fileManager: fileManager) else { continue }
+            if let fav = favoritesByPath[folder] {
+                appendEntry(fav)
+            } else {
+                let name = (folder as NSString).lastPathComponent
+                let title = name.isEmpty ? folder : name
+                appendEntry(FileDialogFolderSuggestion(path: folder, title: title, aliases: [title.lowercased()]))
+            }
+        }
+        // 3. Reste des favoris (Nextcloud, Home).
+        for fav in favorites.dropFirst(3) {
+            appendEntry(fav)
+        }
+        return result
+    }
+
+    /// Filtre les dossiers candidats d'un dialogue fichier selon la saisie utilisateur (titre, alias FR/EN ou chemin).
+    public static func matchingFolders(
+        query: String,
+        in candidates: [FileDialogFolderSuggestion],
+        limit: Int = 5
+    ) -> [FileDialogFolderSuggestion] {
+        let normQuery = TargetHintService.normalized(query)
+        guard !normQuery.isEmpty else { return [] }
+        let words = normQuery.split(separator: " ").map(String.init)
+        guard !words.isEmpty else { return [] }
+
+        let scored: [(entry: FileDialogFolderSuggestion, score: Int)] = candidates.compactMap { entry in
+            let titleNorm = TargetHintService.normalized(entry.title)
+            let aliasesNorm = entry.aliases.map(TargetHintService.normalized)
+            let pathNorm = TargetHintService.normalized(entry.path)
+            let haystack = ([titleNorm] + aliasesNorm + [pathNorm]).joined(separator: " ")
+            guard words.allSatisfy({ haystack.contains($0) }) else { return nil }
+            let exact = titleNorm == normQuery || aliasesNorm.contains(normQuery)
+            let prefix = titleNorm.hasPrefix(normQuery) || aliasesNorm.contains(where: { $0.hasPrefix(normQuery) })
+            let score = exact ? 3 : (prefix ? 2 : 1)
+            return (entry, score)
+        }
+        return scored
+            .sorted { $0.score != $1.score ? $0.score > $1.score : false }
+            .prefix(limit)
+            .map(\.entry)
+    }
+
+    /// Sonde AX ponctuelle (timeout 120 ms) sur la fenêtre active, ses feuilles (`AXSheets` / `AXSheet`),
+    /// l'élément focalisé et `AXWindows` du processus (couvre aussi les dialogues XPC sandboxés comme TextEdit).
     public func detect(pid: pid_t, appName: String) -> FileDialogContext? {
         guard pid > 0, AXIsProcessTrusted() else { return nil }
         let appElement = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(appElement, 0.12)
 
-        guard let focusedWindow = Self.copyElement(appElement, kAXFocusedWindowAttribute)
-            ?? Self.copyElement(appElement, kAXMainWindowAttribute)
-        else { return nil }
-
-        // Priorité à une feuille AXSheet attachée à la fenêtre active (cas standard NSOpenPanel/NSSavePanel).
         var candidates: [AXUIElement] = []
-        if let children = Self.copyElementArray(focusedWindow, kAXChildrenAttribute) {
-            for child in children where Self.copyString(child, kAXRoleAttribute) == kAXSheetRole {
-                candidates.append(child)
+        var seen = CFIdentitySet()
+        func addCandidate(_ element: AXUIElement?) {
+            guard let element, seen.insert(element) else { return }
+            candidates.append(element)
+        }
+
+        // 1. Chaîne ascendante depuis l'élément focalisé (détecte immédiatement le champ « Save As » XPC).
+        if let focusedElement = Self.copyElement(appElement, kAXFocusedUIElementAttribute) {
+            let focusedID = (Self.copyString(focusedElement, kAXIdentifierAttribute) ?? "").lowercased()
+            let focusedDesc = (Self.copyString(focusedElement, kAXDescriptionAttribute) ?? "").lowercased()
+            if focusedID.contains("saveasnametextfield") || focusedID.contains("namefieldstringvalue")
+                || focusedDesc.contains("save as") || focusedDesc.contains("enregistrer sous") {
+                return FileDialogContext(pid: pid, appName: appName, kind: .save, title: "")
+            }
+            addCandidate(Self.copyElement(focusedElement, kAXWindowAttribute))
+            var cursor: AXUIElement? = focusedElement
+            for _ in 0..<6 {
+                guard let parent = cursor.flatMap({ Self.copyElement($0, kAXParentAttribute) }) else { break }
+                let role = Self.copyString(parent, kAXRoleAttribute) ?? ""
+                if role == kAXSheetRole || role == kAXWindowRole {
+                    addCandidate(parent)
+                }
+                cursor = parent
             }
         }
-        candidates.append(focusedWindow)
+
+        // 2. Feuilles attachées (AXSheets et enfants AXSheet) de la fenêtre active/principale.
+        let primaryWindows = [
+            Self.copyElement(appElement, kAXFocusedWindowAttribute),
+            Self.copyElement(appElement, kAXMainWindowAttribute),
+        ].compactMap(\.self)
+        for win in primaryWindows {
+            if let sheets = Self.copyElementArray(win, "AXSheets") {
+                for sheet in sheets { addCandidate(sheet) }
+            }
+            if let children = Self.copyElementArray(win, kAXChildrenAttribute) {
+                for child in children where Self.copyString(child, kAXRoleAttribute) == kAXSheetRole {
+                    addCandidate(child)
+                }
+            }
+            addCandidate(win)
+        }
+
+        // 3. Toutes les fenêtres AX exposées par l'application (inclut les dialogues Powerbox XPC).
+        if let windows = Self.copyElementArray(appElement, kAXWindowsAttribute) {
+            for win in windows.prefix(10) {
+                if let sheets = Self.copyElementArray(win, "AXSheets") {
+                    for sheet in sheets { addCandidate(sheet) }
+                }
+                addCandidate(win)
+            }
+        }
 
         for element in candidates {
             AXUIElementSetMessagingTimeout(element, 0.12)
@@ -186,14 +341,16 @@ public struct FileDialogJumpService: FileDialogNavigating, Sendable {
             let subrole = Self.copyString(element, kAXSubroleAttribute)
             let identifier = Self.copyString(element, kAXIdentifierAttribute)
             let title = Self.copyString(element, kAXTitleAttribute)
-            let probe = Self.probePanelChildren(element, maxNodes: 60)
+            let probe = Self.probePanelChildren(element, maxNodes: 120)
             if let kind = Self.classify(
                 role: role,
                 subrole: subrole,
                 identifier: identifier,
                 title: title,
                 hasFileBrowser: probe.hasFileBrowser,
-                hasSaveField: probe.hasSaveField
+                hasSaveField: probe.hasSaveField,
+                hasDialogButtons: probe.hasDialogButtons,
+                hasSaveButton: probe.hasSaveButton
             ) {
                 return FileDialogContext(pid: pid, appName: appName, kind: kind, title: title ?? "")
             }
@@ -217,18 +374,24 @@ public struct FileDialogJumpService: FileDialogNavigating, Sendable {
         app.activate(options: [])
         Thread.sleep(forTimeInterval: 0.08)
 
-        // 1. Envoyer ⌘⇧G (keycode 5 = 'g') pour ouvrir la feuille native « Aller au dossier ».
-        Self.postKey(keyCode: 5, flags: [.maskCommand, .maskShift])
-
-        // 2. Attendre brièvement l'apparition du champ texte de la feuille « Aller au dossier » (400 ms max).
         let appElement = AXUIElementCreateApplication(context.pid)
         AXUIElementSetMessagingTimeout(appElement, 0.15)
-        let deadline = Date().addingTimeInterval(0.45)
+        // Mémoriser l'élément focalisé AVANT ⌘⇧G (ex. le champ « Save As: Untitled ») afin de ne
+        // JAMAIS écrire le chemin dans le nom du fichier en cours d'enregistrement.
+        let previousFocused = Self.copyElement(appElement, kAXFocusedUIElementAttribute)
+
+        // 1. Envoyer ⌘⇧G (keycode 5 = 'g') pour ouvrir la feuille native « Aller au dossier ».
+        Self.postKey(keyCode: 5, flags: [.maskCommand, .maskShift])
+        Thread.sleep(forTimeInterval: 0.06)
+
+        // 2. Attendre l'apparition du NOUVEAU champ texte de la feuille « Aller au dossier » (500 ms max).
+        let deadline = Date().addingTimeInterval(0.5)
         var targetField: AXUIElement?
         while Date() < deadline {
             if let focused = Self.copyElement(appElement, kAXFocusedUIElementAttribute) {
+                let isSameAsBefore = previousFocused.map { CFEqual($0, focused) } ?? false
                 let role = Self.copyString(focused, kAXRoleAttribute) ?? ""
-                if role == kAXComboBoxRole || role == kAXTextFieldRole {
+                if !isSameAsBefore && (role == kAXComboBoxRole || role == kAXTextFieldRole) {
                     targetField = focused
                     break
                 }
@@ -254,29 +417,51 @@ public struct FileDialogJumpService: FileDialogNavigating, Sendable {
 
     // MARK: - Helpers AX & événements clavier bornés
 
-    private static func probePanelChildren(_ root: AXUIElement, maxNodes: Int) -> (hasFileBrowser: Bool, hasSaveField: Bool) {
+    private struct PanelProbeResult {
+        var hasFileBrowser = false
+        var hasSaveField = false
+        var hasSaveButton = false
+        var hasOpenButton = false
+        var hasCancelButton = false
+        var hasNewFolderButton = false
+
+        var hasDialogButtons: Bool {
+            (hasSaveButton || hasOpenButton) && (hasCancelButton || hasNewFolderButton)
+        }
+    }
+
+    private static func probePanelChildren(_ root: AXUIElement, maxNodes: Int) -> PanelProbeResult {
         var stack: [(AXUIElement, Int)] = [(root, 0)]
         var visited = 0
-        var hasBrowser = false
-        var hasSave = false
+        var probe = PanelProbeResult()
 
         while let (node, depth) = stack.popLast(), visited < maxNodes {
             visited += 1
             let role = copyString(node, kAXRoleAttribute) ?? ""
             let identifier = (copyString(node, kAXIdentifierAttribute) ?? "").lowercased()
-            if role == "AXBrowser" || (role == "AXOutline" && identifier.contains("file")) || identifier.contains("open-panel") {
-                hasBrowser = true
+            let title = (copyString(node, kAXTitleAttribute) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let desc = (copyString(node, kAXDescriptionAttribute) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            if role == "AXBrowser" || (role == "AXOutline" && (identifier.contains("file") || identifier.contains("sidebar"))) || identifier.contains("open-panel") {
+                probe.hasFileBrowser = true
             }
-            if identifier.contains("saveasnametextfield") || identifier.contains("save-panel") || identifier.contains("namefieldstringvalue") {
-                hasSave = true
+            if identifier.contains("saveasnametextfield") || identifier.contains("save-panel") || identifier.contains("namefieldstringvalue")
+                || (role == kAXTextFieldRole && (desc.contains("save as") || desc.contains("enregistrer sous"))) {
+                probe.hasSaveField = true
             }
-            if hasBrowser && hasSave { break }
-            guard depth < 4, let children = copyElementArray(node, kAXChildrenAttribute) else { continue }
-            for child in children.prefix(16) {
+            if role == kAXButtonRole {
+                if saveButtonTitles.contains(title) { probe.hasSaveButton = true }
+                if openButtonTitles.contains(title) { probe.hasOpenButton = true }
+                if cancelButtonTitles.contains(title) { probe.hasCancelButton = true }
+                if newFolderButtonTitles.contains(title) { probe.hasNewFolderButton = true }
+            }
+            if probe.hasFileBrowser && probe.hasSaveField { break }
+            guard depth < 6, let children = copyElementArray(node, kAXChildrenAttribute) else { continue }
+            for child in children.prefix(24) {
                 stack.append((child, depth + 1))
             }
         }
-        return (hasBrowser, hasSave)
+        return probe
     }
 
     private static func copyElement(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {

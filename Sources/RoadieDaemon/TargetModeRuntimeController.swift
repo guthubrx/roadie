@@ -965,18 +965,18 @@ public final class TargetModeRuntimeController: NSObject {
         var idle: [LauncherList.Row] = []
         if let dialog = context.activeFileDialog, context.fileDialogJumpEnabled {
             let projectFolders = context.projects.flatMap(\.extraURLs).filter { !$0.contains("://") }
-            let folders = FileDialogJumpService.suggestedFolders(
+            let entries = FileDialogJumpService.suggestedFolderEntries(
                 stageFolders: projectFolders,
-                recentFolders: LauncherRecentFiles.shared.recentFolders(limit: 8),
-                limit: 6
+                recentFolders: LauncherRecentFiles.shared.recentFolders(limit: 12),
+                limit: 16
             )
-            if !folders.isEmpty {
+            context.fileDialogFolders = entries
+            if !entries.isEmpty {
                 idle.append(.header(dialog.label))
-                for folder in folders {
-                    let name = (folder as NSString).lastPathComponent
-                    let file = LauncherFile(path: folder, name: name.isEmpty ? folder : name, isFolder: true, lastUsed: nil)
+                for entry in entries.prefix(8) {
+                    let file = LauncherFile(path: entry.path, name: entry.title, isFolder: true, lastUsed: nil)
                     let action = LauncherAction(subject: .file(file), verb: .useInFileDialog, destination: nil)
-                    idle.append(.action("file-dialog:\(folder)", action, file.name, LauncherList.shortPath(folder)))
+                    idle.append(.action("file-dialog:\(entry.path)", action, entry.title, LauncherList.shortPath(entry.path)))
                 }
             }
         }

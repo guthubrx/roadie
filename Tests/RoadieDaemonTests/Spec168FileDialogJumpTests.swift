@@ -47,11 +47,46 @@ struct Spec168FileDialogJumpTests {
             hasFileBrowser: true, hasSaveField: false
         ) == .save)
 
+        // Feuille Save As sandboxée (TextEdit XPC : pas de titre, boutons Save + Cancel)
+        #expect(FileDialogJumpService.classify(
+            role: "AXSheet", subrole: nil, identifier: nil, title: "",
+            hasFileBrowser: false, hasSaveField: false, hasDialogButtons: true, hasSaveButton: true
+        ) == .save)
+
         // Une fenêtre applicative normale n'est jamais classée comme dialogue fichier
         #expect(FileDialogJumpService.classify(
             role: "AXWindow", subrole: "AXStandardWindow", identifier: nil, title: "Open Issues - GitHub",
             hasFileBrowser: false, hasSaveField: false
         ) == nil)
+    }
+
+    @Test func standardFavoriteFoldersAndBilingualSearchMatchDesktop() throws {
+        let fakeHome = try tempDir("fake-home")
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        for name in ["Desktop", "Downloads", "Documents", "Nextcloud"] {
+            try FileManager.default.createDirectory(at: fakeHome.appendingPathComponent(name), withIntermediateDirectories: true)
+        }
+
+        let favorites = FileDialogJumpService.standardFavoriteFolders(homeDirectory: fakeHome.path)
+        let titles = favorites.map(\.title)
+        #expect(titles.contains("Desktop"))
+        #expect(titles.contains("Downloads"))
+        #expect(titles.contains("Documents"))
+
+        let entries = FileDialogJumpService.suggestedFolderEntries(
+            stageFolders: [],
+            recentFolders: [],
+            favoriteFolders: favorites,
+            limit: 10
+        )
+        #expect(entries.first?.title == "Desktop")
+
+        let matchEN = FileDialogJumpService.matchingFolders(query: "desktop", in: entries)
+        #expect(matchEN.first?.title == "Desktop")
+        let matchFR = FileDialogJumpService.matchingFolders(query: "bureau", in: entries)
+        #expect(matchFR.first?.title == "Desktop")
+        let matchDL = FileDialogJumpService.matchingFolders(query: "telecharg", in: entries)
+        #expect(matchDL.first?.title == "Downloads")
     }
 
     @Test func resolvesFolderAndFileParentAndDeduplicatesSuggestions() throws {

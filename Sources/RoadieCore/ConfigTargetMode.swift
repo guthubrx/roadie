@@ -581,9 +581,10 @@ public struct AppTargetsConfig: Equatable, Codable, Sendable {
     public var axBoostEnabled: Bool
     public var maxDepth: Int
     public var additionalBoostBundleIDs: [String]
-    /// Spec 169 : repli OCR local macOS Vision (désactivé par défaut ; 0 capture et 0 CPU/RAM si faux).
+    /// Spec 169 : OCR local macOS Vision (désactivé par défaut ; 0 capture et 0 CPU/RAM si faux).
     public var ocrFallbackEnabled: Bool
-    /// Nombre maximal de cibles AX en dessous duquel le repli OCR se déclenche sur une fenêtre (0..30).
+    /// Seuil AX de déclenchement OCR (0..30). 0 = complète toujours l'Accessibilité sur chaque fenêtre
+    /// visible pour trouver n'importe quel texte affiché ; 1..30 = uniquement si l'AX trouve <= N cibles.
     public var ocrFallbackThreshold: Int
 
     public init(
@@ -597,7 +598,7 @@ public struct AppTargetsConfig: Equatable, Codable, Sendable {
         maxDepth: Int = 12,
         additionalBoostBundleIDs: [String] = [],
         ocrFallbackEnabled: Bool = false,
-        ocrFallbackThreshold: Int = 3
+        ocrFallbackThreshold: Int = 0
     ) {
         self.enabled = enabled
         self.scope = scope
@@ -639,7 +640,7 @@ public struct AppTargetsConfig: Equatable, Codable, Sendable {
             maxDepth: try c.decodeIfPresent(Int.self, forKey: .maxDepth) ?? 12,
             additionalBoostBundleIDs: try c.decodeIfPresent([String].self, forKey: .additionalBoostBundleIDs) ?? [],
             ocrFallbackEnabled: try c.decodeIfPresent(Bool.self, forKey: .ocrFallbackEnabled) ?? false,
-            ocrFallbackThreshold: try c.decodeIfPresent(Int.self, forKey: .ocrFallbackThreshold) ?? 3
+            ocrFallbackThreshold: try c.decodeIfPresent(Int.self, forKey: .ocrFallbackThreshold) ?? 0
         )
     }
 }

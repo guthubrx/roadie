@@ -32,10 +32,18 @@ public struct OCRScanMetrics: Codable, Equatable, Sendable {
     }
 }
 
-/// Module isolé (Spec 169) : repli OCR 100 % local via Apple Vision (`VNRecognizeTextRequest`).
-/// Zéro timer, zéro mémoire et zéro capture tant que `experimental.app_targets.ocr_fallback == false`
-/// ou tant que le scan Accessibilité a déjà trouvé suffisamment de cibles (`> ocr_fallback_threshold`).
+/// Module isolé (Spec 169) : OCR 100 % local via Apple Vision (`VNRecognizeTextRequest`).
+/// Zéro timer, zéro mémoire et zéro capture tant que `experimental.app_targets.ocr_fallback == false`.
+/// Quand `ocr_fallback_threshold == 0` (défaut), complète toujours l'Accessibilité sur chaque fenêtre
+/// visible afin de trouver et surligner n'importe quel texte affiché à l'écran.
 public enum ScreenSearchOCRService {
+    /// Décide si une passe OCR doit tourner sur cette fenêtre selon la configuration et le nombre
+    /// de cibles AX déjà collectées. `ocr_fallback_threshold == 0` signifie toujours actif.
+    public static func shouldRunOCR(config: AppTargetsConfig, existingAXCount: Int) -> Bool {
+        guard config.ocrFallbackEnabled else { return false }
+        return config.ocrFallbackThreshold == 0 || existingAXCount <= config.ocrFallbackThreshold
+    }
+
     /// Convertit une boîte normalisée Vision (`[0,1]×[0,1]`, origine en bas-gauche) vers le repère
     /// Accessibilité macOS (points logiques, origine en haut-gauche, compatible coordonnées négatives).
     public static func normalizedBoxToAXRect(_ box: CGRect, in windowFrame: Rect) -> Rect {
@@ -50,16 +58,46 @@ public enum ScreenSearchOCRService {
         return Rect(x: x, y: y, width: width, height: height)
     }
 
-    /// Retourne `true` si la boîte OCR recouvre majoritairement une cible AX déjà trouvée (>= 60 %).
+    /// Retourne `true` si la boîte OCR correspond sensiblement à la même zone qu'une cible AX existante
+    /// (recouvrement mutuel : évite d'écarter une ligne de texte située dans un grand conteneur AX).
     public static func overlapsExisting(_ candidate: Rect, existingFrames: [Rect]) -> Bool {
         let candRect = candidate.cgRect
         let candArea = candRect.width * candRect.height
         guard candArea > 0 else { return true }
         for existing in existingFrames {
-            let inter = candRect.intersection(existing.cgRect)
+            let existingRect = existing.cgRect
+            let existingArea = existingRect.width * existingRect.height
+            guard existingArea > 0 else { continue }
+            let inter = candRect.intersection(existingRect)
             guard !inter.isNull, !inter.isEmpty else { continue }
-            let ratio = (inter.width * inter.height) / candArea
-            if ratio >= 0.6 {
+            let interArea = inter.width * inter.height
+            if (interArea / candArea) >= 0.6 && (interArea / existingArea) >= 0.35 {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Retourne `true` si une cible AX recouvrant déjà cette boîte porte déjà le même texte recherchable.
+    private static func isRedundantWithExisting(
+        _ candidate: Rect,
+        normalizedText: String,
+        existingTargets: [(frame: Rect, matchText: String)]
+    ) -> Bool {
+        let candRect = candidate.cgRect
+        let candArea = candRect.width * candRect.height
+        guard candArea > 0 else { return true }
+        for existing in existingTargets {
+            let existingRect = existing.frame.cgRect
+            let existingArea = existingRect.width * existingRect.height
+            guard existingArea > 0 else { continue }
+            let inter = candRect.intersection(existingRect)
+            guard !inter.isNull, !inter.isEmpty else { continue }
+            let interArea = inter.width * inter.height
+            let candRatio = interArea / candArea
+            let existingRatio = interArea / existingArea
+            // Même bouton/libellé (tailles comparables) OU conteneur AX qui expose déjà exactement ce texte.
+            if candRatio >= 0.6 && (existingRatio >= 0.35 || (!normalizedText.isEmpty && existing.matchText.contains(normalizedText))) {
                 return true
             }
         }
@@ -79,29 +117,60 @@ public enum ScreenSearchOCRService {
         return Int(info.phys_footprint / 1024)
     }
 
-    /// Capture ponctuelle d'une fenêtre via ScreenCaptureKit, strictement conditionnée à
-    /// `CGPreflightScreenCaptureAccess()` (zéro popup système si refusé, zéro warning deprecated).
-    /// Appelée uniquement depuis les fils de scan hors `@MainActor` ; bornée à 350 ms.
-    public static func captureWindowImage(windowID: CGWindowID) -> CGImage? {
-        guard CGPreflightScreenCaptureAccess() else { return nil }
-        final class Box: @unchecked Sendable { var image: CGImage? }
+    /// Liste en un seul appel ScreenCaptureKit les fenêtres visibles capturables (0 appel si non autorisé).
+    public static func shareableWindowsByID() -> [CGWindowID: SCWindow] {
+        guard CGPreflightScreenCaptureAccess() else { return [:] }
+        final class Box: @unchecked Sendable { var windows: [CGWindowID: SCWindow] = [:] }
         let box = Box()
         let semaphore = DispatchSemaphore(value: 0)
         Task.detached(priority: .userInitiated) {
             defer { semaphore.signal() }
-            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
-                  let window = content.windows.first(where: { $0.windowID == windowID })
-            else { return }
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) else { return }
+            var map: [CGWindowID: SCWindow] = [:]
+            map.reserveCapacity(content.windows.count)
+            for window in content.windows {
+                map[window.windowID] = window
+            }
+            box.windows = map
+        }
+        _ = semaphore.wait(timeout: .now() + .milliseconds(450))
+        return box.windows
+    }
+
+    /// Capture ponctuelle d'une fenêtre via ScreenCaptureKit, strictement conditionnée à
+    /// `CGPreflightScreenCaptureAccess()` (zéro popup système si refusé, zéro warning deprecated).
+    /// Appelée uniquement depuis les fils de scan hors `@MainActor` ; bornée à 750 ms.
+    public static func captureWindowImage(windowID: CGWindowID, preloadedWindow: SCWindow? = nil) -> CGImage? {
+        guard CGPreflightScreenCaptureAccess() else { return nil }
+        final class Box: @unchecked Sendable { var image: CGImage? }
+        final class WindowRef: @unchecked Sendable {
+            let window: SCWindow?
+            init(_ window: SCWindow?) { self.window = window }
+        }
+        let box = Box()
+        let ref = WindowRef(preloadedWindow)
+        let semaphore = DispatchSemaphore(value: 0)
+        Task.detached(priority: .userInitiated) {
+            defer { semaphore.signal() }
+            let targetWindow: SCWindow?
+            if let preloaded = ref.window {
+                targetWindow = preloaded
+            } else {
+                let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                targetWindow = content?.windows.first(where: { $0.windowID == windowID })
+            }
+            guard let window = targetWindow else { return }
+            let scale = min(2.0, max(1.0, 2560.0 / max(1.0, Double(window.frame.width))))
             let config = SCStreamConfiguration()
-            config.width = max(1, Int(window.frame.width))
-            config.height = max(1, Int(window.frame.height))
+            config.width = max(1, Int((Double(window.frame.width) * scale).rounded()))
+            config.height = max(1, Int((Double(window.frame.height) * scale).rounded()))
             config.showsCursor = false
             box.image = try? await SCScreenshotManager.captureImage(
                 contentFilter: SCContentFilter(desktopIndependentWindow: window),
                 configuration: config
             )
         }
-        _ = semaphore.wait(timeout: .now() + .milliseconds(350))
+        _ = semaphore.wait(timeout: .now() + .milliseconds(750))
         return box.image
     }
 
@@ -114,7 +183,7 @@ public enum ScreenSearchOCRService {
         pid: pid_t,
         appName: String,
         existingTargets: [RoadieTarget] = [],
-        maxTargets: Int = 80
+        maxTargets: Int = 160
     ) -> (targets: [RoadieTarget], metrics: OCRScanMetrics) {
         let startFootprint = currentPhysFootprintKB()
         let startedAt = CFAbsoluteTimeGetCurrent()
@@ -123,7 +192,8 @@ public enum ScreenSearchOCRService {
         request.recognitionLevel = .fast
         request.usesLanguageCorrection = false
         request.recognitionLanguages = ["fr-FR", "en-US"]
-        request.minimumTextHeight = 0.012
+        // 0.005 (~7 pt sur un écran 1440p) pour lire aussi le corps de texte 12–14 pt des apps et navigateurs.
+        request.minimumTextHeight = 0.005
 
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
         do {
@@ -142,7 +212,10 @@ public enum ScreenSearchOCRService {
         }
 
         let observations = request.results ?? []
-        let existingFrames = existingTargets.compactMap { $0.clickFrame ?? $0.frame }
+        let existingEntries: [(frame: Rect, matchText: String)] = existingTargets.compactMap { target in
+            guard let frame = target.clickFrame ?? target.frame else { return nil }
+            return (frame, target.matchText)
+        }
         let subtitle = appName.isEmpty ? "OCR" : "OCR · \(appName)"
         var retained: [RoadieTarget] = []
         retained.reserveCapacity(min(observations.count, maxTargets))
@@ -154,7 +227,8 @@ public enum ScreenSearchOCRService {
             guard text.count >= 2 else { continue }
             let frame = normalizedBoxToAXRect(observation.boundingBox, in: windowFrame)
             guard frame.width >= 6, frame.height >= 6 else { continue }
-            guard !overlapsExisting(frame, existingFrames: existingFrames) else { continue }
+            let normalizedText = RoadieTarget.normalizedMatchText([text])
+            guard !isRedundantWithExisting(frame, normalizedText: normalizedText, existingTargets: existingEntries) else { continue }
 
             let id = "app:\(pid)/ocr:\(windowID)/\(index)"
             retained.append(RoadieTarget(
@@ -184,21 +258,21 @@ public enum ScreenSearchOCRService {
         return (retained, metrics)
     }
 
-    /// Point d'entrée de repli pour `LiveAppTargetProvider` : capture + OCR seulement si le module est activé
-    /// et si le scan AX n'a trouvé que peu ou pas de cibles sur la fenêtre.
+    /// Point d'entrée pour `LiveAppTargetProvider` : capture + OCR seulement si le module est activé
+    /// et si le seuil (`0` = toujours, `1..30` = si `<= seuil`) l'autorise.
     public static func fallbackTargetsIfNeeded(
         config: AppTargetsConfig,
         existingTargets: [RoadieTarget],
         windowID: CGWindowID,
         windowFrame: Rect,
         pid: pid_t,
-        appName: String
+        appName: String,
+        preloadedWindow: SCWindow? = nil
     ) -> (targets: [RoadieTarget], metrics: OCRScanMetrics?) {
-        guard config.ocrFallbackEnabled else { return ([], nil) }
-        guard existingTargets.count <= config.ocrFallbackThreshold else { return ([], nil) }
+        guard shouldRunOCR(config: config, existingAXCount: existingTargets.count) else { return ([], nil) }
         guard windowFrame.width >= 40, windowFrame.height >= 40 else { return ([], nil) }
-        guard let image = captureWindowImage(windowID: windowID) else { return ([], nil) }
-        let remaining = max(1, config.maxTargets - existingTargets.count)
+        guard let image = captureWindowImage(windowID: windowID, preloadedWindow: preloadedWindow) else { return ([], nil) }
+        let ocrCap = min(160, max(80, config.maxTargets))
         let result = recognize(
             image: image,
             windowFrame: windowFrame,
@@ -206,7 +280,7 @@ public enum ScreenSearchOCRService {
             pid: pid,
             appName: appName,
             existingTargets: existingTargets,
-            maxTargets: min(80, remaining)
+            maxTargets: ocrCap
         )
         return (result.targets, result.metrics)
     }

@@ -62,10 +62,10 @@ public enum RoadieModuleCatalog {
         RoadieModuleDescriptor(
             settingID: "app_targets.ocr_fallback",
             symbolName: "text.viewfinder",
-            titleFR: "Repli OCR local (Apple Vision)",
-            titleEN: "Local OCR fallback (Apple Vision)",
-            summaryFR: "Lit en local le texte d'apps pauvres en Accessibilité (~11 ms à chaud, ~200 Mo RAM au 1er appel). Désactivé par défaut : 0 Mo et 0 capture.",
-            summaryEN: "Locally reads text in sparse-AX apps (~11 ms warm, ~200 MB RAM on first call). Off by default: 0 MB and zero capture.",
+            titleFR: "OCR local sur l'écran (Apple Vision)",
+            titleEN: "Local screen OCR (Apple Vision)",
+            summaryFR: "Lit en local le texte visible à l'écran dans « Rechercher à l'écran » (~11-35 ms à chaud, ~200 Mo RAM au 1er appel). Désactivé par défaut : 0 Mo et 0 capture.",
+            summaryEN: "Locally reads visible screen text in Find on screen (~11-35 ms warm, ~200 MB RAM on first call). Off by default: 0 MB and zero capture.",
             offByDefault: true
         ),
         RoadieModuleDescriptor(

@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import RoadieAX
 import RoadieCore
+import ScreenCaptureKit
 
 public struct AppTargetQueryReport: Codable, Equatable, Sendable {
     public var targets: [RoadieTarget]
@@ -452,7 +453,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         AppTargetElementRegistry.shared.add(result.pass.elements, generation: generation)
         let partial = result.pass.stopReason != "complete"
         var targets = AppTargetQueryService.targets(from: result.pass.candidates, config: config, windowID: windowID)
-        if config.ocrFallbackEnabled, targets.count <= config.ocrFallbackThreshold,
+        if ScreenSearchOCRService.shouldRunOCR(config: config, existingAXCount: targets.count),
            let winFrame = Self.copyFrame(window) {
             let ocr = ScreenSearchOCRService.fallbackTargetsIfNeeded(
                 config: config,
@@ -503,19 +504,29 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         let generation = AppTargetElementRegistry.shared.begin()
         let windows = Self.visibleWindows()
         var elementsByPID: [pid_t: [CGWindowID: AXUIElement]] = [:]
-        var jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)] = []
+        var jobs: [(order: Int, id: CGWindowID, element: AXUIElement?, app: NSRunningApplication)] = []
         var skipped: [AppTargetScanStats] = []
         for (order, window) in windows.enumerated() {
             if elementsByPID[window.pid] == nil {
                 elementsByPID[window.pid] = axWindowElements(pid: window.pid)
             }
             let app = NSRunningApplication(processIdentifier: window.pid)
-            guard let element = elementsByPID[window.pid]?[window.id], let app else {
+            let element = elementsByPID[window.pid]?[window.id]
+            guard let app else {
                 skipped.append(AppTargetScanStats(
-                    bundleID: app?.bundleIdentifier ?? "pid:\(window.pid)", isElectron: false, manualAccessibility: "skipped",
+                    bundleID: "pid:\(window.pid)", isElectron: false, manualAccessibility: "skipped",
                     visited: 0, candidates: 0, offscreen: 0, maxDepthReached: 0, atMaxDepth: 0, sawWebArea: false,
                     focusableAdded: 0, rejectedRoles: "window=\(window.id),axWindows=\(elementsByPID[window.pid]?.count ?? 0)",
-                    elapsedMs: 0, stopReason: app == nil ? "no_app" : "no_ax_window", retries: 0
+                    elapsedMs: 0, stopReason: "no_app", retries: 0
+                ))
+                continue
+            }
+            guard element != nil || config.ocrFallbackEnabled else {
+                skipped.append(AppTargetScanStats(
+                    bundleID: app.bundleIdentifier ?? "pid:\(window.pid)", isElectron: false, manualAccessibility: "skipped",
+                    visited: 0, candidates: 0, offscreen: 0, maxDepthReached: 0, atMaxDepth: 0, sawWebArea: false,
+                    focusableAdded: 0, rejectedRoles: "window=\(window.id),axWindows=\(elementsByPID[window.pid]?.count ?? 0)",
+                    elapsedMs: 0, stopReason: "no_ax_window", retries: 0
                 ))
                 continue
             }
@@ -524,30 +535,63 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
 
         let startedAt = Date()
         let frames = windows.map(\.frame)
-        let batch = WindowScanBatch(jobs: jobs)
+        let scWindows = config.ocrFallbackEnabled ? ScreenSearchOCRService.shareableWindowsByID() : [:]
+        let batch = WindowScanBatch(jobs: jobs, scWindows: scWindows)
         DispatchQueue.concurrentPerform(iterations: jobs.count) { index in
             let job = batch.jobs[index]
-            let scan = scanWindow(job.element, app: job.app, rootPath: "w\(job.id)", config: config, startedAt: startedAt)
             let inFront = Array(frames.prefix(job.order))
-            var targets = AppTargetQueryService.targets(from: scan.pass.candidates, config: config, windowID: job.id)
-                .filter { !AppTargetQueryService.isCovered($0, by: inFront) }
-            if config.ocrFallbackEnabled, targets.count <= config.ocrFallbackThreshold, job.order < frames.count {
+            var targets: [RoadieTarget] = []
+            var stats: AppTargetScanStats
+            var partial = false
+            if let element = job.element {
+                let scan = scanWindow(element, app: job.app, rootPath: "w\(job.id)", config: config, startedAt: startedAt)
+                targets = AppTargetQueryService.targets(from: scan.pass.candidates, config: config, windowID: job.id)
+                    .filter { !AppTargetQueryService.isCovered($0, by: inFront) }
+                stats = scan.stats
+                partial = scan.pass.stopReason != "complete"
+                // Avant `onWindow` : une cible affichée peut être cliquée aussitôt (mode recherche).
+                AppTargetElementRegistry.shared.add(scan.pass.elements, generation: generation)
+            } else {
+                stats = AppTargetScanStats(
+                    bundleID: job.app.bundleIdentifier ?? "pid:\(job.app.processIdentifier)",
+                    isElectron: false,
+                    manualAccessibility: "ocr_only",
+                    visited: 0,
+                    candidates: 0,
+                    offscreen: 0,
+                    maxDepthReached: 0,
+                    atMaxDepth: 0,
+                    sawWebArea: false,
+                    focusableAdded: 0,
+                    rejectedRoles: "window=\(job.id)",
+                    elapsedMs: 0,
+                    stopReason: "complete",
+                    retries: 0
+                )
+            }
+            if ScreenSearchOCRService.shouldRunOCR(config: config, existingAXCount: targets.count), job.order < frames.count {
                 let ocr = ScreenSearchOCRService.fallbackTargetsIfNeeded(
                     config: config,
                     existingTargets: targets,
                     windowID: job.id,
                     windowFrame: frames[job.order],
                     pid: job.app.processIdentifier,
-                    appName: job.app.localizedName ?? ""
+                    appName: job.app.localizedName ?? "",
+                    preloadedWindow: batch.scWindows[job.id]
                 )
                 let visibleOCR = ocr.targets.filter { !AppTargetQueryService.isCovered($0, by: inFront) }
-                targets.append(contentsOf: visibleOCR)
+                if !visibleOCR.isEmpty {
+                    targets.append(contentsOf: visibleOCR)
+                    stats.candidates += visibleOCR.count
+                    let ocrTag = "ocr=\(visibleOCR.count)"
+                    stats.rejectedRoles = stats.rejectedRoles.isEmpty ? ocrTag : "\(stats.rejectedRoles),\(ocrTag)"
+                }
+                if job.element == nil, let metrics = ocr.metrics {
+                    stats.elapsedMs = metrics.elapsedMs
+                }
             }
-            let result = VisibleWindowScan(order: job.order, targets: targets, stats: scan.stats,
-                                           partial: scan.pass.stopReason != "complete")
+            let result = VisibleWindowScan(order: job.order, targets: targets, stats: stats, partial: partial)
             batch.results[index] = result
-            // Avant `onWindow` : une cible affichée peut être cliquée aussitôt (mode recherche).
-            AppTargetElementRegistry.shared.add(scan.pass.elements, generation: generation)
             onWindow(result)
         }
         return (Array(batch.results).compactMap(\.self), skipped)
@@ -561,11 +605,13 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     /// `@unchecked Sendable` : pendant `concurrentPerform`, chaque fil lit `jobs` sans le modifier
     /// et écrit seulement sa case de `results`. Les éléments AX se lisent depuis n'importe quel fil.
     private final class WindowScanBatch: @unchecked Sendable {
-        let jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)]
+        let jobs: [(order: Int, id: CGWindowID, element: AXUIElement?, app: NSRunningApplication)]
+        let scWindows: [CGWindowID: SCWindow]
         let results: UnsafeMutableBufferPointer<VisibleWindowScan?>
 
-        init(jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)]) {
+        init(jobs: [(order: Int, id: CGWindowID, element: AXUIElement?, app: NSRunningApplication)], scWindows: [CGWindowID: SCWindow]) {
             self.jobs = jobs
+            self.scWindows = scWindows
             results = .allocate(capacity: jobs.count)
             results.initialize(repeating: nil)
         }
@@ -875,7 +921,14 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         case .focused:
             break
         case .windowGone:
-            return TargetActionResult(changed: false, message: "stale_target: window_gone \(target.id)", target: target, error: "stale_target")
+            // Fenêtre XPC/panneau sans AXUIElement : autoriser un clic OCR uniquement si la fenêtre
+            // est toujours tout devant dans la pile CGWindow (hors Roadie).
+            let ocrTopWindow = target.id.contains("/ocr:")
+                && NSRunningApplication(processIdentifier: pid) != nil
+                && Self.frontWindowID(excluding: getpid()) == windowID
+            guard ocrTopWindow else {
+                return TargetActionResult(changed: false, message: "stale_target: window_gone \(target.id)", target: target, error: "stale_target")
+            }
         case .timedOut:
             // Diagnostic (essai du 30 octobre 2026) : ce que l'accessibilité voit au premier plan à l'échéance.
             return TargetActionResult(changed: false, message: "focus_failed: \(Self.focusDescription(pid: pid)) \(target.id)",

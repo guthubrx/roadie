@@ -78,4 +78,35 @@ struct Spec171ModulesOnboardingTests {
         let desc = try #require(SettingsCatalog.find(id: "target_mode.history_arrow_navigation"))
         #expect(desc.defaultValue == .bool(true))
     }
+
+    @Test
+    @MainActor
+    func modulesTogglesInGeneralRetainStateAfterApplyAndRefresh() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-spec171-vm-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let config = dir.appendingPathComponent("roadies.toml")
+        try "".write(to: config, atomically: true, encoding: .utf8)
+        let log = EventLog(path: dir.appendingPathComponent("events.jsonl").path)
+        let service = SettingsService(configPath: config.path, eventLog: log, afterWrite: {})
+        let model = SettingsViewModel(service: service)
+        #expect(model.category == .general)
+
+        // Activer un module hors catégorie .general (ex. OCR dans .lettres) depuis l'onglet Général
+        let ocrDesc = try #require(SettingsCatalog.find(id: "app_targets.ocr_fallback"))
+        #expect(model.value(ocrDesc) == .bool(false))
+        model.apply(ocrDesc, raw: "true")
+        #expect(model.value(ocrDesc) == .bool(true))
+
+        // Une relecture complète (focus fenêtre ou rechargement fichier) doit conserver ON dans Général
+        model.refresh()
+        #expect(model.value(ocrDesc) == .bool(true))
+
+        // Même chose à la réouverture d'un nouveau SettingsViewModel sur le même fichier
+        let reopened = SettingsViewModel(service: SettingsService(configPath: config.path, eventLog: log, afterWrite: {}))
+        #expect(reopened.category == .general)
+        #expect(reopened.value(ocrDesc) == .bool(true))
+    }
 }
