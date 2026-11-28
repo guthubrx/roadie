@@ -2234,6 +2234,20 @@ public final class CLICommandRouter {
                 return 1
             }
         case "add-once":
+            let follow = options.follow ?? false
+            var returnFocusWindowID: WindowID?
+            var returnDisplayID: String?
+            if !follow {
+                let preSnapshot = self.service.snapshot(followFocus: false)
+                let fallbackDisplayID = self.service.effectiveStageStore.state().activeDisplayID?.rawValue
+                if let focusedID = preSnapshot.focusedWindowID {
+                    returnFocusWindowID = focusedID
+                    returnDisplayID = preSnapshot.windows.first(where: { $0.window.id == focusedID })?.scope?.displayID.rawValue
+                        ?? fallbackDisplayID
+                } else {
+                    returnDisplayID = fallbackDisplayID
+                }
+            }
             let rule = OneShotWindowRule(
                 app: options.app,
                 bundleID: options.bundleID,
@@ -2243,7 +2257,9 @@ public final class CLICommandRouter {
                 desktop: options.desktop,
                 stage: options.stage,
                 stagePosition: options.stagePosition,
-                follow: options.follow ?? false,
+                follow: follow,
+                returnFocusWindowID: returnFocusWindowID,
+                returnDisplayID: returnDisplayID,
                 ttlSeconds: options.ttl ?? 30
             )
             guard rule.isValid else {

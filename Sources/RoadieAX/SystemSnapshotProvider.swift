@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import Darwin
 import os
 import RoadieCore
 
@@ -1073,6 +1074,65 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
     }
 
     // O(n + Σm) : n fenetres CG, une enumeration kAXWindows (m elements) par application.
+    private static let bundleIDByAppURLCache = OSAllocatedUnfairLock<[URL: String]>(initialState: [:])
+
+    /// Résout l'identifiant de bundle d'un PID, avec repli sur `bundleURL`, `executableURL` et
+    /// `proc_pidpath` → `.app/Contents/Info.plist` pour les binaires lancés directement (ex.
+    /// Chrome/Chromium via Playwright `posix_spawn`) quand LaunchServices ne fournit pas encore
+    /// `NSRunningApplication.bundleIdentifier`. O(1) en cache par `.app`.
+    public static func resolveBundleIdentifier(pid: pid_t) -> String {
+        guard pid > 0 else { return "" }
+        let running = NSRunningApplication(processIdentifier: pid)
+        if let id = running?.bundleIdentifier, !id.isEmpty {
+            return id
+        }
+        if let bundleURL = running?.bundleURL,
+           let id = cachedBundleIdentifier(forAppURL: bundleURL) {
+            return id
+        }
+        if let execURL = running?.executableURL ?? executableURL(for: pid),
+           let appURL = enclosingAppBundleURL(for: execURL),
+           let id = cachedBundleIdentifier(forAppURL: appURL) {
+            return id
+        }
+        return ""
+    }
+
+    public static func enclosingAppBundleURL(for url: URL) -> URL? {
+        var current = url.standardizedFileURL
+        while current.path != "/" && !current.path.isEmpty {
+            if current.pathExtension.caseInsensitiveCompare("app") == .orderedSame {
+                return current
+            }
+            let parent = current.deletingLastPathComponent()
+            if parent.path == current.path { break }
+            current = parent
+        }
+        return nil
+    }
+
+    public static func cachedBundleIdentifier(forAppURL appURL: URL) -> String? {
+        let key = appURL.standardizedFileURL
+        if let cached = bundleIDByAppURLCache.withLock({ $0[key] }) {
+            return cached.isEmpty ? nil : cached
+        }
+        let resolved = Bundle(url: key)?.bundleIdentifier ?? ""
+        bundleIDByAppURLCache.withLock { cache in
+            if cache.count >= 256 { cache.removeAll(keepingCapacity: true) }
+            cache[key] = resolved
+        }
+        return resolved.isEmpty ? nil : resolved
+    }
+
+    private static func executableURL(for pid: pid_t) -> URL? {
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        let bytes = buffer.prefix(Int(length)).map { UInt8(bitPattern: $0) }
+        guard let path = String(bytes: bytes, encoding: .utf8), !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+
     public func windows() -> [WindowSnapshot] {
         // Un scan ancien ne peut publier après un événement AX ou un scan plus récent.
         let attributesGeneration = AXAttributeCache.shared.beginSnapshot()
@@ -1115,7 +1175,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
             if let known = bundleByPID[pid] {
                 bundleID = known
             } else {
-                bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
+                bundleID = Self.resolveBundleIdentifier(pid: pid)
                 bundleByPID[pid] = bundleID
             }
 

@@ -17,6 +17,10 @@ public struct OneShotWindowRule: Codable, Equatable, Sendable {
     public let stage: String?
     public let stagePosition: Int?
     public let follow: Bool
+    /// Fenêtre et écran focalisés au moment où `rules add-once --no-follow` a été armé,
+    /// afin de restituer exactement le focus utilisateur sans dépendre de l'historique seul.
+    public let returnFocusWindowID: WindowID?
+    public let returnDisplayID: String?
     public let createdAt: Date
     public let expiresAt: Date
 
@@ -31,6 +35,8 @@ public struct OneShotWindowRule: Codable, Equatable, Sendable {
         stage: String? = nil,
         stagePosition: Int? = nil,
         follow: Bool = false,
+        returnFocusWindowID: WindowID? = nil,
+        returnDisplayID: String? = nil,
         createdAt: Date = Date(),
         ttlSeconds: TimeInterval = 30
     ) {
@@ -44,6 +50,8 @@ public struct OneShotWindowRule: Codable, Equatable, Sendable {
         self.stage = Self.cleaned(stage)
         self.stagePosition = stagePosition.flatMap { $0 > 0 ? $0 : nil }
         self.follow = follow
+        self.returnFocusWindowID = returnFocusWindowID
+        self.returnDisplayID = Self.cleaned(returnDisplayID)
         self.createdAt = createdAt
         let clampedTTL = min(600, max(1, ttlSeconds))
         self.expiresAt = createdAt.addingTimeInterval(clampedTTL)
@@ -73,12 +81,20 @@ public struct OneShotWindowRule: Codable, Equatable, Sendable {
         if let pid, window.pid != pid {
             return false
         }
+        let effectiveBundleID: String
+        if !window.bundleID.isEmpty {
+            effectiveBundleID = window.bundleID
+        } else if (app != nil || bundleID != nil), window.pid > 0 {
+            effectiveBundleID = LiveSystemSnapshotProvider.resolveBundleIdentifier(pid: window.pid)
+        } else {
+            effectiveBundleID = ""
+        }
         if let app {
             let appMatches = window.appName.caseInsensitiveCompare(app) == .orderedSame
-                || window.bundleID.caseInsensitiveCompare(app) == .orderedSame
+                || effectiveBundleID.caseInsensitiveCompare(app) == .orderedSame
             if !appMatches { return false }
         }
-        if let bundleID, window.bundleID.caseInsensitiveCompare(bundleID) != .orderedSame {
+        if let bundleID, effectiveBundleID.caseInsensitiveCompare(bundleID) != .orderedSame {
             return false
         }
         if let titlePrefix {

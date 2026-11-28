@@ -130,6 +130,11 @@ public final class LayoutMaintainer {
     private var emittedRuleAppliedKeys: Set<String> = []
     private var emittedRulePlacementIssueKeys: Set<String> = []
     private var observedRulePlacementWindowIDs: Set<WindowID> = []
+    /// Dernière fenêtre et dernier écran focalisés avant l'apparition d'une fenêtre placée
+    /// silencieusement par `rules add-once --no-follow`, afin de restituer le focus exact.
+    private var lastObservedFocusedWindowID: WindowID?
+    private var lastObservedActiveDisplayID: DisplayID?
+    private var lastObservedFocusedAt: Date?
     private var lastGrowthClampedExcludedWindowIDs: Set<WindowID> = []
     private var lastCommandActivitySuppressedAt: Date?
     /// Échéance de l'activité de commande qui a suspendu des scopes sans arbre.
@@ -785,12 +790,25 @@ public final class LayoutMaintainer {
             observedFrames: observedFrames,
             processedScopes: settingsRetryRunnableScopes.subtracting(waitingSettingsScopes), now: writeEnd
         )
+        var effectiveFocusedAfterPass = snapshot.focusedWindowID
         for placement in rulePlacements {
             if placement.follow {
                 _ = service.focus(placement.window)
+                effectiveFocusedAfterPass = placement.window.id
             } else if let restoreID = placement.restorePreviousFocusWindowID,
                       let previous = snapshot.windows.first(where: { $0.window.id == restoreID })?.window {
                 _ = service.focus(previous)
+                WindowSwitcherFocusHistory.shared.observe(previous.id)
+                effectiveFocusedAfterPass = previous.id
+            }
+        }
+        if let focusedID = effectiveFocusedAfterPass {
+            lastObservedFocusedWindowID = focusedID
+            lastObservedFocusedAt = writeEnd
+            if let displayID = snapshot.windows.first(where: { $0.window.id == focusedID })?.scope?.displayID {
+                lastObservedActiveDisplayID = displayID
+            } else if let activeDisplayID = store.state().activeDisplayID {
+                lastObservedActiveDisplayID = activeDisplayID
             }
         }
         finishDriftMoves(driftMoves, result: application.result)
@@ -2796,7 +2814,7 @@ public final class LayoutMaintainer {
         enum OneShotDecision {
             case deferred
             case alreadyOnTarget(StageScope)
-            case placed(StageScope, PersistentStageState)
+            case placed(StageScope, WindowID?)
         }
 
         let decision: OneShotDecision = store.mutate { state in
@@ -2842,7 +2860,20 @@ public final class LayoutMaintainer {
             working.updatePinHomeScope(windowID: entry.window.id, to: destinationScope)
             working.suppressRulePlacement(window: entry.window)
 
+            var restoreTarget: (windowID: WindowID, displayID: DisplayID)?
             if !rule.follow {
+                restoreTarget = previousActiveWindow(
+                    excluding: entry.window.id,
+                    rule: rule,
+                    sourceDisplayID: entry.scope?.displayID,
+                    state: working,
+                    snapshot: snapshot
+                )
+                if let restoreDisplayID = restoreTarget?.displayID
+                    ?? rule.returnDisplayID.map(DisplayID.init(rawValue:))
+                    ?? lastObservedActiveDisplayID {
+                    working.activeDisplayID = restoreDisplayID
+                }
                 if targetScope.activeStageID != stageID {
                     working.protectCommandFocus(
                         displayID: display.id,
@@ -2853,16 +2884,18 @@ public final class LayoutMaintainer {
                         duration: 3.0
                     )
                 }
-                if let sourceScope = entry.scope, sourceScope.displayID != display.id {
-                    let sourceActiveScope = working.scope(
-                        displayID: sourceScope.displayID,
-                        desktopID: working.currentDesktopID(for: sourceScope.displayID)
+                let protectedReturnDisplayID = restoreTarget?.displayID ?? entry.scope?.displayID
+                if let protectedReturnDisplayID, protectedReturnDisplayID != display.id {
+                    let returnActiveScope = working.scope(
+                        displayID: protectedReturnDisplayID,
+                        desktopID: working.currentDesktopID(for: protectedReturnDisplayID)
                     )
                     working.protectCommandFocus(
-                        displayID: sourceScope.displayID,
-                        desktopID: sourceActiveScope.desktopID,
-                        stageID: sourceActiveScope.activeStageID,
-                        windowID: sourceActiveScope.stages.first(where: { $0.id == sourceActiveScope.activeStageID })?.focusedWindowID,
+                        displayID: protectedReturnDisplayID,
+                        desktopID: returnActiveScope.desktopID,
+                        stageID: returnActiveScope.activeStageID,
+                        windowID: restoreTarget?.windowID
+                            ?? returnActiveScope.stages.first(where: { $0.id == returnActiveScope.activeStageID })?.focusedWindowID,
                         staleFocusedWindowID: entry.window.id,
                         duration: 3.0
                     )
@@ -2870,7 +2903,7 @@ public final class LayoutMaintainer {
             }
 
             state = working
-            return .placed(destinationScope, working)
+            return .placed(destinationScope, restoreTarget?.windowID)
         }
 
         switch decision {
@@ -2880,56 +2913,102 @@ public final class LayoutMaintainer {
             _ = oneShotRules.consume(id: rule.id, now: timestamp)
             appendOneShotEvent(type: "rule.placement_skipped", rule: rule, entry: entry, destination: destination, reason: "already on target")
             return .settled
-        case .placed(let destination, let updatedState):
+        case .placed(let destination, let candidateRestoreID):
             _ = oneShotRules.consume(id: rule.id, now: timestamp)
             if let sourceScope = entry.scope {
                 service.removeLayoutIntent(scope: sourceScope)
             }
             service.removeLayoutIntent(scope: destination)
-            appendOneShotEvent(type: "rule.applied", rule: rule, entry: entry, destination: destination, reason: "placed")
-            appendOneShotEvent(type: "rule.placement_applied", rule: rule, entry: entry, destination: destination, reason: "placed")
-            let restoreID = !rule.follow && snapshot.focusedWindowID == entry.window.id
-                ? previousActiveWindowID(excluding: entry.window.id, sourceDisplayID: entry.scope?.displayID, state: updatedState, snapshot: snapshot)
-                : nil
+            let restoreID: WindowID?
+            if !rule.follow,
+               let candidateRestoreID,
+               snapshot.focusedWindowID != candidateRestoreID {
+                restoreID = candidateRestoreID
+            } else {
+                restoreID = nil
+            }
+            appendOneShotEvent(
+                type: "rule.applied",
+                rule: rule,
+                entry: entry,
+                destination: destination,
+                reason: "placed",
+                restoreFocusWindowID: restoreID
+            )
+            appendOneShotEvent(
+                type: "rule.placement_applied",
+                rule: rule,
+                entry: entry,
+                destination: destination,
+                reason: "placed",
+                restoreFocusWindowID: restoreID
+            )
             return .placed(RulePlacement(window: entry.window, follow: rule.follow, restorePreviousFocusWindowID: restoreID))
         }
     }
 
-    private func previousActiveWindowID(
+    private func previousActiveWindow(
         excluding excludedID: WindowID,
+        rule: OneShotWindowRule,
         sourceDisplayID: DisplayID?,
         state: PersistentStageState,
         snapshot: DaemonSnapshot
-    ) -> WindowID? {
+    ) -> (windowID: WindowID, displayID: DisplayID)? {
         var mutableState = state
         var activeScopesByDisplay: [DisplayID: PersistentStageScope] = [:]
+        var activeMemberDisplayByID: [WindowID: DisplayID] = [:]
         for display in snapshot.displays {
             let desktopID = mutableState.currentDesktopID(for: display.id)
-            activeScopesByDisplay[display.id] = mutableState.scope(displayID: display.id, desktopID: desktopID)
-        }
-        var activeMemberIDs = Set<WindowID>()
-        for scope in activeScopesByDisplay.values {
+            let scope = mutableState.scope(displayID: display.id, desktopID: desktopID)
+            activeScopesByDisplay[display.id] = scope
             if let activeStage = scope.stages.first(where: { $0.id == scope.activeStageID }) {
                 for member in activeStage.members {
-                    activeMemberIDs.insert(member.windowID)
+                    activeMemberDisplayByID[member.windowID] = display.id
                 }
             }
         }
-        if let recent = WindowSwitcherFocusHistory.shared.recentIDs.first(where: {
-            $0 != excludedID && activeMemberIDs.contains($0)
-        }) {
-            return recent
+
+        // 1. Si le focus a été observé après l'armement de la règle, préférer ce focus le plus récent ;
+        // sinon préférer la fenêtre focalisée capturée au moment exact de `roadie rules add-once`.
+        let observedAfterRule = lastObservedFocusedAt.map { $0 > rule.createdAt } ?? false
+        if observedAfterRule,
+           let previous = lastObservedFocusedWindowID,
+           previous != excludedID,
+           let displayID = activeMemberDisplayByID[previous] {
+            return (previous, displayID)
         }
-        let preferredDisplays = [state.activeDisplayID, sourceDisplayID].compactMap { $0 }
+        if let armedFocus = rule.returnFocusWindowID,
+           armedFocus != excludedID,
+           let displayID = activeMemberDisplayByID[armedFocus] {
+            return (armedFocus, displayID)
+        }
+        if let previous = lastObservedFocusedWindowID,
+           previous != excludedID,
+           let displayID = activeMemberDisplayByID[previous] {
+            return (previous, displayID)
+        }
+        // 3. Historique de focus partagé du sélecteur.
+        if let recent = WindowSwitcherFocusHistory.shared.recentIDs.first(where: {
+            $0 != excludedID && activeMemberDisplayByID[$0] != nil
+        }), let displayID = activeMemberDisplayByID[recent] {
+            return (recent, displayID)
+        }
+        // 4. Repli : fenêtre focalisée de la stage active de l'écran d'origine (retour armé → dernier actif → source → courant).
+        let preferredDisplays: [DisplayID] = [
+            rule.returnDisplayID.map(DisplayID.init(rawValue:)),
+            lastObservedActiveDisplayID,
+            sourceDisplayID,
+            state.activeDisplayID
+        ].compactMap { $0 }
         for displayID in preferredDisplays {
             guard let scope = activeScopesByDisplay[displayID],
                   let stage = scope.stages.first(where: { $0.id == scope.activeStageID })
             else { continue }
             if let focused = stage.focusedWindowID, focused != excludedID {
-                return focused
+                return (focused, displayID)
             }
             if let firstMember = stage.members.first(where: { $0.windowID != excludedID }) {
-                return firstMember.windowID
+                return (firstMember.windowID, displayID)
             }
         }
         return nil
@@ -2940,26 +3019,31 @@ public final class LayoutMaintainer {
         rule: OneShotWindowRule,
         entry: ScopedWindowSnapshot,
         destination: StageScope,
-        reason: String
+        reason: String,
+        restoreFocusWindowID: WindowID? = nil
     ) {
+        var payload: [String: AutomationPayload] = [
+            "windowID": .string(String(entry.window.id.rawValue)),
+            "app": .string(entry.window.appName),
+            "title": .string(entry.window.title),
+            "ruleID": .string(rule.id),
+            "oneShot": .bool(true),
+            "follow": .bool(rule.follow),
+            "displayID": .string(destination.displayID.rawValue),
+            "desktopID": .int(destination.desktopID.rawValue),
+            "stageID": .string(destination.stageID.rawValue),
+            "reason": .string(reason)
+        ]
+        if let restoreFocusWindowID {
+            payload["restoreFocusWindowID"] = .string(String(restoreFocusWindowID.rawValue))
+        }
         events.append(RoadieEventEnvelope(
             id: "rule_\(UUID().uuidString)",
             type: type,
             scope: .window,
             subject: AutomationSubject(kind: "window", id: String(entry.window.id.rawValue)),
             cause: .system,
-            payload: [
-                "windowID": .string(String(entry.window.id.rawValue)),
-                "app": .string(entry.window.appName),
-                "title": .string(entry.window.title),
-                "ruleID": .string(rule.id),
-                "oneShot": .bool(true),
-                "follow": .bool(rule.follow),
-                "displayID": .string(destination.displayID.rawValue),
-                "desktopID": .int(destination.desktopID.rawValue),
-                "stageID": .string(destination.stageID.rawValue),
-                "reason": .string(reason)
-            ]
+            payload: payload
         ))
     }
 

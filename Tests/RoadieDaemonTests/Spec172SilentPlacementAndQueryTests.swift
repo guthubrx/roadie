@@ -390,4 +390,104 @@ struct Spec172SilentPlacementAndQueryTests {
         let conflictResp = router.run(["stage", "assign", "8", "--follow", "--no-follow"])
         #expect(conflictResp.exitCode == 64)
     }
+
+    @Test
+    func bundleIdentifierFallbackResolvesEnclosingAppBundleFromExecutablePath() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("spec172-bundle-fallback-\(UUID().uuidString)", isDirectory: true)
+        let appURL = root.appendingPathComponent("Google Chrome.app", isDirectory: true)
+        let contentsURL = appURL.appendingPathComponent("Contents", isDirectory: true)
+        let macOSURL = contentsURL.appendingPathComponent("MacOS", isDirectory: true)
+        try FileManager.default.createDirectory(at: macOSURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let plist: [String: Any] = [
+            "CFBundleIdentifier": "com.google.Chrome",
+            "CFBundleName": "Google Chrome",
+            "CFBundleExecutable": "Google Chrome"
+        ]
+        let plistData = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try plistData.write(to: contentsURL.appendingPathComponent("Info.plist"))
+        let execURL = macOSURL.appendingPathComponent("Google Chrome")
+        try Data().write(to: execURL)
+
+        let enclosing = LiveSystemSnapshotProvider.enclosingAppBundleURL(for: execURL)
+        #expect(enclosing?.standardizedFileURL == appURL.standardizedFileURL)
+        let resolved = enclosing.flatMap { LiveSystemSnapshotProvider.cachedBundleIdentifier(forAppURL: $0) }
+        #expect(resolved == "com.google.Chrome")
+    }
+
+    @Test
+    func oneShotNoFollowRestoresArmedFocusOnDisplay2EvenWhenHistoryHasDisplay1Window() throws {
+        let store = StageStore(path: tempPath("spec172-oneshot-restore-exact"))
+        defer { try? FileManager.default.removeItem(at: store.fileURL) }
+
+        let d1InactiveWin = makeWindow(101, app: "Notes", bundleID: "com.apple.Notes", title: "Work", x: 100)
+        let d1TextEdit = makeWindow(377770, app: "TextEdit", bundleID: "com.apple.TextEdit", title: "Untitled", x: 120)
+        let d2Firefox = makeWindow(377712, app: "Firefox", bundleID: "org.mozilla.firefox", title: "App", x: 1850)
+        let newChrome = makeWindow(452870, app: "Google Chrome", bundleID: "com.google.Chrome", title: "about:blank", pid: 9091, x: 1900)
+
+        let scope1 = PersistentStageScope(
+            displayID: display1.id,
+            activeStageID: StageID(rawValue: "1"),
+            stages: [
+                PersistentStage(id: StageID(rawValue: "8"), name: "Work", members: [
+                    PersistentStageMember(windowID: d1InactiveWin.id, bundleID: d1InactiveWin.bundleID, title: d1InactiveWin.title, frame: d1InactiveWin.frame)
+                ]),
+                PersistentStage(id: StageID(rawValue: "1"), name: "Stage 1", focusedWindowID: d1TextEdit.id, members: [
+                    PersistentStageMember(windowID: d1TextEdit.id, bundleID: d1TextEdit.bundleID, title: d1TextEdit.title, frame: d1TextEdit.frame)
+                ])
+            ]
+        )
+        let scope2 = PersistentStageScope(
+            displayID: display2.id,
+            activeStageID: StageID(rawValue: "2"),
+            stages: [
+                PersistentStage(id: StageID(rawValue: "2"), name: "Stage 2", focusedWindowID: d2Firefox.id, members: [
+                    PersistentStageMember(windowID: d2Firefox.id, bundleID: d2Firefox.bundleID, title: d2Firefox.title, frame: d2Firefox.frame)
+                ])
+            ]
+        )
+        store.save(PersistentStageState(scopes: [scope1, scope2], activeDisplayID: display2.id))
+
+        // Simuler un historique partagé pollué par TextEdit (écran 1) devant Firefox (écran 2).
+        WindowSwitcherFocusHistory.shared.observe(d2Firefox.id)
+        WindowSwitcherFocusHistory.shared.observe(d1TextEdit.id)
+
+        let oneShotStore = OneShotWindowRulesStore()
+        let t0 = Date(timeIntervalSince1970: 1_800_000_100)
+        let rule = OneShotWindowRule(
+            bundleID: "com.google.Chrome",
+            display: "1",
+            stagePosition: 1,
+            follow: false,
+            returnFocusWindowID: d2Firefox.id,
+            returnDisplayID: display2.id.rawValue,
+            createdAt: t0,
+            ttlSeconds: 60
+        )
+        #expect(oneShotStore.add(rule, now: t0))
+
+        let provider = PowerUserProvider(displays: [display1, display2], windows: [d1InactiveWin, d1TextEdit, d2Firefox, newChrome])
+        provider.focusedID = newChrome.id
+        let snapshots = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: RoadieConfig(), stageStore: store)
+        let maintainer = LayoutMaintainer(
+            service: snapshots,
+            events: EventLog(),
+            ruleEngine: nil,
+            store: store,
+            oneShotRules: oneShotStore,
+            now: { t0.addingTimeInterval(1) }
+        )
+
+        _ = maintainer.tick(cause: "ax:didActivateApplication")
+
+        let postState = store.state()
+        let postScope1 = try #require(postState.scopes.first { $0.displayID == display1.id })
+        #expect(postScope1.stages.first { $0.id == StageID(rawValue: "8") }?.members.contains { $0.windowID == newChrome.id } == true)
+        #expect(postScope1.activeStageID == StageID(rawValue: "1"))
+        #expect(postState.activeDisplayID == display2.id)
+        // Le focus revient sur Firefox (377712, écran 2), JAMAIS sur TextEdit (377770, écran 1).
+        #expect(provider.focusedID == d2Firefox.id)
+    }
 }
