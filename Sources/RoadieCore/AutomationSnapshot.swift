@@ -80,6 +80,11 @@ public struct AutomationStageSnapshot: Codable, Equatable, Sendable {
     public var desktopId: String
     public var name: String
     public var mode: String
+    /// Position visible (1..N) dans l'ordre du rail pour cet écran et ce bureau, cohérente avec
+    /// `roadie stage list` et `roadie stage assign-position`. Optionnelle pour décoder les anciens JSON.
+    public var position: Int?
+    /// Vrai si cette stage est la stage active du bureau courant de son écran.
+    public var isActive: Bool
     public var windowIds: [String]
     public var focusedWindowId: String?
 
@@ -89,6 +94,8 @@ public struct AutomationStageSnapshot: Codable, Equatable, Sendable {
         desktopId: String,
         name: String,
         mode: String,
+        position: Int? = nil,
+        isActive: Bool = false,
         windowIds: [String] = [],
         focusedWindowId: String? = nil
     ) {
@@ -97,8 +104,27 @@ public struct AutomationStageSnapshot: Codable, Equatable, Sendable {
         self.desktopId = desktopId
         self.name = name
         self.mode = mode
+        self.position = position
+        self.isActive = isActive
         self.windowIds = windowIds
         self.focusedWindowId = focusedWindowId
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, displayId, desktopId, name, mode, position, isActive, windowIds, focusedWindowId
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.displayId = try c.decodeIfPresent(String.self, forKey: .displayId)
+        self.desktopId = try c.decode(String.self, forKey: .desktopId)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.mode = try c.decode(String.self, forKey: .mode)
+        self.position = try c.decodeIfPresent(Int.self, forKey: .position)
+        self.isActive = try c.decodeIfPresent(Bool.self, forKey: .isActive) ?? false
+        self.windowIds = try c.decodeIfPresent([String].self, forKey: .windowIds) ?? []
+        self.focusedWindowId = try c.decodeIfPresent(String.self, forKey: .focusedWindowId)
     }
 }
 

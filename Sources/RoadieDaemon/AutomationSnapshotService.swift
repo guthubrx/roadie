@@ -25,7 +25,7 @@ public struct AutomationSnapshotService: Sendable {
             focusedWindowId: daemonSnapshot.focusedWindowID.map { String($0.rawValue) },
             displays: displaySnapshots(from: daemonSnapshot),
             desktops: desktopSnapshots(from: daemonSnapshot.state),
-            stages: stageSnapshots(from: daemonSnapshot.state),
+            stages: stageSnapshots(from: daemonSnapshot),
             windows: windowSnapshots(from: daemonSnapshot),
             groups: groupSnapshots(from: daemonSnapshot.state),
             rules: Self.ruleSnapshots(rules)
@@ -88,16 +88,44 @@ public struct AutomationSnapshotService: Sendable {
             }
     }
 
-    /// Une ligne par stage, avec son écran : `id` et `desktopId` se répètent d'un écran à l'autre (REL-013).
-    private func stageSnapshots(from state: RoadieState) -> [AutomationStageSnapshot] {
-        state.displays.values
+    /// Une ligne par stage, avec son écran, sa position rail (1..N, cohérente avec `stage list` et
+    /// `stage assign-position`) et son état actif `isActive` sur son écran (REL-013).
+    private func stageSnapshots(from daemonSnapshot: DaemonSnapshot) -> [AutomationStageSnapshot] {
+        let state = daemonSnapshot.state
+        let persistent = stageStore.state()
+        let liveWindowIDs = Set(daemonSnapshot.windows.map(\.window.id))
+        return state.displays.values
             .sorted { $0.id.rawValue < $1.id.rawValue }
             .flatMap { display in
                 display.desktops.values
                     .sorted { $0.id < $1.id }
-                    .flatMap { desktop in
-                        desktop.stages.values
-                            .sorted { $0.id < $1.id }
+                    .flatMap { desktop -> [AutomationStageSnapshot] in
+                        let positionsByID: [StageID: Int]
+                        if let persistedScope = persistent.scopes.first(where: {
+                            $0.displayID == display.id && $0.desktopID == desktop.id
+                        }) {
+                            let order = StagePresentationOrder(scope: persistedScope, liveWindowIDs: liveWindowIDs)
+                            let orderedIDs = order.visibleStageIDs + order.emptyStageIDs
+                            var map: [StageID: Int] = [:]
+                            for (idx, stageID) in orderedIDs.enumerated() {
+                                map[stageID] = idx + 1
+                            }
+                            positionsByID = map
+                        } else {
+                            let sortedIDs = desktop.stages.values.sorted { $0.id < $1.id }.map(\.id)
+                            var map: [StageID: Int] = [:]
+                            for (idx, stageID) in sortedIDs.enumerated() {
+                                map[stageID] = idx + 1
+                            }
+                            positionsByID = map
+                        }
+                        let isCurrentDesktop = desktop.id == display.currentDesktopID
+                        return desktop.stages.values
+                            .sorted { lhs, rhs in
+                                let lPos = positionsByID[lhs.id] ?? Int.max
+                                let rPos = positionsByID[rhs.id] ?? Int.max
+                                return lPos != rPos ? lPos < rPos : lhs.id < rhs.id
+                            }
                             .map { stage in
                                 AutomationStageSnapshot(
                                     id: stage.id.rawValue,
@@ -105,6 +133,8 @@ public struct AutomationSnapshotService: Sendable {
                                     desktopId: String(desktop.id.rawValue),
                                     name: stage.name,
                                     mode: stage.mode.rawValue,
+                                    position: positionsByID[stage.id],
+                                    isActive: isCurrentDesktop && stage.id == desktop.activeStageID,
                                     windowIds: stage.windowIDs.map { String($0.rawValue) },
                                     focusedWindowId: stage.focusedWindowID.map { String($0.rawValue) }
                                 )

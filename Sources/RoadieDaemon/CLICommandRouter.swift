@@ -96,6 +96,7 @@ public final class CLICommandRouter {
     /// les composants (REL-014), donc l'instance partagée par défaut.
     private let configReload: ConfigReloadService
     private let railRuntimeStore: RailRuntimeStateStore
+    private let oneShotRules: OneShotWindowRulesStore
     private let workflowInstallationFolder: URL
     private let launcherHistoryPath: String?
     private var cachedService: SnapshotService?
@@ -115,6 +116,7 @@ public final class CLICommandRouter {
         streamSink: ((String) -> Void)? = nil,
         configReload: ConfigReloadService = .shared,
         railRuntimeStore: RailRuntimeStateStore = RailRuntimeStateStore(),
+        oneShotRules: OneShotWindowRulesStore = .shared,
         workflowInstallationFolder: URL? = nil,
         launcherHistoryPath: String? = nil
     ) {
@@ -122,6 +124,7 @@ public final class CLICommandRouter {
         self.streamSink = streamSink
         self.configReload = configReload
         self.railRuntimeStore = railRuntimeStore
+        self.oneShotRules = oneShotRules
         self.workflowInstallationFolder = workflowInstallationFolder ?? AlfredWorkflowIndex.roadieFolder
         self.launcherHistoryPath = launcherHistoryPath
     }
@@ -236,7 +239,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "layout width next|prev|nudge [DELTA]|ratio RATIO [--all]"),
         CLICommandSpec(usage: "config show|validate|reload|init [--preset standard|vim|minimal|none] [--force] [--json] [--config PATH]"),
         CLICommandSpec(usage: "shortcuts list|presets|apply-preset PRESET|add KEYS COMMAND|remove KEYS|check [--replace] [--dry-run] [--json] [--config PATH]"),
-        CLICommandSpec(usage: "rules validate|list|explain [--json] [--config PATH]"),
+        CLICommandSpec(usage: "rules validate|list|explain|add-once|list-once|clear-once [--json] [--config PATH]"),
         CLICommandSpec(usage: "group create|add|remove|focus|dissolve|list ..."),
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
         CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|screen|actions|hide ..."),
@@ -277,7 +280,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "mode bsp|spatialBsp|masterStack|tabbed|scrolling|float"),
         CLICommandSpec(usage: "toggle maximize|fullscreen|native-fullscreen"),
         CLICommandSpec(usage: "toggle floating"),
-        CLICommandSpec(usage: "window display N"),
+        CLICommandSpec(usage: "window display N|UUID|NAME [--window ID] [--follow|--no-follow]"),
         CLICommandSpec(usage: "window desktop N [--follow]"),
         CLICommandSpec(usage: "window swap left|right|up|down"),
         CLICommandSpec(usage: "window bookmark set|focus|jump|clear|list NAME"),
@@ -296,8 +299,8 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "stage prune-empty"),
         CLICommandSpec(usage: "stage rename N NAME"),
         CLICommandSpec(usage: "stage reorder N POSITION"),
-        CLICommandSpec(usage: "stage switch|assign N"),
-        CLICommandSpec(usage: "stage switch-position|assign-position N"),
+        CLICommandSpec(usage: "stage switch|assign N [--window ID] [--display N|UUID|NAME] [--stage-position N] [--follow|--no-follow]"),
+        CLICommandSpec(usage: "stage switch-position|assign-position N [--window ID] [--display N|UUID|NAME] [--follow|--no-follow]"),
         CLICommandSpec(usage: "stage switch-visible prev|next"),
         CLICommandSpec(usage: "stage assign-empty"),
         CLICommandSpec(usage: "stage summon WINDOW_ID"),
@@ -1765,11 +1768,12 @@ public final class CLICommandRouter {
         case "bookmark":
             return try runBookmarkCommand(Array(args.dropFirst()))
         case "display":
-            guard args.indices.contains(1), let index = Int(args[1]) else {
-                err("roadie: window display requires an index")
-                return 64
-            }
-            let result = WindowCommandService(service: service).sendToDisplay(index)
+            let options = try parseWindowDisplayOptions(Array(args.dropFirst()))
+            let result = WindowCommandService(service: service).sendToDisplay(
+                options.displaySelector,
+                windowID: options.windowID,
+                follow: options.follow
+            )
             return finish(result)
         case "reset":
             let result = WindowCommandService(service: service).reset()
@@ -1974,18 +1978,40 @@ public final class CLICommandRouter {
             let result = StageCommandService(service: service).switchVisible(direction)
             return finish(result)
         case "assign":
-            guard let stageID = args.dropFirst().first else {
-                err("roadie: stage assign requires a stage id")
+            let options = try parseStageAssignOptions(Array(args.dropFirst()), positionalIsPosition: false)
+            let commandService = StageCommandService(service: service)
+            let result: StageCommandResult
+            if let position = options.stagePosition {
+                result = commandService.assignPosition(
+                    position,
+                    windowID: options.windowID,
+                    displaySelector: options.displaySelector,
+                    follow: options.follow
+                )
+            } else if let stageID = options.stageID {
+                result = commandService.assign(
+                    stageID,
+                    windowID: options.windowID,
+                    displaySelector: options.displaySelector,
+                    follow: options.follow
+                )
+            } else {
+                err("roadie: stage assign requires a stage id or --stage-position N")
                 return 64
             }
-            let result = StageCommandService(service: service).assign(stageID)
             return finish(result)
         case "assign-position", "assign-pos":
-            guard let rawPosition = args.dropFirst().first, let position = Int(rawPosition), position > 0 else {
+            let options = try parseStageAssignOptions(Array(args.dropFirst()), positionalIsPosition: true)
+            guard let position = options.stagePosition, position > 0 else {
                 err("roadie: stage assign-position requires a positive position")
                 return 64
             }
-            let result = StageCommandService(service: service).assignPosition(position)
+            let result = StageCommandService(service: service).assignPosition(
+                position,
+                windowID: options.windowID,
+                displaySelector: options.displaySelector,
+                follow: options.follow
+            )
             return finish(result)
         case "assign-empty":
             let result = StageCommandService(service: service).assignEmpty()
@@ -2142,10 +2168,12 @@ public final class CLICommandRouter {
     }
 
     private func runRulesCommand(_ args: [String]) throws -> Int32 {
-        guard let verb = args.first, ["validate", "list", "explain"].contains(verb) else {
+        guard let verb = args.first,
+              ["validate", "list", "explain", "add-once", "list-once", "clear-once"].contains(verb)
+        else {
             return usageError()
         }
-        let options = try parseRulesOptions(Array(args.dropFirst()))
+        let options = try parseRulesOptions(Array(args.dropFirst()), allowPositionalRuleID: verb == "clear-once")
         let service = RulesCommandService(configPath: options.configPath)
 
         switch verb {
@@ -2205,6 +2233,58 @@ public final class CLICommandRouter {
                 err("roadie: rules explain failed: \(error)")
                 return 1
             }
+        case "add-once":
+            let rule = OneShotWindowRule(
+                app: options.app,
+                bundleID: options.bundleID,
+                titlePrefix: options.titlePrefix,
+                pid: options.pid,
+                display: options.display,
+                desktop: options.desktop,
+                stage: options.stage,
+                stagePosition: options.stagePosition,
+                follow: options.follow ?? false,
+                ttlSeconds: options.ttl ?? 30
+            )
+            guard rule.isValid else {
+                err("roadie: rules add-once requires at least one matcher (--app, --bundle-id, --title-prefix, --pid) and one destination (--display, --desktop, --stage, --stage-position)")
+                return 64
+            }
+            _ = oneShotRules.add(rule)
+            if options.json {
+                try printCodableJSON(rule)
+            } else {
+                let ttlSeconds = max(1, Int(rule.expiresAt.timeIntervalSince(rule.createdAt).rounded()))
+                out("rules add-once: id=\(rule.id) ttl=\(ttlSeconds)s follow=\(rule.follow)")
+            }
+            return 0
+        case "list-once":
+            let rules = oneShotRules.list()
+            if options.json {
+                try printCodableJSON(rules)
+            } else if rules.isEmpty {
+                out("rules list-once: no active one-shot rules")
+            } else {
+                var lines = ["ID\tAPP\tDISPLAY\tSTAGE\tFOLLOW\tEXPIRES_IN"]
+                let now = Date()
+                for rule in rules {
+                    let matcher = rule.app ?? rule.bundleID ?? rule.titlePrefix ?? rule.pid.map { "pid:\($0)" } ?? "-"
+                    let stageText = rule.stagePosition.map { "pos:\($0)" } ?? rule.stage ?? "-"
+                    let remaining = max(0, Int(rule.expiresAt.timeIntervalSince(now).rounded()))
+                    lines.append("\(rule.id)\t\(matcher)\t\(rule.display ?? "-")\t\(stageText)\t\(rule.follow)\t\(remaining)s")
+                }
+                out(lines.joined(separator: "\n"))
+            }
+            return 0
+        case "clear-once":
+            let removed = oneShotRules.clear(id: options.ruleID)
+            if options.json {
+                struct ClearResponse: Codable { let removed: Int }
+                try printCodableJSON(ClearResponse(removed: removed))
+            } else {
+                out("rules clear-once: removed=\(removed)")
+            }
+            return 0
         default:
             return usageError()
         }
@@ -2620,21 +2700,170 @@ public final class CLICommandRouter {
         return 0
     }
 
+    struct WindowDisplayOptions {
+        var displaySelector: String
+        var windowID: WindowID?
+        var follow: Bool
+    }
+
+    private func parseWindowDisplayOptions(_ args: [String]) throws -> WindowDisplayOptions {
+        var displaySelector: String?
+        var windowID: WindowID?
+        var followFlag: Bool?
+        var index = 0
+        while index < args.count {
+            let arg = args[index]
+            switch arg {
+            case "--window":
+                guard args.indices.contains(index + 1), let parsed = Self.windowID(args[index + 1]) else {
+                    err("roadie: window display --window requires a positive numeric window id")
+                    throw CLIExit(code: 64)
+                }
+                windowID = parsed
+                index += 2
+            case "--follow":
+                if followFlag == false {
+                    err("roadie: window display accepts only one of --follow or --no-follow")
+                    throw CLIExit(code: 64)
+                }
+                followFlag = true
+                index += 1
+            case "--no-follow":
+                if followFlag == true {
+                    err("roadie: window display accepts only one of --follow or --no-follow")
+                    throw CLIExit(code: 64)
+                }
+                followFlag = false
+                index += 1
+            default:
+                if arg.hasPrefix("-") {
+                    err("roadie: unknown window display option \(arg)")
+                    throw CLIExit(code: 64)
+                }
+                if displaySelector != nil {
+                    err("roadie: unexpected window display argument \(arg)")
+                    throw CLIExit(code: 64)
+                }
+                displaySelector = arg
+                index += 1
+            }
+        }
+        guard let displaySelector, !displaySelector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            err("roadie: window display requires an index, display UUID or name")
+            throw CLIExit(code: 64)
+        }
+        return WindowDisplayOptions(
+            displaySelector: displaySelector,
+            windowID: windowID,
+            follow: followFlag ?? true
+        )
+    }
+
+    struct StageAssignOptions {
+        var stageID: String?
+        var stagePosition: Int?
+        var windowID: WindowID?
+        var displaySelector: String?
+        var follow: Bool
+    }
+
+    private func parseStageAssignOptions(_ args: [String], positionalIsPosition: Bool) throws -> StageAssignOptions {
+        var stageID: String?
+        var stagePosition: Int?
+        var windowID: WindowID?
+        var displaySelector: String?
+        var followFlag: Bool?
+        var index = 0
+        let verbName = positionalIsPosition ? "stage assign-position" : "stage assign"
+        while index < args.count {
+            let arg = args[index]
+            switch arg {
+            case "--window":
+                guard args.indices.contains(index + 1), let parsed = Self.windowID(args[index + 1]) else {
+                    err("roadie: \(verbName) --window requires a positive numeric window id")
+                    throw CLIExit(code: 64)
+                }
+                windowID = parsed
+                index += 2
+            case "--display":
+                guard args.indices.contains(index + 1), !args[index + 1].isEmpty else {
+                    err("roadie: \(verbName) --display requires an index, display UUID or name")
+                    throw CLIExit(code: 64)
+                }
+                displaySelector = args[index + 1]
+                index += 2
+            case "--stage-position":
+                guard args.indices.contains(index + 1), let pos = Int(args[index + 1]), pos > 0 else {
+                    err("roadie: \(verbName) --stage-position requires a positive integer")
+                    throw CLIExit(code: 64)
+                }
+                stagePosition = pos
+                index += 2
+            case "--follow":
+                if followFlag == false {
+                    err("roadie: \(verbName) accepts only one of --follow or --no-follow")
+                    throw CLIExit(code: 64)
+                }
+                followFlag = true
+                index += 1
+            case "--no-follow":
+                if followFlag == true {
+                    err("roadie: \(verbName) accepts only one of --follow or --no-follow")
+                    throw CLIExit(code: 64)
+                }
+                followFlag = false
+                index += 1
+            default:
+                if arg.hasPrefix("-") {
+                    err("roadie: unknown \(verbName) option \(arg)")
+                    throw CLIExit(code: 64)
+                }
+                if positionalIsPosition {
+                    guard stagePosition == nil, let pos = Int(arg), pos > 0 else {
+                        err("roadie: \(verbName) requires a positive position")
+                        throw CLIExit(code: 64)
+                    }
+                    stagePosition = pos
+                } else {
+                    guard stageID == nil else {
+                        err("roadie: unexpected \(verbName) argument \(arg)")
+                        throw CLIExit(code: 64)
+                    }
+                    stageID = arg
+                }
+                index += 1
+            }
+        }
+        return StageAssignOptions(
+            stageID: stageID,
+            stagePosition: stagePosition,
+            windowID: windowID,
+            displaySelector: displaySelector,
+            follow: followFlag ?? true
+        )
+    }
+
     struct RulesOptions {
         var json = false
         var configPath: String?
         var app: String?
         var bundleID: String?
         var title: String?
+        var titlePrefix: String?
+        var pid: Int32?
         var role: String?
         var subrole: String?
         var display: String?
         var desktop: String?
         var stage: String?
+        var stagePosition: Int?
         var isFloating: Bool?
+        var follow: Bool?
+        var ttl: TimeInterval?
+        var ruleID: String?
     }
 
-    private func parseRulesOptions(_ args: [String]) throws -> RulesOptions {
+    private func parseRulesOptions(_ args: [String], allowPositionalRuleID: Bool = false) throws -> RulesOptions {
         var options = RulesOptions()
         var index = 0
         while index < args.count {
@@ -2654,6 +2883,17 @@ public final class CLICommandRouter {
             case "--title":
                 options.title = try requiredRulesOption(args, index: index, name: "--title")
                 index += 2
+            case "--title-prefix":
+                options.titlePrefix = try requiredRulesOption(args, index: index, name: "--title-prefix")
+                index += 2
+            case "--pid":
+                let raw = try requiredRulesOption(args, index: index, name: "--pid")
+                guard let parsed = Int32(raw), parsed > 0 else {
+                    err("roadie: rules --pid requires a positive integer")
+                    throw CLIExit(code: 64)
+                }
+                options.pid = parsed
+                index += 2
             case "--role":
                 options.role = try requiredRulesOption(args, index: index, name: "--role")
                 index += 2
@@ -2669,6 +2909,39 @@ public final class CLICommandRouter {
             case "--stage":
                 options.stage = try requiredRulesOption(args, index: index, name: "--stage")
                 index += 2
+            case "--stage-position":
+                let raw = try requiredRulesOption(args, index: index, name: "--stage-position")
+                guard let parsed = Int(raw), parsed > 0 else {
+                    err("roadie: rules --stage-position requires a positive integer")
+                    throw CLIExit(code: 64)
+                }
+                options.stagePosition = parsed
+                index += 2
+            case "--follow":
+                if options.follow == false {
+                    err("roadie: rules accepts only one of --follow or --no-follow")
+                    throw CLIExit(code: 64)
+                }
+                options.follow = true
+                index += 1
+            case "--no-follow":
+                if options.follow == true {
+                    err("roadie: rules accepts only one of --follow or --no-follow")
+                    throw CLIExit(code: 64)
+                }
+                options.follow = false
+                index += 1
+            case "--ttl":
+                let raw = try requiredRulesOption(args, index: index, name: "--ttl")
+                guard let parsed = Double(raw), parsed > 0 else {
+                    err("roadie: rules --ttl requires a positive number of seconds")
+                    throw CLIExit(code: 64)
+                }
+                options.ttl = parsed
+                index += 2
+            case "--id":
+                options.ruleID = try requiredRulesOption(args, index: index, name: "--id")
+                index += 2
             case "--floating":
                 options.isFloating = true
                 index += 1
@@ -2676,6 +2949,11 @@ public final class CLICommandRouter {
                 options.isFloating = false
                 index += 1
             case let unknown:
+                if allowPositionalRuleID, !unknown.hasPrefix("-"), options.ruleID == nil {
+                    options.ruleID = unknown
+                    index += 1
+                    continue
+                }
                 err("roadie: unknown rules option \(unknown)")
                 throw CLIExit(code: 64)
             }

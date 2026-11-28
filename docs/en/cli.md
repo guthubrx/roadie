@@ -65,7 +65,7 @@ roadie focus back-and-forth
 roadie move left|right|up|down
 roadie warp left|right|up|down
 roadie resize left|right|up|down
-roadie window display 2
+roadie window display 2 [--window ID] [--follow|--no-follow]
 roadie window desktop 2 --follow
 roadie window close [WINDOW_ID]
 roadie window gather-app
@@ -192,9 +192,9 @@ roadie stage list
 roadie stage create 4
 roadie stage rename 4 Comms
 roadie stage switch 2
-roadie stage assign 2
+roadie stage assign 2 [--window ID] [--display N|UUID|NAME] [--stage-position N] [--follow|--no-follow]
 roadie stage switch-position 2
-roadie stage assign-position 2
+roadie stage assign-position 2 [--window ID] [--display N|UUID|NAME] [--follow|--no-follow]
 roadie stage switch-visible next
 roadie stage switch-visible prev
 roadie stage assign-empty
@@ -236,7 +236,12 @@ available displays.
 roadie rules validate --config ~/.config/roadies/roadies.toml
 roadie rules list --json
 roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev --json
+roadie rules add-once --app "Google Chrome" --display 1 --stage-position 1 --no-follow --ttl 30
+roadie rules list-once --json
+roadie rules clear-once [RULE_ID]
 ```
+
+`rules add-once` registers an **in-memory** single-shot rule (one-time consumption + 1–600 s TTL, default 30 s, no write to `roadies.toml`). The next matching window (`--app`, `--bundle-id`, `--title-prefix`, `--pid`) is placed immediately upon creation into `--display`, `--desktop`, `--stage`, or `--stage-position`, with `--no-follow` by default — ideal for launching visual test browsers (Chrome / Playwright) into an inactive stage with zero focus steal or screen flash.
 
 ## Window Groups
 
@@ -271,7 +276,7 @@ roadie query restore
 roadie query targets
 ```
 
-Every `query` returns stable JSON:
+Every `query` returns stable JSON (`query state` and `query stages` include each stage's `1..N` rail `position` and per-display `isActive` flag):
 
 ```json
 {

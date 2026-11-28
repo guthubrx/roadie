@@ -72,42 +72,125 @@ public struct StageCommandService {
         self.mouseFollower = mouseFollower
     }
 
-    public func assign(_ rawStageID: String) -> StageCommandResult {
-        let snapshot = service.snapshot()
-        guard let active = activeWindow(in: snapshot),
-              let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
-        else {
+    /// Résout un écran par indice 1-based (`1`, `2`), identifiant UUID ou nom (insensible à la casse).
+    static func resolveDisplay(_ selector: String, in displays: [DisplaySnapshot]) -> DisplaySnapshot? {
+        let trimmed = selector.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let byID = displays.first(where: { $0.id.rawValue == trimmed }) {
+            return byID
+        }
+        if let byName = displays.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return byName
+        }
+        if let index = Int(trimmed), let byIndex = displays.first(where: { $0.index == index }) {
+            return byIndex
+        }
+        return nil
+    }
+
+    public func assign(
+        _ rawStageID: String,
+        windowID: WindowID? = nil,
+        displaySelector: String? = nil,
+        follow: Bool = true
+    ) -> StageCommandResult {
+        let snapshot = service.snapshot(followFocus: windowID == nil && follow)
+        let targetEntry: ScopedWindowSnapshot?
+        if let windowID {
+            guard let found = snapshot.windows.first(where: { $0.window.id == windowID }) else {
+                return StageCommandResult(message: "stage assign: window \(windowID.rawValue) not found", changed: false, outcome: .failed)
+            }
+            targetEntry = found
+        } else {
+            targetEntry = activeWindow(in: snapshot)
+        }
+        guard let target = targetEntry else {
             return StageCommandResult(message: "stage assign: no active window", changed: false, outcome: .noOp)
         }
 
+        let targetDisplayID: DisplayID
+        if let displaySelector {
+            guard let resolved = Self.resolveDisplay(displaySelector, in: snapshot.displays) else {
+                return StageCommandResult(message: "stage assign: unknown display \(displaySelector)", changed: false, outcome: .failed)
+            }
+            targetDisplayID = resolved.id
+        } else if let inferred = target.scope?.displayID ?? displayID(containing: target.window.frame.center, in: snapshot.displays) {
+            targetDisplayID = inferred
+        } else {
+            return StageCommandResult(message: "stage assign: no active window", changed: false, outcome: .noOp)
+        }
+
+        // Permet aussi de désigner une stage existante par son nom sur l'écran cible.
+        var state = store.state()
+        let scope = activeScope(displayID: targetDisplayID, in: &state)
+        let resolvedStageID: String
+        if scope.stages.contains(where: { $0.id.rawValue == rawStageID }) {
+            resolvedStageID = rawStageID
+        } else if let byName = scope.stages.first(where: { $0.name.caseInsensitiveCompare(rawStageID) == .orderedSame }) {
+            resolvedStageID = byName.id.rawValue
+        } else {
+            resolvedStageID = rawStageID
+        }
+
         return assign(
-            windowID: active.window.id,
-            to: rawStageID,
-            displayID: displayID,
-            focusAssignedWindow: true,
+            windowID: target.window.id,
+            to: resolvedStageID,
+            displayID: targetDisplayID,
+            focusAssignedWindow: follow,
             eventType: "stage_assign",
             commandReason: "stage.assign"
         )
     }
 
-    public func assignPosition(_ position: Int) -> StageCommandResult {
+    public func assignPosition(
+        _ position: Int,
+        windowID: WindowID? = nil,
+        displaySelector: String? = nil,
+        follow: Bool = true
+    ) -> StageCommandResult {
         guard position > 0 else {
             return StageCommandResult(message: "stage assign-position: requires a positive position", changed: false, outcome: .failed)
         }
-        let snapshot = service.snapshot()
-        guard let active = activeWindow(in: snapshot),
-              let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
-        else {
+        let snapshot = service.snapshot(followFocus: windowID == nil && follow)
+        let targetEntry: ScopedWindowSnapshot?
+        if let windowID {
+            guard let found = snapshot.windows.first(where: { $0.window.id == windowID }) else {
+                return StageCommandResult(message: "stage assign-position: window \(windowID.rawValue) not found", changed: false, outcome: .failed)
+            }
+            targetEntry = found
+        } else {
+            targetEntry = activeWindow(in: snapshot)
+        }
+        guard let target = targetEntry else {
+            return StageCommandResult(message: "stage assign-position: no active window", changed: false, outcome: .noOp)
+        }
+
+        let targetDisplayID: DisplayID
+        if let displaySelector {
+            guard let resolved = Self.resolveDisplay(displaySelector, in: snapshot.displays) else {
+                return StageCommandResult(message: "stage assign-position: unknown display \(displaySelector)", changed: false, outcome: .failed)
+            }
+            targetDisplayID = resolved.id
+        } else if let inferred = target.scope?.displayID ?? displayID(containing: target.window.frame.center, in: snapshot.displays) {
+            targetDisplayID = inferred
+        } else {
             return StageCommandResult(message: "stage assign-position: no active window", changed: false, outcome: .noOp)
         }
 
         var state = store.state()
-        let scope = activeScope(displayID: displayID, in: &state)
+        let scope = activeScope(displayID: targetDisplayID, in: &state)
         guard let stageID = StagePresentationOrder(scope: scope, liveWindowIDs: liveWindowIDs(in: snapshot))
             .stageID(at: position, allowingEmptySlots: true) else {
             return StageCommandResult(message: "stage assign-position \(position): not found", changed: false, outcome: .failed)
         }
-        return assign(stageID.rawValue)
+        return assign(
+            windowID: target.window.id,
+            to: stageID.rawValue,
+            displayID: targetDisplayID,
+            focusAssignedWindow: follow,
+            eventType: "stage_assign",
+            commandReason: "stage.assign"
+        )
     }
 
     public func assignEmpty() -> StageCommandResult {
@@ -157,7 +240,7 @@ public struct StageCommandService {
         beginLayoutCommand(commandReason)
         defer { finishLayoutCommand(commandReason) }
         let generation = PlacementGeneration.shared.next()
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followFocus: focusAssignedWindow)
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "stage assign: unknown display", changed: false, outcome: .failed)
         }
@@ -243,16 +326,30 @@ public struct StageCommandService {
                     )
                 }
                 // Stage cible inactive, sans suivi du focus : focus de la stage active protégé dans la
-                // même transaction, pour qu'aucune écriture ne puisse échouer après celle-ci (REL-021).
-                if scope.activeStageID != stageID, !focusAssignedWindow {
-                    state.protectCommandFocus(
-                        displayID: displayID,
-                        desktopID: scope.desktopID,
-                        stageID: scope.activeStageID,
-                        windowID: scope.stages.first(where: { $0.id == scope.activeStageID })?.focusedWindowID,
-                        staleFocusedWindowID: windowID,
-                        duration: 3.0
-                    )
+                // même transaction (écran cible ET écran d'origine si transfert inter-écrans), pour
+                // qu'aucune bascule ni prise de focus ne survienne (REL-021).
+                if !focusAssignedWindow {
+                    if scope.activeStageID != stageID {
+                        state.protectCommandFocus(
+                            displayID: displayID,
+                            desktopID: scope.desktopID,
+                            stageID: scope.activeStageID,
+                            windowID: scope.stages.first(where: { $0.id == scope.activeStageID })?.focusedWindowID,
+                            staleFocusedWindowID: windowID,
+                            duration: 3.0
+                        )
+                    }
+                    if let sourceScope = entry.scope, sourceScope.displayID != displayID {
+                        let sourceActiveScope = activeScope(displayID: sourceScope.displayID, in: &state)
+                        state.protectCommandFocus(
+                            displayID: sourceScope.displayID,
+                            desktopID: sourceActiveScope.desktopID,
+                            stageID: sourceActiveScope.activeStageID,
+                            windowID: sourceActiveScope.stages.first(where: { $0.id == sourceActiveScope.activeStageID })?.focusedWindowID,
+                            staleFocusedWindowID: windowID,
+                            duration: 3.0
+                        )
+                    }
                 }
                 return (scope, pin)
             }
@@ -311,6 +408,27 @@ public struct StageCommandService {
         let layoutResult = service.applyCommandPlacement(placement, cause: commandReason, generation: generation, events: events).result
         if focusAssignedWindow, scope.activeStageID == stageID {
             _ = service.focus(window)
+        } else if !focusAssignedWindow, scope.activeStageID != stageID, snapshot.focusedWindowID == windowID {
+            // Si la fenêtre déplacée silencieusement détenait le focus, rendre le focus à la
+            // fenêtre active précédente sur l'écran d'origine (ou à défaut l'écran cible).
+            var postState = store.state()
+            let preferredDisplayID = entry.scope?.displayID ?? displayID
+            let preferredScope = postState.scope(
+                displayID: preferredDisplayID,
+                desktopID: postState.currentDesktopID(for: preferredDisplayID)
+            )
+            let preferredFocused = preferredScope.stages
+                .first(where: { $0.id == preferredScope.activeStageID })?
+                .focusedWindowID
+            let targetActiveFocused = scope.stages
+                .first(where: { $0.id == scope.activeStageID })?
+                .focusedWindowID
+            let restoreCandidateID = preferredFocused ?? targetActiveFocused
+            if let restoreID = restoreCandidateID,
+               restoreID != windowID,
+               let restoreWindow = snapshot.windows.first(where: { $0.window.id == restoreID })?.window {
+                _ = service.focus(restoreWindow)
+            }
         }
         var details = [
             "stageID": stageID.rawValue,

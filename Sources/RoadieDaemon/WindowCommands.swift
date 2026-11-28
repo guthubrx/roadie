@@ -1005,15 +1005,36 @@ public struct WindowCommandService {
         )
     }
 
-    public func sendToDisplay(_ displayIndex: Int) -> WindowCommandResult {
-        let snapshot = service.snapshot()
-        guard let active = activeWindow(in: snapshot) else {
+    public func sendToDisplay(
+        _ displayIndex: Int,
+        windowID: WindowID? = nil,
+        follow: Bool = true
+    ) -> WindowCommandResult {
+        sendToDisplay(String(displayIndex), windowID: windowID, follow: follow)
+    }
+
+    public func sendToDisplay(
+        _ displaySelector: String,
+        windowID: WindowID? = nil,
+        follow: Bool = true
+    ) -> WindowCommandResult {
+        let snapshot = service.snapshot(followFocus: windowID == nil && follow)
+        let targetEntry: ScopedWindowSnapshot?
+        if let windowID {
+            guard let found = snapshot.windows.first(where: { $0.window.id == windowID }) else {
+                return WindowCommandResult(message: "display \(displaySelector): window \(windowID.rawValue) unavailable", changed: false, outcome: .failed)
+            }
+            targetEntry = found
+        } else {
+            targetEntry = activeWindow(in: snapshot)
+        }
+        guard let active = targetEntry else {
             return WindowCommandResult(message: "no active window", changed: false, outcome: .noOp)
         }
-        guard let display = snapshot.displays.first(where: { $0.index == displayIndex }) else {
-            return WindowCommandResult(message: "unknown display \(displayIndex)", changed: false, outcome: .failed)
+        guard let display = StageCommandService.resolveDisplay(displaySelector, in: snapshot.displays) else {
+            return WindowCommandResult(message: "unknown display \(displaySelector)", changed: false, outcome: .failed)
         }
-        return send(active, to: display, focusMovedWindow: true)
+        return send(active, to: display, focusMovedWindow: follow)
     }
 
     public func send(
@@ -1077,10 +1098,22 @@ public struct WindowCommandService {
                     state.scopes[scopeIndex].remove(windowID: active.window.id)
                 }
                 var targetScope = state.scope(displayID: display.id, desktopID: targetDesktopID)
-                targetScope.assign(window: transferredWindow, to: targetScope.activeStageID)
+                targetScope.assign(window: transferredWindow, to: targetScope.activeStageID, focusWindow: focusMovedWindow)
                 state.update(targetScope)
                 let pin = state.removePin(windowID: active.window.id)
                 state.suppressRulePlacement(window: transferredWindow)
+                if !focusMovedWindow, let sourceScope, sourceScope.displayID != display.id {
+                    let sourceDesktopID = state.currentDesktopID(for: sourceScope.displayID)
+                    let sourceActive = state.scope(displayID: sourceScope.displayID, desktopID: sourceDesktopID)
+                    state.protectCommandFocus(
+                        displayID: sourceScope.displayID,
+                        desktopID: sourceDesktopID,
+                        stageID: sourceActive.activeStageID,
+                        windowID: sourceActive.stages.first(where: { $0.id == sourceActive.activeStageID })?.focusedWindowID,
+                        staleFocusedWindowID: active.window.id,
+                        duration: 3.0
+                    )
+                }
                 return pin
             }, clearingIntentsOf: { _ in [sourceScope, targetScopeID].compactMap { $0 } })
         } catch {
@@ -1088,8 +1121,9 @@ public struct WindowCommandService {
         }
 
         // Plan unique (A15, T212) : fenêtre transférée, scope d'origine et scope cible dans une seule
-        // écriture groupée, puis le focus.
-        let observed = service.snapshot()
+        // écriture groupée, puis le focus. `followFocus: false` évite qu'un relevé ne ré-adopte la
+        // fenêtre sur son ancien écran avant la pose.
+        let observed = service.snapshot(followFocus: false)
         let (plan, result) = service.applyCommandPlacement(
             CommandPlacement(restoring: [active.window.id: transferFrame], layoutScopes: Set([sourceScope, targetScopeID].compactMap { $0 })),
             snapshot: observed,
@@ -1131,9 +1165,12 @@ public struct WindowCommandService {
             ]
         ))
         appendManualPinRemovalEvent(removedPin, targetScope: targetScopeID)
+        // Le transfert logique de scope est déjà committé : un plan avec `attempted == 0` et `failed == 0`
+        // (fenêtre déjà placée ou cadre identique) reste un succès. Seul un échec total AX échoue.
+        let succeeded = result.failed == 0 || result.failed < result.attempted
         return WindowCommandResult.changedOrFailed(
-            "display \(display.index): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
-            changed: result.attempted > 0 && result.failed < result.attempted
+            "display \(display.index): window=\(active.window.id.rawValue) follow=\(focusMovedWindow) attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+            changed: succeeded
         )
     }
 
