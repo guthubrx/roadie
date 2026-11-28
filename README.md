@@ -263,7 +263,9 @@ roadie project save Dev --url https://example.org --app com.apple.Terminal --not
 roadie profile save desk && roadie config export ~/roadie-backup.json
 roadie config import ~/roadie-backup.json --dry-run
 
-# Automation, grids & query API
+# Automation, silent one-shot placement, grids & query API
+roadie rules add-once --bundle-id com.google.Chrome --display 1 --stage-position 1 --no-follow --ttl 30
+roadie stage assign --window <ID> --display 1 --stage-position 1 --no-follow
 roadie query state|windows|displays|desktops|stages|groups|rules|health|events
 roadie events subscribe --from-now --initial-state
 roadie targets search && roadie grid interactive --scope display

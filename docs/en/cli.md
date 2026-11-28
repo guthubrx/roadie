@@ -241,7 +241,7 @@ roadie rules list-once --json
 roadie rules clear-once [RULE_ID]
 ```
 
-`rules add-once` registers an **in-memory** single-shot rule (one-time consumption + 1–600 s TTL, default 30 s, no write to `roadies.toml`). The next matching window (`--app`, `--bundle-id`, `--title-prefix`, `--pid`) is placed immediately upon creation into `--display`, `--desktop`, `--stage`, or `--stage-position`, with `--no-follow` by default — ideal for launching visual test browsers (Chrome / Playwright) into an inactive stage with zero focus steal or screen flash.
+`rules add-once` registers an **in-memory** single-shot rule (one-time consumption + 1–600 s TTL, default 30 s, no write to `roadies.toml`). The next matching window (`--app`, `--bundle-id`, `--title-prefix`, `--pid`) is placed immediately upon creation into `--display`, `--desktop`, `--stage`, or `--stage-position`, with `--no-follow` by default. `--bundle-id` also resolves directly spawned app binaries (e.g., Chrome/Playwright via `proc_pidpath` → `.app/Info.plist`), and `--no-follow` captures and restores the pre-launch focused window and display (`returnFocusWindowID` / `returnDisplayID`) — ideal for launching visual test browsers into an inactive stage with zero focus steal or screen flash.
 
 ## Window Groups
 

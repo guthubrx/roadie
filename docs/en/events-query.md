@@ -70,6 +70,7 @@ Rules:
 
 - `rule.matched`
 - `rule.applied`
+- `rule.placement_applied` (includes `oneShot` and `restoreFocusWindowID` for `rules add-once --no-follow`)
 - `rule.skipped`
 - `rule.failed`
 
@@ -146,6 +147,7 @@ Stable format:
 Use cases:
 
 - `query windows`: display tileable windows in a status bar.
+- `query stages` (and `query state`): list stages per display and desktop with their `1..N` rail `position` (matching `stage list` and `stage assign-position`) and per-display `isActive` flag.
 - `query groups`: display tabbed/stacked groups.
 - `query rules`: verify what was loaded from TOML.
 - `query health`: integrate Roadie into a local health check.

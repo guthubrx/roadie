@@ -241,7 +241,7 @@ roadie rules list-once --json
 roadie rules clear-once [RULE_ID]
 ```
 
-`rules add-once` ajoute une règle ponctuelle **en mémoire** (consommation unique + TTL de 1 à 600 s, défaut 30 s, sans écriture dans `roadies.toml`). La première fenêtre correspondante (`--app`, `--bundle-id`, `--title-prefix`, `--pid`) est placée dès sa création vers `--display`, `--desktop`, `--stage` ou `--stage-position`, sans suivre le focus par défaut (`--no-follow`). Idéal pour lancer des tests visuels (Chrome / Playwright) dans une stage inactive sans clignotement ni vol de focus.
+`rules add-once` ajoute une règle ponctuelle **en mémoire** (consommation unique + TTL de 1 à 600 s, défaut 30 s, sans écriture dans `roadies.toml`). La première fenêtre correspondante (`--app`, `--bundle-id`, `--title-prefix`, `--pid`) est placée dès sa création vers `--display`, `--desktop`, `--stage` ou `--stage-position`, sans suivre le focus par défaut (`--no-follow`). `--bundle-id` résout aussi les binaires lancés directement (ex. Chrome/Playwright via `proc_pidpath` → `.app/Info.plist`), et `--no-follow` capture puis restitue la fenêtre et l'écran actifs avant lancement (`returnFocusWindowID` / `returnDisplayID`). Idéal pour lancer des tests visuels dans une stage inactive sans clignotement ni vol de focus.
 
 ## Groupes de fenetres
 
